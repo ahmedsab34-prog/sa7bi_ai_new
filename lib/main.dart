@@ -4,7 +4,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await MobileAds.instance.initialize();
+  try {
+    await MobileAds.instance.initialize();
+  } catch (e) {
+    debugPrint("Ads init error: $e");
+  }
   runApp(const Sa7biAiApp());
 }
 
@@ -34,29 +38,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // معرفات الإعلانات الحقيقية الخاصة بك
   static const String bannerAdUnitId = 'ca-app-pub-9077658292229374/1672148581';
-  static const String interstitialAdUnitId = 'ca-app-pub-9077658292229374/9768287146';
-  static const String rewardedAdUnitId = 'ca-app-pub-9077658292229374/4621745555';
-
   BannerAd? _bannerAd;
   bool _isBannerAdLoaded = false;
 
-  InterstitialAd? _interstitialAd;
-  RewardedAd? _rewardedAd;
-
   final TextEditingController _chatController = TextEditingController();
-  final List<String> _chatMessages = [];
+  final List<Map<String, String>> _messages = [
+    {"sender": "ai", "text": "أهلاً بك يا أحمد! أنا صاحبي AI، جاهز لمساعدتك بكل طاقتى."}
+  ];
 
   @override
   void initState() {
     super.initState();
     _initBannerAd();
-    _loadInterstitialAd();
-    _loadRewardedAd();
   }
 
-  // 1. تهيئة وتحميل إعلان البانر
   void _initBannerAd() {
     _bannerAd = BannerAd(
       adUnitId: bannerAdUnitId,
@@ -75,91 +71,16 @@ class _HomeScreenState extends State<HomeScreen> {
     )..load();
   }
 
-  // 2. تحميل الإعلان البيني (Interstitial)
-  void _loadInterstitialAd() {
-    InterstitialAd.load(
-      adUnitId: interstitialAdUnitId,
-      request: const AdRequest(),
-      adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) {
-          _interstitialAd = ad;
-        },
-        onAdFailedToLoad: (error) {
-          _interstitialAd = null;
-        },
-      ),
-    );
-  }
-
-  // عرض الإعلان البيني بشكل ذكي عند الإرسال
-  void _showInterstitialAd(VoidCallback onComplete) {
-    if (_interstitialAd != null) {
-      _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
-        onAdDismissedFullScreenContent: (ad) {
-          ad.dispose();
-          _loadInterstitialAd();
-          onComplete();
-        },
-        onAdFailedToShowFullScreenContent: (ad, error) {
-          ad.dispose();
-          _loadInterstitialAd();
-          onComplete();
-        },
-      );
-      _interstitialAd!.show();
-    } else {
-      onComplete();
-    }
-  }
-
-  // 3. تحميل إعلان المكافأة (Rewarded)
-  void _loadRewardedAd() {
-    RewardedAd.load(
-      adUnitId: rewardedAdUnitId,
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) {
-          _rewardedAd = ad;
-        },
-        onAdFailedToLoad: (error) {
-          _rewardedAd = null;
-        },
-      ),
-    );
-  }
-
-  // عرض إعلان المكافأة لفتح ميزات ذكاء اصطناعي إضافية
-  void _showRewardedAd() {
-    if (_rewardedAd != null) {
-      _rewardedAd!.show(
-        onUserEarnedReward: (ad, reward) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('مبارك! حصلت على نقاط ومميزات إضافية من صاحبي AI 🎁')),
-          );
-          _loadRewardedAd();
-        },
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الإعلان غير جاهز حالاً، حاول بعد قليل.')),
-      );
-      _loadRewardedAd();
-    }
-  }
-
-  // دالة التوجيه للتسويق بالعمولة (Affiliate Links)
-  Future<void> _launchAffiliateLink(String urlString) async {
+  Future<void> _launchUrl(String urlString) async {
     final Uri url = Uri.parse(urlString);
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      throw Exception('Could not launch $urlString');
+      debugPrint('Could not launch $urlString');
     }
   }
 
   @override
   void dispose() {
     _bannerAd?.dispose();
-    _interstitialAd?.dispose();
-    _rewardedAd?.dispose();
     _chatController.dispose();
     super.dispose();
   }
@@ -171,36 +92,34 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('صاحبي AI - المساعد الذكي'),
         centerTitle: true,
         backgroundColor: const Color(0xFF1F1F1F),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.card_giftcard, color: Colors.amber),
-            onPressed: _showRewardedAd,
-            tooltip: 'احصل على مكافأة',
-          ),
-        ],
       ),
       body: Column(
         children: [
-          // منطقة محادثة الذكاء الاصطناعي
+          // قائمة الشات
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: _chatMessages.length,
+              itemCount: _messages.length,
               itemBuilder: (context, index) {
-                return Container(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2C2C2C),
-                    borderRadius: BorderRadius.circular(12),
+                final msg = _messages[index];
+                final isUser = msg["sender"] == "user";
+                return Align(
+                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isUser ? Colors.deepPurple[700] : const Color(0xFF2C2C2C),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(msg["text"] ?? ''),
                   ),
-                  child: Text(_chatMessages[index]),
                 );
               },
             ),
           ),
 
-          // قسم التوجيه للشراء والتسويق بالعمولة (Affiliate Offers)
+          // أزرار التسويق بالعمولة (نون وجوميا)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             color: const Color(0xFF1A1A1A),
@@ -209,13 +128,13 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                  onPressed: () => _launchAffiliateLink('https://www.jumia.com.eg'),
+                  onPressed: () => _launchUrl('https://www.jumia.com.eg'),
                   icon: const Icon(Icons.shopping_bag, size: 18),
                   label: const Text('عروض جوميا'),
                 ),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.yellow[700]),
-                  onPressed: () => _launchAffiliateLink('https://www.noon.com'),
+                  onPressed: () => _launchUrl('https://www.noon.com'),
                   icon: const Icon(Icons.flash_on, size: 18, color: Colors.black),
                   label: const Text('عروض نون', style: TextStyle(color: Colors.black)),
                 ),
@@ -223,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // حقل إدخال الرسائل
+          // خانة إدخال الرسائل
           Container(
             padding: const EdgeInsets.all(8),
             color: const Color(0xFF1F1F1F),
@@ -233,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: TextField(
                     controller: _chatController,
                     decoration: const InputDecoration(
-                      hintText: 'اسأل صاحبي AI أي شيء...',
+                      hintText: 'اكتب رسالتك هنا...',
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.symmetric(horizontal: 12),
                     ),
@@ -243,14 +162,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: const Icon(Icons.send, color: Colors.deepPurpleAccent),
                   onPressed: () {
                     if (_chatController.text.trim().isNotEmpty) {
+                      final text = _chatController.text;
                       setState(() {
-                        _chatMessages.add("أنت: ${_chatController.text}");
-                        _chatMessages.add("صاحبي AI: أهلاً بك يا أحمد، أنا جاهز لمساعدتك بكامل طاقتي!");
+                        _messages.add({"sender": "user", "text": text});
+                        _messages.add({
+                          "sender": "ai",
+                          "text": "أنا أستمع إليك يا أحمد، جارٍ معالجة طلبك..."
+                        });
                         _chatController.clear();
                       });
-                      
-                      // عرض الإعلان البيني عند الإرسال بشكل احترافي
-                      _showInterstitialAd(() {});
                     }
                   },
                 ),
@@ -258,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // مكان إعلان البانر في الأسفل
+          // مكان إعلان البانر إن وجد
           if (_isBannerAdLoaded && _bannerAd != null)
             SizedBox(
               height: _bannerAd!.size.height.toDouble(),
