@@ -25,20 +25,16 @@ jobs:
 
       - name: Create Clean Flutter Project and Inject Code
         run: |
-          # الاحتفاظ بملفات الكود والملفات المهمة
           mkdir -p temp_lib temp_pubspec
           cp -r lib/* temp_lib/
           cp pubspec.yaml temp_pubspec/
           
-          # إنشاء مشروع فلاتر جديد نظيف بالكامل وبالبنية الصحيحة
-          flutter create . --org com.sa7bi.ai --project-name sa7bi_app --force
+          flutter create . --org com.sa7bi.ai --project-name sa7bi_app
           
-          # استعادة ملفاتنا وملف الـ pubspec الخاص بنا
           rm -rf lib/*
           cp -r temp_lib/* lib/
           cp temp_pubspec/pubspec.yaml ./
           
-          # تنظيف الملفات المؤقتة
           rm -rf temp_lib temp_pubspec
 
       - name: Install Dependencies
