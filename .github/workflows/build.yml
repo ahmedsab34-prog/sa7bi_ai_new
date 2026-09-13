@@ -25,19 +25,15 @@ jobs:
 
       - name: Setup Android Environment and Inject Source Code
         run: |
-          # حفظ ملفات الكود والملفات الأساسية مؤقتاً
           mkdir -p temp_lib temp_pubspec
           if [ -d "lib" ]; then cp -r lib/* temp_lib/; fi
           if [ -f "pubspec.yaml" ]; then cp pubspec.yaml temp_pubspec/; fi
           
-          # تهيئة مشروع فلاتر كامل بنظام الأندرويد والهيكل الهندسي الصحيح
           flutter create . --org com.sa7bi.ai --project-name sa7bi_app
           
-          # استعادة كود التطبيق وملف الاعتماديات الخاص بنا
           if [ -d "temp_lib" ]; then cp -r temp_lib/* lib/; fi
           if [ -f "temp_pubspec/pubspec.yaml" ]; then cp temp_pubspec/pubspec.yaml ./; fi
           
-          # تنظيف الملفات المؤقتة
           rm -rf temp_lib temp_pubspec
 
       - name: Install Dependencies
