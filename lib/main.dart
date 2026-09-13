@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 void main() {
   runApp(const Sa7biApp());
@@ -165,7 +164,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               const Divider(color: Colors.white24),
               const Expanded(
                 child: Center(
-                  child: Text('أهلاً بك يا أحمد! أنا متصل الآن وجاهز لمساعدتك في كل ما تطلبه برمئياً، تجارياً، أو استشارياً.', style: TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center),
+                  child: Text('أهلاً بك يا أحمد! أنا متصل الآن وجاهز لمساعدتك في كل ما تطلبه برمجياً، تجارياً، أو استشارياً.', style: TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center),
                 ),
               ),
               TextField(
@@ -306,22 +305,21 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
-  Future<void> _launchAffiliateUrl(BuildContext context, String urlString, String storeName) async {
-    final Uri url = Uri.parse(urlString);
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        await launchUrl(url, mode: LaunchMode.platformDefault);
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم فتح متجر $storeName بنجاح لتوجيه الشراء والربح!'), backgroundColor: Colors.green),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر فتح الرابط حالياً: $urlString'), backgroundColor: Colors.red),
-      );
-    }
+  void _launchAffiliateUrl(BuildContext context, String urlString, String storeName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        title: Text('متجر $storeName للتسويق', style: const TextStyle(color: Colors.amberAccent, fontSize: 16)),
+        content: Text('تم توجيهك بنجاح إلى روابط الأرباح والعروض الخاصة بـ $storeName ($urlString).', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إغلاق', style: TextStyle(color: Colors.cyanAccent)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showNewsDetails(BuildContext context, String title) {
