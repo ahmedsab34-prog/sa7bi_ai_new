@@ -23,20 +23,6 @@ jobs:
           flutter-version: '3.19.6'
           channel: 'stable'
 
-      - name: Create Clean Flutter Project and Inject Code
-        run: |
-          mkdir -p temp_lib temp_pubspec
-          cp -r lib/* temp_lib/
-          cp pubspec.yaml temp_pubspec/
-          
-          flutter create . --org com.sa7bi.ai --project-name sa7bi_app
-          
-          rm -rf lib/*
-          cp -r temp_lib/* lib/
-          cp temp_pubspec/pubspec.yaml ./
-          
-          rm -rf temp_lib temp_pubspec
-
       - name: Install Dependencies
         run: flutter pub get
 
