@@ -1,11 +1,12 @@
-# Changelog: Sa7bi AI
+# Changelog - Sa7bi AI
 
-All notable changes to this project will be documented in this file.
+جميع التغييرات والتحسينات المهمة في مشروع "صاحبي AI" سيتم توثيقها هنا.
 
-## [0.1.0] - 2026-09-13
-### Added
-- Initialized repository structure (`ahmedsab34-prog/sa7bi_ai_new`).
-- Created baseline `README.md` project description.
-- Added `PROJECT_STATE.md` to track current implementation status and roadmap.
-- Added `CHAT_HANDOFF.md` to maintain smooth context across prompt sessions.
-- Added `CHANGELOG.md` to track version history and updates.
+## [1.0.4] - 2026-09-13
+### Added:
+- بناء الهيكل الأساسي للتطبيق (`main.dart`) مع شريط التنقل السفلي والـ الهيدر العلوي بشعار `@i`.
+- إنشاء شاشة الأقسام العشرة (`categories_screen.dart`) بتصميم شبكي فاخر وأيقونات مخصصة.
+- إضافة شاشة الإعدادات (`settings_screen.dart`) لإدخال وحفظ مفتاح Gemini API.
+- إطلاق خدمة الذكاء الاصطناعي (`ai_service.dart`) وشاشة الدردشة الفورية (`chat_screen.dart`) للربط المباشر مع نموذج `gemini-1.5-flash`.
+- إضافة حزمة `google_generative_ai` وتحديث `pubspec.yaml`.
+- تحديث التوثيق وملفات المشروع (`README.md`, `PROJECT_STATE.md`).
