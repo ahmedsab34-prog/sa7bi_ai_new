@@ -1,5 +1,5 @@
 name: sa7bi_ai_new
-description: "A new Flutter project."
+description: "A high-end Android Flutter application featuring Gemini AI, AdMob monetization, and affiliate e-commerce."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.6
   url_launcher: ^6.2.4
+  google_mobile_ads: ^4.0.0
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:
