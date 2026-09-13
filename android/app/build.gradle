@@ -4,14 +4,10 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
-def flutterRoot = localProperties.getProperty('flutter.sdk')
-if (flutterRoot == null) {
-    throw new GradleException("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
-}
-
 android {
     namespace "com.example.sa7bi_ai_new"
-    compileSdkVersion flutter.compileSdkVersion
+    compileSdkVersion 34
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -24,9 +20,9 @@ android {
     defaultConfig {
         applicationId "com.example.sa7bi_ai_new"
         minSdkVersion 21
-        targetSdkVersion flutter.targetSdkVersion
-        versionCode flutterVersionCode.toInteger()
-        versionName flutterVersionName
+        targetSdkVersion 34
+        versionCode 1
+        versionName "1.0.0"
     }
 
     buildTypes {
