@@ -7,7 +7,7 @@ void main() {
 }
 
 class Sa7biAiApp extends StatelessWidget {
-  const Sa7biAiApp({Key? key}) : super(key: key);
+  const Sa7biAiApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +25,7 @@ class Sa7biAiApp extends StatelessWidget {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(Key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
