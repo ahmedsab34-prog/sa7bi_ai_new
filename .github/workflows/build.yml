@@ -2,48 +2,32 @@ name: Build Flutter APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '17'
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'adopt'
+        java-version: '11'
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.19.6'
-          channel: 'stable'
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.5'
+        channel: 'stable'
+        cache: true
 
-      - name: Setup Android Environment and Inject Source Code
-        run: |
-          mkdir -p temp_lib temp_pubspec
-          if [ -d "lib" ]; then cp -r lib/* temp_lib/; fi
-          if [ -f "pubspec.yaml" ]; then cp pubspec.yaml temp_pubspec/; fi
-          
-          flutter create . --org com.sa7bi.ai --project-name sa7bi_app
-          
-          if [ -d "temp_lib" ]; then cp -r temp_lib/* lib/; fi
-          if [ -f "temp_pubspec/pubspec.yaml" ]; then cp temp_pubspec/pubspec.yaml ./; fi
-          
-          rm -rf temp_lib temp_pubspec
+    - name: Install dependencies
+      run: flutter pub get
 
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Build Release APK
-        run: flutter build apk --release
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+    - name: Build Release APK
+      run: flutter build apk --release
