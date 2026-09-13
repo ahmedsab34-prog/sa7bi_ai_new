@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'settings_screen.dart';
+import 'categories_screen.dart';
 
 void main() {
   runApp(const Sa7biAIApp());
@@ -23,7 +24,6 @@ class Sa7biAIApp extends StatelessWidget {
   }
 }
 
-// الشاشة الرئيسية الحاوية للشريط السفلي والصفحات الثلاثة
 class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({Key? key}) : super(key: key);
 
@@ -34,9 +34,10 @@ class MainContainerScreen extends StatefulWidget {
 class _MainContainerScreenState extends State<MainContainerScreen> {
   int _currentIndex = 0;
 
+  // ربط الصفحات الثلاثة للشريط السفلي
   final List<Widget> _screens = [
     const HomeScreen(),
-    const Center(child: Text('شاشة الأقسام العشرة', style: TextStyle(fontSize: 20))),
+    const CategoriesScreen(), // شاشة الأقسام العشرة المربوطة هنا
     const ProfileScreen(),
   ];
 
@@ -46,7 +47,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // الهيدر الثابت أعلى الصفحات
             const AppHeader(),
             Expanded(
               child: _screens[_currentIndex],
@@ -83,7 +83,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
   }
 }
 
-// الهيدر العلوي الثابت (اللوجو على اليسار وأيقونة المستخدم على اليمين)
 class AppHeader extends StatelessWidget {
   const AppHeader({Key? key}) : super(key: key);
 
@@ -95,7 +94,6 @@ class AppHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // اللوجو على اليسار: الدائرة الذهبية مع @ و i وكلمة صحبي
           Row(
             children: [
               Container(
@@ -145,7 +143,6 @@ class AppHeader extends StatelessWidget {
               ),
             ],
           ),
-          // أيقونة المستخدم والاسم والتفاعلات على اليمين
           Row(
             children: [
               Column(
@@ -175,7 +172,6 @@ class AppHeader extends StatelessWidget {
   }
 }
 
-// الصفحة الرئيسية (الرئيسية)
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
@@ -184,7 +180,6 @@ class HomeScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
-        // البانر الإعلاني المتحرك للتسوق والعروض
         Container(
           height: 150,
           decoration: BoxDecoration(
@@ -213,7 +208,6 @@ class HomeScreen extends StatelessWidget {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
         ),
         const SizedBox(height: 10),
-        // محاكاة لستة الأخبار
         ...List.generate(5, (index) => Container(
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(12),
@@ -228,9 +222,8 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// الصفحة الشخصية
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
+  const ProfileScreen({Key? key}) : size(Key? key) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
