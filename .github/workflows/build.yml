@@ -24,7 +24,10 @@ jobs:
       with:
         flutter-version: '3.19.6'
         channel: 'stable'
-        cache: true
+        cache: false
+
+    - name: Clean project
+      run: flutter clean
 
     - name: Install dependencies
       run: flutter pub get
