@@ -1,14 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await MobileAds.instance.initialize();
-  } catch (e) {
-    debugPrint("Ads init error: $e");
-  }
   runApp(const Sa7biAiApp());
 }
 
@@ -31,45 +25,17 @@ class Sa7biAiApp extends StatelessWidget {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({Key? key}) : super(Key: key);
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const String bannerAdUnitId = 'ca-app-pub-9077658292229374/1672148581';
-  BannerAd? _bannerAd;
-  bool _isBannerAdLoaded = false;
-
   final TextEditingController _chatController = TextEditingController();
   final List<Map<String, String>> _messages = [
     {"sender": "ai", "text": "أهلاً بك يا أحمد! أنا صاحبي AI، جاهز لمساعدتك بكل طاقتى."}
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    _initBannerAd();
-  }
-
-  void _initBannerAd() {
-    _bannerAd = BannerAd(
-      adUnitId: bannerAdUnitId,
-      size: AdSize.banner,
-      request: const AdRequest(),
-      listener: BannerAdListener(
-        onAdLoaded: (ad) {
-          setState(() {
-            _isBannerAdLoaded = true;
-          });
-        },
-        onAdFailedToLoad: (ad, error) {
-          ad.dispose();
-        },
-      ),
-    )..load();
-  }
 
   Future<void> _launchUrl(String urlString) async {
     final Uri url = Uri.parse(urlString);
@@ -80,7 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _bannerAd?.dispose();
     _chatController.dispose();
     super.dispose();
   }
@@ -95,7 +60,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // قائمة الشات
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(12),
@@ -118,8 +82,6 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           ),
-
-          // أزرار التسويق بالعمولة (نون وجوميا)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             color: const Color(0xFF1A1A1A),
@@ -141,8 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-
-          // خانة إدخال الرسائل
           Container(
             padding: const EdgeInsets.all(8),
             color: const Color(0xFF1F1F1F),
@@ -177,14 +137,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-
-          // مكان إعلان البانر إن وجد
-          if (_isBannerAdLoaded && _bannerAd != null)
-            SizedBox(
-              height: _bannerAd!.size.height.toDouble(),
-              width: _bannerAd!.size.width.toDouble(),
-              child: AdWidget(ad: _bannerAd!),
-            ),
         ],
       ),
     );
