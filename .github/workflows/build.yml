@@ -29,11 +29,5 @@ jobs:
     - name: Install dependencies
       run: flutter pub get
 
-    - name: Fix Android Manifest configuration
-      run: |
-        sed -i 's/android:icon="@mipmap\/ic_launcher"/android:icon="@android:drawable\/sym_def_app_icon"/.g' android/app/src/main/AndroidManifest.xml
-        sed -i 's/android:theme="@style\/LaunchTheme"/android:theme="@android:style\/Theme.NoTitleBar"/.g' android/app/src/main/AndroidManifest.xml
-        sed -i 's/android:theme="@style\/NormalTheme"/android:theme="@android:style\/Theme.NoTitleBar"/.g' android/app/src/main/AndroidManifest.xml
-
     - name: Build Release APK
       run: flutter build apk --release
