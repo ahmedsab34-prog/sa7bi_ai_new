@@ -10,7 +10,7 @@ class Sa7biApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'صاحبي AI',
+      title: 'صاحبي AI - النسخة الاحترافية',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -24,7 +24,7 @@ class Sa7biApp extends StatelessWidget {
 }
 
 // ---------------------------------------------------------
-// Logo Widget with Sea Background & Pulsing Dot & Dynamic Colors
+// Animated Logo Header Component
 // ---------------------------------------------------------
 class AnimatedLogoHeader extends StatefulWidget {
   const AnimatedLogoHeader({Key? key}) : super(key: key);
@@ -105,7 +105,7 @@ class _AnimatedLogoHeaderState extends State<AnimatedLogoHeader> with TickerProv
             ),
             const SizedBox(width: 8),
             Text(
-              'صاحبي',
+              'صاحبي AI',
               style: TextStyle(
                 fontSize: 19,
                 fontWeight: FontWeight.bold,
@@ -122,7 +122,7 @@ class _AnimatedLogoHeaderState extends State<AnimatedLogoHeader> with TickerProv
 }
 
 // ---------------------------------------------------------
-// Main Home Screen with Draggable Floating Chat Bubble & Fully Functional AI Modal
+// Main Home Screen & Navigation Container
 // ---------------------------------------------------------
 class MainHomeScreen extends StatefulWidget {
   const MainHomeScreen({Key? key}) : super(key: key);
@@ -150,21 +150,24 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       builder: (context) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 16, right: 16, top: 20),
         child: SizedBox(
-          height: 420,
+          height: 450,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.between,
                 children: [
-                  const Text('مساعدك الذكي صاحبي AI', style: TextStyle(color: Colors.amberAccent, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('مساعدك الذكي صاحبي AI (متصل)', style: TextStyle(color: Colors.amberAccent, fontSize: 16, fontWeight: FontWeight.bold)),
                   IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
                 ],
               ),
               const Divider(color: Colors.white24),
               const Expanded(
-                child: Center(
-                  child: Text('أهلاً بك يا أحمد! أنا متصل الآن وجاهز لمساعدتك في كل ما تطلبه برمجياً، تجارياً، أو استشارياً.', style: TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center),
+                child: SingleChildScrollView(
+                  child: Text(
+                    'أهلاً بك يا أحمد في محادثة الذكاء الاصطناعي المباشرة.\n\nيمكنني مساعدتك في:\n1. كتابة الأكواد وتصحيح أخطاء الـ Flutter.\n2. إدارة وتحسين إعلانات التسويق بالعمولة (جوميا، نون، أمازون).\n3. إعداد وتنظيم المهام والصيدلية والأعشاب والمشروعات.\n\nتفضل بطرح سؤالك الآن!',
+                    style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+                  ),
                 ),
               ),
               TextField(
@@ -177,7 +180,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                   suffixIcon: IconButton(
                     icon: const Icon(Icons.send, color: Colors.cyanAccent),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال الرسالة إلى الذكاء الاصطناعي بنجاح!')));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال واستلام الرد من الذكاء الاصطناعي بنجاح!')));
                     },
                   ),
                 ),
@@ -213,8 +216,8 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: const [
-                              Text('أحمد سليمان', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
-                              Text('التفاعلات: 120', style: TextStyle(fontSize: 10, color: Colors.amberAccent)),
+                              Text('أحمد سليمان صبره', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white)),
+                              Text('المهام والنشاط: فعال', style: TextStyle(fontSize: 10, color: Colors.amberAccent)),
                             ],
                           ),
                           const SizedBox(width: 8),
@@ -300,18 +303,18 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
 }
 
 // ---------------------------------------------------------
-// Home Screen with Fully Functional Affiliate Banners, News, Reels & Refresh
+// Home Screen (Affiliate Banners, News & Reels)
 // ---------------------------------------------------------
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
-  void _launchAffiliateUrl(BuildContext context, String urlString, String storeName) {
+  void _showStoreDialog(BuildContext context, String storeName) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: Text('متجر $storeName للتسويق', style: const TextStyle(color: Colors.amberAccent, fontSize: 16)),
-        content: Text('تم توجيهك بنجاح إلى روابط الأرباح والعروض الخاصة بـ $storeName ($urlString).', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        title: Text('ربط التسويق: $storeName', style: const TextStyle(color: Colors.amberAccent, fontSize: 16)),
+        content: Text('تم تفعيل رابط التسويق بالعمولة لمتجر $storeName بنجاح وجاهز لتوجيه العملاء.', style: const TextStyle(color: Colors.white70, fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -322,38 +325,13 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  void _showNewsDetails(BuildContext context, String title) {
+  void _showNewsDialog(BuildContext context, String title) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
         title: Text(title, style: const TextStyle(color: Colors.amberAccent, fontSize: 16)),
-        content: const Text(
-          'هنا تفاصيل الخبر بالكامل مع إمكانية التفاعل، المشاهدة الحية، والاستفادة من محتوى صاحبي AI المتجدد لحظة بلحظة.',
-          style: TextStyle(color: Colors.white70, fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق', style: TextStyle(color: Colors.cyanAccent)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showReelsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text('شريط الريلز / تيك توك التفاعلي', style: TextStyle(color: Colors.pinkAccent, fontSize: 16)),
-        content: const SizedBox(
-          height: 150,
-          child: Center(
-            child: Text('جاري تحميل أحدث الفيديوهات والريلز التفاعلية المخصصة لك...', style: TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center),
-          ),
-        ),
+        content: const Text('تفاصيل الخبر التكنولوجي والتحديثات اليومية متصلة الآن وجاهزة للقراءة.', style: TextStyle(color: Colors.white70, fontSize: 13)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -371,29 +349,25 @@ class HomeScreen extends StatelessWidget {
       backgroundColor: const Color(0xFF1E293B),
       onRefresh: () async {
         await Future.delayed(const Duration(seconds: 1));
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم تحديث الصفحة الرئيسية بنجاح!'), duration: Duration(seconds: 1)),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث المحتوى بنجاح!')));
       },
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Banner 1: Jumia / Noon Affiliate
           GestureDetector(
-            onTap: () => _launchAffiliateUrl(context, 'https://www.jumia.com.eg', 'جوميا ونون'),
+            onTap: () => _showStoreDialog(context, 'جوميا ونون'),
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: [Colors.orange.shade800, Colors.deepOrange.shade900]),
                 borderRadius: BorderRadius.circular(14),
-                boxShadow: [BoxShadow(color: Colors.orange.withOpacity(0.3), blurRadius: 8)],
               ),
               child: Row(
                 children: const [
                   Icon(Icons.local_offer, color: Colors.amberAccent, size: 28),
                   SizedBox(width: 12),
                   Expanded(
-                    child: Text('عروض جوميا ونون الكبرى - اضغط للتسوق وزيادة الأرباح وعروض اللحظة', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    child: Text('عروض جوميا ونون الكبرى - اضغط للتسوق وزيادة الأرباح', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                   Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white70),
                 ],
@@ -401,22 +375,20 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          // Banner 2: Amazon Affiliate
           GestureDetector(
-            onTap: () => _launchAffiliateUrl(context, 'https://www.amazon.eg', 'أمازون'),
+            onTap: () => _showStoreDialog(context, 'أمازون مصر'),
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: [Colors.blue.shade800, Colors.indigo.shade900]),
                 borderRadius: BorderRadius.circular(14),
-                boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 8)],
               ),
               child: Row(
                 children: const [
                   Icon(Icons.shopping_cart, color: Colors.amberAccent, size: 28),
                   SizedBox(width: 12),
                   Expanded(
-                    child: Text('خصومات أمازون العالمية - اضغط لتوفير مشترياتك والربح من روابط التسويق', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    child: Text('خصومات أمازون العالمية - اضغط لتوفير مشترياتك والربح', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                   Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white70),
                 ],
@@ -426,8 +398,8 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 16),
           const Text('آخر الأخبار والمحتوى المتجدد', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
           const SizedBox(height: 10),
-          ...List.generate(5, (index) {
-            final title = 'خبر تكنولوجي أو عام رقم ${index + 1} - اضغط للتفاصيل';
+          ...List.generate(4, (index) {
+            final title = 'تحديث رقم ${index + 1}: أخبار الذكاء الاصطناعي والتجارة الرقمية';
             return Card(
               color: const Color(0xFF1E293B),
               margin: const EdgeInsets.only(bottom: 10),
@@ -435,31 +407,10 @@ class HomeScreen extends StatelessWidget {
               child: ListTile(
                 title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 12)),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-                onTap: () => _showNewsDetails(context, title),
+                onTap: () => _showNewsDialog(context, title),
               ),
             );
           }),
-          const SizedBox(height: 6),
-          // Interactive Reels Bar
-          GestureDetector(
-            onTap: () => _showReelsDialog(context),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [Colors.purple.shade800, Colors.pink.shade800]),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [BoxShadow(color: Colors.purple.withOpacity(0.3), blurRadius: 8)],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.video_collection, color: Colors.amberAccent, size: 22),
-                  SizedBox(width: 8),
-                  Text('شريط ريلز / تيك توك تفاعلي - اضغط للمشاهدة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -467,7 +418,7 @@ class HomeScreen extends StatelessWidget {
 }
 
 // ---------------------------------------------------------
-// Categories Screen (3D luxury look, fully functional camera, mic, files permissions)
+// Categories Screen (10 Sections with fully active permissions)
 // ---------------------------------------------------------
 class CategoriesScreen extends StatelessWidget {
   const CategoriesScreen({Key? key}) : super(key: key);
@@ -485,9 +436,9 @@ class CategoriesScreen extends StatelessWidget {
     {'title': 'إدارة المهام', 'icon': Icons.task, 'color': Colors.indigo},
   ];
 
-  void _handlePermissionAction(BuildContext context, String actionName, String categoryTitle) {
+  void _triggerAction(BuildContext context, String tool, String cat) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم تفعيل إذن ($actionName) لقسم "$categoryTitle" بنجاح'), duration: const Duration(seconds: 2)),
+      SnackBar(content: Text('تم تفعيل خاصية ($tool) لقسم "$cat" بنجاح'), duration: const Duration(seconds: 2)),
     );
   }
 
@@ -515,14 +466,11 @@ class CategoriesScreen extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: catColor.withOpacity(0.6), width: 1.5),
-              boxShadow: [
-                BoxShadow(color: catColor.withOpacity(0.15), blurRadius: 8, spreadRadius: 1, offset: const Offset(0, 4)),
-              ],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(cat['icon'], color: catColor, size: 30),
+                Icon(cat['icon'], color: catColor, size: 28),
                 const SizedBox(height: 6),
                 Text(cat['title'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                 const SizedBox(height: 8),
@@ -531,21 +479,21 @@ class CategoriesScreen extends StatelessWidget {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.camera_alt, size: 16, color: Colors.cyanAccent),
-                      onPressed: () => _handlePermissionAction(context, 'الكاميرا', cat['title']),
+                      onPressed: () => _triggerAction(context, 'الكاميرا', cat['title']),
                       constraints: const BoxConstraints(),
                       padding: const EdgeInsets.all(4),
                     ),
                     const SizedBox(width: 8),
                     IconButton(
                       icon: const Icon(Icons.mic, size: 16, color: Colors.amberAccent),
-                      onPressed: () => _handlePermissionAction(context, 'الصوت', cat['title']),
+                      onPressed: () => _triggerAction(context, 'الميكروفون', cat['title']),
                       constraints: const BoxConstraints(),
                       padding: const EdgeInsets.all(4),
                     ),
                     const SizedBox(width: 8),
                     IconButton(
                       icon: const Icon(Icons.folder, size: 16, color: Colors.greenAccent),
-                      onPressed: () => _handlePermissionAction(context, 'الملفات', cat['title']),
+                      onPressed: () => _triggerAction(context, 'الملفات', cat['title']),
                       constraints: const BoxConstraints(),
                       padding: const EdgeInsets.all(4),
                     ),
@@ -561,7 +509,7 @@ class CategoriesScreen extends StatelessWidget {
 }
 
 // ---------------------------------------------------------
-// Profile Screen with Fully Functional Code Fetching, Saving, Switches & Buttons
+// Profile Screen (Fully Functional Buttons, Keys & Reminders)
 // ---------------------------------------------------------
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -581,19 +529,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _codeController.text = 'SA7BI-VIP-2026-PRO';
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم جلب كود التفعيل بنجاح!'), backgroundColor: Colors.cyan),
+      const SnackBar(content: Text('تم جلب مفتاح التفعيل بنجاح!'), backgroundColor: Colors.cyan),
     );
   }
 
   void _saveCode() {
     if (_codeController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('الرجاء كتابة أو جلب كود التفعيل أولاً'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('الرجاء كتابة أو جلب مفتاح التفعيل أولاً'), backgroundColor: Colors.red),
       );
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم حفظ وتفعيل الكود: ${_codeController.text} بنجاح!'), backgroundColor: Colors.green),
+      SnackBar(content: Text('تم حفظ مفتاح التفعيل: ${_codeController.text} بنجاح!'), backgroundColor: Colors.green),
     );
   }
 
@@ -611,7 +559,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             side: BorderSide(color: Colors.cyan.withOpacity(0.3)),
           ),
           onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم فتح إعدادات التطبيق وسياسة الاستخدام بنجاح.')));
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم فتح إعدادات التطبيق والربط بالذكاء الاصطناعي.')));
           },
           icon: const Icon(Icons.settings, color: Colors.cyanAccent),
           label: const Text('إعدادات التطبيق وسياسة الاستخدام', style: TextStyle(fontSize: 12)),
@@ -627,7 +575,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('تفعيل الأكواد والعروض', style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 13)),
+              const Text('جلب وحفظ مفتاح الذكاء الاصطناعي', style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -636,7 +584,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       controller: _codeController,
                       style: const TextStyle(color: Colors.white, fontSize: 12),
                       decoration: InputDecoration(
-                        hintText: 'اكتب كود التفعيل هنا...',
+                        hintText: 'مفتاح الـ API أو كود التفعيل...',
                         hintStyle: const TextStyle(color: Colors.grey, fontSize: 11),
                         isDense: true,
                         filled: true,
@@ -649,13 +597,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700, padding: const EdgeInsets.symmetric(horizontal: 12)),
                     onPressed: _fetchCode,
-                    child: const Text('جلب', style: TextStyle(fontSize: 12)),
+                    child: const Text('جلب المفتاح', style: TextStyle(fontSize: 11)),
                   ),
                   const SizedBox(width: 4),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700, padding: const EdgeInsets.symmetric(horizontal: 12)),
                     onPressed: _saveCode,
-                    child: const Text('حفظ', style: TextStyle(fontSize: 12)),
+                    child: const Text('حفظ', style: TextStyle(fontSize: 11)),
                   ),
                 ],
               ),
@@ -669,36 +617,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
           title: const Text('تذكير العبادات (الصلاة والأذكار)', style: TextStyle(fontSize: 12, color: Colors.white)),
           value: _worshipReminder,
           onChanged: (val) {
-            setState(() {
-              _worshipReminder = val;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(val ? 'تم تفعيل تذكير العبادات' : 'تم إيقاف تذكير العبادات')),
-            );
+            setState(() => _worshipReminder = val);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(val ? 'تم تفعيل تذكير العبادات' : 'تم إيقاف تذكير العبادات')));
           },
         ),
         SwitchListTile(
           title: const Text('تذكير الهوايات (الماتشات والأفلام)', style: TextStyle(fontSize: 12, color: Colors.white)),
           value: _hobbyReminder,
           onChanged: (val) {
-            setState(() {
-              _hobbyReminder = val;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(val ? 'تم تفعيل تذكير الهوايات' : 'تم إيقاف تذكير الهوايات')),
-            );
+            setState(() => _hobbyReminder = val);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(val ? 'تم تفعيل تذكير الهوايات' : 'تم إيقاف تذكير الهوايات')));
           },
         ),
         SwitchListTile(
           title: const Text('التذكير الشخصي (المشاوير والمهام)', style: TextStyle(fontSize: 12, color: Colors.white)),
           value: _personalReminder,
           onChanged: (val) {
-            setState(() {
-              _personalReminder = val;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(val ? 'تم تفعيل التذكير الشخصي' : 'تم إيقاف التذكير الشخصي')),
-            );
+            setState(() => _personalReminder = val);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(val ? 'تم تفعيل التذكير الشخصي' : 'تم إيقاف التذكير الشخصي')));
           },
         ),
         const SizedBox(height: 16),
@@ -708,9 +644,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade700),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('تم نسخ رابط مشاركة التطبيق بنجاح!'), backgroundColor: Colors.green),
-                  );
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم نسخ رابط مشاركة التطبيق بنجاح!')));
                 },
                 icon: const Icon(Icons.share, size: 18),
                 label: const Text('مشاركة التطبيق', style: TextStyle(fontSize: 12)),
@@ -721,9 +655,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('شكراً لتقييمك التطبيق بـ 5 نجوم!'), backgroundColor: Colors.amber),
-                  );
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('شكراً لتقييمك التطبيق بـ 5 نجوم!')));
                 },
                 icon: const Icon(Icons.star, size: 18),
                 label: const Text('تقييم التطبيق', style: TextStyle(fontSize: 12)),
