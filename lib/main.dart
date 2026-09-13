@@ -44,7 +44,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // الهيدر الموحد الفاخر
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -54,7 +53,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // اللوجو الزجاجي اللامع مع نقطة الـ RGB
                   Row(
                     children: [
                       Container(
@@ -63,7 +61,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
-                            colors: [Colors.amber.shade400, Colors.deepOrange.accentColor ?? Colors.cyan],
+                            colors: [Colors.amber.shade400, Colors.cyan],
                           ),
                           boxShadow: [
                             BoxShadow(color: Colors.amber.withOpacity(0.4), blurRadius: 8, spreadRadius: 2)
@@ -97,7 +95,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                       ),
                     ],
                   ),
-                  // معلومات المستخدم وبروفايل الريلز
                   Row(
                     children: [
                       Column(
@@ -109,9 +106,7 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                       ),
                       const SizedBox(width: 10),
                       GestureDetector(
-                        onTap: () {
-                          // فتح نافذة الريلز والتفاعلات
-                        },
+                        onTap: () {},
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -127,7 +122,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
                 ],
               ),
             ),
-            // محتوى الشاشات
             Expanded(
               child: _screens[_currentIndex],
             ),
@@ -150,7 +144,6 @@ class _MainHomeScreenState extends State<MainHomeScreen> {
   }
 }
 
-// 1. الصفحة الرئيسية مع الأخبار والريلز
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
 
@@ -163,7 +156,6 @@ class HomeScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // زر المحادثة الذكية مع AI
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -180,7 +172,6 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          // بانر الإعلانات المستمرة للربح
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -200,7 +191,6 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 20),
           const Text('آخر الأخبار والمحتوى المتجدد', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
           const SizedBox(height: 10),
-          // سرد الأخبار مع دمج شريط الريلز بعد كل 5 أخبار
           ...List.generate(8, (index) {
             if (index > 0 && index % 5 == 0) {
               return Container(
@@ -228,9 +218,7 @@ class HomeScreen extends StatelessWidget {
               child: ListTile(
                 title: Text('خبر تكنولوجي أو عام رقم ${index + 1} - اضغط للتفاصيل داخل التطبيق', style: const TextStyle(color: Colors.white, fontSize: 13)),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-                onTap: () {
-                  // فتح تفاصيل الخبر
-                },
+                onTap: () {},
               ),
             );
           }),
@@ -240,7 +228,6 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// 2. شاشة الأقسام العشرة بـ 3D Glassmorphism
 class CategoriesScreen extends StatelessWidget {
   const CategoriesScreen({Key? key}) : super(key: key);
 
@@ -315,7 +302,6 @@ class CategoriesScreen extends StatelessWidget {
   }
 }
 
-// 3. الصفحة الشخصية، الأكواد، الإعدادات والتذكيرات
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({Key? key}) : super(key: key);
 
@@ -324,7 +310,6 @@ class ProfileScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // زر إعدادات التطبيق
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF1E293B),
@@ -338,7 +323,6 @@ class ProfileScreen extends StatelessWidget {
           label: const Text('إعدادات التطبيق وسياسة الاستخدام'),
         ),
         const SizedBox(height: 16),
-        // قسم الأكواد
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -372,7 +356,6 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        // التذكيرات الثلاثة الذكية
         const Text('التذكيرات والمهام الذكية', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
         const SizedBox(height: 8),
         SwitchListTile(
@@ -391,7 +374,6 @@ class ProfileScreen extends StatelessWidget {
           onChanged: (val) {},
         ),
         const SizedBox(height: 20),
-        // مشاركة وتقييم التطبيق
         Row(
           children: [
             Expanded(
