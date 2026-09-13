@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'settings_screen.dart';
 import 'categories_screen.dart';
+import 'chat_screen.dart';
+import 'ai_service.dart';
 
 void main() {
   runApp(const Sa7biAIApp());
@@ -34,10 +36,9 @@ class MainContainerScreen extends StatefulWidget {
 class _MainContainerScreenState extends State<MainContainerScreen> {
   int _currentIndex = 0;
 
-  // ربط الصفحات الثلاثة للشريط السفلي
   final List<Widget> _screens = [
     const HomeScreen(),
-    const CategoriesScreen(), // شاشة الأقسام العشرة المربوطة هنا
+    const CategoriesScreen(),
     const ProfileScreen(),
   ];
 
@@ -180,6 +181,23 @@ class HomeScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
+        // زر سريع لفتح الشات الذكي
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ChatScreen()),
+            );
+          },
+          icon: const Icon(Icons.chat_bubble_outline, color: Colors.amber),
+          label: const Text('ابدأ المحادثة مع المساعد الذكي صاحبي AI', style: TextStyle(color: Colors.white)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF1E293B),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 15),
         Container(
           height: 150,
           decoration: BoxDecoration(
@@ -223,7 +241,7 @@ class HomeScreen extends StatelessWidget {
 }
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({Key? key}) : size(Key? key) : super(key: key);
+  const ProfileScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
