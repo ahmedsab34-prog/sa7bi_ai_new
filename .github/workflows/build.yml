@@ -26,6 +26,24 @@ jobs:
           flutter-version: '3.19.6'
           channel: 'stable'
 
+      - name: Show Java version
+        run: java -version
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Show Gradle version
+        run: |
+          echo "Checking Gradle..."
+          if [ -f android/gradlew ]; then
+            cd android
+            chmod +x gradlew
+            ./gradlew --version
+          else
+            echo "No Gradle Wrapper found in android/"
+            gradle --version || true
+          fi
+
       - name: Clean Flutter build cache
         run: flutter clean
 
