@@ -6,6 +6,7 @@
 
     <application
         android:label="صاحبي AI"
+        android:icon="@drawable/app_icon"
         android:name="${applicationName}"
         android:usesCleartextTraffic="true"
         android:allowBackup="true">
