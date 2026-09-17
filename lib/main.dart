@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -27,6 +29,10 @@ class Sa7biAiApp extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// MAIN CONTAINER
+// ============================================================
 
 class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
@@ -85,7 +91,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 }
 
 // ============================================================
-// LOGO
+// SA7BI LOGO
 // ============================================================
 
 class Sa7biLogo extends StatefulWidget {
@@ -98,8 +104,6 @@ class Sa7biLogo extends StatefulWidget {
 class _Sa7biLogoState extends State<Sa7biLogo>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _rotation;
-  late final Animation<double> _dotOpacity;
 
   @override
   void initState() {
@@ -107,23 +111,8 @@ class _Sa7biLogoState extends State<Sa7biLogo>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 5),
+      duration: const Duration(seconds: 7),
     )..repeat();
-
-    _rotation = Tween<double>(
-      begin: 0,
-      end: 6.283185307,
-    ).animate(_controller);
-
-    _dotOpacity = Tween<double>(
-      begin: 0.25,
-      end: 1.0,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeInOut,
-      ),
-    );
   }
 
   @override
@@ -137,105 +126,358 @@ class _Sa7biLogoState extends State<Sa7biLogo>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Transform.rotate(
-              angle: _rotation.value,
-              child: Container(
-                width: 58,
-                height: 58,
+        final t = _controller.value;
+
+        final pulse =
+            (math.sin(t * math.pi * 2) + 1) / 2;
+
+        final signalColor = HSVColor.fromAHSV(
+          1,
+          (185 + t * 150) % 360,
+          .82,
+          1,
+        ).toColor();
+
+        final edgeColor = HSVColor.fromAHSV(
+          1,
+          (42 + t * 45) % 360,
+          .65,
+          1,
+        ).toColor();
+
+        return SizedBox(
+          width: 76,
+          height: 76,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              // الإضاءة الخارجية
+              Container(
+                width: 72,
+                height: 72,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: SweepGradient(
-                    transform: GradientRotation(_rotation.value),
-                    colors: const [
-                      Color(0xFFFFD54F),
-                      Color(0xFF00E5FF),
-                      Color(0xFFB15CFF),
-                      Color(0xFFFF4FD8),
-                      Color(0xFFFFD54F),
-                    ],
-                  ),
-                  boxShadow: const [
+                  boxShadow: [
                     BoxShadow(
-                      color: Color(0x55FFD54F),
+                      color: edgeColor.withOpacity(.45),
                       blurRadius: 18,
                       spreadRadius: 2,
                     ),
+                    BoxShadow(
+                      color: signalColor.withOpacity(.18),
+                      blurRadius: 30,
+                      spreadRadius: 4,
+                    ),
                   ],
                 ),
-                padding: const EdgeInsets.all(5),
-                child: Container(
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFF10121A),
+              ),
+
+              // الإطار الخارجي
+              Container(
+                width: 70,
+                height: 70,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: SweepGradient(
+                    transform: GradientRotation(
+                      t * math.pi * 2,
+                    ),
+                    colors: [
+                      const Color(0xFFFFB300),
+                      const Color(0xFFFFF0A6),
+                      const Color(0xFFFFC107),
+                      signalColor,
+                      const Color(0xFF1769FF),
+                      const Color(0xFFFFB300),
+                    ],
                   ),
-                  child: Transform.rotate(
-                    angle: -_rotation.value,
-                    child: Center(
-                      child: RichText(
-                        text: TextSpan(
-                          children: [
-                            const TextSpan(
-                              text: '@',
-                              style: TextStyle(
-                                color: Color(0xFFFFD76A),
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                shadows: [
-                                  Shadow(
-                                    color: Color(0xFFFFB300),
-                                    blurRadius: 8,
-                                  ),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF082B61),
+                        Color(0xFF03152F),
+                        Color(0xFF061B3B),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(.32),
+                      width: 1,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x99000000),
+                        blurRadius: 10,
+                        offset: Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
+                    children: [
+                      // لمعة زجاج متحركة
+                      Positioned(
+                        left: -18 + (t * 70),
+                        top: 3,
+                        child: Transform.rotate(
+                          angle: -.45,
+                          child: Container(
+                            width: 23,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              borderRadius:
+                                  BorderRadius.circular(20),
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withOpacity(0),
+                                  Colors.white.withOpacity(.18),
+                                  Colors.white.withOpacity(0),
                                 ],
                               ),
                             ),
-                            TextSpan(
-                              text: 'i',
-                              style: TextStyle(
-                                color: const Color(0xFFFFD76A),
-                                fontSize: 23,
-                                fontWeight: FontWeight.w900,
-                                shadows: [
-                                  Shadow(
-                                    color: Color.lerp(
-                                      Colors.transparent,
-                                      const Color(0xFFFFF59D),
-                                      _dotOpacity.value,
-                                    )!,
-                                    blurRadius: 12,
-                                  ),
-                                ],
+                          ),
+                        ),
+                      ),
+
+                      // @
+                      Positioned(
+                        left: 7,
+                        top: 14,
+                        child: ShaderMask(
+                          shaderCallback: (bounds) {
+                            return const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFFFFF1A8),
+                                Color(0xFFFFC107),
+                                Color(0xFFD88A00),
+                                Color(0xFFFFE082),
+                              ],
+                            ).createShader(bounds);
+                          },
+                          child: const Text(
+                            '@',
+                            style: TextStyle(
+                              fontSize: 29,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Color(0xFFFFB300),
+                                  blurRadius: 7,
+                                  offset: Offset(1, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // i
+                      Positioned(
+                        right: 10,
+                        top: 16,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            ShaderMask(
+                              shaderCallback: (bounds) {
+                                return const LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Color(0xFFB9F7FF),
+                                    Color(0xFF00C8FF),
+                                    Color(0xFF087BFF),
+                                    Color(0xFFFFC107),
+                                  ],
+                                ).createShader(bounds);
+                              },
+                              child: const Text(
+                                'i',
+                                style: TextStyle(
+                                  fontSize: 31,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+
+                            // النقطة المضيئة
+                            Positioned(
+                              left: 7,
+                              top: -3,
+                              child: Container(
+                                width: 9 + pulse * 3,
+                                height: 9 + pulse * 3,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: signalColor,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: signalColor
+                                          .withOpacity(.95),
+                                      blurRadius:
+                                          6 + pulse * 8,
+                                      spreadRadius:
+                                          1 + pulse * 2,
+                                    ),
+                                    const BoxShadow(
+                                      color: Color(0xFFFFC107),
+                                      blurRadius: 3,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ),
+
+                      // إشارات Wi-Fi
+                      Positioned(
+                        right: 1,
+                        top: -4,
+                        child: CustomPaint(
+                          size: const Size(36, 25),
+                          painter: _Sa7biSignalPainter(
+                            progress: t,
+                            color: signalColor,
+                          ),
+                        ),
+                      ),
+
+                      // صاحبي داخل الدائرة
+                      Positioned(
+                        bottom: 7,
+                        left: 0,
+                        right: 0,
+                        child: ShaderMask(
+                          shaderCallback: (bounds) {
+                            return const LinearGradient(
+                              colors: [
+                                Color(0xFFFFF3B0),
+                                Color(0xFFFFC107),
+                                Color(0xFFD98A00),
+                                Color(0xFFFFE082),
+                              ],
+                            ).createShader(bounds);
+                          },
+                          child: const Text(
+                            'صاحبي',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: .5,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black87,
+                                  blurRadius: 3,
+                                  offset: Offset(1, 1),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // لمعة صغيرة
+                      Positioned(
+                        left: 8,
+                        top: 7,
+                        child: Container(
+                          width: 16,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            borderRadius:
+                                BorderRadius.circular(20),
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white.withOpacity(.65),
+                                Colors.white.withOpacity(0),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'صاحبي',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-                color: Color(0xFFFFD76A),
-                shadows: [
-                  Shadow(
-                    color: Color(0xFFFFB300),
-                    blurRadius: 8,
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
+  }
+}
+
+// ============================================================
+// WIFI SIGNAL
+// ============================================================
+
+class _Sa7biSignalPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _Sa7biSignalPainter({
+    required this.progress,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(
+      size.width / 2,
+      size.height * .92,
+    );
+
+    for (int i = 0; i < 3; i++) {
+      final phase =
+          (progress + i * .18) % 1.0;
+
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round
+        ..color = color.withOpacity(
+          .28 + phase * .65,
+        );
+
+      final rect = Rect.fromCenter(
+        center: center,
+        width: size.width *
+            (.38 + i * .23),
+        height: size.height *
+            (.55 + i * .24),
+      );
+
+      canvas.drawArc(
+        rect,
+        math.pi * 1.17,
+        math.pi * .66,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(
+    covariant _Sa7biSignalPainter oldDelegate,
+  ) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.color != color;
   }
 }
 
@@ -254,9 +496,11 @@ class AppHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment:
+          MainAxisAlignment.spaceBetween,
       children: [
         const Sa7biLogo(),
+
         GestureDetector(
           onTap: onProfileTap,
           child: Container(
@@ -290,12 +534,15 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() =>
+      _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refresh() async {
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future.delayed(
+      const Duration(milliseconds: 800),
+    );
 
     if (!mounted) return;
 
@@ -323,17 +570,20 @@ class _HomeScreenState extends State<HomeScreen> {
     return RefreshIndicator(
       onRefresh: _refresh,
       child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding:
+            const EdgeInsets.fromLTRB(16, 14, 16, 24),
         children: [
           const AppHeader(),
+
           const SizedBox(height: 18),
 
-          // Shopping / affiliate banner
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius:
+                  BorderRadius.circular(22),
               gradient: const LinearGradient(
                 colors: [
                   Color(0xFF2B1F08),
@@ -353,7 +603,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 const Row(
                   children: [
@@ -372,7 +623,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 8),
+
                 const Text(
                   'اختار المتجر وشوف أحدث المنتجات والعروض.',
                   style: TextStyle(
@@ -380,7 +633,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 14,
                   ),
                 ),
+
                 const SizedBox(height: 14),
+
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -469,11 +724,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(height: 18),
 
-          // Reels / TikTok strip
           Container(
             height: 150,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius:
+                  BorderRadius.circular(22),
               border: Border.all(
                 color: const Color(0x33FFFFFF),
               ),
@@ -489,13 +744,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: _ShortVideoBox(
                     title: 'Reels',
-                    icon: Icons.play_circle_fill,
+                    icon:
+                        Icons.play_circle_fill,
                     onTap: () {},
                   ),
                 ),
                 Container(
                   width: 1,
-                  margin: const EdgeInsets.symmetric(vertical: 20),
+                  margin:
+                      const EdgeInsets.symmetric(
+                    vertical: 20,
+                  ),
                   color: Colors.white24,
                 ),
                 Expanded(
@@ -514,6 +773,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// ============================================================
+// STORE BUTTON
+// ============================================================
+
 class _StoreButton extends StatelessWidget {
   final String name;
   final IconData icon;
@@ -529,7 +792,8 @@ class _StoreButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius:
+          BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: 12,
@@ -537,13 +801,15 @@ class _StoreButton extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: const Color(0x22111111),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius:
+              BorderRadius.circular(14),
           border: Border.all(
             color: const Color(0x44FFD54F),
           ),
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize:
+              MainAxisSize.min,
           children: [
             Icon(
               icon,
@@ -564,6 +830,10 @@ class _StoreButton extends StatelessWidget {
   }
 }
 
+// ============================================================
+// NEWS CARD
+// ============================================================
+
 class _NewsCard extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -578,24 +848,30 @@ class _NewsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
+      margin:
+          const EdgeInsets.only(bottom: 12),
+      padding:
+          const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: const Color(0xFF12151E),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius:
+            BorderRadius.circular(20),
         border: Border.all(
           color: const Color(0x22FFFFFF),
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(15),
-              gradient: const LinearGradient(
+              borderRadius:
+                  BorderRadius.circular(15),
+              gradient:
+                  const LinearGradient(
                 colors: [
                   Color(0xFFFFD54F),
                   Color(0xFFB15CFF),
@@ -607,10 +883,13 @@ class _NewsCard extends StatelessWidget {
               color: Colors.black,
             ),
           ),
+
           const SizedBox(width: 12),
+
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
@@ -636,7 +915,12 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
-class _ShortVideoBox extends StatelessWidget {
+// ============================================================
+// SHORT VIDEO
+// ============================================================
+
+class _ShortVideoBox
+    extends StatelessWidget {
   final String title;
   final IconData icon;
   final VoidCallback onTap;
@@ -651,14 +935,17 @@ class _ShortVideoBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius:
+          BorderRadius.circular(20),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment:
+            MainAxisAlignment.center,
         children: [
           Icon(
             icon,
             size: 48,
-            color: const Color(0xFFFFD54F),
+            color:
+                const Color(0xFFFFD54F),
           ),
           const SizedBox(height: 8),
           Text(
@@ -683,13 +970,15 @@ class _ShortVideoBox extends StatelessWidget {
 }
 
 // ============================================================
-// CATEGORIES / SERVICES
+// CATEGORIES
 // ============================================================
 
-class CategoriesScreen extends StatelessWidget {
+class CategoriesScreen
+    extends StatelessWidget {
   const CategoriesScreen({super.key});
 
-  static const List<_CategoryData> categories = [
+  static const List<_CategoryData>
+      categories = [
     _CategoryData(
       title: 'المطبخ والبيت',
       icon: Icons.kitchen,
@@ -757,14 +1046,26 @@ class CategoriesScreen extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-          sliver: SliverToBoxAdapter(
-            child: const AppHeader(),
+          padding:
+              const EdgeInsets.fromLTRB(
+            16,
+            14,
+            16,
+            10,
+          ),
+          sliver:
+              const SliverToBoxAdapter(
+            child: AppHeader(),
           ),
         ),
+
         const SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          sliver: SliverToBoxAdapter(
+          padding:
+              EdgeInsets.symmetric(
+            horizontal: 16,
+          ),
+          sliver:
+              SliverToBoxAdapter(
             child: Text(
               'خدمات صاحبي AI',
               style: TextStyle(
@@ -774,15 +1075,22 @@ class CategoriesScreen extends StatelessWidget {
             ),
           ),
         ),
+
         const SliverToBoxAdapter(
           child: SizedBox(height: 15),
         ),
+
         SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal: 12,
+          ),
           sliver: SliverGrid(
-            delegate: SliverChildBuilderDelegate(
+            delegate:
+                SliverChildBuilderDelegate(
               (context, index) {
-                final category = categories[index];
+                final category =
+                    categories[index];
 
                 return _CategoryCard(
                   data: category,
@@ -790,7 +1098,8 @@ class CategoriesScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ServiceDetailScreen(
+                        builder: (_) =>
+                            ServiceDetailScreen(
                           data: category,
                         ),
                       ),
@@ -798,24 +1107,32 @@ class CategoriesScreen extends StatelessWidget {
                   },
                 );
               },
-              childCount: categories.length,
+              childCount:
+                  categories.length,
             ),
             gridDelegate:
                 const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: 0.95,
+              childAspectRatio: .88,
             ),
           ),
         ),
-        const SliverToBoxAdapter(
-          child: SizedBox(height: 25),
+
+        const SliverPadding(
+          padding: EdgeInsets.only(
+            bottom: 25,
+          ),
         ),
       ],
     );
   }
 }
+
+// ============================================================
+// CATEGORY DATA
+// ============================================================
 
 class _CategoryData {
   final String title;
@@ -829,7 +1146,12 @@ class _CategoryData {
   });
 }
 
-class _CategoryCard extends StatelessWidget {
+// ============================================================
+// CATEGORY CARD
+// ============================================================
+
+class _CategoryCard
+    extends StatelessWidget {
   final _CategoryData data;
   final VoidCallback onTap;
 
@@ -842,17 +1164,21 @@ class _CategoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius:
+          BorderRadius.circular(24),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding:
+            const EdgeInsets.all(15),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: const LinearGradient(
+          borderRadius:
+              BorderRadius.circular(24),
+          gradient:
+              const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF202431),
-              Color(0xFF10121A),
+              Color(0xFF18243A),
+              Color(0xFF0D121F),
             ],
           ),
           border: Border.all(
@@ -860,53 +1186,62 @@ class _CategoryCard extends StatelessWidget {
           ),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x22000000),
+              color: Color(0x33000000),
               blurRadius: 12,
               offset: Offset(0, 6),
             ),
           ],
         ),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
             Container(
-              width: 68,
-              height: 68,
+              width: 62,
+              height: 62,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
+                gradient:
+                    const LinearGradient(
                   colors: [
                     Color(0xFFFFD54F),
-                    Color(0xFFB15CFF),
+                    Color(0xFFB16CFF),
                   ],
                 ),
                 boxShadow: const [
                   BoxShadow(
-                    color: Color(0x33FFD54F),
-                    blurRadius: 15,
+                    color: Color(0x55FFD54F),
+                    blurRadius: 14,
                   ),
                 ],
               ),
               child: Icon(
                 data.icon,
-                size: 35,
                 color: Colors.black,
+                size: 31,
               ),
             ),
+
             const SizedBox(height: 12),
+
             Text(
               data.title,
-              textAlign: TextAlign.center,
+              textAlign:
+                  TextAlign.center,
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 5),
-            const Icon(
-              Icons.arrow_forward_ios,
-              size: 13,
-              color: Color(0xFFFFD54F),
+
+            const SizedBox(height: 6),
+
+            const Text(
+              'اضغط للدخول',
+              style: TextStyle(
+                color: Colors.white54,
+                fontSize: 11,
+              ),
             ),
           ],
         ),
@@ -919,7 +1254,8 @@ class _CategoryCard extends StatelessWidget {
 // SERVICE DETAIL
 // ============================================================
 
-class ServiceDetailScreen extends StatelessWidget {
+class ServiceDetailScreen
+    extends StatelessWidget {
   final _CategoryData data;
 
   const ServiceDetailScreen({
@@ -932,103 +1268,85 @@ class ServiceDetailScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(data.title),
-        backgroundColor: const Color(0xFF0D0F16),
+        backgroundColor:
+            const Color(0xFF0D1018),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(18),
+        padding:
+            const EdgeInsets.all(18),
         children: [
           Container(
-            padding: const EdgeInsets.all(22),
+            padding:
+                const EdgeInsets.all(22),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(25),
-              gradient: const LinearGradient(
+              borderRadius:
+                  BorderRadius.circular(25),
+              gradient:
+                  const LinearGradient(
                 colors: [
-                  Color(0xFF242836),
-                  Color(0xFF11131C),
+                  Color(0xFF18243A),
+                  Color(0xFF0C101A),
                 ],
               ),
               border: Border.all(
-                color: const Color(0x33FFD54F),
+                color: const Color(0x44FFD54F),
               ),
             ),
             child: Column(
               children: [
-                Container(
-                  width: 90,
-                  height: 90,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        Color(0xFFFFD54F),
-                        Color(0xFFB15CFF),
-                      ],
-                    ),
-                  ),
-                  child: Icon(
-                    data.icon,
-                    size: 48,
-                    color: Colors.black,
-                  ),
+                Icon(
+                  data.icon,
+                  size: 70,
+                  color:
+                      const Color(0xFFFFD54F),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 15),
                 Text(
                   data.title,
                   style: const TextStyle(
                     fontSize: 25,
-                    fontWeight: FontWeight.w900,
+                    fontWeight:
+                        FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   data.description,
-                  textAlign: TextAlign.center,
+                  textAlign:
+                      TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white70,
                     height: 1.5,
-                    fontSize: 15,
                   ),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
           _ActionTile(
             icon: Icons.camera_alt,
-            title: 'صورة',
-            subtitle: 'استخدم صورة للحصول على مساعدة وتحليل.',
-            onTap: () {},
-          ),
-
-          _ActionTile(
-            icon: Icons.videocam,
-            title: 'فيديو',
-            subtitle: 'استخدم فيديو لشرح المشكلة أو الطلب.',
+            title: 'الكاميرا',
+            subtitle:
+                'صوّر صورة أو فيديو وأرسله للخدمة.',
             onTap: () {},
           ),
 
           _ActionTile(
             icon: Icons.mic,
-            title: 'صوت',
-            subtitle: 'تحدث بصوتك وسيتم تحويل كلامك إلى نص.',
+            title: 'الصوت',
+            subtitle:
+                'استخدم صوتك للتحدث مع الخدمة.',
             onTap: () {},
           ),
 
           _ActionTile(
-            icon: Icons.chat_bubble,
-            title: 'محادثة',
-            subtitle: 'اكتب طلبك وتحدث مع المساعد.',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'المحادثة الذكية سيتم ربطها في مرحلة AI التالية.',
-                  ),
-                ),
-              );
-            },
+            icon: Icons.chat,
+            title: 'المحادثة',
+            subtitle:
+                'اكتب رسالتك وابدأ المحادثة.',
+            onTap: () {},
           ),
         ],
       ),
@@ -1036,7 +1354,12 @@ class ServiceDetailScreen extends StatelessWidget {
   }
 }
 
-class _ActionTile extends StatelessWidget {
+// ============================================================
+// ACTION TILE
+// ============================================================
+
+class _ActionTile
+    extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
@@ -1052,39 +1375,35 @@ class _ActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin:
+          const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121722),
+        borderRadius:
+            BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0x22FFFFFF),
+        ),
+      ),
       child: ListTile(
         onTap: onTap,
-        contentPadding: const EdgeInsets.all(12),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(
-            color: Color(0x22FFFFFF),
-          ),
-        ),
-        tileColor: const Color(0xFF131620),
         leading: Container(
-          width: 50,
-          height: 50,
-          decoration: const BoxDecoration(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: [
-                Color(0xFFFFD54F),
-                Color(0xFFB15CFF),
-              ],
-            ),
+            color: const Color(0x22FFD54F),
           ),
           child: Icon(
             icon,
-            color: Colors.black,
+            color:
+                const Color(0xFFFFD54F),
           ),
         ),
         title: Text(
           title,
           style: const TextStyle(
             fontWeight: FontWeight.bold,
-            fontSize: 17,
           ),
         ),
         subtitle: Text(
@@ -1093,11 +1412,8 @@ class _ActionTile extends StatelessWidget {
             color: Colors.white54,
           ),
         ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Color(0xFFFFD54F),
-        ),
+        trailing:
+            const Icon(Icons.chevron_right),
       ),
     );
   }
@@ -1107,114 +1423,61 @@ class _ActionTile extends StatelessWidget {
 // PROFILE
 // ============================================================
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen
+    extends StatelessWidget {
   const ProfileScreen({super.key});
 
-  Future<void> _shareApp(BuildContext context) async {
-    const appLink = 'https://github.com/ahmedsab34-prog/sa7bi_ai_new';
-
+  Future<void> _shareApp() async {
     final uri = Uri.parse(
-      'https://wa.me/?text=${Uri.encodeComponent(
-        'جرّب تطبيق صاحبي AI\n$appLink',
-      )}',
+      'https://github.com/ahmedsab34-prog/sa7bi_ai_new',
     );
 
     if (await canLaunchUrl(uri)) {
       await launchUrl(
         uri,
-        mode: LaunchMode.externalApplication,
-      );
-    } else {
-      if (!context.mounted) return;
-
-      await showDialog<void>(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('مشاركة التطبيق'),
-            content: const SelectableText(
-              'https://github.com/ahmedsab34-prog/sa7bi_ai_new',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('إغلاق'),
-              ),
-            ],
-          );
-        },
+        mode:
+            LaunchMode.externalApplication,
       );
     }
-  }
-
-  void _showMessage(
-    BuildContext context,
-    String title,
-    String message,
-  ) {
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('حسنًا'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 25),
+      padding:
+          const EdgeInsets.fromLTRB(
+        16,
+        14,
+        16,
+        25,
+      ),
       children: [
         const AppHeader(),
+
         const SizedBox(height: 25),
 
         Center(
           child: Column(
             children: [
-              Container(
-                width: 92,
-                height: 92,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFFFFD54F),
-                    width: 3,
-                  ),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFF292D3A),
-                      Color(0xFF12141D),
-                    ],
-                  ),
-                ),
-                child: const Icon(
-                  Icons.person,
-                  size: 50,
-                  color: Color(0xFFFFD54F),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'حسابي',
-                style: TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 5),
+              const Sa7biLogo(),
+
+              const SizedBox(height: 15),
+
               const Text(
                 'صاحبي AI',
                 style: TextStyle(
-                  color: Colors.white54,
+                  fontSize: 26,
+                  fontWeight:
+                      FontWeight.w900,
+                ),
+              ),
+
+              const SizedBox(height: 6),
+
+              const Text(
+                'مساعدك الذكي في كل يوم',
+                style: TextStyle(
+                  color: Colors.white60,
                 ),
               ),
             ],
@@ -1224,101 +1487,43 @@ class ProfileScreen extends StatelessWidget {
         const SizedBox(height: 25),
 
         _ProfileButton(
+          icon: Icons.share,
+          title: 'مشاركة التطبيق',
+          subtitle:
+              'شارك رابط صاحبي مع أصدقائك.',
+          onTap: _shareApp,
+        ),
+
+        _ProfileButton(
           icon: Icons.settings,
           title: 'الإعدادات',
-          subtitle: 'إعدادات التطبيق والمساعد الذكي',
+          subtitle:
+              'إعدادات التطبيق والحساب.',
           onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const SettingsScreen(),
+                builder: (_) =>
+                    const SettingsScreen(),
               ),
             );
           },
         ),
 
         _ProfileButton(
-          icon: Icons.share,
-          title: 'مشاركة التطبيق',
-          subtitle: 'شارك صاحبي مع أصدقائك',
-          onTap: () => _shareApp(context),
+          icon: Icons.auto_awesome,
+          title: 'الذكاء الاصطناعي',
+          subtitle:
+              'إعدادات الذكاء الاصطناعي.',
+          onTap: () {},
         ),
 
         _ProfileButton(
-          icon: Icons.chat,
-          title: 'مفتاح الذكاء الاصطناعي',
-          subtitle: 'إعداد وربط مفتاح AI',
-          onTap: () {
-            _showMessage(
-              context,
-              'مفتاح الذكاء الاصطناعي',
-              'سيتم ربط إعداد مفتاح Gemini مع خدمة الذكاء الاصطناعي في المرحلة التالية.',
-            );
-          },
-        ),
-
-        const SizedBox(height: 20),
-
-        const Text(
-          'التذكيرات',
-          style: TextStyle(
-            fontSize: 21,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-
-        const SizedBox(height: 10),
-
-        _ReminderTile(
-          icon: Icons.mosque,
-          title: 'تذكير العبادات',
+          icon: Icons.notifications,
+          title: 'التذكيرات',
           subtitle:
-              'الصلاة والأذكار والمواعيد التي تختارها.',
-        ),
-
-        _ReminderTile(
-          icon: Icons.sports,
-          title: 'تذكير الهوايات والرياضة',
-          subtitle:
-              'تذكير بالمباريات والهوايات والاهتمامات.',
-        ),
-
-        _ReminderTile(
-          icon: Icons.alarm,
-          title: 'التذكير الشخصي',
-          subtitle:
-              'منبه أو موعد أو رحلة أو ملاحظة شخصية.',
-        ),
-
-        const SizedBox(height: 20),
-
-        Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            color: const Color(0xFF11141D),
-            border: Border.all(
-              color: const Color(0x22FFFFFF),
-            ),
-          ),
-          child: const Row(
-            children: [
-              Icon(
-                Icons.verified_user,
-                color: Color(0xFFFFD54F),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'التطبيق متصل ويعمل. سيتم إضافة المزايا المتقدمة تدريجيًا.',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
-          ),
+              'إدارة التنبيهات والتذكيرات.',
+          onTap: () {},
         ),
       ],
     );
@@ -1329,7 +1534,8 @@ class ProfileScreen extends StatelessWidget {
 // PROFILE BUTTON
 // ============================================================
 
-class _ProfileButton extends StatelessWidget {
+class _ProfileButton
+    extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
@@ -1345,26 +1551,25 @@ class _ProfileButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin:
+          const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121722),
+        borderRadius:
+            BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0x22FFFFFF),
+        ),
+      ),
       child: ListTile(
         onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 15,
-          vertical: 7,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(
-            color: Color(0x22FFFFFF),
-          ),
-        ),
-        tileColor: const Color(0xFF12151E),
         leading: Container(
           width: 48,
           height: 48,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
+            gradient:
+                const LinearGradient(
               colors: [
                 Color(0xFFFFD54F),
                 Color(0xFFB15CFF),
@@ -1388,106 +1593,8 @@ class _ProfileButton extends StatelessWidget {
             color: Colors.white54,
           ),
         ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 15,
-          color: Color(0xFFFFD54F),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// REMINDERS
-// ============================================================
-
-class _ReminderTile extends StatefulWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  const _ReminderTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  State<_ReminderTile> createState() => _ReminderTileState();
-}
-
-class _ReminderTileState extends State<_ReminderTile> {
-  bool enabled = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 10,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF12151E),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: enabled
-              ? const Color(0x55FFD54F)
-              : const Color(0x22FFFFFF),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  Color(0xFFFFD54F),
-                  Color(0xFFB15CFF),
-                ],
-              ),
-            ),
-            child: Icon(
-              widget.icon,
-              color: Colors.black,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.subtitle,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: enabled,
-            activeColor: const Color(0xFFFFD54F),
-            onChanged: (value) {
-              setState(() {
-                enabled = value;
-              });
-            },
-          ),
-        ],
+        trailing:
+            const Icon(Icons.chevron_right),
       ),
     );
   }
@@ -1497,153 +1604,84 @@ class _ReminderTileState extends State<_ReminderTile> {
 // SETTINGS
 // ============================================================
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen
+    extends StatelessWidget {
   const SettingsScreen({super.key});
-
-  @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
-
-class _SettingsScreenState extends State<SettingsScreen> {
-  final TextEditingController _apiKeyController =
-      TextEditingController();
-
-  bool _saved = false;
-
-  @override
-  void dispose() {
-    _apiKeyController.dispose();
-    super.dispose();
-  }
-
-  void _saveKey() {
-    setState(() {
-      _saved = true;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'تم حفظ الإعداد على شاشة التطبيق مؤقتًا.',
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('الإعدادات'),
-        backgroundColor: const Color(0xFF0D0F16),
+        backgroundColor:
+            const Color(0xFF0D1018),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(18),
+        padding:
+            const EdgeInsets.all(16),
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(22),
-              color: const Color(0xFF12151E),
-              border: Border.all(
-                color: const Color(0x22FFFFFF),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.auto_awesome,
-                      color: Color(0xFFFFD54F),
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'الذكاء الاصطناعي',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'مفتاح Gemini API',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _apiKeyController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    hintText: 'أدخل مفتاح API',
-                    filled: true,
-                    fillColor: const Color(0xFF080A10),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _saveKey,
-                    icon: const Icon(Icons.save),
-                    label: Text(
-                      _saved
-                          ? 'تم الحفظ'
-                          : 'حفظ مفتاح الذكاء الاصطناعي',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 15),
-
-          ListTile(
-            tileColor: const Color(0xFF12151E),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            leading: const Icon(
-              Icons.notifications,
-              color: Color(0xFFFFD54F),
-            ),
-            title: const Text('الإشعارات'),
-            subtitle: const Text(
-              'سيتم تطوير نظام الإشعارات والتذكيرات.',
-            ),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 15),
+          _SettingTile(
+            icon: Icons.notifications,
+            title: 'الإشعارات',
             onTap: () {},
           ),
-
-          const SizedBox(height: 10),
-
-          ListTile(
-            tileColor: const Color(0xFF12151E),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-            ),
-            leading: const Icon(
-              Icons.security,
-              color: Color(0xFFFFD54F),
-            ),
-            title: const Text('الخصوصية والأمان'),
-            subtitle: const Text(
-              'إعدادات الخصوصية والحماية.',
-            ),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 15),
+          _SettingTile(
+            icon: Icons.lock,
+            title: 'الخصوصية والأمان',
+            onTap: () {},
+          ),
+          _SettingTile(
+            icon: Icons.language,
+            title: 'اللغة',
+            onTap: () {},
+          ),
+          _SettingTile(
+            icon: Icons.info_outline,
+            title: 'عن صاحبي AI',
             onTap: () {},
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// SETTING TILE
+// ============================================================
+
+class _SettingTile
+    extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  const _SettingTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin:
+          const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121722),
+        borderRadius:
+            BorderRadius.circular(18),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(
+          icon,
+          color:
+              const Color(0xFFFFD54F),
+        ),
+        title: Text(title),
+        trailing:
+            const Icon(Icons.chevron_right),
       ),
     );
   }
