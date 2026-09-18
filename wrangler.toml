@@ -1,3 +1,9 @@
 name = "sa7bi-ai-new"
-main = "backend/index.js"
+main = "backend/src/index.js"
 compatibility_date = "2026-09-18"
+
+[vars]
+OPENAI_MODEL = "gpt-5.6-luna"
+
+[secrets]
+required = ["OPENAI_API_KEY"]
