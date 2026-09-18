@@ -1,5 +1,5 @@
 name: sa7bi_ai_new
-description: "A high-end Android Flutter application featuring Sa7bi AI, AdMob monetization, and affiliate e-commerce."
+description: "A high-end Android Flutter application featuring Sa7bi AI."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -16,6 +16,7 @@ dependencies:
   google_mobile_ads: ^4.0.0
   permission_handler: ^11.3.0
   http: ^1.2.0
+  image_picker: ^1.0.8
 
 dev_dependencies:
   flutter_test:
