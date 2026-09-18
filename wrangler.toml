@@ -1,0 +1,3 @@
+name = "sa7bi-ai-new"
+main = "backend/index.js"
+compatibility_date = "2026-09-18"
