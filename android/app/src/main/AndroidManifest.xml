@@ -4,6 +4,12 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
+    <!-- Camera -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- Microphone -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
     <application
         android:label="صاحبي AI"
         android:icon="@drawable/app_icon"
@@ -25,8 +31,8 @@
             android:windowSoftInputMode="adjustResize">
 
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme"
             />
 
             <intent-filter>
@@ -36,7 +42,7 @@
         </activity>
 
         <meta-data
-            android:name="flutterEmbedding"
+            name="flutterEmbedding"
             android:value="2" />
 
     </application>
