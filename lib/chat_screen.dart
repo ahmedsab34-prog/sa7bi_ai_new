@@ -10,91 +10,190 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
+
   final List<Map<String, String>> _messages = [];
+
   bool _isLoading = false;
 
-  // مفتاح مؤقت للاختبار أو يتم جلبه من الإعدادات
-  final String _apiKey = "ضع_مفتاح_الـ_api_هنا_أو_استرجعه";
+  Future<void> _sendMessage() async {
+    final userMessage = _controller.text.trim();
 
-  void _sendMessage() async {
-    if (_controller.text.trim().isEmpty) return;
+    if (userMessage.isEmpty || _isLoading) {
+      return;
+    }
 
-    final userMessage = _controller.text;
     setState(() {
-      _messages.add({"sender": "user", "text": userMessage});
+      _messages.add({
+        "sender": "user",
+        "text": userMessage,
+      });
       _isLoading = true;
     });
+
     _controller.clear();
 
-    // استدعاء خدمة الذكاء الاصطناعي
-    final aiResponse = await AiService.getGeminiResponse(_apiKey, userMessage);
+    try {
+      final aiResponse = await AiService.getResponse(userMessage);
 
-    setState(() {
-      _messages.add({"sender": "ai", "text": aiResponse});
-      _isLoading = false;
-    });
+      if (!mounted) return;
+
+      setState(() {
+        _messages.add({
+          "sender": "ai",
+          "text": aiResponse,
+        });
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _messages.add({
+          "sender": "ai",
+          "text": "حدث خطأ أثناء الاتصال بصحبي AI. حاول مرة أخرى.",
+        });
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('محادثة صاحبي AI'),
+        title: const Text('محادثة صحبي AI'),
         backgroundColor: const Color(0xFF1E293B),
       ),
+      backgroundColor: const Color(0xFF0F172A),
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final msg = _messages[index];
-                final isUser = msg["sender"] == "user";
-                return Align(
-                  alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 4),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isUser ? Colors.cyan.withOpacity(0.2) : const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+            child: _messages.isEmpty
+                ? const Center(
                     child: Text(
-                      msg["text"] ?? "",
-                      style: const TextStyle(color: Colors.white),
+                      'أهلاً بيك 👋\nاكتب رسالتك وابدأ المحادثة مع صحبي AI',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 17,
+                      ),
                     ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = _messages[index];
+                      final isUser = msg["sender"] == "user";
+
+                      return Align(
+                        alignment: isUser
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            maxWidth: 330,
+                          ),
+                          margin: const EdgeInsets.symmetric(vertical: 5),
+                          padding: const EdgeInsets.all(13),
+                          decoration: BoxDecoration(
+                            color: isUser
+                                ? Colors.cyan.withOpacity(0.20)
+                                : const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isUser
+                                  ? Colors.cyan.withOpacity(0.25)
+                                  : Colors.white10,
+                            ),
+                          ),
+                          child: Text(
+                            msg["text"] ?? "",
+                            textDirection: TextDirection.rtl,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
+
           if (_isLoading)
             const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(color: Colors.amber),
-            ),
-          Container(
-            padding: const EdgeInsets.all(8),
-            color: const Color(0xFF1E293B),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      hintText: 'اكتب رسالتك هنا...',
-                      hintStyle: TextStyle(color: Colors.grey),
-                      border: InputBorder.none,
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.amber,
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.amber),
-                  onPressed: _sendMessage,
-                ),
-              ],
+                  SizedBox(width: 10),
+                  Text(
+                    'صحبي AI بيفكر...',
+                    style: TextStyle(
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+              color: const Color(0xFF1E293B),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      minLines: 1,
+                      maxLines: 5,
+                      textDirection: TextDirection.rtl,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                      ),
+                      onSubmitted: (_) => _sendMessage(),
+                      decoration: const InputDecoration(
+                        hintText: 'اكتب رسالتك هنا...',
+                        hintStyle: TextStyle(
+                          color: Colors.grey,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.send_rounded,
+                      color: Colors.amber,
+                    ),
+                    onPressed: _isLoading ? null : _sendMessage,
+                  ),
+                ],
+              ),
             ),
           ),
         ],
