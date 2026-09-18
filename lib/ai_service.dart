@@ -1,24 +1,54 @@
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class AiService {
-  // دالة لإرسال الرسالة واستقبال الرد من نموذج Gemini الفعال
-  static Future<String> getGeminiResponse(String apiKey, String prompt) async {
+  static const String _workerUrl =
+      'https://sa7bi-ai-new.ahmedsab34.workers.dev/v1/chat';
+
+  static Future<String> getResponse(String prompt) async {
     try {
-      if (apiKey.isEmpty) {
-        return 'الرجاء إدخال مفتاح API الصحيح من شاشة الإعدادات أولاً.';
+      if (prompt.trim().isEmpty) {
+        return 'اكتب رسالتك أولاً.';
       }
 
-      final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
-        apiKey: apiKey,
-      );
+      final response = await http
+          .post(
+            Uri.parse(_workerUrl),
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': prompt.trim(),
+                }
+              ],
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
 
-      final content = [Content.text(prompt)];
-      final response = await model.generateContent(content);
+      if (response.statusCode != 200) {
+        try {
+          final errorData = jsonDecode(response.body);
+          return errorData['error']?.toString() ??
+              'حدث خطأ أثناء الاتصال بالمساعد.';
+        } catch (_) {
+          return 'حدث خطأ أثناء الاتصال بالمساعد.';
+        }
+      }
 
-      return response.text ?? 'عذراً، لم يتم تلقي رد من المساعد.';
+      final data = jsonDecode(response.body);
+
+      if (data['ok'] == true &&
+          data['reply'] is String &&
+          data['reply'].toString().trim().isNotEmpty) {
+        return data['reply'].toString();
+      }
+
+      return 'عذراً، لم يتم تلقي رد من المساعد.';
     } catch (e) {
-      return 'حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: $e';
+      return 'تعذر الاتصال بالمساعد. تأكد من اتصال الإنترنت وحاول مرة أخرى.';
     }
   }
 }
