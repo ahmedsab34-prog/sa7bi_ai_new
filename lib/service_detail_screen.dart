@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'chat_screen.dart';
 import 'service_config.dart';
 
-class ServiceDetailScreen extends StatefulWidget {
+class ServiceDetailScreen extends StatelessWidget {
   final Sa7biService service;
 
   const ServiceDetailScreen({
@@ -13,258 +11,198 @@ class ServiceDetailScreen extends StatefulWidget {
     required this.service,
   });
 
-  @override
-  State<ServiceDetailScreen> createState() =>
-      _ServiceDetailScreenState();
-}
-
-class _ServiceDetailScreenState
-    extends State<ServiceDetailScreen> {
-  final ImagePicker _picker = ImagePicker();
-
-  bool _cameraBusy = false;
-  bool _microphoneBusy = false;
-
-  Future<void> _openAiChat() async {
-    await Navigator.push(
+  void _openChat(BuildContext context) {
+    Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ChatScreen(
-          serviceTitle: widget.service.title,
-          serviceContext: widget.service.aiRole,
+          serviceTitle: service.title,
+          serviceContext: service.aiRole,
         ),
       ),
     );
   }
 
-  Future<void> _pickPhoto() async {
-    if (_cameraBusy) return;
-
-    setState(() {
-      _cameraBusy = true;
-    });
-
-    try {
-      final permission =
-          await Permission.camera.request();
-
-      if (!permission.isGranted) {
-        if (mounted) {
-          _showMessage(
-            'صلاحية الكاميرا غير مفعلة. اسمح للتطبيق باستخدام الكاميرا من إعدادات الهاتف.',
-          );
-        }
-        return;
-      }
-
-      final XFile? image =
-          await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-      );
-
-      if (!mounted) return;
-
-      if (image != null) {
-        _showMessage(
-          'تم التقاط الصورة بنجاح ✅\n'
-          'الصورة جاهزة للمرحلة القادمة من تحليل الصور بالذكاء الاصطناعي.',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        _showMessage(
-          'حدث خطأ أثناء تشغيل الكاميرا.\n$e',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _cameraBusy = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _pickVideo() async {
-    if (_cameraBusy) return;
-
-    setState(() {
-      _cameraBusy = true;
-    });
-
-    try {
-      final permission =
-          await Permission.camera.request();
-
-      if (!permission.isGranted) {
-        if (mounted) {
-          _showMessage(
-            'صلاحية الكاميرا غير مفعلة. اسمح للتطبيق باستخدام الكاميرا من إعدادات الهاتف.',
-          );
-        }
-        return;
-      }
-
-      final XFile? video =
-          await _picker.pickVideo(
-        source: ImageSource.camera,
-        maxDuration:
-            const Duration(minutes: 2),
-      );
-
-      if (!mounted) return;
-
-      if (video != null) {
-        _showMessage(
-          'تم تسجيل الفيديو بنجاح ✅\n'
-          'الفيديو جاهز للمرحلة القادمة من التحليل بالذكاء الاصطناعي.',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        _showMessage(
-          'حدث خطأ أثناء تشغيل الفيديو.\n$e',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _cameraBusy = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _testMicrophone() async {
-    if (_microphoneBusy) return;
-
-    setState(() {
-      _microphoneBusy = true;
-    });
-
-    try {
-      final permission =
-          await Permission.microphone.request();
-
-      if (!mounted) return;
-
-      if (permission.isGranted) {
-        _showMessage(
-          'الميكروفون يعمل وصلاحيته مفعلة ✅',
-        );
-      } else {
-        _showMessage(
-          'صلاحية الميكروفون غير مفعلة. '
-          'اسمح للتطبيق باستخدام الميكروفون من إعدادات الهاتف.',
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        _showMessage(
-          'حدث خطأ أثناء اختبار الميكروفون.\n$e',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _microphoneBusy = false;
-        });
-      }
-    }
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            message,
-            textDirection: TextDirection.rtl,
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration:
-              const Duration(seconds: 4),
+  void _openImageAi(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          serviceTitle:
+              '${service.title} — تحليل الصور',
+          serviceContext:
+              '${service.aiRole}\n'
+              'ركز على تحليل الصور المرسلة من المستخدم '
+              'وشرح الأشياء الظاهرة فيها بدقة، '
+              'ولا تخمن ما لا يمكن رؤيته.',
         ),
-      );
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final service = widget.service;
-
     return Scaffold(
       backgroundColor:
           const Color(0xFF09090F),
       appBar: AppBar(
         backgroundColor:
             const Color(0xFF11111A),
-        foregroundColor: Colors.white,
+        foregroundColor:
+            Colors.white,
         elevation: 0,
+        centerTitle: true,
         title: Text(
           service.title,
           style: const TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.w900,
           ),
         ),
-        centerTitle: true,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(18),
+          padding:
+              const EdgeInsets.all(18),
           child: Column(
             children: [
-              _buildServiceHeader(service),
+              _buildHeader(),
 
-              const SizedBox(height: 22),
+              const SizedBox(
+                height: 20,
+              ),
 
-              _buildAiButton(),
+              _buildMainButton(
+                context,
+                icon:
+                    Icons.auto_awesome_rounded,
+                title:
+                    'تحدث مع صَحبي AI',
+                subtitle:
+                    'نص + صوت + صور + إنشاء صور',
+                onTap: () =>
+                    _openChat(context),
+              ),
 
-              const SizedBox(height: 18),
+              const SizedBox(
+                height: 12,
+              ),
 
-              _buildActionCard(
+              _buildMainButton(
+                context,
                 icon:
                     Icons.camera_alt_rounded,
-                title: 'التقاط صورة',
-                description:
-                    'استخدم كاميرا الهاتف داخل هذا القسم.',
-                onTap: _cameraBusy
-                    ? null
-                    : _pickPhoto,
-                isLoading: _cameraBusy,
+                title:
+                    'حلل صورة بالكاميرا',
+                subtitle:
+                    'صوّر أي شيء واسأل صَحبي عنه',
+                onTap: () =>
+                    _openImageAi(context),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(
+                height: 12,
+              ),
 
-              _buildActionCard(
+              _buildMainButton(
+                context,
                 icon:
-                    Icons.videocam_rounded,
-                title: 'تصوير فيديو',
-                description:
-                    'صوّر فيديو قصير لاستخدامه في المراحل القادمة.',
-                onTap: _cameraBusy
-                    ? null
-                    : _pickVideo,
-                isLoading: _cameraBusy,
+                    Icons.photo_library_rounded,
+                title:
+                    'حلل صورة من الهاتف',
+                subtitle:
+                    'اختر صورة من المعرض ثم اسأل AI',
+                onTap: () =>
+                    _openImageAi(context),
               ),
 
-              const SizedBox(height: 12),
-
-              _buildActionCard(
-                icon: Icons.mic_rounded,
-                title: 'اختبار الميكروفون',
-                description:
-                    'تأكد من أن التطبيق يستطيع الوصول إلى الميكروفون.',
-                onTap: _microphoneBusy
-                    ? null
-                    : _testMicrophone,
-                isLoading: _microphoneBusy,
+              const SizedBox(
+                height: 12,
               ),
 
-              const SizedBox(height: 24),
+              _buildMainButton(
+                context,
+                icon:
+                    Icons.mic_rounded,
+                title:
+                    'تحدث بصوتك',
+                subtitle:
+                    'صَحبي يسمع كلامك ويرد عليك',
+                onTap: () =>
+                    _openChat(context),
+              ),
 
-              _buildInfoBox(),
+              const SizedBox(
+                height: 12,
+              ),
+
+              _buildMainButton(
+                context,
+                icon:
+                    Icons.image_rounded,
+                title:
+                    'إنشاء صورة بالـAI',
+                subtitle:
+                    'اكتب وصف الصورة وسيتم إنشاؤها',
+                onTap: () =>
+                    _openChat(context),
+              ),
+
+              const SizedBox(
+                height: 24,
+              ),
+
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.all(17),
+                decoration:
+                    BoxDecoration(
+                  color:
+                      const Color(
+                    0xFF11111A,
+                  ),
+                  borderRadius:
+                      BorderRadius.circular(
+                    20,
+                  ),
+                  border: Border.all(
+                    color: Colors.white
+                        .withOpacity(
+                      0.08,
+                    ),
+                  ),
+                ),
+                child: const Row(
+                  textDirection:
+                      TextDirection.rtl,
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color:
+                          Color(0xFFFFD76A),
+                    ),
+                    SizedBox(
+                      width: 10,
+                    ),
+                    Expanded(
+                      child: Text(
+                        'الفيديو موجود في واجهة القسم، لكن تحليل الفيديو نفسه سنضيفه بعد تثبيت تحليل الصور والصوت؛ لأننا لا نريد إدخال مكتبة فيديو قد تكسر نسخة Android الحالية.',
+                        textDirection:
+                            TextDirection.rtl,
+                        style: TextStyle(
+                          color:
+                              Colors.white70,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -272,81 +210,96 @@ class _ServiceDetailScreenState
     );
   }
 
-  Widget _buildServiceHeader(
-    Sa7biService service,
-  ) {
+  Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
+      padding:
+          const EdgeInsets.all(22),
+      decoration:
+          BoxDecoration(
         borderRadius:
-            BorderRadius.circular(28),
-        gradient: LinearGradient(
+            BorderRadius.circular(
+          28,
+        ),
+        gradient:
+            LinearGradient(
           colors: [
-            service.color.withOpacity(0.30),
-            const Color(0xFF171722),
+            service.color
+                .withOpacity(0.30),
+            const Color(
+              0xFF171722,
+            ),
           ],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
+          begin:
+              Alignment.topRight,
+          end:
+              Alignment.bottomLeft,
         ),
-        border: Border.all(
-          color:
-              service.color.withOpacity(0.35),
+        border:
+            Border.all(
+          color: service.color
+              .withOpacity(0.35),
         ),
-        boxShadow: [
-          BoxShadow(
-            color:
-                service.color.withOpacity(0.12),
-            blurRadius: 24,
-            spreadRadius: 2,
-          ),
-        ],
       ),
       child: Column(
         children: [
           Container(
-            width: 82,
-            height: 82,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color:
-                  service.color.withOpacity(0.18),
-              border: Border.all(
-                color:
-                    service.color.withOpacity(0.5),
+            width: 84,
+            height: 84,
+            decoration:
+                BoxDecoration(
+              shape:
+                  BoxShape.circle,
+              color: service.color
+                  .withOpacity(
+                0.18,
+              ),
+              border:
+                  Border.all(
+                color: service.color
+                    .withOpacity(
+                  0.5,
+                ),
                 width: 2,
               ),
             ),
             child: Icon(
               service.icon,
-              color: service.color,
+              color:
+                  service.color,
               size: 42,
             ),
           ),
-
-          const SizedBox(height: 16),
-
+          const SizedBox(
+            height: 15,
+          ),
           Text(
             service.title,
             textDirection:
                 TextDirection.rtl,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
               color: Colors.white,
               fontSize: 25,
-              fontWeight: FontWeight.bold,
+              fontWeight:
+                  FontWeight.w900,
             ),
           ),
-
-          const SizedBox(height: 8),
-
+          const SizedBox(
+            height: 8,
+          ),
           Text(
             service.description,
             textDirection:
                 TextDirection.rtl,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white70,
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
+              color:
+                  Colors.white70,
               fontSize: 15,
               height: 1.5,
             ),
@@ -356,68 +309,16 @@ class _ServiceDetailScreenState
     );
   }
 
-  Widget _buildAiButton() {
-    return SizedBox(
-      width: double.infinity,
-      height: 62,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius:
-              BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            colors: [
-              Color(0xFFFFD700),
-              Color(0xFFFF8C00),
-            ],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color:
-                  Colors.orange.withOpacity(0.20),
-              blurRadius: 18,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-        child: ElevatedButton.icon(
-          onPressed: _openAiChat,
-          icon: const Icon(
-            Icons.auto_awesome,
-            color: Colors.black,
-          ),
-          label: const Text(
-            'تحدث مع صَحبي AI',
-            style: TextStyle(
-              color: Colors.black,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor:
-                Colors.transparent,
-            shadowColor:
-                Colors.transparent,
-            shape:
-                RoundedRectangleBorder(
-              borderRadius:
-                  BorderRadius.circular(20),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionCard({
+  Widget _buildMainButton(
+    BuildContext context, {
     required IconData icon,
     required String title,
-    required String description,
-    required VoidCallback? onTap,
-    required bool isLoading,
+    required String subtitle,
+    required VoidCallback onTap,
   }) {
     return Material(
-      color: const Color(0xFF15151F),
+      color:
+          const Color(0xFF15151F),
       borderRadius:
           BorderRadius.circular(20),
       child: InkWell(
@@ -426,13 +327,19 @@ class _ServiceDetailScreenState
             BorderRadius.circular(20),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
+          padding:
+              const EdgeInsets.all(16),
+          decoration:
+              BoxDecoration(
             borderRadius:
-                BorderRadius.circular(20),
+                BorderRadius.circular(
+              20,
+            ),
             border: Border.all(
-              color:
-                  Colors.white.withOpacity(0.08),
+              color: Colors.white
+                  .withOpacity(
+                0.08,
+              ),
             ),
           ),
           child: Row(
@@ -440,124 +347,80 @@ class _ServiceDetailScreenState
                 TextDirection.rtl,
             children: [
               Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.service.color
-                      .withOpacity(0.14),
-                  border: Border.all(
-                    color: widget.service.color
-                        .withOpacity(0.35),
+                width: 56,
+                height: 56,
+                decoration:
+                    BoxDecoration(
+                  shape:
+                      BoxShape.circle,
+                  color: service.color
+                      .withOpacity(
+                    0.14,
+                  ),
+                  border:
+                      Border.all(
+                    color: service.color
+                        .withOpacity(
+                      0.35,
+                    ),
                   ),
                 ),
-                child: isLoading
-                    ? const Padding(
-                        padding:
-                            EdgeInsets.all(15),
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color:
-                              Color(0xFFFFD54F),
-                        ),
-                      )
-                    : Icon(
-                        icon,
-                        color:
-                            widget.service.color,
-                        size: 28,
-                      ),
+                child: Icon(
+                  icon,
+                  color:
+                      service.color,
+                  size: 28,
+                ),
               ),
-
-              const SizedBox(width: 14),
-
+              const SizedBox(
+                width: 14,
+              ),
               Expanded(
                 child: Column(
                   crossAxisAlignment:
-                      CrossAxisAlignment.end,
+                      CrossAxisAlignment
+                          .end,
                   children: [
                     Text(
                       title,
                       textDirection:
-                          TextDirection.rtl,
-                      style: const TextStyle(
-                        color: Colors.white,
+                          TextDirection
+                              .rtl,
+                      style:
+                          const TextStyle(
+                        color:
+                            Colors.white,
                         fontSize: 17,
                         fontWeight:
                             FontWeight.w800,
                       ),
                     ),
-
-                    const SizedBox(height: 5),
-
+                    const SizedBox(
+                      height: 5,
+                    ),
                     Text(
-                      description,
+                      subtitle,
                       textDirection:
-                          TextDirection.rtl,
-                      style: const TextStyle(
-                        color: Colors.white60,
+                          TextDirection
+                              .rtl,
+                      style:
+                          const TextStyle(
+                        color:
+                            Colors.white60,
                         fontSize: 13,
-                        height: 1.35,
                       ),
                     ),
                   ],
                 ),
               ),
-
-              const SizedBox(width: 8),
-
               const Icon(
                 Icons.chevron_left_rounded,
-                color: Colors.white38,
+                color:
+                    Colors.white38,
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildInfoBox() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF11111A),
-        borderRadius:
-            BorderRadius.circular(20),
-        border: Border.all(
-          color:
-              Colors.white.withOpacity(0.08),
-        ),
-      ),
-      child: const Row(
-        textDirection:
-            TextDirection.rtl,
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.info_outline_rounded,
-            color: Color(0xFFFFD54F),
-            size: 24,
-          ),
-
-          SizedBox(width: 12),
-
-          Expanded(
-            child: Text(
-              'الصور والفيديو والصوت مهيأة حاليًا لاختبار الصلاحيات وتجهيز التكامل الكامل مع الذكاء الاصطناعي في المرحلة التالية.',
-              textDirection:
-                  TextDirection.rtl,
-              style: TextStyle(
-                color: Colors.white70,
-                height: 1.5,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
