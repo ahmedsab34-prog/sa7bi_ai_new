@@ -17,7 +17,8 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "Content-Type": "application/json; charset=utf-8",
+      "Content-Type":
+        "application/json; charset=utf-8",
       ...corsHeaders
     }
   });
@@ -131,7 +132,8 @@ async function callOpenAI(
       headers: {
         "Authorization":
           `Bearer ${env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
+        "Content-Type":
+          "application/json"
       },
       body: JSON.stringify({
         model,
@@ -142,7 +144,10 @@ async function callOpenAI(
   );
 }
 
-async function handleChat(request, env) {
+async function handleChat(
+  request,
+  env
+) {
   const contentType =
     request.headers.get("content-type") || "";
 
@@ -154,23 +159,29 @@ async function handleChat(request, env) {
     return json(
       {
         ok: false,
-        error: "JSON request required"
+        error:
+          "JSON request required"
       },
       415
     );
   }
 
-  const contentLength = Number(
-    request.headers.get("content-length") || 0
-  );
+  const contentLength =
+    Number(
+      request.headers.get(
+        "content-length"
+      ) || 0
+    );
 
   if (
-    contentLength > MAX_BODY_BYTES
+    contentLength >
+    MAX_BODY_BYTES
   ) {
     return json(
       {
         ok: false,
-        error: "Request is too large"
+        error:
+          "Request is too large"
       },
       413
     );
@@ -179,35 +190,42 @@ async function handleChat(request, env) {
   let body;
 
   try {
-    const raw = await request.text();
+    const raw =
+      await request.text();
 
     if (
       new TextEncoder()
         .encode(raw)
-        .byteLength > MAX_BODY_BYTES
+        .byteLength >
+      MAX_BODY_BYTES
     ) {
       return json(
         {
           ok: false,
-          error: "Request is too large"
+          error:
+            "Request is too large"
         },
         413
       );
     }
 
-    body = JSON.parse(raw);
+    body =
+      JSON.parse(raw);
   } catch {
     return json(
       {
         ok: false,
-        error: "Invalid JSON"
+        error:
+          "Invalid JSON"
       },
       400
     );
   }
 
   const messages =
-    cleanMessages(body?.messages);
+    cleanMessages(
+      body?.messages
+    );
 
   if (!messages) {
     return json(
@@ -253,7 +271,9 @@ async function handleChat(request, env) {
 
   if (image) {
     const lastMessage =
-      messages[messages.length - 1];
+      messages[
+        messages.length - 1
+      ];
 
     const previousMessages =
       messages.slice(
@@ -267,8 +287,10 @@ async function handleChat(request, env) {
           role: message.role,
           content: [
             {
-              type: "input_text",
-              text: message.content
+              type:
+                "input_text",
+              text:
+                message.content
             }
           ]
         })
@@ -277,13 +299,18 @@ async function handleChat(request, env) {
         role: "user",
         content: [
           {
-            type: "input_text",
-            text: lastMessage.content
+            type:
+              "input_text",
+            text:
+              lastMessage.content
           },
           {
-            type: "input_image",
-            image_url: image,
-            detail: "auto"
+            type:
+              "input_image",
+            image_url:
+              image,
+            detail:
+              "auto"
           }
         ]
       }
@@ -300,12 +327,33 @@ async function handleChat(request, env) {
         env,
         {
           instructions:
-            "You are Sa7bi AI, a helpful Arabic-first assistant. " +
-            "Answer naturally in Arabic unless the user asks for another language. " +
-            "Be clear, practical, respectful and concise. " +
-            "Do not claim to have performed an action you did not perform. " +
-            "When analyzing an image, describe only what is reasonably visible " +
-            "and clearly distinguish uncertainty.",
+            [
+              "أنت صَحبي AI.",
+              "",
+              "أنت مساعد عربي ودود وذكي وقريب من المستخدم.",
+              "افهم نبرة المستخدم ورد بطريقة إنسانية وطبيعية.",
+              "",
+              "اجعل الردود:",
+              "- واضحة ومباشرة.",
+              "- مفيدة وليست طويلة بلا داعٍ.",
+              "- دافئة وقريبة من الكلام الطبيعي.",
+              "- فيها لمسة emotion مناسبة للسياق.",
+              "- استخدم الإيموجي باعتدال عندما يضيف إحساسًا للرد.",
+              "- لا تستخدم نفس الإيموجي في كل رد.",
+              "- لا تبدأ كل رد بعبارات محفوظة مثل: بالتأكيد يا عزيزي.",
+              "",
+              "إذا كان المستخدم حزينًا أو قلقًا، كن هادئًا ومتعاونًا.",
+              "إذا كان متحمسًا أو يطلب فكرة إبداعية، شاركه الحماس.",
+              "إذا كان يسأل سؤالًا تقنيًا، كن عمليًا ودقيقًا.",
+              "إذا كان يريد إجابة قصيرة، لا تطل الرد.",
+              "",
+              "لا تدّعي أنك نفذت شيئًا لم تنفذه.",
+              "لا تخترع معلومات.",
+              "إذا كانت المعلومة غير مؤكدة، وضح ذلك.",
+              "عند تحليل صورة، صف فقط ما يظهر بشكل معقول.",
+              "",
+              "استخدم العربية افتراضيًا، إلا إذا طلب المستخدم لغة أخرى."
+            ].join(" "),
           input
         },
         model
@@ -349,7 +397,8 @@ async function handleChat(request, env) {
     );
 
     if (
-      openaiResponse.status === 429
+      openaiResponse.status ===
+      429
     ) {
       return json(
         {
@@ -423,14 +472,17 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
-        error: "Invalid JSON"
+        error:
+          "Invalid JSON"
       },
       400
     );
   }
 
   const prompt =
-    body?.prompt?.toString().trim();
+    body?.prompt
+      ?.toString()
+      .trim();
 
   if (!prompt) {
     return json(
@@ -461,25 +513,29 @@ async function handleImageGeneration(
   let response;
 
   try {
-    response = await fetch(
-      "https://api.openai.com/v1/images/generations",
-      {
-        method: "POST",
-        headers: {
-          "Authorization":
-            `Bearer ${env.OPENAI_API_KEY}`,
-          "Content-Type":
-            "application/json"
-        },
-        body: JSON.stringify({
-          model,
-          prompt,
-          size: "1024x1024",
-          quality: "low",
-          output_format: "png"
-        })
-      }
-    );
+    response =
+      await fetch(
+        "https://api.openai.com/v1/images/generations",
+        {
+          method: "POST",
+          headers: {
+            "Authorization":
+              `Bearer ${env.OPENAI_API_KEY}`,
+            "Content-Type":
+              "application/json"
+          },
+          body: JSON.stringify({
+            model,
+            prompt,
+            size:
+              "1024x1024",
+            quality:
+              "low",
+            output_format:
+              "png"
+          })
+        }
+      );
   } catch (error) {
     console.error(
       "Image generation network error",
@@ -514,14 +570,46 @@ async function handleImageGeneration(
           null,
         code:
           details?.error?.code ||
+          null,
+        message:
+          details?.error?.message ||
           null
       }
     );
+
+    if (
+      response.status ===
+      429
+    ) {
+      return json(
+        {
+          ok: false,
+          error:
+            "خدمة إنشاء الصور مشغولة حاليًا. جرّب بعد لحظات."
+        },
+        429
+      );
+    }
+
+    if (
+      response.status ===
+      403
+    ) {
+      return json(
+        {
+          ok: false,
+          error:
+            "خدمة الصور تحتاج تفعيل صلاحية إنشاء الصور في حساب الـAPI."
+        },
+        502
+      );
+    }
 
     return json(
       {
         ok: false,
         error:
+          details?.error?.message ||
           "Image generation temporarily unavailable"
       },
       502
@@ -548,7 +636,8 @@ async function handleImageGeneration(
     data?.data?.[0]?.b64_json;
 
   if (
-    typeof imageBase64 !== "string" ||
+    typeof imageBase64 !==
+      "string" ||
     !imageBase64.trim()
   ) {
     return json(
@@ -570,12 +659,16 @@ async function handleImageGeneration(
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(
+    request,
+    env
+  ) {
     const url =
       new URL(request.url);
 
     if (
-      request.method === "OPTIONS"
+      request.method ===
+      "OPTIONS"
     ) {
       return new Response(
         null,
@@ -588,15 +681,18 @@ export default {
     }
 
     if (
-      request.method === "GET" &&
+      request.method ===
+        "GET" &&
       url.pathname === "/"
     ) {
       return json({
         ok: true,
         service:
           "Sa7bi AI Backend",
-        status: "online",
-        version: "2.0.0"
+        status:
+          "online",
+        version:
+          "2.1.0"
       });
     }
 
@@ -614,8 +710,10 @@ export default {
     }
 
     if (
-      request.method === "POST" &&
-      url.pathname === "/v1/chat"
+      request.method ===
+        "POST" &&
+      url.pathname ===
+        "/v1/chat"
     ) {
       return handleChat(
         request,
@@ -624,8 +722,10 @@ export default {
     }
 
     if (
-      request.method === "POST" &&
-      url.pathname === "/v1/image"
+      request.method ===
+        "POST" &&
+      url.pathname ===
+        "/v1/image"
     ) {
       return handleImageGeneration(
         request,
@@ -636,7 +736,8 @@ export default {
     return json(
       {
         ok: false,
-        error: "Not found"
+        error:
+          "Not found"
       },
       404
     );
