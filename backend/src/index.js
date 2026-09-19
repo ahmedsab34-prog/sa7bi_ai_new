@@ -6,11 +6,17 @@ const MAX_TOTAL_CHARS = 24000;
 
 const MAX_IMAGE_CHARS = 6 * 1024 * 1024;
 
+const BACKEND_VERSION = "2.3.0";
+
+const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
+const DEFAULT_IMAGE_MODEL = "gpt-image-2.5-flare";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
-  "Cache-Control": "no-store"
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff"
 };
 
 function json(data, status = 200) {
@@ -274,11 +280,11 @@ async function handleChat(
       ? (
           env.OPENAI_VISION_MODEL ||
           env.OPENAI_MODEL ||
-          "gpt-5.6-luna"
+          DEFAULT_TEXT_MODEL
         )
       : (
           env.OPENAI_MODEL ||
-          "gpt-5.6-luna"
+          DEFAULT_TEXT_MODEL
         );
 
   let input;
@@ -347,7 +353,7 @@ async function handleChat(
               "- فيها لمسة emotion مناسبة للسياق.",
               "- استخدم الإيموجي باعتدال عندما يضيف إحساسًا للرد.",
               "- لا تستخدم نفس الإيموجي في كل رد.",
-              "- لا تبدأ كل رد بعبارات محفوظة مثل: بالتأكيد يا عزيزي.",
+              "- لا تبدأ كل رد بعبارات محفوظة.",
               "",
               "إذا كان المستخدم حزينًا أو قلقًا، كن هادئًا ومتعاونًا.",
               "إذا كان متحمسًا أو يطلب فكرة إبداعية، شاركه الحماس.",
@@ -358,6 +364,7 @@ async function handleChat(
               "لا تخترع معلومات.",
               "إذا كانت المعلومة غير مؤكدة، وضح ذلك.",
               "عند تحليل صورة، صف فقط ما يظهر بشكل معقول.",
+              "لا تستنتج معلومات شخصية أو غير مرئية من الصورة.",
               "",
               "استخدم العربية افتراضيًا، إلا إذا طلب المستخدم لغة أخرى."
             ].join(" "),
@@ -424,6 +431,22 @@ async function handleChat(
       );
     }
 
+    if (
+      openaiResponse.status ===
+      401 ||
+      openaiResponse.status ===
+      403
+    ) {
+      return json(
+        {
+          ok: false,
+          error:
+            "AI service authentication is not configured correctly."
+        },
+        502
+      );
+    }
+
     return json(
       {
         ok: false,
@@ -477,6 +500,45 @@ async function handleImageGeneration(
   request,
   env
 ) {
+  const contentType =
+    request.headers.get("content-type") || "";
+
+  if (
+    !contentType
+      .toLowerCase()
+      .includes("application/json")
+  ) {
+    return json(
+      {
+        ok: false,
+        error:
+          "JSON request required"
+      },
+      415
+    );
+  }
+
+  const contentLength =
+    Number(
+      request.headers.get(
+        "content-length"
+      ) || 0
+    );
+
+  if (
+    contentLength >
+    64 * 1024
+  ) {
+    return json(
+      {
+        ok: false,
+        error:
+          "Image prompt request is too large"
+      },
+      413
+    );
+  }
+
   let body;
 
   try {
@@ -522,7 +584,7 @@ async function handleImageGeneration(
 
   const model =
     env.OPENAI_IMAGE_MODEL ||
-    "gpt-image-2.5-flare";
+    DEFAULT_IMAGE_MODEL;
 
   let response;
 
@@ -604,13 +666,15 @@ async function handleImageGeneration(
 
     if (
       response.status ===
+      401 ||
+      response.status ===
       403
     ) {
       return json(
         {
           ok: false,
           error:
-            "خدمة الصور تحتاج تفعيل صلاحية إنشاء الصور في حساب الـAPI."
+            "خدمة الصور تحتاج إعداد صلاحية صحيح في حساب الـAPI."
         },
         502
       );
@@ -836,14 +900,29 @@ export default {
         "GET" &&
       url.pathname === "/"
     ) {
+      const aiConfigured =
+        Boolean(
+          env.OPENAI_API_KEY
+        );
+
       return json({
         ok: true,
         service:
           "Sa7bi AI Backend",
         status:
-          "online",
+          aiConfigured
+            ? "online"
+            : "misconfigured",
+        ai_configured:
+          aiConfigured,
+        text_model:
+          env.OPENAI_MODEL ||
+          DEFAULT_TEXT_MODEL,
+        image_model:
+          env.OPENAI_IMAGE_MODEL ||
+          DEFAULT_IMAGE_MODEL,
         version:
-          "2.2.0"
+          BACKEND_VERSION
       });
     }
 
