@@ -1,6 +1,6 @@
 package com.example.sa7bi_ai_new
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 
-class MainActivity: FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
 }
