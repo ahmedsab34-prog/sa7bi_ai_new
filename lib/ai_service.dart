@@ -22,8 +22,20 @@ class AiService {
             const Duration(seconds: 10),
           );
 
-      return response.statusCode >= 200 &&
-          response.statusCode < 300;
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        return false;
+      }
+
+      final data = jsonDecode(response.body);
+
+      if (data is! Map) {
+        return false;
+      }
+
+      return data['ok'] == true &&
+          data['status'] == 'online' &&
+          data['ai_configured'] == true;
     } catch (_) {
       return false;
     }
@@ -68,8 +80,10 @@ class AiService {
       if (serviceContext != null &&
           serviceContext.trim().isNotEmpty) {
         current =
-            'سياق القسم: ${serviceContext.trim()}\n\n'
-            'رسالة المستخدم: $text';
+            'سياق القسم:\n'
+            '${serviceContext.trim()}\n\n'
+            'رسالة المستخدم:\n'
+            '$text';
       }
 
       messages.add({
@@ -130,8 +144,10 @@ class AiService {
       if (serviceContext != null &&
           serviceContext.trim().isNotEmpty) {
         finalPrompt =
-            'سياق القسم: ${serviceContext.trim()}\n\n'
-            'طلب المستخدم: $prompt';
+            'سياق القسم:\n'
+            '${serviceContext.trim()}\n\n'
+            'طلب المستخدم:\n'
+            '$prompt';
       }
 
       final body = {
@@ -179,6 +195,20 @@ class AiService {
     String prompt,
   ) async {
     try {
+      final cleanPrompt = prompt.trim();
+
+      if (cleanPrompt.isEmpty) {
+        return const ImageGenerationResult.failure(
+          'اكتب وصف الصورة الأول.',
+        );
+      }
+
+      if (cleanPrompt.length > 8000) {
+        return const ImageGenerationResult.failure(
+          'وصف الصورة طويل جدًا.',
+        );
+      }
+
       final response = await http
           .post(
             Uri.parse(imageEndpoint),
@@ -186,7 +216,7 @@ class AiService {
               'Content-Type': 'application/json',
             },
             body: jsonEncode({
-              'prompt': prompt.trim(),
+              'prompt': cleanPrompt,
             }),
           )
           .timeout(
@@ -213,9 +243,21 @@ class AiService {
         );
       }
 
-      return ImageGenerationResult.success(
-        base64Decode(base64Image),
-      );
+      try {
+        final bytes = base64Decode(base64Image);
+
+        if (bytes.isEmpty) {
+          return const ImageGenerationResult.failure(
+            'خدمة الصور رجعت بيانات فارغة.',
+          );
+        }
+
+        return ImageGenerationResult.success(bytes);
+      } catch (_) {
+        return const ImageGenerationResult.failure(
+          'تعذر قراءة الصورة التي رجعتها الخدمة.',
+        );
+      }
     } catch (_) {
       return const ImageGenerationResult.failure(
         'إنشاء الصورة اتأخر. جرّب مرة ثانية 🎨',
@@ -288,6 +330,15 @@ class AiService {
         return error.toString();
       }
     } catch (_) {}
+
+    if (response.statusCode == 400) {
+      return 'الطلب غير صحيح. جرّب صياغة الطلب بطريقة أبسط.';
+    }
+
+    if (response.statusCode == 401 ||
+        response.statusCode == 403) {
+      return 'خدمة الذكاء الاصطناعي تحتاج إلى إعداد صحيح من الخادم.';
+    }
 
     if (response.statusCode == 429) {
       return 'الخدمة مشغولة حاليًا ⏳';
