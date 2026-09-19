@@ -42,7 +42,8 @@ class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
 
   @override
-  State<MainContainerScreen> createState() => _MainContainerScreenState();
+  State<MainContainerScreen> createState() =>
+      _MainContainerScreenState();
 }
 
 class _MainContainerScreenState extends State<MainContainerScreen> {
@@ -77,7 +78,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
               index: index,
               children: pages,
             ),
-
             Positioned(
               right: 15,
               bottom: 16,
@@ -88,7 +88,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
           ],
         ),
       ),
-
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF17181F),
         indicatorColor: const Color(0x3348D8FF),
@@ -141,7 +140,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> loadNews() async {
-    setState(() => loadingNews = true);
+    if (mounted) {
+      setState(() => loadingNews = true);
+    }
 
     final result = await AiService.getNews();
 
@@ -177,13 +178,9 @@ class _HomeScreenState extends State<HomeScreen> {
           AppHeader(
             onProfileTap: widget.onProfile,
           ),
-
           const SizedBox(height: 16),
-
           const _WelcomeCard(),
-
           const SizedBox(height: 18),
-
           const Text(
             'آخر الأخبار',
             textDirection: TextDirection.rtl,
@@ -192,9 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
               fontWeight: FontWeight.w900,
             ),
           ),
-
           const SizedBox(height: 9),
-
           if (loadingNews)
             const Padding(
               padding: EdgeInsets.all(25),
@@ -213,9 +208,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => openLink(item.link),
               ),
             ),
-
           const SizedBox(height: 16),
-
           const Text(
             'تسوق بسرعة',
             textDirection: TextDirection.rtl,
@@ -224,9 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
               fontWeight: FontWeight.w900,
             ),
           ),
-
           const SizedBox(height: 9),
-
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -273,7 +264,6 @@ class AppHeader extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Sa7biLogo(),
-
         GestureDetector(
           onTap: onProfileTap,
           child: Container(
@@ -367,7 +357,6 @@ class _Sa7biLogoState extends State<Sa7biLogo>
                   ],
                 ),
               ),
-
               Transform.rotate(
                 angle: controller.value * math.pi * 2,
                 child: Container(
@@ -387,7 +376,6 @@ class _Sa7biLogoState extends State<Sa7biLogo>
                   ),
                 ),
               ),
-
               Container(
                 width: 72,
                 height: 72,
@@ -406,7 +394,6 @@ class _Sa7biLogoState extends State<Sa7biLogo>
                   ),
                 ),
               ),
-
               Positioned(
                 right: 12,
                 top: 7,
@@ -522,7 +509,7 @@ class _NewsCard extends StatelessWidget {
           item.source,
           textDirection: TextDirection.rtl,
           style: const TextStyle(
-            color: Colors.white45,
+            color: Colors.white54,
           ),
         ),
         trailing: const Icon(
@@ -680,9 +667,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fontWeight: FontWeight.w900,
           ),
         ),
-
         const SizedBox(height: 15),
-
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
@@ -725,9 +710,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 9),
-
               const Text(
                 'صورتك الشخصية',
                 textDirection: TextDirection.rtl,
@@ -735,9 +718,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-
               const SizedBox(height: 12),
-
               Row(
                 children: [
                   Expanded(
@@ -757,7 +738,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
-
               if (reelName != null) ...[
                 const SizedBox(height: 9),
                 Text(
@@ -773,16 +753,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-
         const SizedBox(height: 12),
-
         _ProfileButton(
           icon: Icons.share_rounded,
           title: 'مشاركة التطبيق',
           subtitle: 'شارك صاحبي مع أصحابك',
           onTap: shareApp,
         ),
-
         _ProfileButton(
           icon: Icons.settings_rounded,
           title: 'الإعدادات',
@@ -855,7 +832,7 @@ class _ProfileButton extends StatelessWidget {
           subtitle,
           textDirection: TextDirection.rtl,
           style: const TextStyle(
-            color: Colors.white45,
+            color: Colors.white54,
             fontSize: 12,
           ),
         ),
