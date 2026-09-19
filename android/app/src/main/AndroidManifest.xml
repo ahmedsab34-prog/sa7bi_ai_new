@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.example.sa7bi_ai_new">
 
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -6,6 +7,11 @@
 
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- Background audio -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
 
     <queries>
         <intent>
@@ -18,7 +24,8 @@
         android:label="صاحبي AI"
         android:icon="@drawable/app_icon"
         android:usesCleartextTraffic="true"
-        android:allowBackup="true">
+        android:allowBackup="true"
+        android:hardwareAccelerated="true">
 
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
@@ -43,6 +50,31 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Background audio service -->
+        <service
+            android:name="com.ryanheise.audioservice.AudioService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService"/>
+            </intent-filter>
+
+        </service>
+
+        <!-- Media / headset buttons -->
+        <receiver
+            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+
+        </receiver>
 
         <meta-data
             android:name="flutterEmbedding"
