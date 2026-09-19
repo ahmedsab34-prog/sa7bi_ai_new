@@ -17,8 +17,7 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "Content-Type":
-        "application/json; charset=utf-8",
+      "Content-Type": "application/json; charset=utf-8",
       ...corsHeaders
     }
   });
@@ -120,6 +119,27 @@ function isValidImageDataUrl(value) {
   );
 }
 
+function decodeXml(value) {
+  return String(value)
+    .replace(
+      /<!\[CDATA\[([\s\S]*?)\]\]>/g,
+      "$1"
+    )
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'");
+}
+
+function stripHtml(value) {
+  return String(value)
+    .replace(/<[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function callOpenAI(
   env,
   payload,
@@ -159,8 +179,7 @@ async function handleChat(
     return json(
       {
         ok: false,
-        error:
-          "JSON request required"
+        error: "JSON request required"
       },
       415
     );
@@ -180,8 +199,7 @@ async function handleChat(
     return json(
       {
         ok: false,
-        error:
-          "Request is too large"
+        error: "Request is too large"
       },
       413
     );
@@ -202,8 +220,7 @@ async function handleChat(
       return json(
         {
           ok: false,
-          error:
-            "Request is too large"
+          error: "Request is too large"
         },
         413
       );
@@ -215,8 +232,7 @@ async function handleChat(
     return json(
       {
         ok: false,
-        error:
-          "Invalid JSON"
+        error: "Invalid JSON"
       },
       400
     );
@@ -231,8 +247,7 @@ async function handleChat(
     return json(
       {
         ok: false,
-        error:
-          "Invalid messages."
+        error: "Invalid messages."
       },
       400
     );
@@ -248,8 +263,7 @@ async function handleChat(
     return json(
       {
         ok: false,
-        error:
-          "Invalid or oversized image."
+        error: "Invalid or oversized image."
       },
       400
     );
@@ -287,10 +301,8 @@ async function handleChat(
           role: message.role,
           content: [
             {
-              type:
-                "input_text",
-              text:
-                message.content
+              type: "input_text",
+              text: message.content
             }
           ]
         })
@@ -299,18 +311,13 @@ async function handleChat(
         role: "user",
         content: [
           {
-            type:
-              "input_text",
-            text:
-              lastMessage.content
+            type: "input_text",
+            text: lastMessage.content
           },
           {
-            type:
-              "input_image",
-            image_url:
-              image,
-            detail:
-              "auto"
+            type: "input_image",
+            image_url: image,
+            detail: "auto"
           }
         ]
       }
@@ -354,6 +361,13 @@ async function handleChat(
               "",
               "استخدم العربية افتراضيًا، إلا إذا طلب المستخدم لغة أخرى."
             ].join(" "),
+
+          reasoning: {
+            effort: "none"
+          },
+
+          max_output_tokens: 700,
+
           input
         },
         model
@@ -527,12 +541,9 @@ async function handleImageGeneration(
           body: JSON.stringify({
             model,
             prompt,
-            size:
-              "1024x1024",
-            quality:
-              "low",
-            output_format:
-              "png"
+            size: "1024x1024",
+            quality: "low",
+            output_format: "png"
           })
         }
       );
@@ -658,6 +669,146 @@ async function handleImageGeneration(
   });
 }
 
+async function handleNews(
+  request
+) {
+  if (
+    request.method !==
+    "GET"
+  ) {
+    return json(
+      {
+        ok: false,
+        error:
+          "GET required"
+      },
+      405
+    );
+  }
+
+  const rssUrl =
+    "https://news.google.com/rss?hl=ar&gl=EG&ceid=EG:ar";
+
+  try {
+    const response =
+      await fetch(
+        rssUrl,
+        {
+          headers: {
+            "User-Agent":
+              "Sa7biAI/1.0 News Reader"
+          },
+          cf: {
+            cacheTtl: 300,
+            cacheEverything: true
+          }
+        }
+      );
+
+    if (!response.ok) {
+      return json(
+        {
+          ok: false,
+          error:
+            "News feed unavailable"
+        },
+        502
+      );
+    }
+
+    const xml =
+      await response.text();
+
+    const blocks =
+      xml.match(
+        /<item>[\s\S]*?<\/item>/gi
+      ) || [];
+
+    const items = [];
+
+    for (
+      const block of blocks.slice(
+        0,
+        12
+      )
+    ) {
+      const titleMatch =
+        block.match(
+          /<title>([\s\S]*?)<\/title>/i
+        );
+
+      const linkMatch =
+        block.match(
+          /<link>([\s\S]*?)<\/link>/i
+        );
+
+      const sourceMatch =
+        block.match(
+          /<source[^>]*>([\s\S]*?)<\/source>/i
+        );
+
+      const title =
+        stripHtml(
+          decodeXml(
+            titleMatch?.[1] || ""
+          )
+        );
+
+      const link =
+        decodeXml(
+          (
+            linkMatch?.[1] ||
+            ""
+          ).trim()
+        );
+
+      const source =
+        stripHtml(
+          decodeXml(
+            sourceMatch?.[1] ||
+            "Google News"
+          )
+        );
+
+      if (
+        title &&
+        link
+      ) {
+        items.push({
+          title,
+          source:
+            source ||
+            "Google News",
+          link
+        });
+      }
+    }
+
+    return json({
+      ok: true,
+      source:
+        "Google News",
+      updated_at:
+        new Date().toISOString(),
+      items
+    });
+  } catch (error) {
+    console.error(
+      "News feed error",
+      String(error)
+    );
+
+    return json(
+      {
+        ok: false,
+        error:
+          "News feed temporarily unavailable"
+      },
+      502
+    );
+  }
+}
+
 export default {
   async fetch(
     request,
@@ -692,8 +843,19 @@ export default {
         status:
           "online",
         version:
-          "2.1.0"
+          "2.2.0"
       });
+    }
+
+    if (
+      request.method ===
+        "GET" &&
+      url.pathname ===
+        "/v1/news"
+    ) {
+      return handleNews(
+        request
+      );
     }
 
     if (
