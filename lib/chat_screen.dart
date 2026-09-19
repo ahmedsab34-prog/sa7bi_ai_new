@@ -20,8 +20,7 @@ class ChatScreen extends StatefulWidget {
   });
 
   @override
-  State<ChatScreen> createState() =>
-      _ChatScreenState();
+  State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatMessage {
@@ -52,7 +51,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final FlutterTts _tts =
       FlutterTts();
 
-  final List<_ChatMessage> _messages = [];
+  final List<_ChatMessage> _messages =
+      <_ChatMessage>[];
 
   bool _isLoading = false;
   bool _isListening = false;
@@ -103,7 +103,9 @@ class _ChatScreenState extends State<ChatScreen> {
           _speaking = false;
         });
       });
-    } catch (_) {}
+    } catch (_) {
+      // الصوت يظل اختياريًا حتى لو لم تتوفر خدمة TTS.
+    }
   }
 
   @override
@@ -111,14 +113,19 @@ class _ChatScreenState extends State<ChatScreen> {
     _controller.dispose();
     _scrollController.dispose();
 
-    _tts.stop();
-    _speech.stop();
+    try {
+      _tts.stop();
+    } catch (_) {}
+
+    try {
+      _speech.stop();
+    } catch (_) {}
 
     super.dispose();
   }
 
   // ============================================================
-  // TEXT
+  // إرسال الرسائل
   // ============================================================
 
   Future<void> _sendText() async {
@@ -132,7 +139,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _controller.clear();
 
-    // لو المستخدم يطلب صورة بشكل مباشر، نحوله لمسار الصور.
+    // إذا كان الطلب واضحًا أنه طلب إنشاء صورة،
+    // نرسله مباشرة لمسار توليد الصور.
     if (_looksLikeImageRequest(text)) {
       await _generateImageFromPrompt(text);
       return;
@@ -140,18 +148,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final history = _messages
         .where(
-          (m) =>
-              m.text.trim().isNotEmpty &&
-              m.image == null,
+          (message) =>
+              message.text.trim().isNotEmpty &&
+              message.image == null,
         )
         .map(
-          (m) => {
-            'role':
-                m.isUser
-                    ? 'user'
-                    : 'assistant',
-            'content':
-                m.text,
+          (message) => <String, String>{
+            'role': message.isUser
+                ? 'user'
+                : 'assistant',
+            'content': message.text.trim(),
           },
         )
         .toList();
@@ -169,11 +175,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _scrollToBottom();
 
-    final reply =
-        await AiService.getResponse(
+    final reply = await AiService.getResponse(
       text,
-      serviceContext:
-          widget.serviceContext,
+      serviceContext: widget.serviceContext,
       history: history,
     );
 
@@ -193,16 +197,14 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
   }
 
-  bool _looksLikeImageRequest(
-    String text,
-  ) {
+  bool _looksLikeImageRequest(String text) {
     final value = text
         .toLowerCase()
         .replaceAll('أ', 'ا')
         .replaceAll('إ', 'ا')
         .replaceAll('آ', 'ا');
 
-    final imageWords = [
+    const imageWords = <String>[
       'صوره',
       'صورة',
       'صور',
@@ -213,44 +215,48 @@ class _ChatScreenState extends State<ChatScreen> {
       'poster',
       'logo',
       'image',
+      'images',
       'generate image',
+      'generate a picture',
     ];
 
-    final actionWords = [
+    const actionWords = <String>[
       'اعمل',
       'اعملي',
       'اعمللي',
+      'اعمل لي',
       'انشئ',
       'انشئلي',
+      'انشئ لي',
       'صمم',
       'صمملي',
+      'صمم لي',
       'ارسم',
       'ارسملي',
-      'اعمل لي',
+      'ارسم لي',
       'عايز صوره',
       'عايز صورة',
+      'عايز صور',
       'محتاج صوره',
       'محتاج صورة',
+      'محتاج تصميم',
       'generate',
       'create',
+      'make',
+      'draw',
     ];
 
     final hasImageWord =
-        imageWords.any(
-      value.contains,
-    );
+        imageWords.any(value.contains);
 
     final hasActionWord =
-        actionWords.any(
-      value.contains,
-    );
+        actionWords.any(value.contains);
 
-    return hasImageWord &&
-        hasActionWord;
+    return hasImageWord && hasActionWord;
   }
 
   // ============================================================
-  // IMAGE ANALYSIS
+  // الكاميرا والصور
   // ============================================================
 
   Future<void> _takePhoto() async {
@@ -267,10 +273,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
-      final image =
-          await _picker.pickImage(
-        source:
-            ImageSource.camera,
+      final image = await _picker.pickImage(
+        source: ImageSource.camera,
         imageQuality: 60,
         maxWidth: 1280,
       );
@@ -289,10 +293,8 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_isLoading) return;
 
     try {
-      final image =
-          await _picker.pickImage(
-        source:
-            ImageSource.gallery,
+      final image = await _picker.pickImage(
+        source: ImageSource.gallery,
         imageQuality: 60,
         maxWidth: 1280,
       );
@@ -312,55 +314,70 @@ class _ChatScreenState extends State<ChatScreen> {
   ) async {
     if (_isLoading) return;
 
-    final bytes =
-        await image.readAsBytes();
+    try {
+      final bytes = await image.readAsBytes();
 
-    setState(() {
-      _messages.add(
-        _ChatMessage(
-          isUser: true,
-          text:
-              '📷 بعتهالك يا صَحبي… حلّلها.',
-          image: bytes,
-        ),
+      if (bytes.isEmpty) {
+        _showMessage(
+          'لم أستطع قراءة الصورة.',
+        );
+        return;
+      }
+
+      setState(() {
+        _messages.add(
+          _ChatMessage(
+            isUser: true,
+            text: '📷 بعتّهالك يا صَحبي… حلّلها.',
+            image: bytes,
+          ),
+        );
+
+        _isLoading = true;
+      });
+
+      _scrollToBottom();
+
+      final reply = await AiService.analyzeImage(
+        image,
+        prompt:
+            'حلل هذه الصورة بذكاء وبطريقة مفيدة. '
+            'اشرح ما يظهر فيها بوضوح، '
+            'وإذا كان هناك منتج أو طعام أو مشكلة أو مستند '
+            'اذكر أهم التفاصيل المفيدة. '
+            'لا تخمن الأشياء غير الواضحة.',
+        serviceContext: widget.serviceContext,
       );
 
-      _isLoading = true;
-    });
+      if (!mounted) return;
 
-    _scrollToBottom();
+      setState(() {
+        _messages.add(
+          _ChatMessage(
+            isUser: false,
+            text: reply,
+          ),
+        );
 
-    final reply =
-        await AiService.analyzeImage(
-      image,
-      prompt:
-          'حلل هذه الصورة بذكاء وبطريقة مفيدة. '
-          'اشرح ما يظهر فيها بوضوح، '
-          'وإذا كان هناك منتج أو طعام أو مشكلة أو مستند '
-          'اذكر أهم التفاصيل المفيدة. '
-          'لا تخمن الأشياء غير الواضحة.',
-      serviceContext:
-          widget.serviceContext,
-    );
+        _isLoading = false;
+      });
 
-    if (!mounted) return;
+      _scrollToBottom();
+    } catch (_) {
+      if (!mounted) return;
 
-    setState(() {
-      _messages.add(
-        _ChatMessage(
-          isUser: false,
-          text: reply,
-        ),
+      setState(() {
+        _isLoading = false;
+      });
+
+      _showMessage(
+        'حصل خطأ أثناء تحليل الصورة.',
       );
-
-      _isLoading = false;
-    });
-
-    _scrollToBottom();
+    }
   }
 
   // ============================================================
-  // VOICE
+  // الصوت - Speech To Text
   // ============================================================
 
   Future<void> _toggleListening() async {
@@ -418,8 +435,7 @@ class _ChatScreenState extends State<ChatScreen> {
       });
 
       await _speech.listen(
-        onResult:
-            _onSpeechResult,
+        onResult: _onSpeechResult,
         listenOptions:
             stt.SpeechListenOptions(
           partialResults: true,
@@ -427,12 +443,10 @@ class _ChatScreenState extends State<ChatScreen> {
           autoPunctuation: true,
         ),
         localeId: 'ar_EG',
-        listenFor:
-            const Duration(
+        listenFor: const Duration(
           seconds: 35,
         ),
-        pauseFor:
-            const Duration(
+        pauseFor: const Duration(
           seconds: 2,
         ),
       );
@@ -462,38 +476,36 @@ class _ChatScreenState extends State<ChatScreen> {
   ) {
     if (!mounted) return;
 
-    _controller.text =
-        result.recognizedWords;
+    final words =
+        result.recognizedWords.trim();
 
-    _controller.selection =
-        TextSelection.fromPosition(
-      TextPosition(
-        offset:
-            _controller.text.length,
-      ),
-    );
+    if (words.isNotEmpty) {
+      _controller.text = words;
+
+      _controller.selection =
+          TextSelection.fromPosition(
+        TextPosition(
+          offset: _controller.text.length,
+        ),
+      );
+    }
+
+    setState(() {});
 
     if (result.finalResult) {
       _stopListening();
 
-      final text =
-          _controller.text.trim();
-
-      if (text.isNotEmpty) {
+      if (words.isNotEmpty) {
         _sendText();
       }
     }
-
-    setState(() {});
   }
 
   // ============================================================
-  // TTS
+  // تحويل رد AI إلى صوت
   // ============================================================
 
-  Future<void> _speak(
-    String text,
-  ) async {
+  Future<void> _speak(String text) async {
     if (text.trim().isEmpty) {
       return;
     }
@@ -507,17 +519,15 @@ class _ChatScreenState extends State<ChatScreen> {
         });
       }
 
-      await _tts.setLanguage(
-        'ar-EG',
-      );
-
+      await _tts.setLanguage('ar-EG');
+      await _tts.setSpeechRate(0.48);
       await _tts.speak(text);
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _speaking = false;
-        });
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _speaking = false;
+      });
     }
   }
 
@@ -534,7 +544,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
-  // IMAGE GENERATION
+  // إنشاء الصور
   // ============================================================
 
   Future<void> _generateImageFromPrompt(
@@ -546,8 +556,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages.add(
         _ChatMessage(
           isUser: true,
-          text:
-              '🎨 طلب صورة\n$prompt',
+          text: '🎨 طلب صورة\n$prompt',
         ),
       );
 
@@ -600,33 +609,29 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _generateImage() async {
     if (_isLoading) return;
 
-    final controller =
+    final promptController =
         TextEditingController();
 
     final prompt =
         await showDialog<String>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           backgroundColor:
               const Color(0xFF171A24),
           title: const Text(
             '🎨 إنشاء صورة',
-            textDirection:
-                TextDirection.rtl,
+            textDirection: TextDirection.rtl,
             style: TextStyle(
               color: Colors.white,
-              fontWeight:
-                  FontWeight.w900,
+              fontWeight: FontWeight.w900,
             ),
           ),
           content: TextField(
-            controller:
-                controller,
+            controller: promptController,
             autofocus: true,
             maxLines: 4,
-            textDirection:
-                TextDirection.rtl,
+            textDirection: TextDirection.rtl,
             style: const TextStyle(
               color: Colors.white,
             ),
@@ -636,37 +641,51 @@ class _ChatScreenState extends State<ChatScreen> {
                   'اكتب وصف الصورة...',
               hintTextDirection:
                   TextDirection.rtl,
-              hintStyle:
-                  TextStyle(
-                color:
-                    Colors.white38,
+              hintStyle: TextStyle(
+                color: Colors.white38,
+              ),
+              enabledBorder:
+                  UnderlineInputBorder(
+                borderSide: BorderSide(
+                  color: Color(0x44FFFFFF),
+                ),
+              ),
+              focusedBorder:
+                  UnderlineInputBorder(
+                borderSide: BorderSide(
+                  color: Color(0xFFFFD76A),
+                ),
               ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                );
+              },
+              child: const Text(
+                'إلغاء',
               ),
-              child:
-                  const Text('إلغاء'),
             ),
             ElevatedButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-                controller.text,
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  promptController.text,
+                );
+              },
+              child: const Text(
+                'إنشاء',
               ),
-              child:
-                  const Text('إنشاء'),
             ),
           ],
         );
       },
     );
 
-    controller.dispose();
+    promptController.dispose();
 
     if (prompt == null ||
         prompt.trim().isEmpty) {
@@ -679,7 +698,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
-  // UI
+  // واجهة الشاشة
   // ============================================================
 
   @override
@@ -687,8 +706,7 @@ class _ChatScreenState extends State<ChatScreen> {
     BuildContext context,
   ) {
     final title =
-        widget.serviceTitle ??
-            'صَحبي AI';
+        widget.serviceTitle ?? 'صَحبي AI';
 
     return Scaffold(
       backgroundColor:
@@ -702,10 +720,8 @@ class _ChatScreenState extends State<ChatScreen> {
         centerTitle: true,
         title: Text(
           title,
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.w900,
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
           ),
         ),
         actions: [
@@ -713,21 +729,17 @@ class _ChatScreenState extends State<ChatScreen> {
             tooltip:
                 _speaking
                     ? 'إيقاف الصوت'
-                    : 'قراءة الرد',
+                    : 'الصوت',
             onPressed:
                 _speaking
                     ? _stopSpeaking
                     : null,
             icon: Icon(
               _speaking
-                  ? Icons
-                      .volume_off_rounded
-                  : Icons
-                      .volume_up_rounded,
+                  ? Icons.volume_off_rounded
+                  : Icons.volume_up_rounded,
               color:
-                  const Color(
-                0xFFFFD76A,
-              ),
+                  const Color(0xFFFFD76A),
             ),
           ),
         ],
@@ -736,44 +748,38 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           children: [
             Expanded(
-              child:
-                  _messages.isEmpty
-                      ? _buildWelcome()
-                      : ListView.builder(
-                          controller:
-                              _scrollController,
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior
-                                  .onDrag,
-                          padding:
-                              const EdgeInsets
-                                  .fromLTRB(
-                            12,
-                            14,
-                            12,
-                            12,
-                          ),
-                          itemCount:
-                              _messages.length,
-                          itemBuilder:
-                              (context,
-                                  index) {
-                            return _MessageBubble(
-                              message:
-                                  _messages[index],
-                              onSpeak:
-                                  _speak,
-                            );
-                          },
-                        ),
+              child: _messages.isEmpty
+                  ? _buildWelcome()
+                  : ListView.builder(
+                      controller:
+                          _scrollController,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior
+                              .onDrag,
+                      padding:
+                          const EdgeInsets.fromLTRB(
+                        12,
+                        14,
+                        12,
+                        12,
+                      ),
+                      itemCount:
+                          _messages.length,
+                      itemBuilder:
+                          (context, index) {
+                        return _MessageBubble(
+                          message:
+                              _messages[index],
+                          onSpeak:
+                              _speak,
+                        );
+                      },
+                    ),
             ),
-
             if (_isListening)
               _buildListeningBar(),
-
             if (_isLoading)
               _buildLoadingBar(),
-
             _buildInput(),
           ],
         ),
@@ -793,50 +799,34 @@ class _ChatScreenState extends State<ChatScreen> {
             Container(
               width: 88,
               height: 88,
+              padding:
+                  const EdgeInsets.all(3),
               decoration:
                   const BoxDecoration(
-                shape:
-                    BoxShape.circle,
+                shape: BoxShape.circle,
                 gradient:
                     SweepGradient(
                   colors: [
-                    Color(
-                      0xFFFFD76A,
-                    ),
-                    Color(
-                      0xFF8B5CF6,
-                    ),
-                    Color(
-                      0xFF22D3EE,
-                    ),
-                    Color(
-                      0xFFFFD76A,
-                    ),
+                    Color(0xFFFFD76A),
+                    Color(0xFF8B5CF6),
+                    Color(0xFF22D3EE),
+                    Color(0xFFFFD76A),
                   ],
                 ),
-              ),
-              padding:
-                  const EdgeInsets.all(
-                3,
               ),
               child: Container(
                 decoration:
                     const BoxDecoration(
-                  shape:
-                      BoxShape.circle,
+                  shape: BoxShape.circle,
                   color:
                       Color(0xFF10131C),
                 ),
-                child:
-                    const Center(
+                child: const Center(
                   child: Text(
                     'س',
-                    style:
-                        TextStyle(
-                      color:
-                          Colors.white,
-                      fontSize:
-                          46,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 46,
                       fontWeight:
                           FontWeight.w900,
                     ),
@@ -844,39 +834,29 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             ),
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
             const Text(
               'قول يا صاحبي 👋',
               textDirection:
                   TextDirection.rtl,
-              style:
-                  TextStyle(
-                color:
-                    Colors.white,
-                fontSize:
-                    25,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 25,
                 fontWeight:
                     FontWeight.w900,
               ),
             ),
-            const SizedBox(
-              height: 10,
-            ),
+            const SizedBox(height: 10),
             const Text(
               'اكتب أو اتكلم أو ابعت صورة…\n'
               'ولو عايز صورة جديدة قول له: اعمل لي صورة 🎨',
               textDirection:
                   TextDirection.rtl,
-              textAlign:
-                  TextAlign.center,
-              style:
-                  TextStyle(
-                color:
-                    Colors.white60,
-                fontSize:
-                    15,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 15,
                 height: 1.6,
               ),
             ),
@@ -906,17 +886,12 @@ class _ChatScreenState extends State<ChatScreen> {
               strokeWidth: 2,
             ),
           ),
-          SizedBox(
-            width: 8,
-          ),
+          SizedBox(width: 8),
           Text(
             'صَحبي بيفكر… ✨',
-            style:
-                TextStyle(
-              color:
-                  Colors.white60,
-              fontSize:
-                  13,
+            style: TextStyle(
+              color: Colors.white60,
+              fontSize: 13,
             ),
           ),
         ],
@@ -941,9 +916,7 @@ class _ChatScreenState extends State<ChatScreen> {
         color:
             const Color(0x3322D3EE),
         borderRadius:
-            BorderRadius.circular(
-          16,
-        ),
+            BorderRadius.circular(16),
         border:
             Border.all(
           color:
@@ -959,18 +932,14 @@ class _ChatScreenState extends State<ChatScreen> {
             color:
                 Color(0xFF67E8F9),
           ),
-          const SizedBox(
-            width: 8,
-          ),
+          const SizedBox(width: 8),
           const Expanded(
             child: Text(
               'سامعك… اتكلم براحتك 🎙️',
               textDirection:
                   TextDirection.rtl,
-              style:
-                  TextStyle(
-                color:
-                    Colors.white,
+              style: TextStyle(
+                color: Colors.white,
                 fontWeight:
                     FontWeight.w700,
               ),
@@ -995,9 +964,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return Container(
       padding:
           const EdgeInsets.fromLTRB(
-        10,
         8,
-        10,
+        8,
+        8,
         10,
       ),
       decoration:
@@ -1009,7 +978,7 @@ class _ChatScreenState extends State<ChatScreen> {
           top:
               BorderSide(
             color:
-                Color(0x221FFFFFF),
+                Color(0x22FFFFFF),
           ),
         ),
       ),
@@ -1042,26 +1011,17 @@ class _ChatScreenState extends State<ChatScreen> {
                 _generateImage,
           ),
           _InputIconButton(
-            icon:
-                _isListening
-                    ? Icons
-                        .stop_rounded
-                    : Icons
-                        .mic_rounded,
-            color:
-                _isListening
-                    ? const Color(
-                        0xFFFF6B6B,
-                      )
-                    : const Color(
-                        0xFF67E8F9,
-                      ),
+            icon: _isListening
+                ? Icons.stop_rounded
+                : Icons.mic_rounded,
+            color: _isListening
+                ? const Color(0xFFFF6B6B)
+                : const Color(0xFF67E8F9),
             onTap:
                 _toggleListening,
           ),
           Expanded(
-            child:
-                TextField(
+            child: TextField(
               controller:
                   _controller,
               enabled:
@@ -1070,14 +1030,10 @@ class _ChatScreenState extends State<ChatScreen> {
               maxLines: 4,
               textDirection:
                   TextDirection.rtl,
-              textInputAction:
-                  TextInputAction.newline,
               style:
                   const TextStyle(
-                color:
-                    Colors.white,
-                fontSize:
-                    16,
+                color: Colors.white,
+                fontSize: 16,
               ),
               decoration:
                   InputDecoration(
@@ -1092,8 +1048,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   color:
                       Colors.white38,
                 ),
-                filled:
-                    true,
+                filled: true,
                 fillColor:
                     const Color(
                   0xFF171A24,
@@ -1101,33 +1056,45 @@ class _ChatScreenState extends State<ChatScreen> {
                 contentPadding:
                     const EdgeInsets
                         .symmetric(
-                  horizontal:
-                      14,
-                  vertical:
-                      11,
+                  horizontal: 14,
+                  vertical: 11,
                 ),
                 border:
                     OutlineInputBorder(
                   borderRadius:
                       BorderRadius
-                          .circular(
-                    20,
-                  ),
+                          .circular(20),
                   borderSide:
                       BorderSide.none,
                 ),
+                enabledBorder:
+                    OutlineInputBorder(
+                  borderRadius:
+                      BorderRadius
+                          .circular(20),
+                  borderSide:
+                      BorderSide.none,
+                ),
+                focusedBorder:
+                    OutlineInputBorder(
+                  borderRadius:
+                      BorderRadius
+                          .circular(20),
+                  borderSide:
+                      const BorderSide(
+                    color:
+                        Color(0x66FFD76A),
+                  ),
+                ),
               ),
-              onSubmitted:
-                  (_) {
+              onSubmitted: (_) {
                 if (!_isLoading) {
                   _sendText();
                 }
               },
             ),
           ),
-          const SizedBox(
-            width: 8,
-          ),
+          const SizedBox(width: 6),
           _InputIconButton(
             icon:
                 Icons.send_rounded,
@@ -1143,27 +1110,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _scrollToBottom() {
     WidgetsBinding.instance
-        .addPostFrameCallback(
-      (_) {
-        if (!_scrollController
-            .hasClients) {
-          return;
-        }
+        .addPostFrameCallback((_) {
+      if (!_scrollController
+          .hasClients) {
+        return;
+      }
 
+      _scrollController.animateTo(
         _scrollController
-            .animateTo(
-          _scrollController
-              .position
-              .maxScrollExtent,
-          duration:
-              const Duration(
-            milliseconds: 220,
-          ),
-          curve:
-              Curves.easeOut,
-        );
-      },
-    );
+            .position
+            .maxScrollExtent,
+        duration:
+            const Duration(
+          milliseconds: 220,
+        ),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   void _showMessage(
@@ -1186,6 +1149,10 @@ class _ChatScreenState extends State<ChatScreen> {
       );
   }
 }
+
+// ============================================================
+// فقاعة الرسائل
+// ============================================================
 
 class _MessageBubble extends StatelessWidget {
   final _ChatMessage message;
@@ -1229,7 +1196,7 @@ class _MessageBubble extends StatelessWidget {
           14,
           11,
           14,
-          10,
+          8,
         ),
         decoration:
             BoxDecoration(
@@ -1240,12 +1207,8 @@ class _MessageBubble extends StatelessWidget {
                   end:
                       Alignment.bottomLeft,
                   colors: [
-                    Color(
-                      0xFF7546A8,
-                    ),
-                    Color(
-                      0xFF38215E,
-                    ),
+                    Color(0xFF7546A8),
+                    Color(0xFF38215E),
                   ],
                 )
               : const LinearGradient(
@@ -1254,24 +1217,16 @@ class _MessageBubble extends StatelessWidget {
                   end:
                       Alignment.bottomLeft,
                   colors: [
-                    Color(
-                      0xFF1F2B39,
-                    ),
-                    Color(
-                      0xFF121821,
-                    ),
+                    Color(0xFF1F2B39),
+                    Color(0xFF121821),
                   ],
                 ),
           borderRadius:
               BorderRadius.only(
             topLeft:
-                const Radius.circular(
-              20,
-            ),
+                const Radius.circular(20),
             topRight:
-                const Radius.circular(
-              20,
-            ),
+                const Radius.circular(20),
             bottomLeft:
                 Radius.circular(
               isUser ? 20 : 5,
@@ -1284,30 +1239,23 @@ class _MessageBubble extends StatelessWidget {
           border:
               Border.all(
             color: isUser
-                ? const Color(
-                    0x665E3D88,
-                  )
-                : const Color(
-                    0x3348D7FF,
-                  ),
+                ? const Color(0x665E3D88)
+                : const Color(0x3348D7FF),
           ),
           boxShadow:
               const [
             BoxShadow(
               color:
                   Color(0x22000000),
-              blurRadius:
-                  10,
+              blurRadius: 10,
               offset:
                   Offset(0, 4),
             ),
           ],
         ),
-        child:
-            Column(
+        child: Column(
           crossAxisAlignment:
-              CrossAxisAlignment
-                  .start,
+              CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisSize:
@@ -1317,8 +1265,7 @@ class _MessageBubble extends StatelessWidget {
                   emotion,
                   style:
                       const TextStyle(
-                    fontSize:
-                        15,
+                    fontSize: 15,
                   ),
                 ),
                 const SizedBox(
@@ -1329,10 +1276,8 @@ class _MessageBubble extends StatelessWidget {
                       ? 'أنت'
                       : 'صَحبي AI',
                   textDirection:
-                      TextDirection
-                          .rtl,
-                  style:
-                      TextStyle(
+                      TextDirection.rtl,
+                  style: TextStyle(
                     color: isUser
                         ? const Color(
                             0xFFE9D5FF,
@@ -1340,80 +1285,55 @@ class _MessageBubble extends StatelessWidget {
                         : const Color(
                             0xFF8BE9FD,
                           ),
-                    fontSize:
-                        12,
+                    fontSize: 12,
                     fontWeight:
                         FontWeight.w800,
                   ),
                 ),
               ],
             ),
-            if (message.image !=
-                null) ...[
-              const SizedBox(
-                height: 9,
-              ),
+            if (message.image != null) ...[
+              const SizedBox(height: 9),
               ClipRRect(
                 borderRadius:
-                    BorderRadius
-                        .circular(
-                  16,
-                ),
-                child:
-                    Image.memory(
+                    BorderRadius.circular(16),
+                child: Image.memory(
                   message.image!,
-                  width:
-                      330,
-                  height:
-                      230,
-                  fit:
-                      BoxFit.cover,
-                  gaplessPlayback:
-                      true,
+                  width: 330,
+                  height: 230,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
                 ),
               ),
             ],
-            if (message.text
-                .trim()
-                .isNotEmpty) ...[
-              const SizedBox(
-                height: 8,
-              ),
+            if (message.text.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
               SelectableText(
                 message.text,
                 textDirection:
                     TextDirection.rtl,
                 textAlign:
                     TextAlign.right,
-                style:
-                    TextStyle(
-                  color:
-                      Colors.white,
-                  fontSize:
-                      16,
-                  height:
-                      1.55,
-                  fontWeight:
-                      isUser
-                          ? FontWeight.w600
-                          : FontWeight.w500,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  height: 1.55,
+                  fontWeight: isUser
+                      ? FontWeight.w600
+                      : FontWeight.w500,
                 ),
               ),
             ],
             if (!isUser &&
-                message.text
-                    .trim()
-                    .isNotEmpty)
+                message.text.trim().isNotEmpty)
               Align(
                 alignment:
                     Alignment.centerLeft,
-                child:
-                    IconButton(
+                child: IconButton(
                   visualDensity:
-                      VisualDensity
-                          .compact,
-                  onPressed:
-                      () => onSpeak(
+                      VisualDensity.compact,
+                  onPressed: () =>
+                      onSpeak(
                     message.text,
                   ),
                   icon:
@@ -1421,11 +1341,8 @@ class _MessageBubble extends StatelessWidget {
                     Icons
                         .volume_up_rounded,
                     color:
-                        Color(
-                      0xFFFFD76A,
-                    ),
-                    size:
-                        20,
+                        Color(0xFFFFD76A),
+                    size: 20,
                   ),
                 ),
               ),
@@ -1476,6 +1393,10 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
+// ============================================================
+// أزرار الإدخال
+// ============================================================
+
 class _InputIconButton extends StatelessWidget {
   final IconData icon;
   final Color color;
@@ -1492,17 +1413,13 @@ class _InputIconButton extends StatelessWidget {
     BuildContext context,
   ) {
     return IconButton(
-      onPressed:
-          onTap,
+      onPressed: onTap,
       visualDensity:
           VisualDensity.compact,
-      icon:
-          Icon(
+      icon: Icon(
         icon,
-        color:
-            color,
-        size:
-            23,
+        color: color,
+        size: 23,
       ),
     );
   }
