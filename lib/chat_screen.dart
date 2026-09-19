@@ -72,27 +72,27 @@ class _ChatScreenState extends State<ChatScreen> {
       await _tts.setPitch(1.0);
 
       _tts.setStartHandler(() {
-        if (mounted) {
-          setState(() {
-            _speaking = true;
-          });
-        }
+        if (!mounted) return;
+
+        setState(() {
+          _speaking = true;
+        });
       });
 
       _tts.setCompletionHandler(() {
-        if (mounted) {
-          setState(() {
-            _speaking = false;
-          });
-        }
+        if (!mounted) return;
+
+        setState(() {
+          _speaking = false;
+        });
       });
 
       _tts.setCancelHandler(() {
-        if (mounted) {
-          setState(() {
-            _speaking = false;
-          });
-        }
+        if (!mounted) return;
+
+        setState(() {
+          _speaking = false;
+        });
       });
     } catch (_) {}
   }
@@ -154,7 +154,7 @@ class _ChatScreenState extends State<ChatScreen> {
           isUser: false,
           text: reply,
         ),
-        );
+      );
 
       _isLoading = false;
     });
@@ -224,7 +224,6 @@ class _ChatScreenState extends State<ChatScreen> {
         _ChatMessage(
           isUser: true,
           text: '📷 تحليل الصورة',
-          image: null,
         ),
       );
 
@@ -325,17 +324,28 @@ class _ChatScreenState extends State<ChatScreen> {
 
       await _speech.listen(
         onResult: _onSpeechResult,
+
+        // مهم:
+        // لا نضع const هنا لأن SpeechListenOptions
+        // في النسخة الحالية ليست const.
         listenOptions:
-            const stt.SpeechListenOptions(
+            stt.SpeechListenOptions(
           partialResults: true,
           cancelOnError: true,
           autoPunctuation: true,
         ),
+
         localeId: 'ar_EG',
+
         listenFor:
-            const Duration(seconds: 45),
+            const Duration(
+          seconds: 45,
+        ),
+
         pauseFor:
-            const Duration(seconds: 3),
+            const Duration(
+          seconds: 3,
+        ),
       );
     } catch (_) {
       if (mounted) {
@@ -356,11 +366,14 @@ class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) return;
 
     setState(() {
-      _controller.text = result.recognizedWords;
+      _controller.text =
+          result.recognizedWords;
+
       _controller.selection =
           TextSelection.fromPosition(
         TextPosition(
-          offset: _controller.text.length,
+          offset:
+              _controller.text.length,
         ),
       );
     });
@@ -372,7 +385,9 @@ class _ChatScreenState extends State<ChatScreen> {
         _isListening = false;
       });
 
-      if (_controller.text.trim().isNotEmpty) {
+      if (_controller.text
+          .trim()
+          .isNotEmpty) {
         _sendText();
       }
     }
@@ -384,7 +399,9 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       await _tts.stop();
 
-      await _tts.setLanguage('ar-EG');
+      await _tts.setLanguage(
+        'ar-EG',
+      );
 
       setState(() {
         _speaking = true;
@@ -415,7 +432,8 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages.add(
         _ChatMessage(
           isUser: true,
-          text: '🎨 إنشاء صورة\n$prompt',
+          text:
+              '🎨 إنشاء صورة\n$prompt',
         ),
       );
 
@@ -452,7 +470,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 'تم إنشاء الصورة بالذكاء الاصطناعي ✨',
             image: image,
           ),
-          );
+        );
 
         _isLoading = false;
       });
@@ -474,17 +492,20 @@ class _ChatScreenState extends State<ChatScreen> {
               const Color(0xFF181824),
           title: const Text(
             'إنشاء صورة',
-            textDirection: TextDirection.rtl,
+            textDirection:
+                TextDirection.rtl,
             style: TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.bold,
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
           content: TextField(
             controller: controller,
             autofocus: true,
             maxLines: 4,
-            textDirection: TextDirection.rtl,
+            textDirection:
+                TextDirection.rtl,
             style: const TextStyle(
               color: Colors.white,
             ),
@@ -502,8 +523,11 @@ class _ChatScreenState extends State<ChatScreen> {
           actions: [
             TextButton(
               onPressed: () =>
-                  Navigator.pop(context),
-              child: const Text('إلغاء'),
+                  Navigator.pop(
+                context,
+              ),
+              child:
+                  const Text('إلغاء'),
             ),
             ElevatedButton(
               onPressed: () =>
@@ -511,7 +535,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 context,
                 controller.text,
               ),
-              child: const Text('إنشاء'),
+              child:
+                  const Text('إنشاء'),
             ),
           ],
         );
@@ -526,20 +551,26 @@ class _ChatScreenState extends State<ChatScreen> {
   void _scrollToBottom() {
     WidgetsBinding.instance
         .addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) {
+      if (!_scrollController
+          .hasClients) {
         return;
       }
 
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        _scrollController
+            .position.maxScrollExtent,
         duration:
-            const Duration(milliseconds: 300),
+            const Duration(
+          milliseconds: 300,
+        ),
         curve: Curves.easeOut,
       );
     });
   }
 
-  void _showMessage(String message) {
+  void _showMessage(
+    String message,
+  ) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -556,9 +587,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final title =
-        widget.serviceTitle ?? 'صَحبي AI';
+        widget.serviceTitle ??
+            'صَحبي AI';
 
     return Scaffold(
       backgroundColor:
@@ -584,16 +618,21 @@ class _ChatScreenState extends State<ChatScreen> {
                     await _tts.stop();
 
                     setState(() {
-                      _speaking = false;
+                      _speaking =
+                          false;
                     });
                   }
                 : null,
             icon: Icon(
               _speaking
-                  ? Icons.volume_off_rounded
-                  : Icons.volume_up_rounded,
+                  ? Icons
+                      .volume_off_rounded
+                  : Icons
+                      .volume_up_rounded,
               color:
-                  const Color(0xFFFFD76A),
+                  const Color(
+                0xFFFFD76A,
+              ),
             ),
           ),
         ],
@@ -602,22 +641,25 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           children: [
             Expanded(
-              child: _messages.isEmpty
-                  ? _buildWelcome()
-                  : ListView.builder(
-                      controller:
-                          _scrollController,
-                      padding:
-                          const EdgeInsets.all(14),
-                      itemCount:
-                          _messages.length,
-                      itemBuilder:
-                          (context, index) {
-                        return _buildMessage(
-                          _messages[index],
-                        );
-                      },
-                    ),
+              child:
+                  _messages.isEmpty
+                      ? _buildWelcome()
+                      : ListView.builder(
+                          controller:
+                              _scrollController,
+                          padding:
+                              const EdgeInsets
+                                  .all(14),
+                          itemCount:
+                              _messages.length,
+                          itemBuilder:
+                              (context,
+                                  index) {
+                            return _buildMessage(
+                              _messages[index],
+                            );
+                          },
+                        ),
             ),
 
             if (_isLoading)
@@ -639,7 +681,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         strokeWidth: 2,
                       ),
                     ),
-                    SizedBox(width: 8),
+                    SizedBox(
+                      width: 8,
+                    ),
                     Text(
                       'صَحبي بيجهز الرد...',
                       style: TextStyle(
@@ -672,21 +716,31 @@ class _ChatScreenState extends State<ChatScreen> {
               height: 92,
               decoration:
                   const BoxDecoration(
-                shape: BoxShape.circle,
+                shape:
+                    BoxShape.circle,
                 gradient:
                     LinearGradient(
                   colors: [
-                    Color(0xFFFFD76A),
-                    Color(0xFFFF8A00),
-                    Color(0xFF7C4DFF),
+                    Color(
+                      0xFFFFD76A,
+                    ),
+                    Color(
+                      0xFFFF8A00,
+                    ),
+                    Color(
+                      0xFF7C4DFF,
+                    ),
                   ],
                 ),
               ),
-              child: const Center(
+              child:
+                  const Center(
                 child: Text(
                   'س',
-                  style: TextStyle(
-                    color: Colors.white,
+                  style:
+                      TextStyle(
+                    color:
+                        Colors.white,
                     fontSize: 48,
                     fontWeight:
                         FontWeight.w900,
@@ -703,8 +757,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   TextDirection.rtl,
               textAlign:
                   TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
+              style:
+                  TextStyle(
+                color:
+                    Colors.white,
                 fontSize: 24,
                 fontWeight:
                     FontWeight.w900,
@@ -714,13 +770,16 @@ class _ChatScreenState extends State<ChatScreen> {
               height: 10,
             ),
             const Text(
-              'اكتب أو اتكلم أو ابعت صورة…\nوصَحبي AI هيتعامل معاها.',
+              'اكتب أو اتكلم أو ابعت صورة…\n'
+              'وصَحبي AI هيتعامل معاها.',
               textDirection:
                   TextDirection.rtl,
               textAlign:
                   TextAlign.center,
-              style: TextStyle(
-                color: Colors.white70,
+              style:
+                  TextStyle(
+                color:
+                    Colors.white70,
                 fontSize: 15,
                 height: 1.6,
               ),
@@ -752,26 +811,39 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         padding:
             const EdgeInsets.all(14),
-        decoration: BoxDecoration(
+        decoration:
+            BoxDecoration(
           gradient: isUser
               ? const LinearGradient(
                   colors: [
-                    Color(0xFF5B2C83),
-                    Color(0xFF342060),
+                    Color(
+                      0xFF5B2C83,
+                    ),
+                    Color(
+                      0xFF342060,
+                    ),
                   ],
                 )
               : const LinearGradient(
                   colors: [
-                    Color(0xFF202532),
-                    Color(0xFF131720),
+                    Color(
+                      0xFF202532,
+                    ),
+                    Color(
+                      0xFF131720,
+                    ),
                   ],
                 ),
           borderRadius:
               BorderRadius.only(
             topLeft:
-                const Radius.circular(20),
+                const Radius.circular(
+              20,
+            ),
             topRight:
-                const Radius.circular(20),
+                const Radius.circular(
+              20,
+            ),
             bottomLeft:
                 Radius.circular(
               isUser ? 20 : 5,
@@ -781,39 +853,50 @@ class _ChatScreenState extends State<ChatScreen> {
               isUser ? 5 : 20,
             ),
           ),
-          border: Border.all(
+          border:
+              Border.all(
             color: isUser
                 ? const Color(
                     0x445F3C88,
                   )
                 : const Color(
-                    0x223FFFFFF,
+                    0x22FFFFFF,
                   ),
           ),
         ),
         child: Column(
           crossAxisAlignment:
-              CrossAxisAlignment.stretch,
+              CrossAxisAlignment
+                  .stretch,
           children: [
-            if (message.image != null)
+            if (message.image !=
+                null)
               ClipRRect(
                 borderRadius:
-                    BorderRadius.circular(
+                    BorderRadius
+                        .circular(
                   14,
                 ),
-                child: Image.memory(
+                child:
+                    Image.memory(
                   message.image!,
-                  fit: BoxFit.cover,
+                  fit:
+                      BoxFit.cover,
                 ),
               ),
-            if (message.image != null)
-              const SizedBox(height: 10),
+            if (message.image !=
+                null)
+              const SizedBox(
+                height: 10,
+              ),
             Text(
               message.text,
               textDirection:
                   TextDirection.rtl,
-              style: const TextStyle(
-                color: Colors.white,
+              style:
+                  const TextStyle(
+                color:
+                    Colors.white,
                 fontSize: 16,
                 height: 1.55,
               ),
@@ -824,14 +907,22 @@ class _ChatScreenState extends State<ChatScreen> {
                     .isNotEmpty)
               Align(
                 alignment:
-                    Alignment.bottomLeft,
-                child: IconButton(
+                    Alignment
+                        .bottomLeft,
+                child:
+                    IconButton(
                   onPressed: () =>
-                      _speak(message.text),
-                  icon: const Icon(
-                    Icons.volume_up_rounded,
+                      _speak(
+                    message.text,
+                  ),
+                  icon:
+                      const Icon(
+                    Icons
+                        .volume_up_rounded,
                     color:
-                        Color(0xFFFFD76A),
+                        Color(
+                      0xFFFFD76A,
+                    ),
                     size: 21,
                   ),
                 ),
@@ -853,39 +944,46 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       decoration:
           const BoxDecoration(
-        color: Color(0xFF10121C),
+        color:
+            Color(0xFF10121C),
       ),
       child: Column(
         children: [
           Row(
             children: [
               _toolButton(
-                icon:
-                    Icons.camera_alt_rounded,
-                tooltip: 'الكاميرا',
-                onTap: _takePhoto,
-              ),
-              _toolButton(
-                icon:
-                    Icons.photo_library_rounded,
-                tooltip: 'الصور',
-                onTap: _pickImage,
-              ),
-              _toolButton(
-                icon:
-                    Icons.image_rounded,
-                tooltip: 'إنشاء صورة',
-                onTap: _generateImage,
-              ),
-              _toolButton(
-                icon:
-                    _isListening
-                        ? Icons.stop_rounded
-                        : Icons.mic_rounded,
+                icon: Icons
+                    .camera_alt_rounded,
                 tooltip:
-                    _isListening
-                        ? 'إيقاف الصوت'
-                        : 'تحدث',
+                    'الكاميرا',
+                onTap:
+                    _takePhoto,
+              ),
+              _toolButton(
+                icon: Icons
+                    .photo_library_rounded,
+                tooltip:
+                    'الصور',
+                onTap:
+                    _pickImage,
+              ),
+              _toolButton(
+                icon: Icons
+                    .image_rounded,
+                tooltip:
+                    'إنشاء صورة',
+                onTap:
+                    _generateImage,
+              ),
+              _toolButton(
+                icon: _isListening
+                    ? Icons
+                        .stop_rounded
+                    : Icons
+                        .mic_rounded,
+                tooltip: _isListening
+                    ? 'إيقاف الصوت'
+                    : 'تحدث',
                 active:
                     _isListening,
                 onTap:
@@ -894,10 +992,13 @@ class _ChatScreenState extends State<ChatScreen> {
               const Spacer(),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(
+            height: 6,
+          ),
           Row(
             crossAxisAlignment:
-                CrossAxisAlignment.end,
+                CrossAxisAlignment
+                    .end,
             children: [
               Expanded(
                 child: TextField(
@@ -909,7 +1010,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       TextDirection.rtl,
                   style:
                       const TextStyle(
-                    color: Colors.white,
+                    color:
+                        Colors.white,
                     fontSize: 16,
                   ),
                   decoration:
@@ -917,7 +1019,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     hintText:
                         'اكتب رسالتك...',
                     hintTextDirection:
-                        TextDirection.rtl,
+                        TextDirection
+                            .rtl,
                     hintStyle:
                         const TextStyle(
                       color:
@@ -936,7 +1039,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         22,
                       ),
                       borderSide:
-                          BorderSide.none,
+                          BorderSide
+                              .none,
                     ),
                     contentPadding:
                         const EdgeInsets
@@ -961,8 +1065,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   gradient:
                       LinearGradient(
                     colors: [
-                      Color(0xFFFFD76A),
-                      Color(0xFFFF8A00),
+                      Color(
+                        0xFFFFD76A,
+                      ),
+                      Color(
+                        0xFFFF8A00,
+                      ),
                     ],
                   ),
                 ),
