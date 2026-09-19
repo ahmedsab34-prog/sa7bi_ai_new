@@ -1,26 +1,29 @@
 plugins {
     id "com.android.application"
-    id "kotlin-android"
+    id "org.jetbrains.kotlin.android"
     id "dev.flutter.flutter-gradle-plugin"
 }
 
 android {
     namespace "com.example.sa7bi_ai_new"
-    compileSdkVersion 34
+
+    compileSdk 35
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        jvmTarget = "17"
     }
 
     defaultConfig {
         applicationId "com.example.sa7bi_ai_new"
-        minSdkVersion 21
-        targetSdkVersion 34
+
+        minSdk 24
+        targetSdk 35
+
         versionCode 1
         versionName "1.0.0"
     }
@@ -33,8 +36,5 @@ android {
 }
 
 flutter {
-    source '../..'
-}
-
-dependencies {
+    source "../.."
 }
