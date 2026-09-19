@@ -15,21 +15,21 @@ class KhalasanaPortal extends StatefulWidget {
 
 class _KhalasanaPortalState extends State<KhalasanaPortal>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+  late final AnimationController controller;
 
   @override
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
+    controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 6),
     )..repeat();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    controller.dispose();
     super.dispose();
   }
 
@@ -38,173 +38,135 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
     return GestureDetector(
       onTap: widget.onTap,
       child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final rotation = _controller.value * math.pi * 2;
+        animation: controller,
+        builder: (_, __) {
           final pulse =
-              1.0 + (math.sin(_controller.value * math.pi * 2) * 0.035);
+              (math.sin(controller.value * math.pi * 2) + 1) / 2;
 
-          return Transform.scale(
-            scale: pulse,
-            child: SizedBox(
-              width: 92,
-              height: 112,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Outer magical glow.
-                  Container(
-                    width: 82,
-                    height: 82,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6C63FF).withOpacity(0.35),
-                          blurRadius: 24,
-                          spreadRadius: 5,
-                        ),
-                        BoxShadow(
-                          color: const Color(0xFFFFD76A).withOpacity(0.18),
-                          blurRadius: 35,
-                          spreadRadius: 8,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Rotating light ring.
-                  Transform.rotate(
-                    angle: rotation,
-                    child: Container(
-                      width: 78,
-                      height: 78,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const SweepGradient(
-                          colors: [
-                            Color(0xFFFFD76A),
-                            Color(0xFF8A6CFF),
-                            Color(0xFF4FD8FF),
-                            Color(0xFFFFD76A),
-                          ],
-                        ),
+          return SizedBox(
+            width: 94,
+            height: 106,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Container(
+                  width: 82,
+                  height: 82,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF6C63FF)
+                            .withOpacity(0.12 + pulse * 0.08),
+                        blurRadius: 25,
+                        spreadRadius: 5,
                       ),
-                    ),
+                      BoxShadow(
+                        color: const Color(0xFFFFD76A)
+                            .withOpacity(0.08 + pulse * 0.08),
+                        blurRadius: 30,
+                        spreadRadius: 5,
+                      ),
+                    ],
                   ),
+                ),
 
-                  // Glass center.
-                  Container(
-                    width: 68,
-                    height: 68,
-                    decoration: BoxDecoration(
+                Transform.rotate(
+                  angle: controller.value * math.pi * 2,
+                  child: Container(
+                    width: 79,
+                    height: 79,
+                    decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                      gradient: SweepGradient(
                         colors: [
-                          Colors.white.withOpacity(0.24),
-                          const Color(0xFF15152B).withOpacity(0.94),
+                          Color(0xFFFFD76A),
+                          Color(0xFF5BD9FF),
+                          Color(0xFF8B5CF6),
+                          Color(0xFF4CE0A6),
+                          Color(0xFFFFD76A),
                         ],
                       ),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.42),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
+                    ),
+                  ),
+                ),
+
+                Container(
+                  width: 69,
+                  height: 69,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF292C50),
+                        Color(0xFF090B14),
                       ],
                     ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Portal opening.
-                        Container(
-                          width: 47,
-                          height: 47,
-                          decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.white24,
+                    ),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF090A13),
+                          border: Border.all(
+                            color: const Color(0xFFFFD76A),
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chat_bubble_rounded,
+                        color: Color(0xFFFFD76A),
+                        size: 25,
+                      ),
+                      Positioned(
+                        right: 12,
+                        top: 12,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: const RadialGradient(
-                              colors: [
-                                Color(0xFF17152F),
-                                Color(0xFF080814),
-                              ],
-                            ),
-                            border: Border.all(
-                              color: const Color(0xFFFFD76A)
-                                  .withOpacity(0.65),
-                              width: 1,
-                            ),
+                            color: Color(0xFF63E6FF),
                           ),
                         ),
-
-                        // AI letters.
-                        const Text(
-                          'AI',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-
-                        // Moving highlight.
-                        Positioned(
-                          top: 9,
-                          left: 12 + (math.sin(rotation) * 7),
-                          child: Container(
-                            width: 17,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              color: Colors.white.withOpacity(0.55),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.white.withOpacity(0.45),
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
 
-                  // Name.
-                  Positioned(
-                    bottom: 0,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
+                Positioned(
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xEE10101D),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0x66FFD76A),
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF10101D).withOpacity(0.88),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: const Color(0xFFFFD76A).withOpacity(0.5),
-                          width: 0.7,
-                        ),
-                      ),
-                      child: const Text(
-                        'خلصانة AI',
-                        textDirection: TextDirection.rtl,
-                        style: TextStyle(
-                          color: Color(0xFFFFD76A),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
+                    ),
+                    child: const Text(
+                      'خلصانة AI',
+                      textDirection: TextDirection.rtl,
+                      style: TextStyle(
+                        color: Color(0xFFFFD76A),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         },
