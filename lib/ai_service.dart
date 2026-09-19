@@ -5,21 +5,14 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 class AiService {
-  static const String baseUrl =
+  static const String base =
       'https://sa7bi-ai-new.ahmedsab34.workers.dev';
 
-  static const String workerUrl =
-      '$baseUrl/v1/chat';
+  static const String chatEndpoint = '$base/v1/chat';
+  static const String imageEndpoint = '$base/v1/image';
+  static const String newsEndpoint = '$base/v1/news';
 
-  static const String imageUrl =
-      '$baseUrl/v1/image';
-
-  static const String statusUrl =
-      '$baseUrl/';
-
-  // نرسل عددًا محدودًا من الرسائل السابقة حتى لا تصبح كل رسالة
-  // أثقل من السابقة.
-  static const int maxHistoryMessages = 10;
+  static const int maxHistory = 6;
 
   static Future<String> getResponse(
     String prompt, {
@@ -30,25 +23,23 @@ class AiService {
       final text = prompt.trim();
 
       if (text.isEmpty) {
-        return 'اكتب رسالتك الأولًا يا صاحبي 😊';
+        return 'قول لي يا صاحبي 😊';
       }
 
-      final messages = <Map<String, String>>[];
-
       final validHistory = history
-          .where((item) {
-            final role = item['role'];
-            final content = item['content'];
-
-            return (role == 'user' || role == 'assistant') &&
-                content != null &&
-                content.trim().isNotEmpty;
-          })
+          .where(
+            (item) =>
+                (item['role'] == 'user' ||
+                    item['role'] == 'assistant') &&
+                (item['content'] ?? '').trim().isNotEmpty,
+          )
           .toList();
 
-      final start = validHistory.length > maxHistoryMessages
-          ? validHistory.length - maxHistoryMessages
+      final start = validHistory.length > maxHistory
+          ? validHistory.length - maxHistory
           : 0;
+
+      final messages = <Map<String, String>>[];
 
       for (final item in validHistory.sublist(start)) {
         messages.add({
@@ -57,23 +48,23 @@ class AiService {
         });
       }
 
-      var currentMessage = text;
+      var current = text;
 
       if (serviceContext != null &&
           serviceContext.trim().isNotEmpty) {
-        currentMessage =
+        current =
             'سياق القسم: ${serviceContext.trim()}\n\n'
             'رسالة المستخدم: $text';
       }
 
       messages.add({
         'role': 'user',
-        'content': currentMessage,
+        'content': current,
       });
 
       final response = await http
           .post(
-            Uri.parse(workerUrl),
+            Uri.parse(chatEndpoint),
             headers: const {
               'Content-Type': 'application/json',
             },
@@ -82,11 +73,11 @@ class AiService {
             }),
           )
           .timeout(
-            const Duration(seconds: 35),
+            const Duration(seconds: 25),
           );
 
       if (response.statusCode != 200) {
-        return _readError(response);
+        return _serverError(response);
       }
 
       final data = jsonDecode(response.body);
@@ -97,66 +88,62 @@ class AiService {
         return data['reply'].toString().trim();
       }
 
-      return 'صَحبي ما قدرش يكوّن رد دلوقتي 😕';
-    } catch (error) {
-      return 'الاتصال بصَحبي اتأخر شوية 😅\n'
-          'جرّب تبعت الرسالة مرة تانية.';
+      return 'خلصانة مش قادرة ترد دلوقتي 😕';
+    } catch (_) {
+      return 'الرد اتأخر شوية 😅 جرّب تاني.';
     }
   }
 
   static Future<String> analyzeImage(
-    XFile image, {
-    String prompt =
-        'حلل الصورة بوضوح وساعدني في فهم ما فيها.',
+    XFile file, {
+    String prompt = 'حلل الصورة المرسلة بدقة وباختصار.',
     String? serviceContext,
   }) async {
     try {
-      final bytes = await image.readAsBytes();
+      final bytes = await file.readAsBytes();
 
       if (bytes.isEmpty) {
-        return 'الصورة فاضية أو لم يتم قراءتها.';
+        return 'الصورة لم يتم قراءتها.';
       }
 
-      // نحافظ على حجم الطلب منخفضًا.
-      if (bytes.length > 4 * 1024 * 1024) {
-        return 'الصورة كبيرة جدًا. حاول التقاط صورة أصغر.';
+      if (bytes.length > 5 * 1024 * 1024) {
+        return 'الصورة كبيرة جدًا. ابعت صورة أصغر.';
       }
 
-      final base64Image = base64Encode(bytes);
-      final mimeType = _mimeType(image.name);
-
-      var finalPrompt = prompt.trim();
+      var finalPrompt = prompt;
 
       if (serviceContext != null &&
           serviceContext.trim().isNotEmpty) {
         finalPrompt =
             'سياق القسم: ${serviceContext.trim()}\n\n'
-            'طلب المستخدم: $finalPrompt';
+            'طلب المستخدم: $prompt';
       }
+
+      final body = {
+        'messages': [
+          {
+            'role': 'user',
+            'content': finalPrompt,
+          },
+        ],
+        'image':
+            'data:${_mime(file.name)};base64,${base64Encode(bytes)}',
+      };
 
       final response = await http
           .post(
-            Uri.parse(workerUrl),
+            Uri.parse(chatEndpoint),
             headers: const {
               'Content-Type': 'application/json',
             },
-            body: jsonEncode({
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': finalPrompt,
-                }
-              ],
-              'image':
-                  'data:$mimeType;base64,$base64Image',
-            }),
+            body: jsonEncode(body),
           )
           .timeout(
-            const Duration(seconds: 60),
+            const Duration(seconds: 45),
           );
 
       if (response.statusCode != 200) {
-        return _readError(response);
+        return _serverError(response);
       }
 
       final data = jsonDecode(response.body);
@@ -167,9 +154,9 @@ class AiService {
         return data['reply'].toString().trim();
       }
 
-      return 'الصورة وصلت، لكن صَحبي ما قدرش يحللها دلوقتي.';
+      return 'الصورة وصلت، لكن التحليل لم يكتمل.';
     } catch (_) {
-      return 'حصل تأخير أثناء تحليل الصورة. جرّب مرة ثانية 📷';
+      return 'حصل تأخير أثناء تحليل الصورة 📷 جرّب مرة ثانية.';
     }
   }
 
@@ -177,22 +164,14 @@ class AiService {
     String prompt,
   ) async {
     try {
-      final text = prompt.trim();
-
-      if (text.isEmpty) {
-        return const ImageGenerationResult.failure(
-          'اكتب وصف الصورة الأول.',
-        );
-      }
-
       final response = await http
           .post(
-            Uri.parse(imageUrl),
+            Uri.parse(imageEndpoint),
             headers: const {
               'Content-Type': 'application/json',
             },
             body: jsonEncode({
-              'prompt': text,
+              'prompt': prompt.trim(),
             }),
           )
           .timeout(
@@ -201,44 +180,27 @@ class AiService {
 
       if (response.statusCode != 200) {
         return ImageGenerationResult.failure(
-          _readError(response),
+          _serverError(response),
         );
       }
 
       final data = jsonDecode(response.body);
 
-      if (data['ok'] != true) {
-        return ImageGenerationResult.failure(
-          data['error']?.toString() ??
-              'خدمة الصور لم ترجع نتيجة.',
-        );
-      }
-
-      final imageBase64 =
+      final base64Image =
           data['image_base64']?.toString();
 
-      if (imageBase64 == null ||
-          imageBase64.trim().isEmpty) {
-        return const ImageGenerationResult.failure(
-          'خدمة الصور رجعت بدون صورة.',
+      if (data['ok'] != true ||
+          base64Image == null ||
+          base64Image.isEmpty) {
+        return ImageGenerationResult.failure(
+          data['error']?.toString() ??
+              'خدمة الصور لم ترجع صورة.',
         );
       }
 
-      try {
-        final bytes = base64Decode(imageBase64);
-
-        if (bytes.isEmpty) {
-          return const ImageGenerationResult.failure(
-            'الصورة الناتجة فارغة.',
-          );
-        }
-
-        return ImageGenerationResult.success(bytes);
-      } catch (_) {
-        return const ImageGenerationResult.failure(
-          'تعذر قراءة الصورة الناتجة.',
-        );
-      }
+      return ImageGenerationResult.success(
+        base64Decode(base64Image),
+      );
     } catch (_) {
       return const ImageGenerationResult.failure(
         'إنشاء الصورة اتأخر. جرّب مرة ثانية 🎨',
@@ -246,32 +208,64 @@ class AiService {
     }
   }
 
-  static Future<bool> checkConnection() async {
+  static Future<List<NewsItem>> getNews() async {
     try {
       final response = await http
-          .get(Uri.parse(statusUrl))
+          .get(Uri.parse(newsEndpoint))
           .timeout(
-            const Duration(seconds: 6),
+            const Duration(seconds: 12),
           );
 
       if (response.statusCode != 200) {
-        return false;
+        return [];
       }
 
       final data = jsonDecode(response.body);
+      final list = data['items'];
 
-      return data['ok'] == true &&
-          data['status'] == 'online';
+      if (list is! List) {
+        return [];
+      }
+
+      return list
+          .whereType<Map>()
+          .map(
+            (item) => NewsItem(
+              title: item['title']?.toString() ?? '',
+              source:
+                  item['source']?.toString() ?? 'Google News',
+              link: item['link']?.toString() ?? '',
+            ),
+          )
+          .where(
+            (item) =>
+                item.title.isNotEmpty &&
+                item.link.isNotEmpty,
+          )
+          .toList();
     } catch (_) {
-      return false;
+      return [];
     }
   }
 
-  static String _readError(
-    http.Response response,
-  ) {
+  static String _mime(String name) {
+    final value = name.toLowerCase();
+
+    if (value.endsWith('.png')) {
+      return 'image/png';
+    }
+
+    if (value.endsWith('.webp')) {
+      return 'image/webp';
+    }
+
+    return 'image/jpeg';
+  }
+
+  static String _serverError(http.Response response) {
     try {
       final data = jsonDecode(response.body);
+
       final error = data['error'];
 
       if (error != null &&
@@ -281,35 +275,27 @@ class AiService {
     } catch (_) {}
 
     if (response.statusCode == 429) {
-      return 'الخدمة مشغولة حاليًا. جرّب بعد لحظات ⏳';
+      return 'الخدمة مشغولة حاليًا ⏳';
     }
 
     if (response.statusCode >= 500) {
-      return 'الخدمة حصل فيها ضغط مؤقت. جرّب مرة ثانية.';
+      return 'الخدمة حصل فيها ضغط مؤقت.';
     }
 
-    return 'حصل خطأ في الاتصال بالخادم '
-        '(${response.statusCode}).';
+    return 'حصل خطأ في الاتصال بالخادم.';
   }
+}
 
-  static String _mimeType(String name) {
-    final lower = name.toLowerCase();
+class NewsItem {
+  final String title;
+  final String source;
+  final String link;
 
-    if (lower.endsWith('.png')) {
-      return 'image/png';
-    }
-
-    if (lower.endsWith('.webp')) {
-      return 'image/webp';
-    }
-
-    if (lower.endsWith('.jpg') ||
-        lower.endsWith('.jpeg')) {
-      return 'image/jpeg';
-    }
-
-    return 'image/jpeg';
-  }
+  const NewsItem({
+    required this.title,
+    required this.source,
+    required this.link,
+  });
 }
 
 class ImageGenerationResult {
@@ -322,12 +308,16 @@ class ImageGenerationResult {
   });
 
   const ImageGenerationResult.success(
-    Uint8List image,
-  ) : this._(bytes: image);
+    Uint8List bytes,
+  ) : this._(
+          bytes: bytes,
+        );
 
   const ImageGenerationResult.failure(
-    String message,
-  ) : this._(error: message);
+    String error,
+  ) : this._(
+          error: error,
+        );
 
   bool get isSuccess =>
       bytes != null && bytes!.isNotEmpty;
