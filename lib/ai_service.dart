@@ -14,6 +14,21 @@ class AiService {
 
   static const int maxHistory = 6;
 
+  static Future<bool> checkConnection() async {
+    try {
+      final response = await http
+          .get(Uri.parse(base))
+          .timeout(
+            const Duration(seconds: 10),
+          );
+
+      return response.statusCode >= 200 &&
+          response.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<String> getResponse(
     String prompt, {
     String? serviceContext,
