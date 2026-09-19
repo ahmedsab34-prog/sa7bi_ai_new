@@ -11,12 +11,13 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
+        android:name="${applicationName}"
         android:label="صاحبي AI"
         android:icon="@drawable/app_icon"
-        android:name="${applicationName}"
         android:usesCleartextTraffic="true"
         android:allowBackup="true">
 
+        <!-- Google Mobile Ads -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-9077658292229374~3333333333"/>
@@ -32,18 +33,20 @@
 
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme"
-            />
+                android:resource="@style/NormalTheme"/>
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
         </activity>
 
+        <!-- Flutter Android Embedding V2 -->
         <meta-data
-            name="flutterEmbedding"
-            android:value="2" />
+            android:name="flutterEmbedding"
+            android:value="2"/>
 
     </application>
+
 </manifest>
