@@ -45,19 +45,20 @@ class _ServiceDetailScreenState
     });
 
     try {
-      final permission = await Permission.camera.request();
+      final permission =
+          await Permission.camera.request();
 
       if (!permission.isGranted) {
-        if (!mounted) return;
-
-        _showMessage(
-          'صلاحية الكاميرا غير مفعلة. '
-          'اسمح للتطبيق باستخدام الكاميرا من إعدادات الهاتف.',
-        );
+        if (mounted) {
+          _showMessage(
+            'صلاحية الكاميرا غير مفعلة. اسمح للتطبيق باستخدام الكاميرا من إعدادات الهاتف.',
+          );
+        }
         return;
       }
 
-      final XFile? image = await _picker.pickImage(
+      final XFile? image =
+          await _picker.pickImage(
         source: ImageSource.camera,
         imageQuality: 85,
       );
@@ -71,11 +72,11 @@ class _ServiceDetailScreenState
         );
       }
     } catch (e) {
-      if (!mounted) return;
-
-      _showMessage(
-        'حدث خطأ أثناء تشغيل الكاميرا.\n$e',
-      );
+      if (mounted) {
+        _showMessage(
+          'حدث خطأ أثناء تشغيل الكاميرا.\n$e',
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -93,21 +94,23 @@ class _ServiceDetailScreenState
     });
 
     try {
-      final permission = await Permission.camera.request();
+      final permission =
+          await Permission.camera.request();
 
       if (!permission.isGranted) {
-        if (!mounted) return;
-
-        _showMessage(
-          'صلاحية الكاميرا غير مفعلة. '
-          'اسمح للتطبيق باستخدام الكاميرا من إعدادات الهاتف.',
-        );
+        if (mounted) {
+          _showMessage(
+            'صلاحية الكاميرا غير مفعلة. اسمح للتطبيق باستخدام الكاميرا من إعدادات الهاتف.',
+          );
+        }
         return;
       }
 
-      final XFile? video = await _picker.pickVideo(
+      final XFile? video =
+          await _picker.pickVideo(
         source: ImageSource.camera,
-        maxDuration: const Duration(minutes: 2),
+        maxDuration:
+            const Duration(minutes: 2),
       );
 
       if (!mounted) return;
@@ -119,11 +122,11 @@ class _ServiceDetailScreenState
         );
       }
     } catch (e) {
-      if (!mounted) return;
-
-      _showMessage(
-        'حدث خطأ أثناء تشغيل الفيديو.\n$e',
-      );
+      if (mounted) {
+        _showMessage(
+          'حدث خطأ أثناء تشغيل الفيديو.\n$e',
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -157,11 +160,11 @@ class _ServiceDetailScreenState
         );
       }
     } catch (e) {
-      if (!mounted) return;
-
-      _showMessage(
-        'حدث خطأ أثناء اختبار الميكروفون.\n$e',
-      );
+      if (mounted) {
+        _showMessage(
+          'حدث خطأ أثناء اختبار الميكروفون.\n$e',
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -181,7 +184,8 @@ class _ServiceDetailScreenState
             textDirection: TextDirection.rtl,
           ),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 4),
+          duration:
+              const Duration(seconds: 4),
         ),
       );
   }
@@ -191,9 +195,11 @@ class _ServiceDetailScreenState
     final service = widget.service;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF09090F),
+      backgroundColor:
+          const Color(0xFF09090F),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF11111A),
+        backgroundColor:
+            const Color(0xFF11111A),
         foregroundColor: Colors.white,
         elevation: 0,
         title: Text(
@@ -210,30 +216,36 @@ class _ServiceDetailScreenState
           child: Column(
             children: [
               _buildServiceHeader(service),
+
               const SizedBox(height: 22),
 
               _buildAiButton(),
+
               const SizedBox(height: 18),
 
               _buildActionCard(
-                icon: Icons.camera_alt_rounded,
+                icon:
+                    Icons.camera_alt_rounded,
                 title: 'التقاط صورة',
                 description:
                     'استخدم كاميرا الهاتف داخل هذا القسم.',
-                onTap:
-                    _cameraBusy ? null : _pickPhoto,
+                onTap: _cameraBusy
+                    ? null
+                    : _pickPhoto,
                 isLoading: _cameraBusy,
               ),
 
               const SizedBox(height: 12),
 
               _buildActionCard(
-                icon: Icons.videocam_rounded,
+                icon:
+                    Icons.videocam_rounded,
                 title: 'تصوير فيديو',
                 description:
                     'صوّر فيديو قصير لاستخدامه في المراحل القادمة.',
-                onTap:
-                    _cameraBusy ? null : _pickVideo,
+                onTap: _cameraBusy
+                    ? null
+                    : _pickVideo,
                 isLoading: _cameraBusy,
               ),
 
@@ -260,12 +272,15 @@ class _ServiceDetailScreenState
     );
   }
 
-  Widget _buildServiceHeader(Sa7biService service) {
+  Widget _buildServiceHeader(
+    Sa7biService service,
+  ) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius:
+            BorderRadius.circular(28),
         gradient: LinearGradient(
           colors: [
             service.color.withOpacity(0.30),
@@ -275,11 +290,13 @@ class _ServiceDetailScreenState
           end: Alignment.bottomLeft,
         ),
         border: Border.all(
-          color: service.color.withOpacity(0.35),
+          color:
+              service.color.withOpacity(0.35),
         ),
         boxShadow: [
           BoxShadow(
-            color: service.color.withOpacity(0.12),
+            color:
+                service.color.withOpacity(0.12),
             blurRadius: 24,
             spreadRadius: 2,
           ),
@@ -292,9 +309,11 @@ class _ServiceDetailScreenState
             height: 82,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: service.color.withOpacity(0.18),
+              color:
+                  service.color.withOpacity(0.18),
               border: Border.all(
-                color: service.color.withOpacity(0.5),
+                color:
+                    service.color.withOpacity(0.5),
                 width: 2,
               ),
             ),
@@ -304,10 +323,13 @@ class _ServiceDetailScreenState
               size: 42,
             ),
           ),
+
           const SizedBox(height: 16),
+
           Text(
             service.title,
-            textDirection: TextDirection.rtl,
+            textDirection:
+                TextDirection.rtl,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
@@ -315,10 +337,13 @@ class _ServiceDetailScreenState
               fontWeight: FontWeight.bold,
             ),
           ),
+
           const SizedBox(height: 8),
+
           Text(
             service.description,
-            textDirection: TextDirection.rtl,
+            textDirection:
+                TextDirection.rtl,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white70,
@@ -337,7 +362,8 @@ class _ServiceDetailScreenState
       height: 62,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius:
+              BorderRadius.circular(20),
           gradient: const LinearGradient(
             colors: [
               Color(0xFFFFD700),
@@ -346,7 +372,8 @@ class _ServiceDetailScreenState
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.orange.withOpacity(0.20),
+              color:
+                  Colors.orange.withOpacity(0.20),
               blurRadius: 18,
               spreadRadius: 1,
             ),
@@ -367,10 +394,14 @@ class _ServiceDetailScreenState
             ),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+            backgroundColor:
+                Colors.transparent,
+            shadowColor:
+                Colors.transparent,
+            shape:
+                RoundedRectangleBorder(
+              borderRadius:
+                  BorderRadius.circular(20),
             ),
           ),
         ),
@@ -387,9 +418,147 @@ class _ServiceDetailScreenState
   }) {
     return Material(
       color: const Color(0xFF15151F),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius:
+          BorderRadius.circular(20),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius:
+            BorderRadius.circular(20),
         child: Container(
-          width
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius:
+                BorderRadius.circular(20),
+            border: Border.all(
+              color:
+                  Colors.white.withOpacity(0.08),
+            ),
+          ),
+          child: Row(
+            textDirection:
+                TextDirection.rtl,
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.service.color
+                      .withOpacity(0.14),
+                  border: Border.all(
+                    color: widget.service.color
+                        .withOpacity(0.35),
+                  ),
+                ),
+                child: isLoading
+                    ? const Padding(
+                        padding:
+                            EdgeInsets.all(15),
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color:
+                              Color(0xFFFFD54F),
+                        ),
+                      )
+                    : Icon(
+                        icon,
+                        color:
+                            widget.service.color,
+                        size: 28,
+                      ),
+              ),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      title,
+                      textDirection:
+                          TextDirection.rtl,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight:
+                            FontWeight.w800,
+                      ),
+                    ),
+
+                    const SizedBox(height: 5),
+
+                    Text(
+                      description,
+                      textDirection:
+                          TextDirection.rtl,
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              const Icon(
+                Icons.chevron_left_rounded,
+                color: Colors.white38,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoBox() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF11111A),
+        borderRadius:
+            BorderRadius.circular(20),
+        border: Border.all(
+          color:
+              Colors.white.withOpacity(0.08),
+        ),
+      ),
+      child: const Row(
+        textDirection:
+            TextDirection.rtl,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            color: Color(0xFFFFD54F),
+            size: 24,
+          ),
+
+          SizedBox(width: 12),
+
+          Expanded(
+            child: Text(
+              'الصور والفيديو والصوت مهيأة حاليًا لاختبار الصلاحيات وتجهيز التكامل الكامل مع الذكاء الاصطناعي في المرحلة التالية.',
+              textDirection:
+                  TextDirection.rtl,
+              style: TextStyle(
+                color: Colors.white70,
+                height: 1.5,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
