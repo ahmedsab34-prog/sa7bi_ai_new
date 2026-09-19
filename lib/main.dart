@@ -1,21 +1,20 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'categories_screen.dart';
 import 'khalasana_portal_screen.dart';
 import 'settings_screen.dart';
+import 'ai_service.dart';
 import 'widgets/khalasana_portal.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const Sa7biAiApp());
 }
-
-// ============================================================
-// SA7BI AI APP
-// ============================================================
 
 class Sa7biAiApp extends StatelessWidget {
   const Sa7biAiApp({super.key});
@@ -39,124 +38,63 @@ class Sa7biAiApp extends StatelessWidget {
   }
 }
 
-// ============================================================
-// MAIN CONTAINER
-// ============================================================
-
 class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
 
   @override
-  State<MainContainerScreen> createState() =>
-      _MainContainerScreenState();
+  State<MainContainerScreen> createState() => _MainContainerScreenState();
 }
 
 class _MainContainerScreenState extends State<MainContainerScreen> {
-  int _currentIndex = 0;
+  int index = 0;
 
-  double _portalRight = 16;
-  double _portalBottom = 18;
+  void openProfile() {
+    setState(() => index = 2);
+  }
 
-  bool _portalWasDragged = false;
-
-  final List<Widget> _pages = const [
-    HomeScreen(),
-    CategoriesScreen(),
-    ProfileScreen(),
-  ];
-
-  void _openKhalasana() {
-    Navigator.of(context).push(
+  void openKhalasana() {
+    Navigator.push(
+      context,
       MaterialPageRoute(
         builder: (_) => const KhalasanaPortalScreen(),
       ),
     );
   }
 
-  void _movePortal(DragUpdateDetails details) {
-    setState(() {
-      _portalWasDragged = true;
-
-      _portalRight -= details.delta.dx;
-      _portalBottom -= details.delta.dy;
-
-      final size = MediaQuery.of(context).size;
-
-      const double portalWidth = 92;
-      const double portalHeight = 112;
-
-      final double maxRight =
-          math.max(8.0, size.width - portalWidth - 8);
-
-      final double maxBottom =
-          math.max(8.0, size.height - portalHeight - 8);
-
-      _portalRight = _portalRight.clamp(
-        8.0,
-        maxRight,
-      );
-
-      _portalBottom = _portalBottom.clamp(
-        8.0,
-        maxBottom,
-      );
-    });
-  }
-
-  void _endPortalDrag() {
-    Future<void>.delayed(
-      const Duration(milliseconds: 100),
-      () {
-        if (!mounted) return;
-
-        setState(() {
-          _portalWasDragged = false;
-        });
-      },
-    );
-  }
-
-  void _handlePortalTap() {
-    if (_portalWasDragged) return;
-
-    _openKhalasana();
-  }
-
   @override
   Widget build(BuildContext context) {
+    final pages = [
+      HomeScreen(onProfile: openProfile),
+      const CategoriesScreen(),
+      const ProfileScreen(),
+    ];
+
     return Scaffold(
       body: SafeArea(
         child: Stack(
-          fit: StackFit.expand,
           children: [
             IndexedStack(
-              index: _currentIndex,
-              children: _pages,
+              index: index,
+              children: pages,
             ),
 
             Positioned(
-              right: _portalRight,
-              bottom: _portalBottom,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onPanUpdate: _movePortal,
-                onPanEnd: (_) => _endPortalDrag(),
-                child: KhalasanaPortal(
-                  onTap: _handlePortalTap,
-                ),
+              right: 15,
+              bottom: 16,
+              child: KhalasanaPortal(
+                onTap: openKhalasana,
               ),
             ),
           ],
         ),
       ),
+
       bottomNavigationBar: NavigationBar(
-        backgroundColor: const Color(0xFF211F1D),
-        indicatorColor: const Color(0x664F421F),
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+        backgroundColor: const Color(0xFF17181F),
+        indicatorColor: const Color(0x3348D8FF),
+        selectedIndex: index,
+        onDestinationSelected: (value) {
+          setState(() => index = value);
         },
         destinations: const [
           NavigationDestination(
@@ -180,343 +118,146 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
   }
 }
 
-// ============================================================
-// SA7BI PREMIUM LOGO
-// ============================================================
+class HomeScreen extends StatefulWidget {
+  final VoidCallback onProfile;
 
-class Sa7biLogo extends StatefulWidget {
-  const Sa7biLogo({super.key});
+  const HomeScreen({
+    super.key,
+    required this.onProfile,
+  });
 
   @override
-  State<Sa7biLogo> createState() => _Sa7biLogoState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _Sa7biLogoState extends State<Sa7biLogo>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
+class _HomeScreenState extends State<HomeScreen> {
+  bool loadingNews = true;
+  List<NewsItem> news = [];
 
   @override
   void initState() {
     super.initState();
-
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 7),
-    )..repeat();
+    loadNews();
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  Future<void> loadNews() async {
+    setState(() => loadingNews = true);
+
+    final result = await AiService.getNews();
+
+    if (!mounted) return;
+
+    setState(() {
+      news = result;
+      loadingNews = false;
+    });
+  }
+
+  Future<void> openLink(String url) async {
+    if (url.isEmpty) return;
+
+    final uri = Uri.tryParse(url);
+
+    if (uri == null) return;
+
+    await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final double t = _controller.value;
+    return RefreshIndicator(
+      onRefresh: loadNews,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+        children: [
+          AppHeader(
+            onProfileTap: widget.onProfile,
+          ),
 
-        final double pulse =
-            (math.sin(t * math.pi * 2) + 1) / 2;
+          const SizedBox(height: 16),
 
-        final Color ringColor =
-            HSVColor.fromAHSV(
-              1,
-              (185 + (t * 360)) % 360,
-              0.82,
-              1,
-            ).toColor();
+          const _WelcomeCard(),
 
-        final Color goldColor =
-            HSVColor.fromAHSV(
-              1,
-              (40 + (t * 70)) % 360,
-              0.78,
-              1,
-            ).toColor();
+          const SizedBox(height: 18),
 
-        return SizedBox(
-          width: 88,
-          height: 88,
-          child: Stack(
-            alignment: Alignment.center,
-            clipBehavior: Clip.none,
+          const Text(
+            'آخر الأخبار',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              fontSize: 25,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+
+          const SizedBox(height: 9),
+
+          if (loadingNews)
+            const Padding(
+              padding: EdgeInsets.all(25),
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (news.isEmpty)
+            _EmptyNews(
+              onRetry: loadNews,
+            )
+          else
+            ...news.map(
+              (item) => _NewsCard(
+                item: item,
+                onTap: () => openLink(item.link),
+              ),
+            ),
+
+          const SizedBox(height: 16),
+
+          const Text(
+            'تسوق بسرعة',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+
+          const SizedBox(height: 9),
+
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              // ------------------------------------------------
-              // OUTER GLOW
-              // ------------------------------------------------
-
-              Container(
-                width: 82 + (pulse * 4),
-                height: 82 + (pulse * 4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: ringColor.withOpacity(0.30),
-                      blurRadius: 24,
-                      spreadRadius: 4,
-                    ),
-                    BoxShadow(
-                      color: goldColor.withOpacity(0.22),
-                      blurRadius: 34,
-                      spreadRadius: 7,
-                    ),
-                  ],
-                ),
+              _StoreButton(
+                title: 'Amazon',
+                icon: Icons.shopping_cart,
+                url: 'https://www.amazon.eg/',
               ),
-
-              // ------------------------------------------------
-              // ROTATING PREMIUM RING
-              // ------------------------------------------------
-
-              Transform.rotate(
-                angle: t * math.pi * 2,
-                child: Container(
-                  width: 82,
-                  height: 82,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: SweepGradient(
-                      colors: [
-                        Color(0xFFFFD76A),
-                        Color(0xFF8A5CFF),
-                        Color(0xFF32DFFF),
-                        Color(0xFF44F0A5),
-                        Color(0xFFFFD76A),
-                      ],
-                    ),
-                  ),
-                ),
+              _StoreButton(
+                title: 'Jumia',
+                icon: Icons.shopping_bag,
+                url: 'https://www.jumia.com.eg/',
               ),
-
-              // ------------------------------------------------
-              // INNER DARK GLASS
-              // ------------------------------------------------
-
-              Container(
-                width: 74,
-                height: 74,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF303546),
-                      Color(0xFF090B12),
-                      Color(0xFF171A25),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.30),
-                    width: 1.2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.55),
-                      blurRadius: 14,
-                      offset: const Offset(0, 7),
-                    ),
-                    BoxShadow(
-                      color: ringColor.withOpacity(0.20),
-                      blurRadius: 18,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
+              _StoreButton(
+                title: 'Noon',
+                icon: Icons.store,
+                url: 'https://www.noon.com/egypt-ar/',
               ),
-
-              // ------------------------------------------------
-              // SA7BI LETTER
-              // ------------------------------------------------
-
-              const Positioned(
-                left: 21,
-                bottom: 17,
-                child: Text(
-                  'س',
-                  textDirection: TextDirection.rtl,
-                  style: TextStyle(
-                    color: Color(0xFFFFD76A),
-                    fontSize: 32,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                  ),
-                ),
-              ),
-
-              // ------------------------------------------------
-              // AI LETTER
-              // ------------------------------------------------
-
-              Positioned(
-                right: 19,
-                bottom: 18,
-                child: Text(
-                  'I',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 31,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                    shadows: [
-                      Shadow(
-                        color: ringColor.withOpacity(0.85),
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ------------------------------------------------
-              // GLOWING I DOT / SIGNAL
-              // ------------------------------------------------
-
-              Positioned(
-                right: 18,
-                top: 16,
-                child: Container(
-                  width: 8 + (pulse * 4),
-                  height: 8 + (pulse * 4),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: ringColor,
-                    boxShadow: [
-                      BoxShadow(
-                        color: ringColor.withOpacity(0.90),
-                        blurRadius: 8 + (pulse * 7),
-                        spreadRadius: 1 + (pulse * 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // ------------------------------------------------
-              // SIGNAL WAVES
-              // ------------------------------------------------
-
-              Positioned(
-                right: 2,
-                top: 1,
-                child: CustomPaint(
-                  size: const Size(38, 30),
-                  painter: _Sa7biSignalPainter(
-                    progress: t,
-                    color: ringColor,
-                  ),
-                ),
-              ),
-
-              // ------------------------------------------------
-              // MOVING GLASS REFLECTION
-              // ------------------------------------------------
-
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: ClipOval(
-                    child: Align(
-                      alignment: Alignment(
-                        -1.3 + (t * 2.6),
-                        -0.15,
-                      ),
-                      child: Transform.rotate(
-                        angle: -0.42,
-                        child: Container(
-                          width: 15,
-                          height: 66,
-                          decoration: BoxDecoration(
-                            borderRadius:
-                                BorderRadius.circular(30),
-                            gradient: LinearGradient(
-                              colors: [
-                                Colors.white.withOpacity(0),
-                                Colors.white.withOpacity(0.20),
-                                Colors.white.withOpacity(0),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              _StoreButton(
+                title: 'Facebook',
+                icon: Icons.facebook,
+                url: 'https://www.facebook.com/marketplace/',
               ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
-
-// ============================================================
-// SIGNAL PAINTER
-// ============================================================
-
-class _Sa7biSignalPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-
-  _Sa7biSignalPainter({
-    required this.progress,
-    required this.color,
-  });
-
-  @override
-  void paint(
-    Canvas canvas,
-    Size size,
-  ) {
-    final Offset center = Offset(
-      size.width * 0.50,
-      size.height * 0.94,
-    );
-
-    for (int i = 0; i < 3; i++) {
-      final double phase =
-          (progress + (i * 0.18)) % 1.0;
-
-      final Paint paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0
-        ..strokeCap = StrokeCap.round
-        ..color = color.withOpacity(
-          0.22 + (phase * 0.65),
-        );
-
-      final Rect rect = Rect.fromCenter(
-        center: center,
-        width: size.width * (0.40 + (i * 0.22)),
-        height: size.height * (0.50 + (i * 0.24)),
-      );
-
-      canvas.drawArc(
-        rect,
-        math.pi * 1.16,
-        math.pi * 0.67,
-        false,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(
-    covariant _Sa7biSignalPainter oldDelegate,
-  ) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.color != color;
-  }
-}
-
-// ============================================================
-// APP HEADER
-// ============================================================
 
 class AppHeader extends StatelessWidget {
   final VoidCallback? onProfileTap;
@@ -529,35 +270,33 @@ class AppHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment:
-          MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const Sa7biLogo(),
 
         GestureDetector(
           onTap: onProfileTap,
           child: Container(
-            width: 48,
-            height: 48,
+            width: 51,
+            height: 51,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF171A24),
+              color: const Color(0xFF151820),
               border: Border.all(
-                color: const Color(0xFFFFD54F),
-                width: 2,
+                color: const Color(0xFFFFD76A),
+                width: 1.5,
               ),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x22FFD54F),
-                  blurRadius: 12,
-                  spreadRadius: 1,
+                  color: Color(0x33FFD76A),
+                  blurRadius: 14,
                 ),
               ],
             ),
             child: const Icon(
-              Icons.person,
-              color: Color(0xFFFFD54F),
-              size: 27,
+              Icons.person_rounded,
+              color: Color(0xFFFFD76A),
+              size: 28,
             ),
           ),
         ),
@@ -566,258 +305,173 @@ class AppHeader extends StatelessWidget {
   }
 }
 
-// ============================================================
-// HOME
-// ============================================================
-
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class Sa7biLogo extends StatefulWidget {
+  const Sa7biLogo({super.key});
 
   @override
-  State<HomeScreen> createState() =>
-      _HomeScreenState();
+  State<Sa7biLogo> createState() => _Sa7biLogoState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  Future<void> _refresh() async {
-    await Future.delayed(
-      const Duration(milliseconds: 700),
-    );
+class _Sa7biLogoState extends State<Sa7biLogo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController controller;
 
-    if (!mounted) return;
+  @override
+  void initState() {
+    super.initState();
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('تم تحديث المحتوى'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+    controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 7),
+    )..repeat();
   }
 
-  Future<void> _openUrl(String url) async {
-    final Uri uri = Uri.parse(url);
-
-    try {
-      final bool launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-
-      if (!launched && mounted) {
-        _showMessage('تعذر فتح الرابط.');
-      }
-    } catch (_) {
-      if (mounted) {
-        _showMessage('تعذر فتح الرابط.');
-      }
-    }
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            message,
-            textDirection: TextDirection.rtl,
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: ListView(
-        physics:
-            const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          16,
-          14,
-          16,
-          24,
-        ),
-        children: [
-          const AppHeader(),
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (_, __) {
+        final pulse =
+            (math.sin(controller.value * math.pi * 2) + 1) / 2;
 
-          const SizedBox(height: 18),
-
-          // --------------------------------------------------
-          // SHOPPING / ADS
-          // --------------------------------------------------
-
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius:
-                  BorderRadius.circular(22),
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFF2B1F08),
-                  Color(0xFF171A24),
-                  Color(0xFF21142A),
-                ],
-              ),
-              border: Border.all(
-                color: const Color(0x55FFD54F),
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x22000000),
-                  blurRadius: 15,
-                  offset: Offset(0, 7),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.local_offer,
-                      color: Color(0xFFFFD54F),
+        return SizedBox(
+          width: 86,
+          height: 86,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 84,
+                height: 84,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF5BD9FF)
+                          .withOpacity(0.10 + pulse * 0.08),
+                      blurRadius: 25,
+                      spreadRadius: 4,
                     ),
-                    SizedBox(width: 8),
-                    Text(
-                      'عروض وتسوق',
-                      style: TextStyle(
-                        color: Color(0xFFFFD54F),
-                        fontSize: 25,
-                        fontWeight: FontWeight.w900,
-                      ),
+                    BoxShadow(
+                      color: const Color(0xFFFFD76A)
+                          .withOpacity(0.10 + pulse * 0.08),
+                      blurRadius: 30,
+                      spreadRadius: 4,
                     ),
                   ],
                 ),
+              ),
 
-                const SizedBox(height: 8),
-
-                const Text(
-                  'اختر المتجر وشوف أحدث المنتجات والعروض.',
-                  textDirection: TextDirection.rtl,
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 17,
+              Transform.rotate(
+                angle: controller.value * math.pi * 2,
+                child: Container(
+                  width: 81,
+                  height: 81,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SweepGradient(
+                      colors: [
+                        Color(0xFFFFD76A),
+                        Color(0xFF5BD9FF),
+                        Color(0xFF8B5CF6),
+                        Color(0xFF49E6A8),
+                        Color(0xFFFFD76A),
+                      ],
+                    ),
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 14),
-
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _StoreButton(
-                      title: 'Amazon',
-                      icon: Icons.shopping_cart,
-                      onTap: () => _openUrl(
-                        'https://www.amazon.eg/',
-                      ),
-                    ),
-                    _StoreButton(
-                      title: 'Jumia',
-                      icon: Icons.shopping_bag,
-                      onTap: () => _openUrl(
-                        'https://www.jumia.com.eg/',
-                      ),
-                    ),
-                    _StoreButton(
-                      title: 'Noon',
-                      icon: Icons.store,
-                      onTap: () => _openUrl(
-                        'https://www.noon.com/egypt-ar/',
-                      ),
-                    ),
-                    _StoreButton(
-                      title: 'Facebook Shop',
-                      icon: Icons.facebook,
-                      onTap: () => _openUrl(
-                        'https://www.facebook.com/marketplace/',
-                      ),
-                    ),
-                  ],
+              Container(
+                width: 72,
+                height: 72,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF080A10),
+                  border: Border.all(
+                    color: Colors.white24,
+                  ),
                 ),
-              ],
-            ),
+                child: ClipOval(
+                  child: Image.asset(
+                    'app_icon.png',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+
+              Positioned(
+                right: 12,
+                top: 7,
+                child: Container(
+                  width: 8 + pulse * 3,
+                  height: 8 + pulse * 3,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF63E6FF),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF63E6FF)
+                            .withOpacity(0.8),
+                        blurRadius: 10 + pulse * 5,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
+        );
+      },
+    );
+  }
+}
 
-          const SizedBox(height: 26),
+class _WelcomeCard extends StatelessWidget {
+  const _WelcomeCard();
 
-          // --------------------------------------------------
-          // NEWS
-          // --------------------------------------------------
-
-          const Text(
-            'آخر الأخبار',
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(23),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF211A0D),
+            Color(0xFF11141D),
+            Color(0xFF1D1527),
+          ],
+        ),
+        border: Border.all(
+          color: const Color(0x44FFD76A),
+        ),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            'أهلاً يا صاحبي 👋',
             textDirection: TextDirection.rtl,
             style: TextStyle(
-              fontSize: 29,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          const _NewsCard(
-            icon: Icons.public,
-            title: 'أخبار وتقنيات جديدة',
-            description:
-                'هنا ستظهر الأخبار والمحتوى المهم من المصادر المختلفة.',
-          ),
-
-          const _NewsCard(
-            icon: Icons.auto_awesome,
-            title: 'أخبار الذكاء الاصطناعي',
-            description:
-                'آخر التطورات والأدوات الجديدة في عالم الذكاء الاصطناعي.',
-          ),
-
-          const _NewsCard(
-            icon: Icons.devices,
-            title: 'أخبار التكنولوجيا',
-            description:
-                'متابعة أهم أخبار الأجهزة والتطبيقات والتكنولوجيا.',
-          ),
-
-          const SizedBox(height: 10),
-
-          // --------------------------------------------------
-          // SHORT VIDEOS
-          // --------------------------------------------------
-
-          const Text(
-            'الفيديوهات القصيرة',
-            textDirection: TextDirection.rtl,
-            style: TextStyle(
-              fontSize: 26,
+              fontSize: 23,
               fontWeight: FontWeight.w900,
             ),
           ),
-
-          const SizedBox(height: 12),
-
-          SizedBox(
-            height: 130,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: const [
-                _ShortVideoBox(
-                  title: 'فيديو جديد',
-                ),
-                _ShortVideoBox(
-                  title: 'Reels',
-                ),
-                _ShortVideoBox(
-                  title: 'TikTok',
-                ),
-              ],
+          SizedBox(height: 5),
+          Text(
+            'اسأل، اتكلم، ابعت صورة أو افتح خلصانة AI.',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              color: Colors.white60,
+              height: 1.4,
             ),
           ),
         ],
@@ -826,135 +480,85 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ============================================================
-// STORE BUTTON
-// ============================================================
-
-class _StoreButton extends StatelessWidget {
-  final String title;
-  final IconData icon;
+class _NewsCard extends StatelessWidget {
+  final NewsItem item;
   final VoidCallback onTap;
 
-  const _StoreButton({
-    required this.title,
-    required this.icon,
+  const _NewsCard({
+    required this.item,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(
-        icon,
-        color: const Color(0xFFFFD54F),
-      ),
-      label: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF11141D),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(
+          color: Colors.white10,
         ),
       ),
-      style: OutlinedButton.styleFrom(
-        side: const BorderSide(
-          color: Color(0x55FFD54F),
+      child: ListTile(
+        onTap: onTap,
+        leading: const CircleAvatar(
+          backgroundColor: Color(0x2238D9FF),
+          child: Icon(
+            Icons.newspaper_rounded,
+            color: Color(0xFF63E6FF),
+          ),
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(18),
+        title: Text(
+          item.title,
+          textDirection: TextDirection.rtl,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          item.source,
+          textDirection: TextDirection.rtl,
+          style: const TextStyle(
+            color: Colors.white45,
+          ),
+        ),
+        trailing: const Icon(
+          Icons.open_in_new_rounded,
+          color: Color(0xFFFFD76A),
+          size: 18,
         ),
       ),
     );
   }
 }
 
-// ============================================================
-// NEWS CARD
-// ============================================================
+class _EmptyNews extends StatelessWidget {
+  final VoidCallback onRetry;
 
-class _NewsCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-
-  const _NewsCard({
-    required this.icon,
-    required this.title,
-    required this.description,
+  const _EmptyNews({
+    required this.onRetry,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin:
-          const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: const Color(0xFF11141D),
-        borderRadius:
-            BorderRadius.circular(22),
-        border: Border.all(
-          color: const Color(0x332F3545),
-        ),
+        borderRadius: BorderRadius.circular(17),
       ),
-      child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+      child: Column(
         children: [
-          Container(
-            width: 92,
-            height: 92,
-            decoration: BoxDecoration(
-              borderRadius:
-                  BorderRadius.circular(20),
-              gradient:
-                  const LinearGradient(
-                colors: [
-                  Color(0xFFFFD54F),
-                  Color(0xFFB45CFF),
-                ],
-              ),
-            ),
-            child: Icon(
-              icon,
-              color: Colors.black,
-              size: 34,
-            ),
+          const Text(
+            'الأخبار مش متاحة دلوقتي 📡',
+            textDirection: TextDirection.rtl,
           ),
-
-          const SizedBox(width: 14),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  textDirection:
-                      TextDirection.rtl,
-                  style: const TextStyle(
-                    fontSize: 21,
-                    fontWeight:
-                        FontWeight.w900,
-                  ),
-                ),
-
-                const SizedBox(height: 7),
-
-                Text(
-                  description,
-                  textDirection:
-                      TextDirection.rtl,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.white60,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text('حاول تاني'),
           ),
         ],
       ),
@@ -962,166 +566,232 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
-// ============================================================
-// SHORT VIDEO BOX
-// ============================================================
-
-class _ShortVideoBox extends StatelessWidget {
+class _StoreButton extends StatelessWidget {
   final String title;
+  final IconData icon;
+  final String url;
 
-  const _ShortVideoBox({
+  const _StoreButton({
     required this.title,
+    required this.icon,
+    required this.url,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 125,
-      margin:
-          const EdgeInsets.only(right: 10),
-      decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(20),
-        gradient:
-            const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF172B55),
-            Color(0xFF30163D),
-          ],
-        ),
-        border: Border.all(
-          color: const Color(0x44FFD54F),
-        ),
+    return OutlinedButton.icon(
+      onPressed: () {
+        launchUrl(
+          Uri.parse(url),
+          mode: LaunchMode.externalApplication,
+        );
+      },
+      icon: Icon(
+        icon,
+        color: const Color(0xFFFFD76A),
+        size: 18,
       ),
-      child: Center(
-        child: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.w800,
-          ),
+      label: Text(title),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        side: const BorderSide(
+          color: Color(0x44FFD76A),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
         ),
       ),
     );
   }
 }
 
-// ============================================================
-// PROFILE
-// ============================================================
-
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
-  static const String appShareLink =
-      'https://github.com/ahmedsab34-prog/sa7bi_ai_new';
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
 
-  Future<void> _shareApp() async {
-    final String message =
-        'جرّب تطبيق صاحبي AI 🤖\n\n'
-        'مساعدك الذكي في كل يوم.\n\n'
-        '$appShareLink';
+class _ProfileScreenState extends State<ProfileScreen> {
+  final ImagePicker picker = ImagePicker();
 
-    final Uri uri = Uri.parse(
-      'https://wa.me/?text=${Uri.encodeComponent(message)}',
+  Uint8List? photo;
+  String? reelName;
+
+  Future<void> choosePhoto() async {
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+      maxWidth: 1200,
     );
 
-    try {
-      await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-    } catch (_) {}
+    if (file == null) return;
+
+    final bytes = await file.readAsBytes();
+
+    if (!mounted) return;
+
+    setState(() {
+      photo = bytes;
+    });
+  }
+
+  Future<void> chooseReel() async {
+    final file = await picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 2),
+    );
+
+    if (file == null) return;
+
+    if (!mounted) return;
+
+    setState(() {
+      reelName = file.name;
+    });
+  }
+
+  Future<void> shareApp() async {
+    const appLink =
+        'https://github.com/ahmedsab34-prog/sa7bi_ai_new';
+
+    final text = Uri.encodeComponent(
+      'جرّب تطبيق صاحبي AI 🤖\n'
+      'مساعدك الذكي في كل يوم.\n'
+      '$appLink',
+    );
+
+    await launchUrl(
+      Uri.parse('https://wa.me/?text=$text'),
+      mode: LaunchMode.externalApplication,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        14,
-        16,
-        24,
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
       children: [
-        const AppHeader(),
-
-        const SizedBox(height: 22),
-
         const Text(
           'حسابي',
-          textAlign: TextAlign.center,
           textDirection: TextDirection.rtl,
           style: TextStyle(
-            fontSize: 31,
+            fontSize: 27,
             fontWeight: FontWeight.w900,
           ),
         ),
 
-        const SizedBox(height: 8),
+        const SizedBox(height: 15),
 
-        const Text(
-          'إدارة حسابك وإعدادات تطبيق صاحبي AI',
-          textAlign: TextAlign.center,
-          textDirection: TextDirection.rtl,
-          style: TextStyle(
-            color: Colors.white60,
-            fontSize: 16,
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(23),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF20243A),
+                Color(0xFF10131C),
+              ],
+            ),
+            border: Border.all(
+              color: const Color(0x44FFD76A),
+            ),
+          ),
+          child: Column(
+            children: [
+              GestureDetector(
+                onTap: choosePhoto,
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFFFFD76A),
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipOval(
+                    child: photo == null
+                        ? const Icon(
+                            Icons.person_rounded,
+                            color: Color(0xFFFFD76A),
+                            size: 48,
+                          )
+                        : Image.memory(
+                            photo!,
+                            fit: BoxFit.cover,
+                          ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 9),
+
+              const Text(
+                'صورتك الشخصية',
+                textDirection: TextDirection.rtl,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: choosePhoto,
+                      icon: const Icon(Icons.photo),
+                      label: const Text('الصورة'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: chooseReel,
+                      icon: const Icon(Icons.movie),
+                      label: const Text('ريلز'),
+                    ),
+                  ),
+                ],
+              ),
+
+              if (reelName != null) ...[
+                const SizedBox(height: 9),
+                Text(
+                  '🎬 $reelName',
+                  textDirection: TextDirection.rtl,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white60,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
 
         _ProfileButton(
-          icon: Icons.share,
+          icon: Icons.share_rounded,
           title: 'مشاركة التطبيق',
-          subtitle:
-              'شارك رابط صاحبي مع أصدقائك',
-          onTap: _shareApp,
+          subtitle: 'شارك صاحبي مع أصحابك',
+          onTap: shareApp,
         ),
 
         _ProfileButton(
-          icon: Icons.settings,
+          icon: Icons.settings_rounded,
           title: 'الإعدادات',
-          subtitle:
-              'إعدادات التطبيق والاتصال بالذكاء الاصطناعي',
+          subtitle: 'إعدادات التطبيق والذكاء الاصطناعي',
           onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    const SettingsScreen(),
-              ),
-            );
-          },
-        ),
-
-        _ProfileButton(
-          icon: Icons.auto_awesome,
-          title: 'الذكاء الاصطناعي',
-          subtitle:
-              'المساعد الذكي يعمل من خلال الخادم الآمن',
-          onTap: () {
-            _showMessage(
-              context,
-              'الذكاء الاصطناعي متصل من خلال Cloudflare Worker.',
-            );
-          },
-        ),
-
-        _ProfileButton(
-          icon: Icons.notifications,
-          title: 'التذكيرات',
-          subtitle:
-              'إدارة التنبيهات والتذكيرات',
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    const RemindersScreen(),
+                builder: (_) => const SettingsScreen(),
               ),
             );
           },
@@ -1129,27 +799,7 @@ class ProfileScreen extends StatelessWidget {
       ],
     );
   }
-
-  void _showMessage(
-    BuildContext context,
-    String message,
-  ) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            message,
-            textDirection: TextDirection.rtl,
-          ),
-        ),
-      );
-  }
 }
-
-// ============================================================
-// PROFILE BUTTON
-// ============================================================
 
 class _ProfileButton extends StatelessWidget {
   final IconData icon;
@@ -1167,26 +817,19 @@ class _ProfileButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin:
-          const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 9),
       decoration: BoxDecoration(
         color: const Color(0xFF131620),
-        borderRadius:
-            BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: const Color(0x333A4152),
+          color: Colors.white10,
         ),
       ),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 7,
-        ),
         onTap: onTap,
         leading: Container(
-          width: 58,
-          height: 58,
+          width: 46,
+          height: 46,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
             gradient: LinearGradient(
@@ -1199,14 +842,12 @@ class _ProfileButton extends StatelessWidget {
           child: Icon(
             icon,
             color: Colors.black,
-            size: 29,
           ),
         ),
         title: Text(
           title,
           textDirection: TextDirection.rtl,
           style: const TextStyle(
-            fontSize: 20,
             fontWeight: FontWeight.w900,
           ),
         ),
@@ -1214,107 +855,12 @@ class _ProfileButton extends StatelessWidget {
           subtitle,
           textDirection: TextDirection.rtl,
           style: const TextStyle(
-            color: Colors.white60,
+            color: Colors.white45,
+            fontSize: 12,
           ),
         ),
         trailing: const Icon(
           Icons.chevron_left_rounded,
-          color: Colors.white70,
-          size: 30,
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// REMINDERS
-// ============================================================
-
-class RemindersScreen extends StatelessWidget {
-  const RemindersScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor:
-          const Color(0xFF080A10),
-      appBar: AppBar(
-        title: const Text(
-          'التذكيرات',
-          style: TextStyle(
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        backgroundColor:
-            const Color(0xFF11141D),
-        foregroundColor: Colors.white,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: const [
-          _ReminderTile(
-            icon:
-                Icons.notifications_active,
-            title: 'التذكيرات اليومية',
-            subtitle:
-                'سيتم تفعيلها عند ربط نظام الإشعارات.',
-          ),
-          _ReminderTile(
-            icon: Icons.access_time,
-            title: 'مواعيد مخصصة',
-            subtitle:
-                'إضافة تذكيرات حسب اختيارك.',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================
-// REMINDER TILE
-// ============================================================
-
-class _ReminderTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  const _ReminderTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF12151E),
-      margin:
-          const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.circular(18),
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.all(12),
-        leading: Icon(
-          icon,
-          color: const Color(0xFFFFD54F),
-          size: 30,
-        ),
-        title: Text(
-          title,
-          textDirection: TextDirection.rtl,
-          style: const TextStyle(
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        subtitle: Text(
-          subtitle,
-          textDirection: TextDirection.rtl,
         ),
       ),
     );
