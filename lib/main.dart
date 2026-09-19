@@ -13,6 +13,10 @@ void main() {
   runApp(const Sa7biAiApp());
 }
 
+// ============================================================
+// SA7BI AI APP
+// ============================================================
+
 class Sa7biAiApp extends StatelessWidget {
   const Sa7biAiApp({super.key});
 
@@ -50,8 +54,6 @@ class MainContainerScreen extends StatefulWidget {
 class _MainContainerScreenState extends State<MainContainerScreen> {
   int _currentIndex = 0;
 
-  // مكان البوابة العائمة.
-  // القيم نسبية من أعلى/يمين منطقة المحتوى.
   double _portalRight = 16;
   double _portalBottom = 18;
 
@@ -80,43 +82,42 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
       final size = MediaQuery.of(context).size;
 
-      // حدود آمنة تقريبية حتى لا تخرج الأيقونة خارج الشاشة.
       const double portalWidth = 92;
       const double portalHeight = 112;
 
-      final maxRight =
+      final double maxRight =
           math.max(8.0, size.width - portalWidth - 8);
 
-      final maxBottom =
+      final double maxBottom =
           math.max(8.0, size.height - portalHeight - 8);
 
-      _portalRight =
-          _portalRight.clamp(8.0, maxRight);
+      _portalRight = _portalRight.clamp(
+        8.0,
+        maxRight,
+      );
 
-      _portalBottom =
-          _portalBottom.clamp(8.0, maxBottom);
+      _portalBottom = _portalBottom.clamp(
+        8.0,
+        maxBottom,
+      );
     });
   }
 
   void _endPortalDrag() {
-    // نترك الإشارة للـtap داخل KhalasanaPortal.
-    // إعادة الضبط تتم بعد انتهاء الحركة.
     Future<void>.delayed(
-      const Duration(milliseconds: 80),
+      const Duration(milliseconds: 100),
       () {
-        if (mounted) {
-          setState(() {
-            _portalWasDragged = false;
-          });
-        }
+        if (!mounted) return;
+
+        setState(() {
+          _portalWasDragged = false;
+        });
       },
     );
   }
 
   void _handlePortalTap() {
-    if (_portalWasDragged) {
-      return;
-    }
+    if (_portalWasDragged) return;
 
     _openKhalasana();
   }
@@ -128,17 +129,11 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // ==================================================
-            // الصفحات الثلاث الأصلية — بدون تغيير
-            // ==================================================
             IndexedStack(
               index: _currentIndex,
               children: _pages,
             ),
 
-            // ==================================================
-            // البوابة العائمة
-            // ==================================================
             Positioned(
               right: _portalRight,
               bottom: _portalBottom,
@@ -186,7 +181,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 }
 
 // ============================================================
-// SA7BI LOGO
+// SA7BI PREMIUM LOGO
 // ============================================================
 
 class Sa7biLogo extends StatefulWidget {
@@ -206,7 +201,7 @@ class _Sa7biLogoState extends State<Sa7biLogo>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 6),
+      duration: const Duration(seconds: 7),
     )..repeat();
   }
 
@@ -221,111 +216,226 @@ class _Sa7biLogoState extends State<Sa7biLogo>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        final t = _controller.value;
+        final double t = _controller.value;
 
-        final pulse =
+        final double pulse =
             (math.sin(t * math.pi * 2) + 1) / 2;
 
-        final signalColor =
+        final Color ringColor =
             HSVColor.fromAHSV(
               1,
-              (185 + t * 170) % 360,
+              (185 + (t * 360)) % 360,
               0.82,
               1,
             ).toColor();
 
-        final glowColor =
+        final Color goldColor =
             HSVColor.fromAHSV(
               1,
-              (42 + t * 45) % 360,
-              0.72,
+              (40 + (t * 70)) % 360,
+              0.78,
               1,
             ).toColor();
 
         return SizedBox(
-          width: 78,
-          height: 78,
+          width: 88,
+          height: 88,
           child: Stack(
-            clipBehavior: Clip.none,
             alignment: Alignment.center,
+            clipBehavior: Clip.none,
             children: [
+              // ------------------------------------------------
+              // OUTER GLOW
+              // ------------------------------------------------
+
               Container(
-                width: 70 + pulse * 4,
-                height: 70 + pulse * 4,
+                width: 82 + (pulse * 4),
+                height: 82 + (pulse * 4),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: glowColor.withOpacity(0.35),
-                      blurRadius: 20,
-                      spreadRadius: 2,
+                      color: ringColor.withOpacity(0.30),
+                      blurRadius: 24,
+                      spreadRadius: 4,
                     ),
                     BoxShadow(
-                      color: signalColor.withOpacity(0.20),
-                      blurRadius: 30,
-                      spreadRadius: 5,
+                      color: goldColor.withOpacity(0.22),
+                      blurRadius: 34,
+                      spreadRadius: 7,
                     ),
                   ],
                 ),
               ),
-              ClipOval(
-                child: Image.asset(
-                  'app_icon.png',
-                  width: 74,
-                  height: 74,
-                  fit: BoxFit.cover,
+
+              // ------------------------------------------------
+              // ROTATING PREMIUM RING
+              // ------------------------------------------------
+
+              Transform.rotate(
+                angle: t * math.pi * 2,
+                child: Container(
+                  width: 82,
+                  height: 82,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SweepGradient(
+                      colors: [
+                        Color(0xFFFFD76A),
+                        Color(0xFF8A5CFF),
+                        Color(0xFF32DFFF),
+                        Color(0xFF44F0A5),
+                        Color(0xFFFFD76A),
+                      ],
+                    ),
+                  ),
                 ),
               ),
+
+              // ------------------------------------------------
+              // INNER DARK GLASS
+              // ------------------------------------------------
+
+              Container(
+                width: 74,
+                height: 74,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF303546),
+                      Color(0xFF090B12),
+                      Color(0xFF171A25),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.30),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.55),
+                      blurRadius: 14,
+                      offset: const Offset(0, 7),
+                    ),
+                    BoxShadow(
+                      color: ringColor.withOpacity(0.20),
+                      blurRadius: 18,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+              ),
+
+              // ------------------------------------------------
+              // SA7BI LETTER
+              // ------------------------------------------------
+
+              const Positioned(
+                left: 21,
+                bottom: 17,
+                child: Text(
+                  'س',
+                  textDirection: TextDirection.rtl,
+                  style: TextStyle(
+                    color: Color(0xFFFFD76A),
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
+                ),
+              ),
+
+              // ------------------------------------------------
+              // AI LETTER
+              // ------------------------------------------------
+
               Positioned(
-                right: 16,
-                top: 13,
-                child: Container(
-                  width: 8 + pulse * 4,
-                  height: 8 + pulse * 4,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: signalColor.withOpacity(0.82),
-                    boxShadow: [
-                      BoxShadow(
-                        color: signalColor.withOpacity(0.90),
-                        blurRadius: 7 + pulse * 8,
-                        spreadRadius: 1 + pulse * 2,
+                right: 19,
+                bottom: 18,
+                child: Text(
+                  'I',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 31,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                    shadows: [
+                      Shadow(
+                        color: ringColor.withOpacity(0.85),
+                        blurRadius: 10,
                       ),
                     ],
                   ),
                 ),
               ),
+
+              // ------------------------------------------------
+              // GLOWING I DOT / SIGNAL
+              // ------------------------------------------------
+
+              Positioned(
+                right: 18,
+                top: 16,
+                child: Container(
+                  width: 8 + (pulse * 4),
+                  height: 8 + (pulse * 4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: ringColor,
+                    boxShadow: [
+                      BoxShadow(
+                        color: ringColor.withOpacity(0.90),
+                        blurRadius: 8 + (pulse * 7),
+                        spreadRadius: 1 + (pulse * 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ------------------------------------------------
+              // SIGNAL WAVES
+              // ------------------------------------------------
+
               Positioned(
                 right: 2,
                 top: 1,
                 child: CustomPaint(
-                  size: const Size(35, 27),
+                  size: const Size(38, 30),
                   painter: _Sa7biSignalPainter(
                     progress: t,
-                    color: signalColor,
+                    color: ringColor,
                   ),
                 ),
               ),
+
+              // ------------------------------------------------
+              // MOVING GLASS REFLECTION
+              // ------------------------------------------------
+
               Positioned.fill(
                 child: IgnorePointer(
                   child: ClipOval(
                     child: Align(
                       alignment: Alignment(
-                        -1.2 + t * 2.4,
-                        -0.2,
+                        -1.3 + (t * 2.6),
+                        -0.15,
                       ),
                       child: Transform.rotate(
                         angle: -0.42,
                         child: Container(
-                          width: 14,
-                          height: 62,
+                          width: 15,
+                          height: 66,
                           decoration: BoxDecoration(
                             borderRadius:
-                                BorderRadius.circular(20),
+                                BorderRadius.circular(30),
                             gradient: LinearGradient(
                               colors: [
                                 Colors.white.withOpacity(0),
-                                Colors.white.withOpacity(0.16),
+                                Colors.white.withOpacity(0.20),
                                 Colors.white.withOpacity(0),
                               ],
                             ),
@@ -344,6 +454,10 @@ class _Sa7biLogoState extends State<Sa7biLogo>
   }
 }
 
+// ============================================================
+// SIGNAL PAINTER
+// ============================================================
+
 class _Sa7biSignalPainter extends CustomPainter {
   final double progress;
   final Color color;
@@ -358,27 +472,27 @@ class _Sa7biSignalPainter extends CustomPainter {
     Canvas canvas,
     Size size,
   ) {
-    final center = Offset(
+    final Offset center = Offset(
       size.width * 0.50,
-      size.height * 0.92,
+      size.height * 0.94,
     );
 
     for (int i = 0; i < 3; i++) {
-      final phase =
-          (progress + i * 0.18) % 1.0;
+      final double phase =
+          (progress + (i * 0.18)) % 1.0;
 
-      final paint = Paint()
+      final Paint paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0
         ..strokeCap = StrokeCap.round
         ..color = color.withOpacity(
-          0.25 + phase * 0.65,
+          0.22 + (phase * 0.65),
         );
 
-      final rect = Rect.fromCenter(
+      final Rect rect = Rect.fromCenter(
         center: center,
-        width: size.width * (0.40 + i * 0.22),
-        height: size.height * (0.50 + i * 0.24),
+        width: size.width * (0.40 + (i * 0.22)),
+        height: size.height * (0.50 + (i * 0.24)),
       );
 
       canvas.drawArc(
@@ -401,7 +515,7 @@ class _Sa7biSignalPainter extends CustomPainter {
 }
 
 // ============================================================
-// HEADER
+// APP HEADER
 // ============================================================
 
 class AppHeader extends StatelessWidget {
@@ -419,6 +533,7 @@ class AppHeader extends StatelessWidget {
           MainAxisAlignment.spaceBetween,
       children: [
         const Sa7biLogo(),
+
         GestureDetector(
           onTap: onProfileTap,
           child: Container(
@@ -426,11 +541,18 @@ class AppHeader extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
+              color: const Color(0xFF171A24),
               border: Border.all(
                 color: const Color(0xFFFFD54F),
                 width: 2,
               ),
-              color: const Color(0xFF171A24),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x22FFD54F),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ],
             ),
             child: const Icon(
               Icons.person,
@@ -475,14 +597,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openUrl(String url) async {
-    final uri = Uri.parse(url);
+    final Uri uri = Uri.parse(url);
 
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(
+    try {
+      final bool launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
+
+      if (!launched && mounted) {
+        _showMessage('تعذر فتح الرابط.');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage('تعذر فتح الرابط.');
+      }
     }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            textDirection: TextDirection.rtl,
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   @override
@@ -500,7 +644,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         children: [
           const AppHeader(),
+
           const SizedBox(height: 18),
+
+          // --------------------------------------------------
+          // SHOPPING / ADS
+          // --------------------------------------------------
 
           Container(
             padding: const EdgeInsets.all(16),
@@ -546,7 +695,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 8),
+
                 const Text(
                   'اختر المتجر وشوف أحدث المنتجات والعروض.',
                   textDirection: TextDirection.rtl,
@@ -555,7 +706,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     fontSize: 17,
                   ),
                 ),
+
                 const SizedBox(height: 14),
+
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -596,6 +749,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(height: 26),
 
+          // --------------------------------------------------
+          // NEWS
+          // --------------------------------------------------
+
           const Text(
             'آخر الأخبار',
             textDirection: TextDirection.rtl,
@@ -631,6 +788,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(height: 10),
 
+          // --------------------------------------------------
+          // SHORT VIDEOS
+          // --------------------------------------------------
+
           const Text(
             'الفيديوهات القصيرة',
             textDirection: TextDirection.rtl,
@@ -664,6 +825,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+
+// ============================================================
+// STORE BUTTON
+// ============================================================
 
 class _StoreButton extends StatelessWidget {
   final String title;
@@ -703,6 +868,10 @@ class _StoreButton extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// NEWS CARD
+// ============================================================
 
 class _NewsCard extends StatelessWidget {
   final IconData icon;
@@ -753,7 +922,9 @@ class _NewsCard extends StatelessWidget {
               size: 34,
             ),
           ),
+
           const SizedBox(width: 14),
+
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -769,7 +940,9 @@ class _NewsCard extends StatelessWidget {
                         FontWeight.w900,
                   ),
                 ),
+
                 const SizedBox(height: 7),
+
                 Text(
                   description,
                   textDirection:
@@ -788,6 +961,10 @@ class _NewsCard extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// SHORT VIDEO BOX
+// ============================================================
 
 class _ShortVideoBox extends StatelessWidget {
   final String title;
@@ -842,21 +1019,21 @@ class ProfileScreen extends StatelessWidget {
       'https://github.com/ahmedsab34-prog/sa7bi_ai_new';
 
   Future<void> _shareApp() async {
-    final message =
+    final String message =
         'جرّب تطبيق صاحبي AI 🤖\n\n'
         'مساعدك الذكي في كل يوم.\n\n'
         '$appShareLink';
 
-    final uri = Uri.parse(
+    final Uri uri = Uri.parse(
       'https://wa.me/?text=${Uri.encodeComponent(message)}',
     );
 
-    if (await canLaunchUrl(uri)) {
+    try {
       await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
-    }
+    } catch (_) {}
   }
 
   @override
@@ -870,6 +1047,7 @@ class ProfileScreen extends StatelessWidget {
       ),
       children: [
         const AppHeader(),
+
         const SizedBox(height: 22),
 
         const Text(
@@ -968,6 +1146,10 @@ class ProfileScreen extends StatelessWidget {
       );
   }
 }
+
+// ============================================================
+// PROFILE BUTTON
+// ============================================================
 
 class _ProfileButton extends StatelessWidget {
   final IconData icon;
@@ -1072,7 +1254,8 @@ class RemindersScreen extends StatelessWidget {
         padding: const EdgeInsets.all(18),
         children: const [
           _ReminderTile(
-            icon: Icons.notifications_active,
+            icon:
+                Icons.notifications_active,
             title: 'التذكيرات اليومية',
             subtitle:
                 'سيتم تفعيلها عند ربط نظام الإشعارات.',
@@ -1088,6 +1271,10 @@ class RemindersScreen extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// REMINDER TILE
+// ============================================================
 
 class _ReminderTile extends StatelessWidget {
   final IconData icon;
