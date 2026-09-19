@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
@@ -31,17 +30,19 @@ class Sa7biAudioHandler extends BaseAudioHandler
             index < queue.value.length) {
           final item = queue.value[index];
 
+          final duration = _player.duration;
+
           if (mediaItem.value?.id != item.id) {
             mediaItem.add(
               item.copyWith(
-                duration: _player.duration ?? item.duration,
+                duration: duration ?? item.duration,
               ),
             );
-          } else if (_player.duration != null &&
-              mediaItem.value?.duration != _player.duration) {
+          } else if (duration != null &&
+              mediaItem.value?.duration != duration) {
             mediaItem.add(
               item.copyWith(
-                duration: _player.duration,
+                duration: duration,
               ),
             );
           }
@@ -50,7 +51,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
       onError: (Object error, StackTrace stackTrace) {
         playbackState.add(
           playbackState.value.copyWith(
-            processingState: AudioProcessingState.error,
+            processingState:
+                AudioProcessingState.error,
             errorMessage: error.toString(),
           ),
         );
@@ -69,35 +71,42 @@ class Sa7biAudioHandler extends BaseAudioHandler
       }
     });
 
-    _player.sequenceStateStream.listen((sequenceState) {
-      final sequence = sequenceState.sequence;
+    _player.sequenceStateStream.listen(
+      (sequenceState) {
+        final sequence =
+            sequenceState.sequence;
 
-      final items = <MediaItem>[];
+        final items = <MediaItem>[];
 
-      for (final source in sequence) {
-        final tag = source.tag;
+        for (final source in sequence) {
+          final tag = source.tag;
 
-        if (tag is MediaItem) {
-          items.add(tag);
+          if (tag is MediaItem) {
+            items.add(tag);
+          }
         }
-      }
 
-      if (items.isNotEmpty) {
-        queue.add(items);
+        if (items.isNotEmpty) {
+          queue.add(items);
 
-        final currentIndex = sequenceState.currentIndex;
+          final currentIndex =
+              sequenceState.currentIndex;
 
-        if (currentIndex >= 0 &&
-            currentIndex < items.length) {
-          mediaItem.add(items[currentIndex]);
+          if (currentIndex >= 0 &&
+              currentIndex < items.length) {
+            mediaItem.add(
+              items[currentIndex],
+            );
+          }
         }
-      }
-    });
+      },
+    );
 
     _player.errorStream.listen((error) {
       playbackState.add(
         playbackState.value.copyWith(
-          processingState: AudioProcessingState.error,
+          processingState:
+              AudioProcessingState.error,
           errorMessage: error.message,
         ),
       );
@@ -147,12 +156,16 @@ class Sa7biAudioHandler extends BaseAudioHandler
           1,
           3,
         ],
-        processingState: _processingState(),
+        processingState:
+            _processingState(),
         playing: _player.playing,
-        updatePosition: _player.position,
-        bufferedPosition: _player.bufferedPosition,
+        updatePosition:
+            _player.position,
+        bufferedPosition:
+            _player.bufferedPosition,
         speed: _player.speed,
-        queueIndex: event.currentIndex,
+        queueIndex:
+            event.currentIndex,
       ),
     );
   }
@@ -261,7 +274,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
       );
     }).toList();
 
-    final source = ConcatenatingAudioSource(
+    final source =
+        ConcatenatingAudioSource(
       children: sources,
       useLazyPreparation: true,
     );
@@ -301,7 +315,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
   }
 
   @override
-  Future<void> seek(Duration position) async {
+  Future<void> seek(
+    Duration position,
+  ) async {
     await _player.seek(position);
   }
 
@@ -322,7 +338,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
   }
 
   @override
-  Future<void> skipToQueueItem(int index) async {
+  Future<void> skipToQueueItem(
+    int index,
+  ) async {
     if (index < 0 ||
         index >= queue.value.length) {
       return;
@@ -340,16 +358,22 @@ class Sa7biAudioHandler extends BaseAudioHandler
   ) async {
     switch (repeatMode) {
       case AudioServiceRepeatMode.none:
-        await _player.setLoopMode(LoopMode.off);
+        await _player.setLoopMode(
+          LoopMode.off,
+        );
         break;
 
       case AudioServiceRepeatMode.one:
-        await _player.setLoopMode(LoopMode.one);
+        await _player.setLoopMode(
+          LoopMode.one,
+        );
         break;
 
       case AudioServiceRepeatMode.group:
       case AudioServiceRepeatMode.all:
-        await _player.setLoopMode(LoopMode.all);
+        await _player.setLoopMode(
+          LoopMode.all,
+        );
         break;
     }
 
@@ -365,10 +389,14 @@ class Sa7biAudioHandler extends BaseAudioHandler
     AudioServiceShuffleMode shuffleMode,
   ) async {
     final enabled =
-        shuffleMode == AudioServiceShuffleMode.all ||
-            shuffleMode == AudioServiceShuffleMode.group;
+        shuffleMode ==
+                AudioServiceShuffleMode.all ||
+            shuffleMode ==
+                AudioServiceShuffleMode.group;
 
-    await _player.setShuffleModeEnabled(enabled);
+    await _player.setShuffleModeEnabled(
+      enabled,
+    );
 
     playbackState.add(
       playbackState.value.copyWith(
@@ -378,13 +406,14 @@ class Sa7biAudioHandler extends BaseAudioHandler
   }
 
   @override
-  Future customAction(
+  Future<dynamic> customAction(
     String name, [
     Map<String, dynamic>? extras,
   ]) async {
     if (name == 'setVolume') {
       final value =
-          (extras?['volume'] as num?)?.toDouble();
+          (extras?['volume'] as num?)
+              ?.toDouble();
 
       if (value != null) {
         await _player.setVolume(
@@ -395,7 +424,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
     if (name == 'setSpeed') {
       final value =
-          (extras?['speed'] as num?)?.toDouble();
+          (extras?['speed'] as num?)
+              ?.toDouble();
 
       if (value != null && value > 0) {
         await _player.setSpeed(value);
@@ -414,9 +444,11 @@ class AudioController {
   static AudioHandler? _handler;
   static Future<AudioHandler>? _initializing;
 
-  static AudioHandler? get handler => _handler;
+  static AudioHandler? get handler =>
+      _handler;
 
-  static Future<AudioHandler> initialize() {
+  static Future<AudioHandler>
+      initialize() {
     if (_handler != null) {
       return Future.value(_handler!);
     }
@@ -425,26 +457,35 @@ class AudioController {
       return _initializing!;
     }
 
-    _initializing = _initializeInternal();
+    _initializing =
+        _initializeInternal();
 
     return _initializing!;
   }
 
-  static Future<AudioHandler> _initializeInternal() async {
+  static Future<AudioHandler>
+      _initializeInternal() async {
     final handler =
-        await AudioService.init<Sa7biAudioHandler>(
-      builder: () => Sa7biAudioHandler(),
-      config: const AudioServiceConfig(
+        await AudioService.init<
+            Sa7biAudioHandler>(
+      builder: () =>
+          Sa7biAudioHandler(),
+      config:
+          const AudioServiceConfig(
         androidNotificationChannelId:
             'com.example.sa7bi_ai_new.audio',
         androidNotificationChannelName:
             'صاحبي AI - الصوت',
         androidNotificationChannelDescription:
             'تشغيل القرآن والأذكار والموسيقى والبودكاست والراديو',
-        androidNotificationOngoing: false,
-        androidStopForegroundOnPause: true,
-        androidNotificationClickStartsActivity: true,
-        androidShowNotificationBadge: false,
+        androidNotificationOngoing:
+            false,
+        androidStopForegroundOnPause:
+            true,
+        androidNotificationClickStartsActivity:
+            true,
+        androidShowNotificationBadge:
+            false,
       ),
     );
 
@@ -453,7 +494,8 @@ class AudioController {
     return handler;
   }
 
-  static Sa7biAudioHandler? get sa7biHandler {
+  static Sa7biAudioHandler?
+      get sa7biHandler {
     final value = _handler;
 
     if (value is Sa7biAudioHandler) {
