@@ -5,7 +5,7 @@ const CORS_HEADERS = {
   "Cache-Control": "no-store"
 };
 
-const BACKEND_VERSION = "3.0.0";
+const BACKEND_VERSION = "3.1.0";
 
 const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
@@ -155,6 +155,34 @@ function stripHtml(value) {
     .replace(/<[^>]*>/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractNewsImage(itemXml) {
+  const content = itemXml.match(
+    /<media:content[^>]+url=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (content?.[1]) {
+    return decodeXml(content[1]);
+  }
+
+  const thumbnail = itemXml.match(
+    /<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (thumbnail?.[1]) {
+    return decodeXml(thumbnail[1]);
+  }
+
+  const enclosure = itemXml.match(
+    /<enclosure[^>]+url=["']([^"']+)["'][^>]*>/i
+  );
+
+  if (enclosure?.[1]) {
+    return decodeXml(enclosure[1]);
+  }
+
+  return "";
 }
 
 async function readJsonBody(request) {
@@ -600,15 +628,17 @@ async function handleAudioSearch(request) {
     const normalizedQuery =
       normalizeArabic(query);
 
-    const [suraResponse, reciterResponse] =
-      await Promise.all([
-        fetch(
-          "https://www.mp3quran.net/api/v3/suwar?language=ar"
-        ),
-        fetch(
-          "https://www.mp3quran.net/api/v3/reciters?language=ar"
-        )
-      ]);
+    const [
+      suraResponse,
+      reciterResponse
+    ] = await Promise.all([
+      fetch(
+        "https://www.mp3quran.net/api/v3/suwar?language=ar"
+      ),
+      fetch(
+        "https://www.mp3quran.net/api/v3/reciters?language=ar"
+      )
+    ]);
 
     if (
       !suraResponse.ok ||
@@ -778,7 +808,7 @@ async function handleNews(request) {
         {
           headers: {
             "User-Agent":
-              "Sa7biAI/3.0 News Reader"
+              "Sa7biAI/3.1 News Reader"
           }
         }
       );
@@ -842,12 +872,16 @@ async function handleNews(request) {
           )
         );
 
+      const imageUrl =
+        extractNewsImage(block);
+
       if (title && link) {
         items.push({
           title,
           source:
             source || "Google News",
-          link
+          link,
+          imageUrl
         });
       }
     }
