@@ -4,24 +4,19 @@
     <!-- Internet -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Audio background playback -->
+    <!-- Audio / Background Playback -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-
-    <!-- Android 13+ notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Camera -->
+    <!-- Camera / Microphone -->
     <uses-permission android:name="android.permission.CAMERA" />
-
-    <!-- Microphone -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:label="صحبي AI"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="false">
 
         <activity
@@ -41,9 +36,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
         </activity>
 
-        <!-- Background audio service -->
+        <!-- Background Audio Service -->
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
@@ -53,9 +49,10 @@
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
+
         </service>
 
-        <!-- Media buttons -->
+        <!-- Media / Headset Buttons -->
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true"
@@ -64,6 +61,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
+
         </receiver>
 
         <meta-data
