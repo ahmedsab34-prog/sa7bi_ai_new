@@ -19,11 +19,13 @@ dependencies:
   audio_service: ^0.18.19
   just_audio: ^0.9.39
   audio_session: ^0.1.21
+  flutter_tts: ^4.2.3
 
   # =========================
   # NETWORK / AI
   # =========================
   http: ^1.2.2
+  webview_flutter: ^4.13.0
 
   # =========================
   # STORAGE
@@ -34,7 +36,12 @@ dependencies:
   # MEDIA
   # =========================
   image_picker: ^1.1.2
-  file_picker: ^8.1.2
+  file_picker: ^8.1.7
+
+  # =========================
+  # SPEECH
+  # =========================
+  speech_to_text: ^7.3.0
 
   # =========================
   # LINKS / SHARING
