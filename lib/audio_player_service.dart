@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
@@ -9,272 +9,87 @@ class Sa7biAudioHandler extends BaseAudioHandler
   final AudioPlayer _player = AudioPlayer();
 
   Sa7biAudioHandler() {
-    _initializePlayer();
+    _init();
   }
 
-  Future<void> _initializePlayer() async {
-    try {
-      final session = await AudioSession.instance;
+  Future<void> _init() async {
+    final session = await AudioSession.instance;
 
-      await session.configure(
-        const AudioSessionConfiguration.music(),
-      );
-
-      _player.playbackEventStream.listen(
-        (_) {
-          _broadcastState();
-        },
-        onError: (
-          Object error,
-          StackTrace stackTrace,
-        ) {
-          // خطأ في مصدر الصوت لا يجب أن يغلق التطبيق.
-        },
-      );
-
-      _player.durationStream.listen(
-        (duration) {
-          if (duration == null) {
-            return;
-          }
-
-          final current = mediaItem.value;
-
-          if (current != null) {
-            mediaItem.add(
-              current.copyWith(
-                duration: duration,
-              ),
-            );
-          }
-        },
-      );
-
-      _player.sequenceStateStream.listen(
-        (sequenceState) {
-          final items = sequenceState.effectiveSequence
-              .map(
-                (source) => source.tag,
-              )
-              .whereType<MediaItem>()
-              .toList();
-
-          queue.add(items);
-
-          final int? index =
-              sequenceState.currentIndex;
-
-          if (index != null &&
-              index >= 0 &&
-              index < items.length) {
-            mediaItem.add(
-              items[index],
-            );
-          }
-
-          _broadcastState();
-        },
-      );
-
-      _player.processingStateStream.listen(
-        (_) {
-          _broadcastState();
-        },
-      );
-
-      _player.playerStateStream.listen(
-        (_) {
-          _broadcastState();
-        },
-      );
-    } catch (_) {
-      // لا نسمح بفشل تهيئة الصوت بإغلاق التطبيق.
-    }
-  }
-
-  AudioProcessingState _processingState() {
-    switch (_player.processingState) {
-      case ProcessingState.idle:
-        return AudioProcessingState.idle;
-
-      case ProcessingState.loading:
-        return AudioProcessingState.loading;
-
-      case ProcessingState.buffering:
-        return AudioProcessingState.buffering;
-
-      case ProcessingState.ready:
-        return AudioProcessingState.ready;
-
-      case ProcessingState.completed:
-        return AudioProcessingState.completed;
-    }
-  }
-
-  void _broadcastState() {
-    playbackState.add(
-      playbackState.value.copyWith(
-        controls: [
-          MediaControl.skipToPrevious,
-          if (_player.playing)
-            MediaControl.pause
-          else
-            MediaControl.play,
-          MediaControl.stop,
-          MediaControl.skipToNext,
-        ],
-        systemActions: const {
-          MediaAction.seek,
-          MediaAction.seekForward,
-          MediaAction.seekBackward,
-        },
-        androidCompactActionIndices: const [
-          0,
-          1,
-          2,
-        ],
-        processingState:
-            _processingState(),
-        playing: _player.playing,
-        updatePosition:
-            _player.position,
-        bufferedPosition:
-            _player.bufferedPosition,
-        speed: _player.speed,
-        queueIndex:
-            _player.currentIndex,
-      ),
-    );
-  }
-
-  Future<void> playUrl({
-    required String url,
-    required String title,
-    String? artist,
-    String? album,
-    String? artUri,
-  }) async {
-    final cleanUrl = url.trim();
-
-    if (cleanUrl.isEmpty) {
-      return;
-    }
-
-    final uri = Uri.tryParse(cleanUrl);
-
-    if (uri == null ||
-        (!uri.hasScheme ||
-            (uri.scheme != 'http' &&
-                uri.scheme != 'https'))) {
-      throw const FormatException(
-        'رابط الصوت غير صالح.',
-      );
-    }
-
-    final item = MediaItem(
-      id: cleanUrl,
-      title: title,
-      artist: artist,
-      album: album,
-      artUri: artUri == null
-          ? null
-          : Uri.tryParse(artUri),
+    await session.configure(
+      const AudioSessionConfiguration.music(),
     );
 
-    await _loadSingleSource(
-      AudioSource.uri(
-        uri,
-        tag: item,
-      ),
-    );
-  }
+    _player.playbackEventStream.listen(
+      (event) {
+        final processingState;
 
-  Future<void> playLocalFile({
-    required String path,
-    required String title,
-    String? artist,
-    String? album,
-  }) async {
-    final cleanPath = path.trim();
+        switch (event.processingState) {
+          case ProcessingState.idle:
+            processingState = AudioProcessingState.idle;
+            break;
+          case ProcessingState.loading:
+            processingState = AudioProcessingState.loading;
+            break;
+          case ProcessingState.buffering:
+            processingState = AudioProcessingState.buffering;
+            break;
+          case ProcessingState.ready:
+            processingState = AudioProcessingState.ready;
+            break;
+          case ProcessingState.completed:
+            processingState = AudioProcessingState.completed;
+            break;
+        }
 
-    if (cleanPath.isEmpty) {
-      throw const FormatException(
-        'مسار الملف غير صالح.',
-      );
-    }
+        final playing = _player.playing;
 
-    final item = MediaItem(
-      id: cleanPath,
-      title: title,
-      artist: artist,
-      album: album,
-    );
-
-    await _loadSingleSource(
-      AudioSource.file(
-        cleanPath,
-        tag: item,
-      ),
-    );
-  }
-
-  Future<void> _loadSingleSource(
-    AudioSource source,
-  ) async {
-    await _player.setAudioSource(
-      source,
-      preload: true,
-    );
-
-    await _player.play();
-  }
-
-  Future<void> playQueue(
-    List<MediaItem> items,
-  ) async {
-    if (items.isEmpty) {
-      return;
-    }
-
-    final sources = <AudioSource>[];
-
-    for (final item in items) {
-      final uri = Uri.tryParse(
-        item.id,
-      );
-
-      if (uri == null) {
-        continue;
-      }
-
-      if (uri.scheme == 'http' ||
-          uri.scheme == 'https') {
-        sources.add(
-          AudioSource.uri(
-            uri,
-            tag: item,
+        playbackState.add(
+          playbackState.value.copyWith(
+            controls: [
+              if (playing) MediaControl.pause else MediaControl.play,
+              MediaControl.stop,
+            ],
+            systemActions: const {
+              MediaAction.seek,
+            },
+            androidCompactActionIndices: const [0, 1],
+            processingState: processingState,
+            playing: playing,
+            updatePosition: _player.position,
+            bufferedPosition: _player.bufferedPosition,
+            speed: _player.speed,
+            queueIndex: _player.currentIndex,
           ),
         );
-      } else if (uri.scheme == 'file') {
-        sources.add(
-          AudioSource.file(
-            uri.toFilePath(),
-            tag: item,
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        playbackState.add(
+          playbackState.value.copyWith(
+            processingState: AudioProcessingState.error,
           ),
         );
-      }
-    }
-
-    if (sources.isEmpty) {
-      return;
-    }
-
-    await _player.setAudioSources(
-      sources,
-      preload: true,
+      },
     );
 
-    await _player.play();
+    _player.currentIndexStream.listen((index) {
+      if (index == null || index < 0 || index >= queue.value.length) {
+        return;
+      }
+
+      mediaItem.add(queue.value[index]);
+    });
+
+    _player.positionStream.listen((position) {
+      final current = playbackState.value;
+
+      playbackState.add(
+        current.copyWith(
+          updatePosition: position,
+          bufferedPosition: _player.bufferedPosition,
+          speed: _player.speed,
+        ),
+      );
+    });
   }
 
   @override
@@ -290,169 +105,86 @@ class Sa7biAudioHandler extends BaseAudioHandler
   @override
   Future<void> stop() async {
     await _player.stop();
+
+    playbackState.add(
+      playbackState.value.copyWith(
+        playing: false,
+        processingState: AudioProcessingState.idle,
+        updatePosition: Duration.zero,
+      ),
+    );
+
     await super.stop();
   }
 
   @override
-  Future<void> seek(
-    Duration position,
-  ) async {
+  Future<void> seek(Duration position) async {
     await _player.seek(position);
   }
 
   @override
-  Future<void> skipToNext() async {
-    if (_player.hasNext) {
-      await _player.seekToNext();
-    }
-  }
+  Future<void> playMediaItem(MediaItem item) async {
+    try {
+      mediaItem.add(item);
 
-  @override
-  Future<void> skipToPrevious() async {
-    if (_player.hasPrevious) {
-      await _player.seekToPrevious();
-    }
-  }
+      await _player.setUrl(item.id);
 
-  @override
-  Future<void> skipToQueueItem(
-    int index,
-  ) async {
-    final length =
-        _player.sequence.length;
-
-    if (index < 0 ||
-        index >= length) {
-      return;
-    }
-
-    await _player.seek(
-      Duration.zero,
-      index: index,
-    );
-  }
-
-  @override
-  Future<void> setRepeatMode(
-    AudioServiceRepeatMode repeatMode,
-  ) async {
-    switch (repeatMode) {
-      case AudioServiceRepeatMode.none:
-        await _player.setLoopMode(
-          LoopMode.off,
-        );
-        break;
-
-      case AudioServiceRepeatMode.one:
-        await _player.setLoopMode(
-          LoopMode.one,
-        );
-        break;
-
-      case AudioServiceRepeatMode.all:
-        await _player.setLoopMode(
-          LoopMode.all,
-        );
-        break;
-
-      case AudioServiceRepeatMode.group:
-        await _player.setLoopMode(
-          LoopMode.all,
-        );
-        break;
-    }
-  }
-
-  @override
-  Future<void> setShuffleMode(
-    AudioServiceShuffleMode shuffleMode,
-  ) async {
-    switch (shuffleMode) {
-      case AudioServiceShuffleMode.none:
-        await _player.setShuffleModeEnabled(
-          false,
-        );
-        break;
-
-      case AudioServiceShuffleMode.all:
-        await _player.setShuffleModeEnabled(
-          true,
-        );
-        break;
-
-      case AudioServiceShuffleMode.group:
-        await _player.setShuffleModeEnabled(
-          true,
-        );
-        break;
-    }
-  }
-
-  @override
-  Future<void> customAction(
-    String name, [
-    dynamic arguments,
-  ]) async {
-    if (name == 'setVolume') {
-      final value = arguments is num
-          ? arguments.toDouble()
-          : 1.0;
-
-      await _player.setVolume(
-        value.clamp(0.0, 1.0).toDouble(),
+      await _player.play();
+    } catch (e) {
+      playbackState.add(
+        playbackState.value.copyWith(
+          processingState: AudioProcessingState.error,
+        ),
       );
     }
   }
+
+  @override
+  Future<void> onTaskRemoved() async {
+    // Keep audio alive when the user removes the app from recent apps.
+    // The Android foreground service handles continued playback.
+  }
+
+  Future<void> disposePlayer() async {
+    await _player.dispose();
+  }
 }
 
-class AudioController {
-  AudioController._();
+class Sa7biAudioService {
+  static AudioHandler? _handler;
+  static Future<AudioHandler>? _initializing;
 
-  static Sa7biAudioHandler? _handler;
-
-  static Future<Sa7biAudioHandler> init() async {
-    final existing = _handler;
-
-    if (existing != null) {
-      return existing;
+  static Future<AudioHandler> init() async {
+    if (_handler != null) {
+      return _handler!;
     }
 
-    _handler = await AudioService.init(
+    if (_initializing != null) {
+      return _initializing!;
+    }
+
+    _initializing = _initialize();
+
+    try {
+      _handler = await _initializing!;
+      return _handler!;
+    } finally {
+      _initializing = null;
+    }
+  }
+
+  static Future<AudioHandler> _initialize() async {
+    return AudioService.init(
       builder: () => Sa7biAudioHandler(),
       config: const AudioServiceConfig(
-        androidNotificationChannelId:
-            'sa7bi_ai_audio',
-        androidNotificationChannelName:
-            'صحبي AI Audio',
-        androidNotificationChannelDescription:
-            'تشغيل الصوت في الخلفية',
-
-        // متوافق مع audio_service 0.18.19.
-        // نترك androidNotificationOngoing على
-        // القيمة الافتراضية false لأن الجمع بين
-        // ongoing:true و stopForegroundOnPause:false
-        // ممنوع في هذا الإصدار.
-        androidStopForegroundOnPause:
-            false,
-
-        androidShowNotificationBadge:
-            true,
-
-        notificationColor:
-            Color(0xFF151923),
+        androidNotificationChannelId: 'com.sa7bi.ai.audio',
+        androidNotificationChannelName: 'صحبي AI - الصوت',
+        androidNotificationOngoing: true,
+        androidStopForegroundOnPause: false,
+        androidNotificationIcon: 'mipmap/ic_launcher',
       ),
     );
-
-    return _handler!;
   }
 
-  // توافق مع الملفات الحالية التي تستعمل
-  // AudioController.initialize().
-  static Future<Sa7biAudioHandler>
-      initialize() async {
-    return init();
-  }
-
-  static Sa7biAudioHandler? get handler =>
-      _handler;
+  static AudioHandler? get handler => _handler;
 }
