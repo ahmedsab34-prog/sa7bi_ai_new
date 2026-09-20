@@ -1,8 +1,9 @@
+import 'dart:io';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 
 import 'ai_service.dart';
 import 'audio_player_service.dart';
@@ -74,15 +75,35 @@ class _AudioCenterScreenState
       results = [];
     });
 
-    final data =
-        await AiService.searchAudio(query);
+    try {
+      final data =
+          await AiService.searchAudio(query);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      results = data;
-      searching = false;
-    });
+      setState(() {
+        results = data;
+        searching = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        results = [];
+        searching = false;
+      });
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'تعذر البحث عن الصوت حاليًا.',
+            textDirection:
+                TextDirection.rtl,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _pickLocalAudio() async {
@@ -96,7 +117,6 @@ class _AudioCenterScreenState
       final result =
           await FilePicker.pickFiles(
         type: FileType.audio,
-        withData: true,
       );
 
       if (result == null ||
@@ -108,9 +128,11 @@ class _AudioCenterScreenState
           result.files.first;
 
       /*
-       * بعض أجهزة Android ترجع مسارًا مؤقتًا أو URI.
-       * لذلك ننسخ الملف إلى cache الخاص بالتطبيق
-       * قبل إعطائه للمشغل.
+       * file_picker 13.1.0 لا يدعم withData.
+       *
+       * نعتمد أولًا على path الذي يرجعه Android.
+       * ولو كان هناك bytes متاحة لأي سبب، نستخدمها
+       * كحل احتياطي وننسخ الملف إلى cache التطبيق.
        */
       String? safePath = picked.path;
 
@@ -147,15 +169,15 @@ class _AudioCenterScreenState
       if (!mounted) return;
 
       ScaffoldMessenger.of(context)
-        .showSnackBar(
-          SnackBar(
-            content: Text(
-              'تعذر تشغيل الملف: $e',
-              textDirection:
-                  TextDirection.rtl,
-            ),
+          .showSnackBar(
+        SnackBar(
+          content: Text(
+            'تعذر تشغيل الملف: $e',
+            textDirection:
+                TextDirection.rtl,
           ),
-        );
+        ),
+      );
     }
   }
 
@@ -179,15 +201,15 @@ class _AudioCenterScreenState
       if (!mounted) return;
 
       ScaffoldMessenger.of(context)
-        .showSnackBar(
-          SnackBar(
-            content: Text(
-              'تعذر تشغيل الصوت: $e',
-              textDirection:
-                  TextDirection.rtl,
-            ),
+          .showSnackBar(
+        SnackBar(
+          content: Text(
+            'تعذر تشغيل الصوت: $e',
+            textDirection:
+                TextDirection.rtl,
           ),
-        );
+        ),
+      );
     }
   }
 
@@ -428,43 +450,46 @@ class _AudioCenterScreenState
   ) {
     return Container(
       margin:
-          const EdgeInsets.only(
-        bottom: 9,
-      ),
-      decoration:
-          BoxDecoration(
+          const EdgeInsets.only(bottom: 9),
+      decoration: BoxDecoration(
         color:
-            const Color(0xFF121620),
+            const Color(0xFF151923),
         borderRadius:
             BorderRadius.circular(18),
-        border:
-            Border.all(
+        border: Border.all(
           color:
-              Colors.white10,
+              const Color(0x2238D9FF),
         ),
       ),
       child: ListTile(
-        onTap: () =>
-            _play(item),
-        contentPadding:
-            const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 5,
-        ),
-        leading:
-            const CircleAvatar(
-          backgroundColor:
-              Color(0x2238D9FF),
-          child: Icon(
-            Icons.play_arrow_rounded,
-            color:
+        onTap: () => _play(item),
+        leading: Container(
+          width: 45,
+          height: 45,
+          decoration:
+              const BoxDecoration(
+            shape:
+                BoxShape.circle,
+            gradient:
+                LinearGradient(
+              colors: [
                 Color(0xFFFFD76A),
+                Color(0xFF7164FF),
+              ],
+            ),
+          ),
+          child:
+              const Icon(
+            Icons.play_arrow_rounded,
+            color: Colors.black,
           ),
         ),
         title: Text(
           item.title,
           textDirection:
               TextDirection.rtl,
+          textAlign:
+              TextAlign.right,
           maxLines: 2,
           overflow:
               TextOverflow.ellipsis,
@@ -474,20 +499,27 @@ class _AudioCenterScreenState
                 FontWeight.w800,
           ),
         ),
-        subtitle: Text(
-          item.artist ??
-              item.type,
-          textDirection:
-              TextDirection.rtl,
-          style:
-              const TextStyle(
-            color:
-                Colors.white54,
-          ),
-        ),
+        subtitle:
+            item.artist == null
+                ? null
+                : Text(
+                    item.artist!,
+                    textDirection:
+                        TextDirection.rtl,
+                    textAlign:
+                        TextAlign.right,
+                    maxLines: 1,
+                    overflow:
+                        TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(
+                      color:
+                          Colors.white54,
+                    ),
+                  ),
         trailing:
             const Icon(
-          Icons.play_circle_fill_rounded,
+          Icons.chevron_left_rounded,
           color:
               Color(0xFFFFD76A),
         ),
@@ -496,32 +528,76 @@ class _AudioCenterScreenState
   }
 
   Widget _buildLocalFiles() {
-    return OutlinedButton.icon(
-      onPressed:
-          _pickLocalAudio,
-      icon:
-          const Icon(
-        Icons.folder_rounded,
-      ),
-      label:
-          const Text(
-        'تشغيل ملف صوت من الهاتف',
-        textDirection:
-            TextDirection.rtl,
-      ),
-      style:
-          OutlinedButton.styleFrom(
-        foregroundColor:
-            Colors.white,
-        side:
-            const BorderSide(
+    return Container(
+      padding:
+          const EdgeInsets.all(15),
+      decoration:
+          BoxDecoration(
+        borderRadius:
+            BorderRadius.circular(20),
+        color:
+            const Color(0xFF11141D),
+        border:
+            Border.all(
           color:
-              Color(0x55FFD76A),
+              const Color(0x3357D9FF),
         ),
-        padding:
-            const EdgeInsets.symmetric(
-          vertical: 14,
-        ),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.folder_rounded,
+            color:
+                Color(0xFF63E6FF),
+            size: 34,
+          ),
+          const SizedBox(
+            height: 7,
+          ),
+          const Text(
+            'ملفات الصوت من الهاتف',
+            textDirection:
+                TextDirection.rtl,
+            style:
+                TextStyle(
+              fontWeight:
+                  FontWeight.w900,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(
+            height: 4,
+          ),
+          const Text(
+            'اختار ملف MP3 أو ملف صوتي من جهازك لتشغيله داخل صاحبي.',
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.center,
+            style:
+                TextStyle(
+              color:
+                  Colors.white54,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(
+            height: 10,
+          ),
+          FilledButton.icon(
+            onPressed:
+                _pickLocalAudio,
+            icon:
+                const Icon(
+              Icons.audio_file_rounded,
+            ),
+            label:
+                const Text(
+              'اختيار ملف صوتي',
+            ),
+          ),
+        ],
       ),
     );
   }
