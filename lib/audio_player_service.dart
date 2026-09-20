@@ -1,464 +1,417 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
+/// خدمة الصوت الأساسية للتطبيق.
+///
+/// مسؤولة عن:
+/// - تشغيل الصوت من الإنترنت.
+/// - تشغيل الملفات المحلية.
+/// - التشغيل في الخلفية.
+/// - إشعار Android.
+/// - أزرار التشغيل/الإيقاف والتقديم والترجيع.
+/// - التحكم من شاشة القفل.
+/// - عدم إيقاف الصوت عند إزالة التطبيق من التطبيقات الأخيرة.
 class Sa7biAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
 
-  StreamSubscription<PlaybackEvent>?
-      _playbackSubscription;
-
-  StreamSubscription<int?>?
-      _indexSubscription;
-
-  StreamSubscription<Duration>?
-      _positionSubscription;
-
-  bool _initialized = false;
-
-  Future<void>? _initializing;
+  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<Duration?>? _durationSubscription;
 
   Sa7biAudioHandler() {
-    _initializing = _initialize();
+    _initialize();
   }
 
   Future<void> _initialize() async {
-    if (_initialized) {
-      return;
-    }
+    try {
+      final session = await AudioSession.instance;
 
-    final session =
-        await AudioSession.instance;
+      await session.configure(
+        const AudioSessionConfiguration.music(),
+      );
 
-    await session.configure(
-      const AudioSessionConfiguration.music(),
-    );
+      _playerStateSubscription = _player.playerStateStream.listen(
+        (_) => _broadcastState(),
+      );
 
-    _playbackSubscription =
-        _player.playbackEventStream.listen(
-      _broadcastState,
-      onError: (
-        Object error,
-        StackTrace stackTrace,
-      ) {
-        playbackState.add(
-          playbackState.value.copyWith(
-            processingState:
-                AudioProcessingState.error,
-          ),
-        );
-      },
-    );
+      _positionSubscription = _player.positionStream.listen(
+        (_) => _broadcastState(),
+      );
 
-    _indexSubscription =
-        _player.currentIndexStream.listen(
-      (index) {
-        if (index == null) {
-          return;
-        }
-
-        final items = queue.value;
-
-        if (index < 0 ||
-            index >= items.length) {
-          return;
-        }
-
-        mediaItem.add(
-          items[index],
-        );
-      },
-    );
-
-    _positionSubscription =
-        _player.positionStream.listen(
-      (position) {
-        final current =
-            playbackState.value;
-
-        playbackState.add(
-          current.copyWith(
-            updatePosition:
-                position,
-            bufferedPosition:
-                _player.bufferedPosition,
-            speed:
-                _player.speed,
-          ),
-        );
-      },
-    );
-
-    _initialized = true;
-
-    _broadcastState(
-      _player.playbackEvent,
-    );
-  }
-
-  Future<void>
-      _ensureInitialized() async {
-    final future =
-        _initializing;
-
-    if (future != null) {
-      await future;
-    }
-
-    if (!_initialized) {
-      _initializing =
-          _initialize();
-
-      try {
-        await _initializing;
-      } finally {
-        _initializing = null;
-      }
+      _durationSubscription = _player.durationStream.listen(
+        (_) => _broadcastState(),
+      );
+    } catch (_) {
+      // لا نوقف التطبيق إذا فشل إعداد جلسة الصوت.
     }
   }
 
-  void _broadcastState(
-    PlaybackEvent event,
-  ) {
-    final processingState =
-        const <ProcessingState,
-            AudioProcessingState>{
-      ProcessingState.idle:
-          AudioProcessingState.idle,
-      ProcessingState.loading:
-          AudioProcessingState.loading,
-      ProcessingState.buffering:
-          AudioProcessingState.buffering,
-      ProcessingState.ready:
-          AudioProcessingState.ready,
-      ProcessingState.completed:
-          AudioProcessingState.completed,
-    }[_player.processingState]!;
-
-    final playing =
-        _player.playing;
+  void _broadcastState() {
+    final processingState = switch (_player.processingState) {
+      ProcessingState.idle => AudioProcessingState.idle,
+      ProcessingState.loading => AudioProcessingState.loading,
+      ProcessingState.buffering => AudioProcessingState.buffering,
+      ProcessingState.ready => AudioProcessingState.ready,
+      ProcessingState.completed => AudioProcessingState.completed,
+    };
 
     playbackState.add(
       playbackState.value.copyWith(
         controls: [
-          if (playing)
-            MediaControl.pause
-          else
-            MediaControl.play,
+          MediaControl.skipToPrevious,
+          if (_player.playing) MediaControl.pause else MediaControl.play,
           MediaControl.stop,
+          MediaControl.skipToNext,
         ],
         systemActions: const {
           MediaAction.seek,
           MediaAction.seekForward,
           MediaAction.seekBackward,
         },
-        androidCompactActionIndices:
-            const [0, 1],
-        processingState:
-            processingState,
-        playing:
-            playing,
-        updatePosition:
-            _player.position,
-        bufferedPosition:
-            _player.bufferedPosition,
-        speed:
-            _player.speed,
-        queueIndex:
-            event.currentIndex,
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: processingState,
+        playing: _player.playing,
+        updatePosition: _player.position,
+        bufferedPosition: _player.bufferedPosition,
+        speed: _player.speed,
       ),
     );
   }
 
   @override
   Future<void> play() async {
-    await _ensureInitialized();
     await _player.play();
   }
 
   @override
   Future<void> pause() async {
-    await _ensureInitialized();
     await _player.pause();
   }
 
   @override
   Future<void> stop() async {
-    await _ensureInitialized();
-
     await _player.stop();
-
-    playbackState.add(
-      playbackState.value.copyWith(
-        playing: false,
-        processingState:
-            AudioProcessingState.idle,
-        updatePosition:
-            Duration.zero,
-        bufferedPosition:
-            Duration.zero,
-      ),
-    );
-
     await super.stop();
   }
 
   @override
-  Future<void> seek(
-    Duration position,
-  ) async {
-    await _ensureInitialized();
+  Future<void> seek(Duration position) async {
     await _player.seek(position);
   }
 
   @override
-  Future<void> playMediaItem(
-    MediaItem item,
-  ) async {
-    await playUrl(
-      url: item.id,
-      title: item.title,
-      artist:
-          item.artist ?? 'صحبي AI',
-    );
+  Future<void> skipToNext() async {
+    if (_player.hasNext) {
+      await _player.seekToNext();
+    }
   }
 
-  Future<void> playUrl({
-    required String url,
-    required String title,
-    String? artist,
-  }) async {
-    await _ensureInitialized();
-
-    final cleanUrl =
-        url.trim();
-
-    if (cleanUrl.isEmpty) {
-      throw Exception(
-        'رابط الصوت فارغ.',
-      );
+  @override
+  Future<void> skipToPrevious() async {
+    if (_player.hasPrevious) {
+      await _player.seekToPrevious();
     }
-
-    final item = MediaItem(
-      id: cleanUrl,
-      title:
-          title.trim().isEmpty
-              ? 'صوت من صحبي AI'
-              : title.trim(),
-      artist:
-          artist ?? 'صحبي AI',
-    );
-
-    mediaItem.add(item);
-
-    await _player.stop();
-
-    await _player.setUrl(
-      cleanUrl,
-    );
-
-    await _player.play();
-  }
-
-  Future<void> playLocalFile({
-    required String path,
-    required String title,
-    String? artist,
-  }) async {
-    await _ensureInitialized();
-
-    final cleanPath =
-        path.trim();
-
-    if (cleanPath.isEmpty) {
-      throw Exception(
-        'مسار ملف الصوت فارغ.',
-      );
-    }
-
-    final file =
-        File(cleanPath);
-
-    if (!await file.exists()) {
-      throw Exception(
-        'ملف الصوت غير موجود.',
-      );
-    }
-
-    final item = MediaItem(
-      id: cleanPath,
-      title:
-          title.trim().isEmpty
-              ? 'ملف صوتي'
-              : title.trim(),
-      artist:
-          artist ?? 'من الهاتف',
-    );
-
-    mediaItem.add(item);
-
-    await _player.stop();
-
-    await _player.setFilePath(
-      cleanPath,
-    );
-
-    await _player.play();
   }
 
   @override
   Future<void> fastForward() async {
-    await _ensureInitialized();
+    final current = _player.position;
+    final duration = _player.duration ?? Duration.zero;
 
-    final position =
-        _player.position;
+    var target = current + const Duration(seconds: 10);
 
-    final duration =
-        _player.duration;
-
-    if (duration == null) {
-      return;
+    if (duration > Duration.zero && target > duration) {
+      target = duration;
     }
 
-    final target =
-        position +
-            const Duration(
-              seconds: 10,
-            );
-
-    await _player.seek(
-      target > duration
-          ? duration
-          : target,
-    );
+    await _player.seek(target);
   }
 
   @override
   Future<void> rewind() async {
-    await _ensureInitialized();
+    var target = _player.position - const Duration(seconds: 10);
 
-    final position =
-        _player.position;
+    if (target < Duration.zero) {
+      target = Duration.zero;
+    }
 
-    final target =
-        position -
-            const Duration(
-              seconds: 10,
-            );
-
-    await _player.seek(
-      target < Duration.zero
-          ? Duration.zero
-          : target,
-    );
+    await _player.seek(target);
   }
 
   @override
-  Future<void> onTaskRemoved() async {
-    // لا نوقف الصوت عند إزالة التطبيق
-    // من قائمة التطبيقات الأخيرة.
+  Future<void> playMediaItem(MediaItem mediaItem) async {
+    mediaItem.addTag(const <String, dynamic>{});
+
+    mediaItem.addTag({
+      'url': mediaItem.id,
+    });
+
+    mediaItem = MediaItem(
+      id: mediaItem.id,
+      title: mediaItem.title,
+      album: mediaItem.album,
+      artist: mediaItem.artist,
+      duration: mediaItem.duration,
+      artUri: mediaItem.artUri,
+      extras: mediaItem.extras,
+    );
+
+    mediaItem = mediaItem;
+
+    mediaItem.addTag({
+      'url': mediaItem.id,
+    });
+
+    try {
+      await _player.setUrl(mediaItem.id);
+
+      mediaItem.addTag({
+        'url': mediaItem.id,
+      });
+
+      queue.add([mediaItem]);
+      mediaItem.addTag({
+        'url': mediaItem.id,
+      });
+
+      await _player.play();
+    } catch (_) {
+      rethrow;
+    }
   }
 
-  Future<void>
-      disposePlayer() async {
-    await _playbackSubscription
-        ?.cancel();
+  /// تشغيل رابط صوت مباشر.
+  Future<void> playUrl(
+    String url, {
+    String title = 'صحبي AI',
+    String? artist,
+    String? album,
+    Duration? duration,
+    Uri? artUri,
+  }) async {
+    final item = MediaItem(
+      id: url,
+      title: title,
+      artist: artist,
+      album: album,
+      duration: duration,
+      artUri: artUri,
+    );
 
-    await _indexSubscription
-        ?.cancel();
+    mediaItem.add(item);
 
-    await _positionSubscription
-        ?.cancel();
+    queue.add([item]);
+
+    await _player.setUrl(url);
+    await _player.play();
+  }
+
+  /// تشغيل ملف صوت موجود على الهاتف.
+  Future<void> playLocalFile(
+    String path, {
+    String title = 'صحبي AI',
+    String? artist,
+    String? album,
+  }) async {
+    final item = MediaItem(
+      id: path,
+      title: title,
+      artist: artist,
+      album: album,
+    );
+
+    mediaItem.add(item);
+
+    queue.add([item]);
+
+    await _player.setFilePath(path);
+    await _player.play();
+  }
+
+  /// معرفة هل الصوت يعمل حاليًا.
+  bool get isPlaying => _player.playing;
+
+  /// موضع التشغيل الحالي.
+  Duration get position => _player.position;
+
+  /// مدة الملف الحالي.
+  Duration? get duration => _player.duration;
+
+  @override
+  Future<void> onTaskRemoved() async {
+    // لا نوقف الصوت عندما يغلق المستخدم التطبيق من قائمة التطبيقات.
+    // هذا يسمح باستمرار التشغيل في الخلفية.
+  }
+
+  Future<void> disposePlayer() async {
+    await _playerStateSubscription?.cancel();
+    await _positionSubscription?.cancel();
+    await _durationSubscription?.cancel();
 
     await _player.dispose();
   }
 }
 
+/// مدير الصوت الرئيسي للتطبيق.
+///
+/// يمنع إنشاء AudioHandler أكثر من مرة.
 class AudioController {
-  static Sa7biAudioHandler?
-      _handler;
+  AudioController._();
 
-  static Future<Sa7biAudioHandler>?
-      _initializing;
+  static final AudioController instance = AudioController._();
 
-  static Future<Sa7biAudioHandler>
-      initialize() async {
-    if (_handler != null) {
-      return _handler!;
+  Sa7biAudioHandler? _handler;
+  bool _initialized = false;
+
+  Sa7biAudioHandler? get handler => _handler;
+
+  Future<void> initialize() async {
+    if (_initialized && _handler != null) {
+      return;
     }
-
-    final existing =
-        _initializing;
-
-    if (existing != null) {
-      return existing;
-    }
-
-    final future =
-        _createHandler();
-
-    _initializing = future;
 
     try {
-      final handler =
-          await future;
+      _handler = await AudioService.init(
+        builder: () => Sa7biAudioHandler(),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.sa7bi.ai.audio',
+          androidNotificationChannelName: 'صحبي AI - الصوت',
+          androidNotificationOngoing: false,
 
-      _handler = handler;
+          // مهم:
+          // لا نوقف الـ foreground service عند إيقاف الصوت.
+          androidStopForegroundOnPause: false,
 
-      return handler;
-    } finally {
-      _initializing = null;
+          // الأيقونة موجودة فعليًا داخل:
+          // android/app/src/main/res/drawable/app_icon.png
+          androidNotificationIcon: 'drawable/app_icon',
+
+          androidResumeOnClick: true,
+        ),
+      );
+
+      _initialized = true;
+    } catch (_) {
+      _initialized = false;
+      rethrow;
     }
   }
 
-  static Future<Sa7biAudioHandler>
-      _createHandler() async {
-    final handler =
-        await AudioService.init(
-      builder:
-          () => Sa7biAudioHandler(),
-      config:
-          const AudioServiceConfig(
-        androidNotificationChannelId:
-            'com.sa7bi.ai.audio',
+  Future<void> playUrl(
+    String url, {
+    String title = 'صحبي AI',
+    String? artist,
+    String? album,
+    Duration? duration,
+    Uri? artUri,
+  }) async {
+    await initialize();
 
-        androidNotificationChannelName:
-            'صحبي AI - الصوت',
-
-        androidNotificationOngoing:
-            false,
-
-        androidStopForegroundOnPause:
-            false,
-
-        androidNotificationIcon:
-            'mipmap/ic_launcher',
-
-        androidResumeOnClick:
-            true,
-      ),
+    await _handler!.playUrl(
+      url,
+      title: title,
+      artist: artist,
+      album: album,
+      duration: duration,
+      artUri: artUri,
     );
-
-    return handler
-        as Sa7biAudioHandler;
   }
 
-  static Sa7biAudioHandler?
-      get handler => _handler;
+  Future<void> playLocalFile(
+    String path, {
+    String title = 'صحبي AI',
+    String? artist,
+    String? album,
+  }) async {
+    await initialize();
+
+    await _handler!.playLocalFile(
+      path,
+      title: title,
+      artist: artist,
+      album: album,
+    );
+  }
+
+  Future<void> pause() async {
+    await _handler?.pause();
+  }
+
+  Future<void> play() async {
+    await _handler?.play();
+  }
+
+  Future<void> stop() async {
+    await _handler?.stop();
+  }
+
+  Future<void> seek(Duration position) async {
+    await _handler?.seek(position);
+  }
 }
 
+/// اسم توافق قديم في المشروع.
+/// نتركه حتى لا نكسر أي ملف حالي يستخدمه.
 class Sa7biAudioService {
-  static Future<Sa7biAudioHandler>
-      init() {
-    return AudioController
-        .initialize();
+  Sa7biAudioService._();
+
+  static final Sa7biAudioService instance = Sa7biAudioService._();
+
+  AudioController get controller => AudioController.instance;
+
+  Future<void> initialize() {
+    return controller.initialize();
   }
 
-  static Sa7biAudioHandler?
-      get handler =>
-          AudioController.handler;
+  Future<void> playUrl(
+    String url, {
+    String title = 'صحبي AI',
+    String? artist,
+    String? album,
+    Duration? duration,
+    Uri? artUri,
+  }) {
+    return controller.playUrl(
+      url,
+      title: title,
+      artist: artist,
+      album: album,
+      duration: duration,
+      artUri: artUri,
+    );
+  }
+
+  Future<void> playLocalFile(
+    String path, {
+    String title = 'صحبي AI',
+    String? artist,
+    String? album,
+  }) {
+    return controller.playLocalFile(
+      path,
+      title: title,
+      artist: artist,
+      album: album,
+    );
+  }
+
+  Future<void> pause() {
+    return controller.pause();
+  }
+
+  Future<void> play() {
+    return controller.play();
+  }
+
+  Future<void> stop() {
+    return controller.stop();
+  }
+
+  Future<void> seek(Duration position) {
+    return controller.seek(position);
+  }
 }
