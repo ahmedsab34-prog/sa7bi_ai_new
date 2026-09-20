@@ -8,10 +8,17 @@ class AiService {
   static const String base =
       'https://sa7bi-ai-new.ahmedsab34.workers.dev';
 
-  static const String chatEndpoint = '$base/v1/chat';
-  static const String imageEndpoint = '$base/v1/image';
-  static const String newsEndpoint = '$base/v1/news';
-  static const String audioSearchEndpoint = '$base/v1/audio/search';
+  static const String chatEndpoint =
+      '$base/v1/chat';
+
+  static const String imageEndpoint =
+      '$base/v1/image';
+
+  static const String newsEndpoint =
+      '$base/v1/news';
+
+  static const String audioSearchEndpoint =
+      '$base/v1/audio/search';
 
   static const int maxHistory = 8;
 
@@ -19,14 +26,17 @@ class AiService {
     try {
       final response = await http
           .get(Uri.parse(base))
-          .timeout(const Duration(seconds: 10));
+          .timeout(
+            const Duration(seconds: 10),
+          );
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
         return false;
       }
 
-      final data = jsonDecode(response.body);
+      final data =
+          jsonDecode(response.body);
 
       if (data is! Map) {
         return false;
@@ -43,7 +53,8 @@ class AiService {
   static Future<String> getResponse(
     String prompt, {
     String? serviceContext,
-    List<Map<String, String>> history = const [],
+    List<Map<String, String>> history =
+        const [],
   }) async {
     final text = prompt.trim();
 
@@ -56,21 +67,29 @@ class AiService {
           .where(
             (item) =>
                 (item['role'] == 'user' ||
-                    item['role'] == 'assistant') &&
-                (item['content'] ?? '').trim().isNotEmpty,
+                    item['role'] ==
+                        'assistant') &&
+                (item['content'] ?? '')
+                    .trim()
+                    .isNotEmpty,
           )
           .toList();
 
-      final start = validHistory.length > maxHistory
-          ? validHistory.length - maxHistory
-          : 0;
+      final start =
+          validHistory.length > maxHistory
+              ? validHistory.length -
+                  maxHistory
+              : 0;
 
-      final messages = <Map<String, String>>[];
+      final messages =
+          <Map<String, String>>[];
 
-      for (final item in validHistory.sublist(start)) {
+      for (final item
+          in validHistory.sublist(start)) {
         messages.add({
           'role': item['role']!,
-          'content': item['content']!.trim(),
+          'content':
+              item['content']!.trim(),
         });
       }
 
@@ -94,25 +113,34 @@ class AiService {
           .post(
             Uri.parse(chatEndpoint),
             headers: const {
-              'Content-Type': 'application/json',
+              'Content-Type':
+                  'application/json',
             },
             body: jsonEncode({
               'messages': messages,
             }),
           )
-          .timeout(const Duration(seconds: 35));
+          .timeout(
+            const Duration(seconds: 45),
+          );
 
       if (response.statusCode != 200) {
         return _serverError(response);
       }
 
-      final data = jsonDecode(response.body);
+      final data =
+          jsonDecode(response.body);
 
       if (data is Map &&
           data['ok'] == true &&
           data['reply'] is String &&
-          data['reply'].toString().trim().isNotEmpty) {
-        return data['reply'].toString().trim();
+          data['reply']
+              .toString()
+              .trim()
+              .isNotEmpty) {
+        return data['reply']
+            .toString()
+            .trim();
       }
 
       return 'صاحبي مش قادر يرد دلوقتي. جرّب تاني.';
@@ -123,17 +151,20 @@ class AiService {
 
   static Future<String> analyzeImage(
     XFile file, {
-    String prompt = 'حلل الصورة المرسلة بدقة وباختصار.',
+    String prompt =
+        'حلل الصورة المرسلة بدقة وباختصار.',
     String? serviceContext,
   }) async {
     try {
-      final bytes = await file.readAsBytes();
+      final bytes =
+          await file.readAsBytes();
 
       if (bytes.isEmpty) {
         return 'الصورة لم يتم قراءتها.';
       }
 
-      if (bytes.length > 5 * 1024 * 1024) {
+      if (bytes.length >
+          5 * 1024 * 1024) {
         return 'الصورة كبيرة جدًا. ابعت صورة أصغر.';
       }
 
@@ -152,7 +183,8 @@ class AiService {
           .post(
             Uri.parse(chatEndpoint),
             headers: const {
-              'Content-Type': 'application/json',
+              'Content-Type':
+                  'application/json',
             },
             body: jsonEncode({
               'messages': [
@@ -165,19 +197,27 @@ class AiService {
                   'data:${_mime(file.name)};base64,${base64Encode(bytes)}',
             }),
           )
-          .timeout(const Duration(seconds: 60));
+          .timeout(
+            const Duration(seconds: 60),
+          );
 
       if (response.statusCode != 200) {
         return _serverError(response);
       }
 
-      final data = jsonDecode(response.body);
+      final data =
+          jsonDecode(response.body);
 
       if (data is Map &&
           data['ok'] == true &&
           data['reply'] is String &&
-          data['reply'].toString().trim().isNotEmpty) {
-        return data['reply'].toString().trim();
+          data['reply']
+              .toString()
+              .trim()
+              .isNotEmpty) {
+        return data['reply']
+            .toString()
+            .trim();
       }
 
       return 'الصورة وصلت، لكن التحليل لم يكتمل.';
@@ -186,10 +226,12 @@ class AiService {
     }
   }
 
-  static Future<ImageGenerationResult> generateImage(
+  static Future<ImageGenerationResult>
+      generateImage(
     String prompt,
   ) async {
-    final cleanPrompt = prompt.trim();
+    final cleanPrompt =
+        prompt.trim();
 
     if (cleanPrompt.isEmpty) {
       return const ImageGenerationResult.failure(
@@ -208,13 +250,16 @@ class AiService {
           .post(
             Uri.parse(imageEndpoint),
             headers: const {
-              'Content-Type': 'application/json',
+              'Content-Type':
+                  'application/json',
             },
             body: jsonEncode({
               'prompt': cleanPrompt,
             }),
           )
-          .timeout(const Duration(seconds: 120));
+          .timeout(
+            const Duration(seconds: 120),
+          );
 
       if (response.statusCode != 200) {
         return ImageGenerationResult.failure(
@@ -222,7 +267,8 @@ class AiService {
         );
       }
 
-      final data = jsonDecode(response.body);
+      final data =
+          jsonDecode(response.body);
 
       if (data is! Map) {
         return const ImageGenerationResult.failure(
@@ -231,7 +277,8 @@ class AiService {
       }
 
       final base64Image =
-          data['image_base64']?.toString();
+          data['image_base64']
+              ?.toString();
 
       if (data['ok'] != true ||
           base64Image == null ||
@@ -243,7 +290,8 @@ class AiService {
       }
 
       try {
-        final bytes = base64Decode(base64Image);
+        final bytes =
+            base64Decode(base64Image);
 
         if (bytes.isEmpty) {
           return const ImageGenerationResult.failure(
@@ -251,7 +299,9 @@ class AiService {
           );
         }
 
-        return ImageGenerationResult.success(bytes);
+        return ImageGenerationResult.success(
+          bytes,
+        );
       } catch (_) {
         return const ImageGenerationResult.failure(
           'تعذر قراءة الصورة التي رجعتها الخدمة.',
@@ -264,17 +314,39 @@ class AiService {
     }
   }
 
-  static Future<List<NewsItem>> getNews() async {
+  static Future<List<NewsItem>>
+      getNews() async {
     try {
+      final uri =
+          Uri.parse(newsEndpoint)
+              .replace(
+        queryParameters: {
+          'refresh':
+              DateTime.now()
+                  .millisecondsSinceEpoch
+                  .toString(),
+        },
+      );
+
       final response = await http
-          .get(Uri.parse(newsEndpoint))
-          .timeout(const Duration(seconds: 15));
+          .get(
+            uri,
+            headers: const {
+              'Cache-Control':
+                  'no-cache',
+              'Pragma': 'no-cache',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 15),
+          );
 
       if (response.statusCode != 200) {
         return [];
       }
 
-      final data = jsonDecode(response.body);
+      final data =
+          jsonDecode(response.body);
 
       if (data is! Map) {
         return [];
@@ -290,11 +362,18 @@ class AiService {
           .whereType<Map>()
           .map(
             (item) => NewsItem(
-              title: item['title']?.toString() ?? '',
+              title:
+                  item['title']
+                          ?.toString() ??
+                      '',
               source:
-                  item['source']?.toString() ??
-                  'Google News',
-              link: item['link']?.toString() ?? '',
+                  item['source']
+                          ?.toString() ??
+                      'Google News',
+              link:
+                  item['link']
+                          ?.toString() ??
+                      '',
             ),
           )
           .where(
@@ -308,19 +387,22 @@ class AiService {
     }
   }
 
-  static Future<List<AudioSearchItem>> searchAudio(
+  static Future<List<AudioSearchItem>>
+      searchAudio(
     String query,
   ) async {
-    final clean = query.trim();
+    final clean =
+        query.trim();
 
     if (clean.isEmpty) {
       return [];
     }
 
     try {
-      final uri = Uri.parse(
-        audioSearchEndpoint,
-      ).replace(
+      final uri =
+          Uri.parse(
+            audioSearchEndpoint,
+          ).replace(
         queryParameters: {
           'q': clean,
         },
@@ -328,13 +410,16 @@ class AiService {
 
       final response = await http
           .get(uri)
-          .timeout(const Duration(seconds: 20));
+          .timeout(
+            const Duration(seconds: 20),
+          );
 
       if (response.statusCode != 200) {
         return [];
       }
 
-      final data = jsonDecode(response.body);
+      final data =
+          jsonDecode(response.body);
 
       if (data is! Map ||
           data['items'] is! List) {
@@ -344,15 +429,22 @@ class AiService {
       return (data['items'] as List)
           .whereType<Map>()
           .map(
-            (item) => AudioSearchItem(
+            (item) =>
+                AudioSearchItem(
               title:
-                  item['title']?.toString() ?? '',
+                  item['title']
+                          ?.toString() ??
+                      '',
               artist:
-                  item['artist']?.toString(),
+                  item['artist']
+                      ?.toString(),
               url:
-                  item['url']?.toString() ?? '',
+                  item['url']
+                          ?.toString() ??
+                      '',
               type:
-                  item['type']?.toString() ??
+                  item['type']
+                          ?.toString() ??
                       'audio',
             ),
           )
@@ -367,8 +459,11 @@ class AiService {
     }
   }
 
-  static String _mime(String name) {
-    final value = name.toLowerCase();
+  static String _mime(
+    String name,
+  ) {
+    final value =
+        name.toLowerCase();
 
     if (value.endsWith('.png')) {
       return 'image/png';
@@ -385,13 +480,18 @@ class AiService {
     http.Response response,
   ) {
     try {
-      final data = jsonDecode(response.body);
+      final data =
+          jsonDecode(response.body);
 
       if (data is Map) {
-        final error = data['error'];
+        final error =
+            data['error'];
 
         if (error != null &&
-            error.toString().trim().isNotEmpty) {
+            error
+                .toString()
+                .trim()
+                .isNotEmpty) {
           return error.toString();
         }
       }
@@ -463,5 +563,6 @@ class ImageGenerationResult {
         );
 
   bool get isSuccess =>
-      bytes != null && bytes!.isNotEmpty;
+      bytes != null &&
+      bytes!.isNotEmpty;
 }
