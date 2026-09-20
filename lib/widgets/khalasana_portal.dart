@@ -24,11 +24,9 @@ class _KhalasanaPortalState
   void initState() {
     super.initState();
 
-    controller =
-        AnimationController(
+    controller = AnimationController(
       vsync: this,
-      duration:
-          const Duration(seconds: 7),
+      duration: const Duration(seconds: 8),
     )..repeat();
   }
 
@@ -50,28 +48,24 @@ class _KhalasanaPortalState
                   math.pi *
                   2;
 
-          final dx =
-              math.sin(t) * 10;
-
+          final dx = math.sin(t) * 7;
           final dy =
-              math.cos(t * 0.75) * 7;
+              math.cos(t * 0.75) * 5;
 
           final pulse =
               (math.sin(t) + 1) / 2;
 
           return Transform.translate(
-            offset:
-                Offset(dx, dy),
+            offset: Offset(dx, dy),
             child: SizedBox(
-              width: 70,
-              height: 70,
+              width: 58,
+              height: 58,
               child: Stack(
-                alignment:
-                    Alignment.center,
+                alignment: Alignment.center,
                 children: [
                   Container(
-                    width: 58,
-                    height: 58,
+                    width: 48,
+                    height: 48,
                     decoration:
                         BoxDecoration(
                       shape:
@@ -82,12 +76,10 @@ class _KhalasanaPortalState
                               const Color(
                             0xFF63E6FF,
                           ).withOpacity(
-                            0.10 +
-                                pulse *
-                                    0.10,
+                            0.08 +
+                                pulse * 0.10,
                           ),
-                          blurRadius:
-                              20,
+                          blurRadius: 17,
                         ),
                         BoxShadow(
                           color:
@@ -95,11 +87,9 @@ class _KhalasanaPortalState
                             0xFFFFD76A,
                           ).withOpacity(
                             0.08 +
-                                pulse *
-                                    0.10,
+                                pulse * 0.10,
                           ),
-                          blurRadius:
-                              20,
+                          blurRadius: 17,
                         ),
                       ],
                     ),
@@ -110,10 +100,9 @@ class _KhalasanaPortalState
                         controller.value *
                             math.pi *
                             2,
-                    child:
-                        Container(
-                      width: 62,
-                      height: 62,
+                    child: Container(
+                      width: 52,
+                      height: 52,
                       decoration:
                           const BoxDecoration(
                         shape:
@@ -143,8 +132,8 @@ class _KhalasanaPortalState
                   ),
 
                   Container(
-                    width: 54,
-                    height: 54,
+                    width: 45,
+                    height: 45,
                     decoration:
                         const BoxDecoration(
                       shape:
@@ -154,8 +143,7 @@ class _KhalasanaPortalState
                     ),
                     child:
                         const Center(
-                      child:
-                          Column(
+                      child: Column(
                         mainAxisSize:
                             MainAxisSize.min,
                         children: [
@@ -170,10 +158,9 @@ class _KhalasanaPortalState
                                 0xFFFFD76A,
                               ),
                               fontSize:
-                                  10,
+                                  9,
                               fontWeight:
-                                  FontWeight
-                                      .w900,
+                                  FontWeight.w900,
                             ),
                           ),
                           Text(
@@ -185,10 +172,9 @@ class _KhalasanaPortalState
                                 0xFF63E6FF,
                               ),
                               fontSize:
-                                  9,
+                                  8,
                               fontWeight:
-                                  FontWeight
-                                      .w900,
+                                  FontWeight.w900,
                             ),
                           ),
                         ],
