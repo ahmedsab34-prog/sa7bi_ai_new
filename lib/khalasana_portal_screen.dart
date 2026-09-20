@@ -65,14 +65,12 @@ class KhalasanaPortalScreen extends StatelessWidget {
           const Positioned.fill(
             child: _KhalasanaBackground(),
           ),
-
           SafeArea(
             child: Column(
               children: [
                 _TopBar(
                   onBack: () => Navigator.pop(context),
                 ),
-
                 Expanded(
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
@@ -85,27 +83,18 @@ class KhalasanaPortalScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         const SizedBox(height: 8),
-
                         const _KhalasanaHero(),
-
                         const SizedBox(height: 20),
-
                         const _IntroCard(),
-
                         const SizedBox(height: 18),
-
                         _QuickActions(
                           onAction: () => _openChat(context),
                         ),
-
                         const SizedBox(height: 22),
-
                         _StartCard(
                           onTap: () => _openChat(context),
                         ),
-
                         const SizedBox(height: 14),
-
                         const Text(
                           'كل ده من مكان واحد — خلصانة مع صاحبي AI',
                           textDirection: TextDirection.rtl,
@@ -159,7 +148,7 @@ class _TopBar extends StatelessWidget {
                 'خلصانة',
                 textDirection: TextDirection.rtl,
                 style: TextStyle(
-                  color: Color(0xFFFFD76A),
+                  color: KhalasanaPortalScreen.gold,
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
                 ),
@@ -241,12 +230,12 @@ class _KhalasanaHero extends StatelessWidget {
               ],
             ),
             border: Border.all(
-              color: gold.withOpacity(0.32),
+              color: KhalasanaPortalScreen.gold.withOpacity(0.32),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: gold.withOpacity(0.14),
+                color: KhalasanaPortalScreen.gold.withOpacity(0.14),
                 blurRadius: 45,
                 spreadRadius: 3,
               ),
@@ -260,27 +249,26 @@ class _KhalasanaHero extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: const Color(0xFF0D111B),
                 border: Border.all(
-                  color: gold.withOpacity(0.40),
+                  color: KhalasanaPortalScreen.gold.withOpacity(0.40),
                   width: 2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: gold.withOpacity(0.18),
+                    color:
+                        KhalasanaPortalScreen.gold.withOpacity(0.18),
                     blurRadius: 25,
                   ),
                 ],
               ),
               child: const Icon(
                 Icons.auto_awesome_rounded,
-                color: gold,
+                color: KhalasanaPortalScreen.gold,
                 size: 46,
               ),
             ),
           ),
         ),
-
         const SizedBox(height: 17),
-
         const Text(
           'خلصانة AI',
           textDirection: TextDirection.rtl,
@@ -291,14 +279,12 @@ class _KhalasanaHero extends StatelessWidget {
             height: 1.15,
           ),
         ),
-
         const SizedBox(height: 7),
-
         const Text(
           'المساعد الشامل بتاعك',
           textDirection: TextDirection.rtl,
           style: TextStyle(
-            color: gold,
+            color: KhalasanaPortalScreen.gold,
             fontSize: 14,
             fontWeight: FontWeight.w800,
           ),
@@ -325,7 +311,7 @@ class _IntroCard extends StatelessWidget {
         color: const Color(0xFF0D111A).withOpacity(0.90),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: gold.withOpacity(0.14),
+          color: KhalasanaPortalScreen.gold.withOpacity(0.14),
         ),
       ),
       child: const Column(
@@ -379,9 +365,7 @@ class _QuickActions extends StatelessWidget {
             fontWeight: FontWeight.w900,
           ),
         ),
-
         const SizedBox(height: 11),
-
         Row(
           children: [
             Expanded(
@@ -458,14 +442,16 @@ class _QuickAction extends StatelessWidget {
                 height: 42,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: gold.withOpacity(0.09),
+                  color:
+                      KhalasanaPortalScreen.gold.withOpacity(0.09),
                   border: Border.all(
-                    color: gold.withOpacity(0.18),
+                    color:
+                        KhalasanaPortalScreen.gold.withOpacity(0.18),
                   ),
                 ),
                 child: Icon(
                   icon,
-                  color: gold,
+                  color: KhalasanaPortalScreen.gold,
                   size: 20,
                 ),
               ),
@@ -514,7 +500,7 @@ class _StartCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: gold.withOpacity(0.14),
+            color: KhalasanaPortalScreen.gold.withOpacity(0.14),
             blurRadius: 30,
             spreadRadius: 1,
           ),
@@ -600,7 +586,7 @@ class _BackgroundPainter extends CustomPainter {
       ),
       radius: 1.0,
       colors: [
-        gold.withOpacity(0.12),
+        KhalasanaPortalScreen.gold.withOpacity(0.12),
         Colors.transparent,
       ],
     );
