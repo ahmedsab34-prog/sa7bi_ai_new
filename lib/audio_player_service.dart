@@ -11,9 +11,9 @@ import 'package:just_audio/just_audio.dart';
 /// - تشغيل الملفات المحلية.
 /// - التشغيل في الخلفية.
 /// - إشعار Android.
-/// - أزرار التشغيل/الإيقاف والتقديم والترجيع.
+/// - أزرار التشغيل والإيقاف والتقديم والترجيع.
 /// - التحكم من شاشة القفل.
-/// - عدم إيقاف الصوت عند إزالة التطبيق من التطبيقات الأخيرة.
+/// - استمرار الخدمة عند إزالة التطبيق من التطبيقات الأخيرة.
 class Sa7biAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
@@ -63,7 +63,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
       playbackState.value.copyWith(
         controls: [
           MediaControl.skipToPrevious,
-          if (_player.playing) MediaControl.pause else MediaControl.play,
+          if (_player.playing)
+            MediaControl.pause
+          else
+            MediaControl.play,
           MediaControl.stop,
           MediaControl.skipToNext,
         ],
@@ -133,7 +136,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> rewind() async {
-    var target = _player.position - const Duration(seconds: 10);
+    var target =
+        _player.position - const Duration(seconds: 10);
 
     if (target < Duration.zero) {
       target = Duration.zero;
@@ -144,39 +148,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> playMediaItem(MediaItem mediaItem) async {
-    mediaItem.addTag(const <String, dynamic>{});
-
-    mediaItem.addTag({
-      'url': mediaItem.id,
-    });
-
-    mediaItem = MediaItem(
-      id: mediaItem.id,
-      title: mediaItem.title,
-      album: mediaItem.album,
-      artist: mediaItem.artist,
-      duration: mediaItem.duration,
-      artUri: mediaItem.artUri,
-      extras: mediaItem.extras,
-    );
-
-    mediaItem = mediaItem;
-
-    mediaItem.addTag({
-      'url': mediaItem.id,
-    });
-
     try {
       await _player.setUrl(mediaItem.id);
 
-      mediaItem.addTag({
-        'url': mediaItem.id,
-      });
-
       queue.add([mediaItem]);
-      mediaItem.addTag({
-        'url': mediaItem.id,
-      });
 
       await _player.play();
     } catch (_) {
@@ -203,7 +178,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
     );
 
     mediaItem.add(item);
-
     queue.add([item]);
 
     await _player.setUrl(url);
@@ -225,14 +199,13 @@ class Sa7biAudioHandler extends BaseAudioHandler
     );
 
     mediaItem.add(item);
-
     queue.add([item]);
 
     await _player.setFilePath(path);
     await _player.play();
   }
 
-  /// معرفة هل الصوت يعمل حاليًا.
+  /// هل الصوت يعمل حاليًا؟
   bool get isPlaying => _player.playing;
 
   /// موضع التشغيل الحالي.
@@ -243,8 +216,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> onTaskRemoved() async {
-    // لا نوقف الصوت عندما يغلق المستخدم التطبيق من قائمة التطبيقات.
-    // هذا يسمح باستمرار التشغيل في الخلفية.
+    // لا نوقف الصوت عند إزالة التطبيق من التطبيقات الأخيرة.
+    // يسمح ذلك باستمرار التشغيل في الخلفية.
   }
 
   Future<void> disposePlayer() async {
@@ -262,7 +235,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
 class AudioController {
   AudioController._();
 
-  static final AudioController instance = AudioController._();
+  static final AudioController instance =
+      AudioController._();
 
   Sa7biAudioHandler? _handler;
   bool _initialized = false;
@@ -278,17 +252,19 @@ class AudioController {
       _handler = await AudioService.init(
         builder: () => Sa7biAudioHandler(),
         config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.sa7bi.ai.audio',
-          androidNotificationChannelName: 'صحبي AI - الصوت',
+          androidNotificationChannelId:
+              'com.sa7bi.ai.audio',
+          androidNotificationChannelName:
+              'صحبي AI - الصوت',
           androidNotificationOngoing: false,
 
-          // مهم:
           // لا نوقف الـ foreground service عند إيقاف الصوت.
           androidStopForegroundOnPause: false,
 
-          // الأيقونة موجودة فعليًا داخل:
+          // الملف موجود فعليًا هنا:
           // android/app/src/main/res/drawable/app_icon.png
-          androidNotificationIcon: 'drawable/app_icon',
+          androidNotificationIcon:
+              'drawable/app_icon',
 
           androidResumeOnClick: true,
         ),
@@ -359,9 +335,11 @@ class AudioController {
 class Sa7biAudioService {
   Sa7biAudioService._();
 
-  static final Sa7biAudioService instance = Sa7biAudioService._();
+  static final Sa7biAudioService instance =
+      Sa7biAudioService._();
 
-  AudioController get controller => AudioController.instance;
+  AudioController get controller =>
+      AudioController.instance;
 
   Future<void> initialize() {
     return controller.initialize();
