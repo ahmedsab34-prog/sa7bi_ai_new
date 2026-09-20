@@ -11,16 +11,15 @@ class AiService {
   static const String chatEndpoint = '$base/v1/chat';
   static const String imageEndpoint = '$base/v1/image';
   static const String newsEndpoint = '$base/v1/news';
+  static const String audioSearchEndpoint = '$base/v1/audio/search';
 
-  static const int maxHistory = 6;
+  static const int maxHistory = 8;
 
   static Future<bool> checkConnection() async {
     try {
       final response = await http
           .get(Uri.parse(base))
-          .timeout(
-            const Duration(seconds: 10),
-          );
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
@@ -46,13 +45,13 @@ class AiService {
     String? serviceContext,
     List<Map<String, String>> history = const [],
   }) async {
+    final text = prompt.trim();
+
+    if (text.isEmpty) {
+      return 'قول لي يا صاحبي 😊';
+    }
+
     try {
-      final text = prompt.trim();
-
-      if (text.isEmpty) {
-        return 'قول لي يا صاحبي 😊';
-      }
-
       final validHistory = history
           .where(
             (item) =>
@@ -80,7 +79,7 @@ class AiService {
       if (serviceContext != null &&
           serviceContext.trim().isNotEmpty) {
         current =
-            'سياق القسم:\n'
+            'سياق الخدمة:\n'
             '${serviceContext.trim()}\n\n'
             'رسالة المستخدم:\n'
             '$text';
@@ -101,9 +100,7 @@ class AiService {
               'messages': messages,
             }),
           )
-          .timeout(
-            const Duration(seconds: 25),
-          );
+          .timeout(const Duration(seconds: 35));
 
       if (response.statusCode != 200) {
         return _serverError(response);
@@ -111,15 +108,16 @@ class AiService {
 
       final data = jsonDecode(response.body);
 
-      if (data['ok'] == true &&
+      if (data is Map &&
+          data['ok'] == true &&
           data['reply'] is String &&
           data['reply'].toString().trim().isNotEmpty) {
         return data['reply'].toString().trim();
       }
 
-      return 'خلصانة مش قادرة ترد دلوقتي 😕';
+      return 'صاحبي مش قادر يرد دلوقتي. جرّب تاني.';
     } catch (_) {
-      return 'الرد اتأخر شوية 😅 جرّب تاني.';
+      return 'حصل تأخير في الاتصال بصاحبي. جرّب تاني.';
     }
   }
 
@@ -144,22 +142,11 @@ class AiService {
       if (serviceContext != null &&
           serviceContext.trim().isNotEmpty) {
         finalPrompt =
-            'سياق القسم:\n'
+            'سياق الخدمة:\n'
             '${serviceContext.trim()}\n\n'
             'طلب المستخدم:\n'
             '$prompt';
       }
-
-      final body = {
-        'messages': [
-          {
-            'role': 'user',
-            'content': finalPrompt,
-          },
-        ],
-        'image':
-            'data:${_mime(file.name)};base64,${base64Encode(bytes)}',
-      };
 
       final response = await http
           .post(
@@ -167,11 +154,18 @@ class AiService {
             headers: const {
               'Content-Type': 'application/json',
             },
-            body: jsonEncode(body),
+            body: jsonEncode({
+              'messages': [
+                {
+                  'role': 'user',
+                  'content': finalPrompt,
+                },
+              ],
+              'image':
+                  'data:${_mime(file.name)};base64,${base64Encode(bytes)}',
+            }),
           )
-          .timeout(
-            const Duration(seconds: 45),
-          );
+          .timeout(const Duration(seconds: 60));
 
       if (response.statusCode != 200) {
         return _serverError(response);
@@ -179,7 +173,8 @@ class AiService {
 
       final data = jsonDecode(response.body);
 
-      if (data['ok'] == true &&
+      if (data is Map &&
+          data['ok'] == true &&
           data['reply'] is String &&
           data['reply'].toString().trim().isNotEmpty) {
         return data['reply'].toString().trim();
@@ -187,28 +182,28 @@ class AiService {
 
       return 'الصورة وصلت، لكن التحليل لم يكتمل.';
     } catch (_) {
-      return 'حصل تأخير أثناء تحليل الصورة 📷 جرّب مرة ثانية.';
+      return 'حصل تأخير أثناء تحليل الصورة. جرّب مرة ثانية.';
     }
   }
 
   static Future<ImageGenerationResult> generateImage(
     String prompt,
   ) async {
+    final cleanPrompt = prompt.trim();
+
+    if (cleanPrompt.isEmpty) {
+      return const ImageGenerationResult.failure(
+        'اكتب وصف الصورة الأول.',
+      );
+    }
+
+    if (cleanPrompt.length > 8000) {
+      return const ImageGenerationResult.failure(
+        'وصف الصورة طويل جدًا.',
+      );
+    }
+
     try {
-      final cleanPrompt = prompt.trim();
-
-      if (cleanPrompt.isEmpty) {
-        return const ImageGenerationResult.failure(
-          'اكتب وصف الصورة الأول.',
-        );
-      }
-
-      if (cleanPrompt.length > 8000) {
-        return const ImageGenerationResult.failure(
-          'وصف الصورة طويل جدًا.',
-        );
-      }
-
       final response = await http
           .post(
             Uri.parse(imageEndpoint),
@@ -219,9 +214,7 @@ class AiService {
               'prompt': cleanPrompt,
             }),
           )
-          .timeout(
-            const Duration(seconds: 90),
-          );
+          .timeout(const Duration(seconds: 120));
 
       if (response.statusCode != 200) {
         return ImageGenerationResult.failure(
@@ -230,6 +223,12 @@ class AiService {
       }
 
       final data = jsonDecode(response.body);
+
+      if (data is! Map) {
+        return const ImageGenerationResult.failure(
+          'رد خدمة الصور غير مفهوم.',
+        );
+      }
 
       final base64Image =
           data['image_base64']?.toString();
@@ -260,7 +259,7 @@ class AiService {
       }
     } catch (_) {
       return const ImageGenerationResult.failure(
-        'إنشاء الصورة اتأخر. جرّب مرة ثانية 🎨',
+        'الاتصال بخدمة الصور انتهى قبل وصول النتيجة.',
       );
     }
   }
@@ -269,15 +268,18 @@ class AiService {
     try {
       final response = await http
           .get(Uri.parse(newsEndpoint))
-          .timeout(
-            const Duration(seconds: 12),
-          );
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) {
         return [];
       }
 
       final data = jsonDecode(response.body);
+
+      if (data is! Map) {
+        return [];
+      }
+
       final list = data['items'];
 
       if (list is! List) {
@@ -290,7 +292,8 @@ class AiService {
             (item) => NewsItem(
               title: item['title']?.toString() ?? '',
               source:
-                  item['source']?.toString() ?? 'Google News',
+                  item['source']?.toString() ??
+                  'Google News',
               link: item['link']?.toString() ?? '',
             ),
           )
@@ -298,6 +301,65 @@ class AiService {
             (item) =>
                 item.title.isNotEmpty &&
                 item.link.isNotEmpty,
+          )
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<List<AudioSearchItem>> searchAudio(
+    String query,
+  ) async {
+    final clean = query.trim();
+
+    if (clean.isEmpty) {
+      return [];
+    }
+
+    try {
+      final uri = Uri.parse(
+        audioSearchEndpoint,
+      ).replace(
+        queryParameters: {
+          'q': clean,
+        },
+      );
+
+      final response = await http
+          .get(uri)
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode != 200) {
+        return [];
+      }
+
+      final data = jsonDecode(response.body);
+
+      if (data is! Map ||
+          data['items'] is! List) {
+        return [];
+      }
+
+      return (data['items'] as List)
+          .whereType<Map>()
+          .map(
+            (item) => AudioSearchItem(
+              title:
+                  item['title']?.toString() ?? '',
+              artist:
+                  item['artist']?.toString(),
+              url:
+                  item['url']?.toString() ?? '',
+              type:
+                  item['type']?.toString() ??
+                      'audio',
+            ),
+          )
+          .where(
+            (item) =>
+                item.title.isNotEmpty &&
+                item.url.isNotEmpty,
           )
           .toList();
     } catch (_) {
@@ -319,36 +381,37 @@ class AiService {
     return 'image/jpeg';
   }
 
-  static String _serverError(http.Response response) {
+  static String _serverError(
+    http.Response response,
+  ) {
     try {
       final data = jsonDecode(response.body);
 
-      final error = data['error'];
+      if (data is Map) {
+        final error = data['error'];
 
-      if (error != null &&
-          error.toString().trim().isNotEmpty) {
-        return error.toString();
+        if (error != null &&
+            error.toString().trim().isNotEmpty) {
+          return error.toString();
+        }
       }
     } catch (_) {}
 
-    if (response.statusCode == 400) {
-      return 'الطلب غير صحيح. جرّب صياغة الطلب بطريقة أبسط.';
+    switch (response.statusCode) {
+      case 400:
+        return 'الطلب غير صحيح.';
+      case 401:
+      case 403:
+        return 'خدمة الذكاء الاصطناعي تحتاج إعداد صلاحية صحيح.';
+      case 429:
+        return 'الخدمة مشغولة حاليًا. جرّب بعد لحظات.';
+      case 500:
+      case 502:
+      case 503:
+        return 'الخادم مشغول أو خدمة الذكاء الاصطناعي غير متاحة حاليًا.';
+      default:
+        return 'حصل خطأ في الاتصال بالخادم.';
     }
-
-    if (response.statusCode == 401 ||
-        response.statusCode == 403) {
-      return 'خدمة الذكاء الاصطناعي تحتاج إلى إعداد صحيح من الخادم.';
-    }
-
-    if (response.statusCode == 429) {
-      return 'الخدمة مشغولة حاليًا ⏳';
-    }
-
-    if (response.statusCode >= 500) {
-      return 'الخدمة حصل فيها ضغط مؤقت.';
-    }
-
-    return 'حصل خطأ في الاتصال بالخادم.';
   }
 }
 
@@ -361,6 +424,20 @@ class NewsItem {
     required this.title,
     required this.source,
     required this.link,
+  });
+}
+
+class AudioSearchItem {
+  final String title;
+  final String? artist;
+  final String url;
+  final String type;
+
+  const AudioSearchItem({
+    required this.title,
+    required this.url,
+    this.artist,
+    required this.type,
   });
 }
 
