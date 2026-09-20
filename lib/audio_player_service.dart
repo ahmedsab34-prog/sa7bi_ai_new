@@ -150,11 +150,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
   Future<void> playMediaItem(MediaItem mediaItem) async {
     await _player.setUrl(mediaItem.id);
 
-    mediaItem.addTag(
-      'source',
-      mediaItem.id,
-    );
-
     this.mediaItem.add(mediaItem);
     queue.add([mediaItem]);
 
@@ -163,8 +158,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   /// تشغيل رابط صوت مباشر.
   ///
-  /// مهم:
-  /// استخدمنا named parameters حتى يتوافق مع
+  /// يستخدم named parameters حتى يتوافق مع
   /// audio_center_screen.dart الحالي.
   Future<void> playUrl({
     required String url,
@@ -192,7 +186,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   /// تشغيل ملف صوت موجود على الهاتف.
   ///
-  /// استخدمنا named parameters حتى يتوافق مع
+  /// يستخدم named parameters حتى يتوافق مع
   /// audio_center_screen.dart الحالي.
   Future<void> playLocalFile({
     required String path,
@@ -236,9 +230,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
 /// مدير الصوت الرئيسي للتطبيق.
 ///
-/// متوافق مع الملفات الحالية في المشروع:
-/// main.dart
-/// audio_center_screen.dart
+/// متوافق مع:
+/// - main.dart
+/// - audio_center_screen.dart
 class AudioController {
   AudioController._();
 
@@ -251,8 +245,8 @@ class AudioController {
 
   /// تهيئة نظام الصوت مرة واحدة فقط.
   ///
-  /// ترجع الـ handler حتى يقدر AudioCenterScreen
-  /// يستخدمه مباشرة.
+  /// ترجع الـ handler حتى يستطيع
+  /// AudioCenterScreen استخدامه مباشرة.
   static Future<Sa7biAudioHandler> initialize() async {
     if (_initialized && _handler != null) {
       return _handler!;
@@ -283,12 +277,8 @@ class AudioController {
               'صحبي AI - الصوت',
           androidNotificationOngoing: false,
           androidStopForegroundOnPause: false,
-
-          // الملف موجود فعليًا هنا:
-          // android/app/src/main/res/drawable/app_icon.png
           androidNotificationIcon:
               'drawable/app_icon',
-
           androidResumeOnClick: true,
         ),
       );
