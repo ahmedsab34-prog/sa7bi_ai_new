@@ -4,7 +4,7 @@
     <!-- Internet -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Audio / Background Playback -->
+    <!-- Background audio / wake lock -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -15,10 +15,12 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
-        android:label="صحبي AI"
         android:name="${applicationName}"
+        android:label="صحبي AI"
+        android:icon="@drawable/app_icon"
         android:usesCleartextTraffic="false">
 
+        <!-- Main Flutter Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -52,7 +54,7 @@
 
         </service>
 
-        <!-- Media / Headset Buttons -->
+        <!-- Media / Headset / Lock-screen buttons -->
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true"
@@ -64,6 +66,7 @@
 
         </receiver>
 
+        <!-- Flutter embedding -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
