@@ -13,6 +13,7 @@ import 'audio_player_service.dart';
 import 'categories_screen.dart';
 import 'khalasana_portal_screen.dart';
 import 'monetization_config.dart';
+import 'news_webview_screen.dart';
 import 'settings_screen.dart';
 import 'widgets/khalasana_portal.dart';
 
@@ -56,8 +57,7 @@ class MainContainerScreen extends StatefulWidget {
       _MainContainerScreenState();
 }
 
-class _MainContainerScreenState
-    extends State<MainContainerScreen> {
+class _MainContainerScreenState extends State<MainContainerScreen> {
   int index = 0;
 
   void openProfile() {
@@ -333,7 +333,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-      // فاصل ريلز كل 5 أخبار.
       if ((i + 1) % 5 == 0 && i != news.length - 1) {
         widgets.add(
           const _ReelStrip(),
@@ -1536,7 +1535,7 @@ class _ReminderCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
+          const Icon(
             Icons.chevron_left_rounded,
             color: Colors.white38,
           ),
@@ -1597,8 +1596,7 @@ class _ReminderCard extends StatelessWidget {
   }
 }
 
-class _ProfileButton
-    extends StatelessWidget {
+class _ProfileButton extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
