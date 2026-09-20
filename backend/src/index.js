@@ -1,68 +1,66 @@
-const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Cache-Control": "no-store"
+};
 
+const BACKEND_VERSION = "3.0.0";
+
+const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
+const DEFAULT_IMAGE_MODEL = "gpt-image-2";
+
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 8000;
 const MAX_TOTAL_CHARS = 24000;
+const MAX_IMAGE_CHARS = 7 * 1024 * 1024;
 
-const MAX_IMAGE_CHARS = 6 * 1024 * 1024;
-
-const BACKEND_VERSION = "2.4.0";
-
-const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
-const DEFAULT_IMAGE_MODEL = "gpt-image-2.5-flare";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-  "Cache-Control": "no-store",
-  "X-Content-Type-Options": "nosniff"
-};
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      ...corsHeaders
+function json(data, status = 200, extraHeaders = {}) {
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        ...CORS_HEADERS,
+        "Content-Type": "application/json; charset=utf-8",
+        ...extraHeaders
+      }
     }
-  });
+  );
 }
 
-function cleanMessages(value) {
+function cleanMessages(messages) {
+  if (!Array.isArray(messages)) {
+    return null;
+  }
+
   if (
-    !Array.isArray(value) ||
-    value.length === 0 ||
-    value.length > MAX_MESSAGES
+    messages.length === 0 ||
+    messages.length > MAX_MESSAGES
   ) {
     return null;
   }
 
   let total = 0;
-  const messages = [];
+  const result = [];
 
-  for (const item of value) {
-    if (!item || typeof item !== "object") {
-      return null;
-    }
+  for (const message of messages) {
+    const role = message?.role?.toString();
+    const content = message?.content?.toString().trim();
 
     if (
-      item.role !== "user" &&
-      item.role !== "assistant"
+      role !== "user" &&
+      role !== "assistant"
     ) {
       return null;
     }
 
-    if (typeof item.content !== "string") {
+    if (!content) {
       return null;
     }
 
-    const content = item.content.trim();
-
-    if (
-      !content ||
-      content.length > MAX_MESSAGE_CHARS
-    ) {
+    if (content.length > MAX_MESSAGE_CHARS) {
       return null;
     }
 
@@ -72,43 +70,13 @@ function cleanMessages(value) {
       return null;
     }
 
-    messages.push({
-      role: item.role,
+    result.push({
+      role,
       content
     });
   }
 
-  if (
-    messages[messages.length - 1]?.role !== "user"
-  ) {
-    return null;
-  }
-
-  return messages;
-}
-
-function extractOutputText(data) {
-  if (
-    typeof data?.output_text === "string" &&
-    data.output_text.trim()
-  ) {
-    return data.output_text.trim();
-  }
-
-  const parts = [];
-
-  for (const item of data?.output ?? []) {
-    for (const content of item?.content ?? []) {
-      if (
-        content?.type === "output_text" &&
-        typeof content?.text === "string"
-      ) {
-        parts.push(content.text);
-      }
-    }
-  }
-
-  return parts.join("").trim();
+  return result;
 }
 
 function isValidImageDataUrl(value) {
@@ -120,46 +88,100 @@ function isValidImageDataUrl(value) {
     return false;
   }
 
-  return /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(
+  return /^data:image\/(jpeg|jpg|png|webp);base64,/i.test(
     value
   );
 }
 
+function extractOutputText(data) {
+  if (
+    typeof data?.output_text === "string" &&
+    data.output_text.trim()
+  ) {
+    return data.output_text.trim();
+  }
+
+  const output = Array.isArray(data?.output)
+    ? data.output
+    : [];
+
+  const parts = [];
+
+  for (const item of output) {
+    const content = Array.isArray(item?.content)
+      ? item.content
+      : [];
+
+    for (const part of content) {
+      if (
+        typeof part?.text === "string" &&
+        part.text.trim()
+      ) {
+        parts.push(part.text.trim());
+      }
+    }
+  }
+
+  return parts.join("\n").trim();
+}
+
+function normalizeArabic(value) {
+  return value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[إأآا]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ـ/g, "")
+    .replace(/\s+/g, " ");
+}
+
 function decodeXml(value) {
-  return String(value)
-    .replace(
-      /<!\[CDATA\[([\s\S]*?)\]\]>/g,
-      "$1"
-    )
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&#x27;/gi, "'");
+    .replace(/&#x27;/g, "'");
 }
 
 function stripHtml(value) {
-  return String(value)
+  return value
     .replace(/<[^>]*>/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function normalizeArabic(value) {
-  return String(value)
-    .toLowerCase()
-    .replace(/[أإآ]/g, "ا")
-    .replace(/ة/g, "ه")
-    .replace(/ى/g, "ي")
-    .trim();
+async function readJsonBody(request) {
+  const contentLength =
+    Number(request.headers.get("content-length") || "0");
+
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > MAX_BODY_BYTES
+  ) {
+    throw new Error("Request is too large");
+  }
+
+  const raw = await request.text();
+
+  if (raw.length > MAX_BODY_BYTES) {
+    throw new Error("Request is too large");
+  }
+
+  if (!raw.trim()) {
+    throw new Error("Empty request");
+  }
+
+  return JSON.parse(raw);
 }
 
-async function callOpenAI(
-  env,
-  payload,
-  model
-) {
+async function callOpenAI(env, body) {
   return fetch(
     "https://api.openai.com/v1/responses",
     {
@@ -167,81 +189,30 @@ async function callOpenAI(
       headers: {
         "Authorization":
           `Bearer ${env.OPENAI_API_KEY}`,
-        "Content-Type":
-          "application/json"
+        "Content-Type": "application/json"
       },
-      body: JSON.stringify({
-        model,
-        store: false,
-        ...payload
-      })
+      body: JSON.stringify(body)
     }
   );
 }
 
-async function handleChat(
-  request,
-  env
-) {
-  const contentType =
-    request.headers.get("content-type") || "";
-
-  if (
-    !contentType
-      .toLowerCase()
-      .includes("application/json")
-  ) {
-    return json(
-      {
-        ok: false,
-        error: "JSON request required"
-      },
-      415
-    );
-  }
-
-  const contentLength =
-    Number(
-      request.headers.get("content-length") || 0
-    );
-
-  if (contentLength > MAX_BODY_BYTES) {
-    return json(
-      {
-        ok: false,
-        error: "Request is too large"
-      },
-      413
-    );
-  }
-
+async function handleChat(request, env) {
   let body;
 
   try {
-    const raw = await request.text();
-
-    if (
-      new TextEncoder()
-        .encode(raw)
-        .byteLength > MAX_BODY_BYTES
-    ) {
-      return json(
-        {
-          ok: false,
-          error: "Request is too large"
-        },
-        413
-      );
-    }
-
-    body = JSON.parse(raw);
-  } catch {
+    body = await readJsonBody(request);
+  } catch (error) {
     return json(
       {
         ok: false,
-        error: "Invalid JSON"
+        error:
+          error.message === "Request is too large"
+            ? "Request is too large"
+            : "Invalid JSON"
       },
-      400
+      error.message === "Request is too large"
+        ? 413
+        : 400
     );
   }
 
@@ -274,28 +245,17 @@ async function handleChat(
   }
 
   const model =
-    image
-      ? (
-          env.OPENAI_VISION_MODEL ||
-          env.OPENAI_MODEL ||
-          DEFAULT_TEXT_MODEL
-        )
-      : (
-          env.OPENAI_MODEL ||
-          DEFAULT_TEXT_MODEL
-        );
+    env.OPENAI_MODEL ||
+    DEFAULT_TEXT_MODEL;
 
-  let input;
+  let input = messages;
 
   if (image) {
     const lastMessage =
       messages[messages.length - 1];
 
     const previousMessages =
-      messages.slice(
-        0,
-        messages.length - 1
-      );
+      messages.slice(0, -1);
 
     input = [
       ...previousMessages.map(
@@ -324,43 +284,109 @@ async function handleChat(
         ]
       }
     ];
-  } else {
-    input = messages;
   }
 
-  let openaiResponse;
-
   try {
-    openaiResponse =
+    const response =
       await callOpenAI(
         env,
         {
+          model,
           instructions: [
-            "أنت صَحبي AI.",
+            "أنت صاحبي AI.",
             "أنت مساعد عربي ودود وذكي وقريب من المستخدم.",
-            "افهم نبرة المستخدم ورد بطريقة إنسانية وطبيعية.",
-            "اجعل الرد واضحًا ومباشرًا ومفيدًا.",
-            "لا تطل الرد بدون داعٍ.",
             "استخدم العربية افتراضيًا.",
-            "استخدم الإيموجي باعتدال.",
-            "لا تصف الإيموجي أو الرموز في الكلام المنطوق.",
+            "كن واضحًا ومباشرًا.",
+            "لا تطل الرد بدون داعٍ.",
             "لا تدّعي أنك نفذت شيئًا لم تنفذه.",
             "لا تخترع معلومات.",
             "إذا كانت المعلومة غير مؤكدة وضح ذلك.",
             "عند تحليل صورة صف فقط ما يظهر بوضوح.",
             "لا تستنتج معلومات شخصية غير ظاهرة."
           ].join(" "),
-
           reasoning: {
             effort: "none"
           },
-
-          max_output_tokens: 700,
-
+          max_output_tokens: 900,
           input
-        },
-        model
+        }
       );
+
+    if (!response.ok) {
+      let details = null;
+
+      try {
+        details = await response.json();
+      } catch (_) {}
+
+      console.error(
+        "OpenAI request failed",
+        {
+          status: response.status,
+          error: details?.error || null
+        }
+      );
+
+      if (response.status === 429) {
+        return json(
+          {
+            ok: false,
+            error:
+              "الخدمة مشغولة حاليًا. جرّب بعد لحظات."
+          },
+          429
+        );
+      }
+
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        return json(
+          {
+            ok: false,
+            error:
+              "خدمة الذكاء الاصطناعي تحتاج إعداد صلاحية صحيح."
+          },
+          502
+        );
+      }
+
+      return json(
+        {
+          ok: false,
+          error:
+            details?.error?.message ||
+            "AI service temporarily unavailable"
+        },
+        502
+      );
+    }
+
+    const data =
+      await response.json();
+
+    const reply =
+      extractOutputText(data);
+
+    if (!reply) {
+      return json(
+        {
+          ok: false,
+          error:
+            "AI returned an empty response"
+        },
+        502
+      );
+    }
+
+    return json({
+      ok: true,
+      reply,
+      model,
+      image_analyzed:
+        Boolean(image)
+    });
   } catch (error) {
     console.error(
       "OpenAI network error",
@@ -376,152 +402,39 @@ async function handleChat(
       502
     );
   }
-
-  if (!openaiResponse.ok) {
-    let details = null;
-
-    try {
-      details =
-        await openaiResponse.json();
-    } catch {}
-
-    console.error(
-      "OpenAI request failed",
-      {
-        status:
-          openaiResponse.status,
-        type:
-          details?.error?.type || null,
-        code:
-          details?.error?.code || null,
-        message:
-          details?.error?.message || null
-      }
-    );
-
-    if (
-      openaiResponse.status === 429
-    ) {
-      return json(
-        {
-          ok: false,
-          error:
-            "AI service is busy. Please try again shortly."
-        },
-        429
-      );
-    }
-
-    if (
-      openaiResponse.status === 401 ||
-      openaiResponse.status === 403
-    ) {
-      return json(
-        {
-          ok: false,
-          error:
-            "AI service authentication is not configured correctly."
-        },
-        502
-      );
-    }
-
-    return json(
-      {
-        ok: false,
-        error:
-          details?.error?.message ||
-          "AI service temporarily unavailable"
-      },
-      502
-    );
-  }
-
-  let data;
-
-  try {
-    data =
-      await openaiResponse.json();
-  } catch {
-    return json(
-      {
-        ok: false,
-        error: "Invalid AI response"
-      },
-      502
-    );
-  }
-
-  const reply =
-    extractOutputText(data);
-
-  if (!reply) {
-    return json(
-      {
-        ok: false,
-        error:
-          "AI returned an empty response"
-      },
-      502
-    );
-  }
-
-  return json({
-    ok: true,
-    reply,
-    model,
-    image_analyzed:
-      Boolean(image)
-  });
 }
 
 async function handleImageGeneration(
   request,
   env
 ) {
-  const contentType =
-    request.headers.get("content-type") || "";
-
-  if (
-    !contentType
-      .toLowerCase()
-      .includes("application/json")
-  ) {
-    return json(
-      {
-        ok: false,
-        error: "JSON request required"
-      },
-      415
-    );
-  }
-
   let body;
 
   try {
-    body =
-      await request.json();
-  } catch {
+    body = await readJsonBody(request);
+  } catch (error) {
     return json(
       {
         ok: false,
-        error: "Invalid JSON"
+        error:
+          error.message === "Request is too large"
+            ? "Request is too large"
+            : "Invalid JSON"
       },
-      400
+      error.message === "Request is too large"
+        ? 413
+        : 400
     );
   }
 
   const prompt =
-    body?.prompt
-      ?.toString()
-      .trim();
+    body?.prompt?.toString().trim();
 
   if (!prompt) {
     return json(
       {
         ok: false,
-        error:
-          "Image prompt is required"
+        error: "Image prompt is required"
       },
       400
     );
@@ -531,8 +444,7 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
-        error:
-          "Image prompt is too long"
+        error: "Image prompt is too long"
       },
       400
     );
@@ -542,10 +454,8 @@ async function handleImageGeneration(
     env.OPENAI_IMAGE_MODEL ||
     DEFAULT_IMAGE_MODEL;
 
-  let response;
-
   try {
-    response =
+    const response =
       await fetch(
         "https://api.openai.com/v1/images/generations",
         {
@@ -565,6 +475,83 @@ async function handleImageGeneration(
           })
         }
       );
+
+    if (!response.ok) {
+      let details = null;
+
+      try {
+        details = await response.json();
+      } catch (_) {}
+
+      console.error(
+        "Image generation failed",
+        {
+          status: response.status,
+          error: details?.error || null
+        }
+      );
+
+      if (response.status === 429) {
+        return json(
+          {
+            ok: false,
+            error:
+              "خدمة إنشاء الصور مشغولة حاليًا. جرّب بعد لحظات."
+          },
+          429
+        );
+      }
+
+      if (
+        response.status === 401 ||
+        response.status === 403
+      ) {
+        return json(
+          {
+            ok: false,
+            error:
+              "خدمة الصور تحتاج إعداد صلاحية صحيح."
+          },
+          502
+        );
+      }
+
+      return json(
+        {
+          ok: false,
+          error:
+            details?.error?.message ||
+            "Image generation temporarily unavailable"
+        },
+        502
+      );
+    }
+
+    const data =
+      await response.json();
+
+    const imageBase64 =
+      data?.data?.[0]?.b64_json;
+
+    if (
+      typeof imageBase64 !== "string" ||
+      !imageBase64.trim()
+    ) {
+      return json(
+        {
+          ok: false,
+          error:
+            "Image service returned no image"
+        },
+        502
+      );
+    }
+
+    return json({
+      ok: true,
+      image_base64: imageBase64,
+      model
+    });
   } catch (error) {
     console.error(
       "Image generation network error",
@@ -580,111 +567,9 @@ async function handleImageGeneration(
       502
     );
   }
-
-  if (!response.ok) {
-    let details = null;
-
-    try {
-      details =
-        await response.json();
-    } catch {}
-
-    console.error(
-      "Image generation failed",
-      {
-        status:
-          response.status,
-        type:
-          details?.error?.type || null,
-        code:
-          details?.error?.code || null,
-        message:
-          details?.error?.message || null
-      }
-    );
-
-    if (
-      response.status === 429
-    ) {
-      return json(
-        {
-          ok: false,
-          error:
-            "خدمة إنشاء الصور مشغولة حاليًا. جرّب بعد لحظات."
-        },
-        429
-      );
-    }
-
-    if (
-      response.status === 401 ||
-      response.status === 403
-    ) {
-      return json(
-        {
-          ok: false,
-          error:
-            "خدمة الصور تحتاج إعداد صلاحية صحيح في حساب الـAPI."
-        },
-        502
-      );
-    }
-
-    return json(
-      {
-        ok: false,
-        error:
-          details?.error?.message ||
-          "Image generation temporarily unavailable"
-      },
-      502
-    );
-  }
-
-  let data;
-
-  try {
-    data =
-      await response.json();
-  } catch {
-    return json(
-      {
-        ok: false,
-        error:
-          "Invalid image response"
-      },
-      502
-    );
-  }
-
-  const imageBase64 =
-    data?.data?.[0]?.b64_json;
-
-  if (
-    typeof imageBase64 !== "string" ||
-    !imageBase64.trim()
-  ) {
-    return json(
-      {
-        ok: false,
-        error:
-          "Image service returned no image"
-      },
-      502
-    );
-  }
-
-  return json({
-    ok: true,
-    image_base64:
-      imageBase64,
-    model
-  });
 }
 
-async function handleAudioSearch(
-  request
-) {
+async function handleAudioSearch(request) {
   if (request.method !== "GET") {
     return json(
       {
@@ -718,22 +603,10 @@ async function handleAudioSearch(
     const [suraResponse, reciterResponse] =
       await Promise.all([
         fetch(
-          "https://www.mp3quran.net/api/v3/suwar?language=ar",
-          {
-            cf: {
-              cacheTtl: 3600,
-              cacheEverything: true
-            }
-          }
+          "https://www.mp3quran.net/api/v3/suwar?language=ar"
         ),
         fetch(
-          "https://www.mp3quran.net/api/v3/reciters?language=ar",
-          {
-            cf: {
-              cacheTtl: 3600,
-              cacheEverything: true
-            }
-          }
+          "https://www.mp3quran.net/api/v3/reciters?language=ar"
         )
       ]);
 
@@ -767,38 +640,6 @@ async function handleAudioSearch(
         ? reciterData.reciters
         : [];
 
-    const results = [];
-
-    const addResult = ({
-      title,
-      artist,
-      url,
-      type
-    }) => {
-      if (
-        !title ||
-        !url ||
-        !url.startsWith("https://")
-      ) {
-        return;
-      }
-
-      if (
-        results.some(
-          (item) => item.url === url
-        )
-      ) {
-        return;
-      }
-
-      results.push({
-        title,
-        artist,
-        url,
-        type
-      });
-    };
-
     const matchedSuras =
       suwar.filter((sura) => {
         const name =
@@ -807,12 +648,8 @@ async function handleAudioSearch(
           );
 
         return (
-          name.includes(
-            normalizedQuery
-          ) ||
-          normalizedQuery.includes(
-            name
-          )
+          name.includes(normalizedQuery) ||
+          normalizedQuery.includes(name)
         );
       });
 
@@ -824,28 +661,24 @@ async function handleAudioSearch(
           );
 
         return (
-          name.includes(
-            normalizedQuery
-          ) ||
-          normalizedQuery.includes(
-            name
-          )
+          name.includes(normalizedQuery) ||
+          normalizedQuery.includes(name)
         );
       });
 
     const selectedSuras =
-      matchedSuras.length > 0
+      matchedSuras.length
         ? matchedSuras.slice(0, 5)
         : suwar.slice(0, 3);
 
     const selectedReciters =
-      matchedReciters.length > 0
+      matchedReciters.length
         ? matchedReciters.slice(0, 3)
         : reciters.slice(0, 3);
 
-    for (
-      const sura of selectedSuras
-    ) {
+    const results = [];
+
+    for (const sura of selectedSuras) {
       const suraId =
         Number(sura?.id);
 
@@ -857,13 +690,9 @@ async function handleAudioSearch(
         continue;
       }
 
-      for (
-        const reciter of selectedReciters
-      ) {
+      for (const reciter of selectedReciters) {
         const moshaf =
-          Array.isArray(
-            reciter?.moshaf
-          )
+          Array.isArray(reciter?.moshaf)
             ? reciter.moshaf[0]
             : null;
 
@@ -872,39 +701,35 @@ async function handleAudioSearch(
             moshaf?.server || ""
           ).trim();
 
-        if (!server) {
-          continue;
-        }
+        if (!server) continue;
 
         const url =
           server.replace(/\/$/, "") +
           "/" +
-          String(suraId).padStart(
-            3,
-            "0"
-          ) +
+          String(suraId).padStart(3, "0") +
           ".mp3";
 
-        addResult({
-          title:
-            `${sura?.name || "سورة"} - ${reciter?.name || "قارئ"}`,
-          artist:
-            reciter?.name ||
-            "قارئ",
-          url,
-          type: "quran"
-        });
-
         if (
-          results.length >= 12
+          !results.some(
+            (item) => item.url === url
+          )
         ) {
+          results.push({
+            title:
+              `${sura?.name || "سورة"} - ${reciter?.name || "قارئ"}`,
+            artist:
+              reciter?.name || "قارئ",
+            url,
+            type: "quran"
+          });
+        }
+
+        if (results.length >= 12) {
           break;
         }
       }
 
-      if (
-        results.length >= 12
-      ) {
+      if (results.length >= 12) {
         break;
       }
     }
@@ -932,9 +757,7 @@ async function handleAudioSearch(
   }
 }
 
-async function handleNews(
-  request
-) {
+async function handleNews(request) {
   if (request.method !== "GET") {
     return json(
       {
@@ -955,11 +778,7 @@ async function handleNews(
         {
           headers: {
             "User-Agent":
-              "Sa7biAI/1.0 News Reader"
-          },
-          cf: {
-            cacheTtl: 300,
-            cacheEverything: true
+              "Sa7biAI/3.0 News Reader"
           }
         }
       );
@@ -986,10 +805,7 @@ async function handleNews(
     const items = [];
 
     for (
-      const block of blocks.slice(
-        0,
-        12
-      )
+      const block of blocks.slice(0, 20)
     ) {
       const titleMatch =
         block.match(
@@ -1015,9 +831,7 @@ async function handleNews(
 
       const link =
         decodeXml(
-          (
-            linkMatch?.[1] || ""
-          ).trim()
+          (linkMatch?.[1] || "").trim()
         );
 
       const source =
@@ -1028,15 +842,11 @@ async function handleNews(
           )
         );
 
-      if (
-        title &&
-        link
-      ) {
+      if (title && link) {
         items.push({
           title,
           source:
-            source ||
-            "Google News",
+            source || "Google News",
           link
         });
       }
@@ -1067,79 +877,59 @@ async function handleNews(
 }
 
 export default {
-  async fetch(
-    request,
-    env
-  ) {
+  async fetch(request, env) {
     const url =
       new URL(request.url);
 
     if (
       request.method === "OPTIONS"
     ) {
-      return new Response(
-        null,
-        {
-          status: 204,
-          headers:
-            corsHeaders
-        }
-      );
+      return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS
+      });
     }
 
     if (
       request.method === "GET" &&
       url.pathname === "/"
     ) {
-      const aiConfigured =
-        Boolean(
-          env.OPENAI_API_KEY
-        );
+      const configured =
+        Boolean(env.OPENAI_API_KEY);
 
       return json({
         ok: true,
-        service:
-          "Sa7bi AI Backend",
+        service: "Sa7bi AI Backend",
         status:
-          aiConfigured
+          configured
             ? "online"
             : "misconfigured",
-        ai_configured:
-          aiConfigured,
+        ai_configured: configured,
         text_model:
           env.OPENAI_MODEL ||
           DEFAULT_TEXT_MODEL,
         image_model:
           env.OPENAI_IMAGE_MODEL ||
           DEFAULT_IMAGE_MODEL,
-        version:
-          BACKEND_VERSION
+        version: BACKEND_VERSION
       });
     }
 
     if (
       request.method === "GET" &&
-      url.pathname ===
-        "/v1/news"
+      url.pathname === "/v1/news"
     ) {
-      return handleNews(
-        request
-      );
+      return handleNews(request);
     }
 
     if (
       request.method === "GET" &&
-      url.pathname ===
-        "/v1/audio/search"
+      url.pathname === "/v1/audio/search"
     ) {
-      return handleAudioSearch(
-        request
-      );
+      return handleAudioSearch(request);
     }
 
-    if (
-      !env.OPENAI_API_KEY
-    ) {
+    if (!env.OPENAI_API_KEY) {
       return json(
         {
           ok: false,
@@ -1152,8 +942,7 @@ export default {
 
     if (
       request.method === "POST" &&
-      url.pathname ===
-        "/v1/chat"
+      url.pathname === "/v1/chat"
     ) {
       return handleChat(
         request,
@@ -1163,8 +952,7 @@ export default {
 
     if (
       request.method === "POST" &&
-      url.pathname ===
-        "/v1/image"
+      url.pathname === "/v1/image"
     ) {
       return handleImageGeneration(
         request,
