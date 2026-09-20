@@ -30,7 +30,7 @@ class _AudioCenterScreenState
   @override
   void initState() {
     super.initState();
-    _init();
+    _initializeAudio();
   }
 
   @override
@@ -39,23 +39,36 @@ class _AudioCenterScreenState
     super.dispose();
   }
 
-  Future<void> _init() async {
+  Future<void> _initializeAudio() async {
     try {
-      final result =
+      final audioHandler =
           await AudioController.initialize();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
-        handler = result;
+        handler = audioHandler;
         loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         loading = false;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'تعذر تشغيل نظام الصوت حاليًا.',
+            textDirection: TextDirection.rtl,
+          ),
+        ),
+      );
     }
   }
 
@@ -67,6 +80,8 @@ class _AudioCenterScreenState
       return;
     }
 
+    FocusScope.of(context).unfocus();
+
     setState(() {
       searching = true;
       results = [];
@@ -76,27 +91,40 @@ class _AudioCenterScreenState
       final data =
           await AiService.searchAudio(query);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         results = data;
         searching = false;
       });
+
+      if (data.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'ملقتش نتائج صوتية متاحة للبحث ده حاليًا.',
+              textDirection: TextDirection.rtl,
+            ),
+          ),
+        );
+      }
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         results = [];
         searching = false;
       });
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             'تعذر البحث عن الصوت حاليًا.',
-            textDirection:
-                TextDirection.rtl,
+            textDirection: TextDirection.rtl,
           ),
         ),
       );
@@ -107,30 +135,34 @@ class _AudioCenterScreenState
     final localHandler = handler;
 
     if (localHandler == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'نظام الصوت لم يجهز بعد.',
+            textDirection: TextDirection.rtl,
+          ),
+        ),
+      );
       return;
     }
 
     try {
-      final result =
+      final FilePickerResult? result =
           await FilePicker.pickFiles(
         type: FileType.audio,
+        allowMultiple: false,
       );
 
-      /*
-       * مهم:
-       * file_picker 13.1.0 في هذا المشروع
-       * يرجع List<PlatformFile> مباشرة.
-       *
-       * PlatformFile في هذه النسخة لا يحتوي
-       * على bytes، لذلك نعتمد على path فقط.
-       */
-      if (result == null || result.isEmpty) {
+      if (result == null ||
+          result.files.isEmpty) {
         return;
       }
 
-      final picked = result.first;
+      final PlatformFile picked =
+          result.files.first;
 
-      final safePath = picked.path;
+      final String? safePath =
+          picked.path;
 
       if (safePath == null ||
           safePath.trim().isEmpty) {
@@ -145,15 +177,15 @@ class _AudioCenterScreenState
         artist: 'من الهاتف',
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'تعذر تشغيل الملف: $e',
-            textDirection:
-                TextDirection.rtl,
+            textDirection: TextDirection.rtl,
           ),
         ),
       );
@@ -169,23 +201,26 @@ class _AudioCenterScreenState
       return;
     }
 
+    if (item.url.trim().isEmpty) {
+      return;
+    }
+
     try {
       await localHandler.playUrl(
         url: item.url,
         title: item.title,
-        artist:
-            item.artist ?? 'صاحبي AI',
+        artist: item.artist ?? 'صاحبي AI',
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'تعذر تشغيل الصوت: $e',
-            textDirection:
-                TextDirection.rtl,
+            textDirection: TextDirection.rtl,
           ),
         ),
       );
@@ -206,15 +241,13 @@ class _AudioCenterScreenState
         title: const Text(
           'صوت صاحبي',
           style: TextStyle(
-            fontWeight:
-                FontWeight.w900,
+            fontWeight: FontWeight.w900,
           ),
         ),
       ),
       body: loading
           ? const Center(
-              child:
-                  CircularProgressIndicator(),
+              child: CircularProgressIndicator(),
             )
           : ListView(
               padding:
@@ -227,21 +260,15 @@ class _AudioCenterScreenState
               children: [
                 _buildHero(),
 
-                const SizedBox(
-                  height: 16,
-                ),
+                const SizedBox(height: 16),
 
                 _buildSearch(),
 
-                const SizedBox(
-                  height: 12,
-                ),
+                const SizedBox(height: 12),
 
                 _buildQuickSearches(),
 
-                const SizedBox(
-                  height: 18,
-                ),
+                const SizedBox(height: 18),
 
                 if (searching)
                   const Padding(
@@ -257,18 +284,14 @@ class _AudioCenterScreenState
                     _buildResult,
                   ),
 
-                const SizedBox(
-                  height: 12,
-                ),
+                const SizedBox(height: 12),
 
                 _buildLocalFiles(),
 
-                const SizedBox(
-                  height: 20,
-                ),
+                const SizedBox(height: 20),
 
                 const Text(
-                  'الصوت يفضل شغال أثناء التنقل داخل التطبيق، ويمكن التحكم فيه من إشعار الهاتف وشاشة القفل عند دعم النظام.',
+                  'الصوت يقدر يفضل شغال أثناء التنقل داخل التطبيق، ومع إعدادات النظام المناسبة يظهر في إشعار الهاتف وشاشة القفل.',
                   textDirection:
                       TextDirection.rtl,
                   textAlign:
@@ -277,6 +300,7 @@ class _AudioCenterScreenState
                     color:
                         Colors.white54,
                     height: 1.5,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -358,8 +382,9 @@ class _AudioCenterScreenState
           const TextStyle(
         color: Colors.white,
       ),
-      onSubmitted: (_) =>
-          _search(),
+      onSubmitted: (_) {
+        _search();
+      },
       decoration:
           InputDecoration(
         hintText:
@@ -429,20 +454,25 @@ class _AudioCenterScreenState
   ) {
     return Container(
       margin:
-          const EdgeInsets.only(bottom: 9),
-      decoration: BoxDecoration(
+          const EdgeInsets.only(
+        bottom: 9,
+      ),
+      decoration:
+          BoxDecoration(
         color:
             const Color(0xFF151923),
         borderRadius:
             BorderRadius.circular(18),
-        border: Border.all(
+        border:
+            Border.all(
           color:
               const Color(0x2238D9FF),
         ),
       ),
       child: ListTile(
-        onTap: () =>
-            _play(item),
+        onTap: () {
+          _play(item);
+        },
         leading: Container(
           width: 45,
           height: 45,
@@ -531,9 +561,11 @@ class _AudioCenterScreenState
                 Color(0xFF63E6FF),
             size: 34,
           ),
+
           const SizedBox(
             height: 7,
           ),
+
           const Text(
             'ملفات الصوت من الهاتف',
             textDirection:
@@ -545,9 +577,11 @@ class _AudioCenterScreenState
               fontSize: 16,
             ),
           ),
+
           const SizedBox(
             height: 4,
           ),
+
           const Text(
             'اختار ملف MP3 أو ملف صوتي من جهازك لتشغيله داخل صاحبي.',
             textDirection:
@@ -562,9 +596,11 @@ class _AudioCenterScreenState
               height: 1.4,
             ),
           ),
+
           const SizedBox(
             height: 10,
           ),
+
           FilledButton.icon(
             onPressed:
                 _pickLocalAudio,
