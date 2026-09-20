@@ -20,44 +20,46 @@ class ChatScreen extends StatefulWidget {
   });
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  State<ChatScreen> createState() =>
+      _ChatScreenState();
 }
 
-class _ChatMessage {
-  final bool isUser;
+class _Message {
+  final bool user;
   final String text;
   final Uint8List? image;
 
-  const _ChatMessage({
-    required this.isUser,
+  const _Message({
+    required this.user,
     required this.text,
     this.image,
   });
 }
 
-class _ChatScreenState extends State<ChatScreen> {
-  final TextEditingController _controller =
+class _ChatScreenState
+    extends State<ChatScreen> {
+  final controller =
       TextEditingController();
 
-  final ScrollController _scrollController =
+  final scrollController =
       ScrollController();
 
-  final ImagePicker _picker =
+  final picker =
       ImagePicker();
 
-  final stt.SpeechToText _speech =
+  final speech =
       stt.SpeechToText();
 
-  final FlutterTts _tts =
+  final tts =
       FlutterTts();
 
-  final List<_ChatMessage> _messages =
-      <_ChatMessage>[];
+  final messages =
+      <_Message>[];
 
-  bool _isLoading = false;
-  bool _isListening = false;
-  bool _speechReady = false;
-  bool _speaking = false;
+  bool loading = false;
+  bool listening = false;
+  bool speechReady = false;
+  bool speaking = false;
 
   @override
   void initState() {
@@ -67,324 +69,298 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _setupTts() async {
     try {
-      await _tts.setLanguage('ar-EG');
-      await _tts.setSpeechRate(0.48);
-      await _tts.setVolume(1.0);
-      await _tts.setPitch(1.0);
+      await tts.setLanguage('ar-EG');
+      await tts.setSpeechRate(0.48);
+      await tts.setVolume(1);
+      await tts.setPitch(1);
 
-      _tts.setStartHandler(() {
+      tts.setStartHandler(() {
         if (!mounted) return;
-
-        setState(() {
-          _speaking = true;
-        });
+        setState(() => speaking = true);
       });
 
-      _tts.setCompletionHandler(() {
+      tts.setCompletionHandler(() {
         if (!mounted) return;
-
-        setState(() {
-          _speaking = false;
-        });
+        setState(() => speaking = false);
       });
 
-      _tts.setCancelHandler(() {
+      tts.setCancelHandler(() {
         if (!mounted) return;
-
-        setState(() {
-          _speaking = false;
-        });
+        setState(() => speaking = false);
       });
 
-      _tts.setErrorHandler((_) {
+      tts.setErrorHandler((_) {
         if (!mounted) return;
-
-        setState(() {
-          _speaking = false;
-        });
+        setState(() => speaking = false);
       });
-    } catch (_) {
-      // الصوت يظل اختياريًا حتى لو لم تتوفر خدمة TTS.
-    }
+    } catch (_) {}
   }
 
   @override
   void dispose() {
-    _controller.dispose();
-    _scrollController.dispose();
+    controller.dispose();
+    scrollController.dispose();
 
-    try {
-      _tts.stop();
-    } catch (_) {}
-
-    try {
-      _speech.stop();
-    } catch (_) {}
+    tts.stop();
+    speech.stop();
 
     super.dispose();
   }
 
-  // ============================================================
-  // إرسال الرسائل
-  // ============================================================
+  Future<void> send() async {
+    final text =
+        controller.text.trim();
 
-  Future<void> _sendText() async {
-    final text = _controller.text.trim();
-
-    if (text.isEmpty ||
-        _isLoading ||
-        _isListening) {
+    if (
+      text.isEmpty ||
+      loading ||
+      listening
+    ) {
       return;
     }
 
-    _controller.clear();
+    controller.clear();
 
-    // إذا كان الطلب واضحًا أنه طلب إنشاء صورة،
-    // نرسله مباشرة لمسار توليد الصور.
-    if (_looksLikeImageRequest(text)) {
-      await _generateImageFromPrompt(text);
+    if (_isImageRequest(text)) {
+      await generateImage(text);
       return;
     }
 
-    final history = _messages
-        .where(
-          (message) =>
-              message.text.trim().isNotEmpty &&
-              message.image == null,
-        )
-        .map(
-          (message) => <String, String>{
-            'role': message.isUser
-                ? 'user'
-                : 'assistant',
-            'content': message.text.trim(),
-          },
-        )
-        .toList();
+    final history =
+        messages
+            .where(
+              (item) =>
+                  item.text
+                      .trim()
+                      .isNotEmpty &&
+                  item.image == null,
+            )
+            .map(
+              (item) => {
+                'role':
+                    item.user
+                        ? 'user'
+                        : 'assistant',
+                'content':
+                    item.text,
+              },
+            )
+            .toList();
 
     setState(() {
-      _messages.add(
-        _ChatMessage(
-          isUser: true,
+      messages.add(
+        _Message(
+          user: true,
           text: text,
         ),
       );
 
-      _isLoading = true;
+      loading = true;
     });
 
-    _scrollToBottom();
+    scrollBottom();
 
-    final reply = await AiService.getResponse(
+    final reply =
+        await AiService.getResponse(
       text,
-      serviceContext: widget.serviceContext,
+      serviceContext:
+          widget.serviceContext,
       history: history,
     );
 
     if (!mounted) return;
 
     setState(() {
-      _messages.add(
-        _ChatMessage(
-          isUser: false,
+      messages.add(
+        _Message(
+          user: false,
           text: reply,
         ),
       );
 
-      _isLoading = false;
+      loading = false;
     });
 
-    _scrollToBottom();
+    scrollBottom();
   }
 
-  bool _looksLikeImageRequest(String text) {
-    final value = text
-        .toLowerCase()
-        .replaceAll('أ', 'ا')
-        .replaceAll('إ', 'ا')
-        .replaceAll('آ', 'ا');
+  bool _isImageRequest(
+    String text,
+  ) {
+    final value =
+        text
+            .toLowerCase()
+            .replaceAll('أ', 'ا')
+            .replaceAll('إ', 'ا')
+            .replaceAll('آ', 'ا');
 
-    const imageWords = <String>[
-      'صوره',
+    final imageWords = [
       'صورة',
+      'صوره',
       'صور',
       'تصميم',
       'لوجو',
       'شعار',
       'بوستر',
-      'poster',
-      'logo',
       'image',
-      'images',
-      'generate image',
-      'generate a picture',
+      'logo',
+      'poster',
     ];
 
-    const actionWords = <String>[
+    final actionWords = [
       'اعمل',
       'اعملي',
       'اعمللي',
-      'اعمل لي',
       'انشئ',
       'انشئلي',
-      'انشئ لي',
       'صمم',
       'صمملي',
-      'صمم لي',
       'ارسم',
-      'ارسملي',
-      'ارسم لي',
-      'عايز صوره',
-      'عايز صورة',
-      'عايز صور',
-      'محتاج صوره',
-      'محتاج صورة',
-      'محتاج تصميم',
-      'generate',
+      'عايز',
+      'محتاج',
       'create',
+      'generate',
       'make',
       'draw',
     ];
 
-    final hasImageWord =
-        imageWords.any(value.contains);
-
-    final hasActionWord =
-        actionWords.any(value.contains);
-
-    return hasImageWord && hasActionWord;
+    return imageWords.any(
+          value.contains,
+        ) &&
+        actionWords.any(
+          value.contains,
+        );
   }
 
-  // ============================================================
-  // الكاميرا والصور
-  // ============================================================
-
-  Future<void> _takePhoto() async {
-    if (_isLoading) return;
+  Future<void> takePhoto() async {
+    if (loading) return;
 
     final permission =
         await Permission.camera.request();
 
     if (!permission.isGranted) {
-      _showMessage(
-        'اسمح للتطبيق باستخدام الكاميرا من إعدادات الهاتف.',
+      message(
+        'اسمح للتطبيق باستخدام الكاميرا.',
       );
       return;
     }
 
     try {
-      final image = await _picker.pickImage(
-        source: ImageSource.camera,
+      final image =
+          await picker.pickImage(
+        source:
+            ImageSource.camera,
         imageQuality: 60,
         maxWidth: 1280,
       );
 
-      if (image == null) return;
-
-      await _analyzeImage(image);
+      if (image != null) {
+        await analyzeImage(image);
+      }
     } catch (_) {
-      _showMessage(
-        'حدث خطأ أثناء فتح الكاميرا.',
+      message(
+        'تعذر فتح الكاميرا.',
       );
     }
   }
 
-  Future<void> _pickImage() async {
-    if (_isLoading) return;
+  Future<void> pickImage() async {
+    if (loading) return;
 
     try {
-      final image = await _picker.pickImage(
-        source: ImageSource.gallery,
+      final image =
+          await picker.pickImage(
+        source:
+            ImageSource.gallery,
         imageQuality: 60,
         maxWidth: 1280,
       );
 
-      if (image == null) return;
-
-      await _analyzeImage(image);
+      if (image != null) {
+        await analyzeImage(image);
+      }
     } catch (_) {
-      _showMessage(
-        'حدث خطأ أثناء اختيار الصورة.',
+      message(
+        'تعذر اختيار الصورة.',
       );
     }
   }
 
-  Future<void> _analyzeImage(
+  Future<void> analyzeImage(
     XFile image,
   ) async {
-    if (_isLoading) return;
+    if (loading) return;
 
     try {
-      final bytes = await image.readAsBytes();
+      final bytes =
+          await image.readAsBytes();
 
       if (bytes.isEmpty) {
-        _showMessage(
+        message(
           'لم أستطع قراءة الصورة.',
         );
         return;
       }
 
       setState(() {
-        _messages.add(
-          _ChatMessage(
-            isUser: true,
-            text: '📷 بعتّهالك يا صَحبي… حلّلها.',
+        messages.add(
+          _Message(
+            user: true,
+            text:
+                'أرسلت صورة لتحليلها.',
             image: bytes,
           ),
         );
 
-        _isLoading = true;
+        loading = true;
       });
 
-      _scrollToBottom();
+      scrollBottom();
 
-      final reply = await AiService.analyzeImage(
+      final reply =
+          await AiService.analyzeImage(
         image,
         prompt:
-            'حلل هذه الصورة بذكاء وبطريقة مفيدة. '
-            'اشرح ما يظهر فيها بوضوح، '
-            'وإذا كان هناك منتج أو طعام أو مشكلة أو مستند '
-            'اذكر أهم التفاصيل المفيدة. '
+            'حلل الصورة بطريقة مفيدة. '
+            'صف الأشياء الظاهرة بوضوح، '
+            'واذكر أهم التفاصيل المفيدة. '
             'لا تخمن الأشياء غير الواضحة.',
-        serviceContext: widget.serviceContext,
+        serviceContext:
+            widget.serviceContext,
       );
 
       if (!mounted) return;
 
       setState(() {
-        _messages.add(
-          _ChatMessage(
-            isUser: false,
+        messages.add(
+          _Message(
+            user: false,
             text: reply,
           ),
         );
 
-        _isLoading = false;
+        loading = false;
       });
 
-      _scrollToBottom();
+      scrollBottom();
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _isLoading = false;
+        loading = false;
       });
 
-      _showMessage(
-        'حصل خطأ أثناء تحليل الصورة.',
+      message(
+        'حدث خطأ أثناء تحليل الصورة.',
       );
     }
   }
 
-  // ============================================================
-  // الصوت - Speech To Text
-  // ============================================================
+  Future<void> toggleListening() async {
+    if (loading) return;
 
-  Future<void> _toggleListening() async {
-    if (_isLoading) return;
-
-    if (_isListening) {
-      await _stopListening();
+    if (listening) {
+      await stopListening();
       return;
     }
 
@@ -392,50 +368,52 @@ class _ChatScreenState extends State<ChatScreen> {
         await Permission.microphone.request();
 
     if (!permission.isGranted) {
-      _showMessage(
+      message(
         'اسمح للتطبيق باستخدام الميكروفون.',
       );
       return;
     }
 
     try {
-      if (!_speechReady) {
-        _speechReady =
-            await _speech.initialize(
+      if (!speechReady) {
+        speechReady =
+            await speech.initialize(
           onStatus: (status) {
             if (!mounted) return;
 
-            if (status == 'done' ||
-                status == 'notListening') {
-              setState(() {
-                _isListening = false;
-              });
+            if (
+              status == 'done' ||
+              status == 'notListening'
+            ) {
+              setState(
+                () => listening = false,
+              );
             }
           },
           onError: (_) {
             if (!mounted) return;
 
-            setState(() {
-              _isListening = false;
-            });
+            setState(
+              () => listening = false,
+            );
           },
         );
       }
 
-      if (!_speechReady) {
-        _showMessage(
-          'التعرف على الصوت غير متاح حاليًا.',
+      if (!speechReady) {
+        message(
+          'التعرف على الصوت غير متاح.',
         );
         return;
       }
 
       setState(() {
-        _isListening = true;
-        _controller.clear();
+        listening = true;
+        controller.clear();
       });
 
-      await _speech.listen(
-        onResult: _onSpeechResult,
+      await speech.listen(
+        onResult: onSpeechResult,
         listenOptions:
             stt.SpeechListenOptions(
           partialResults: true,
@@ -443,49 +421,40 @@ class _ChatScreenState extends State<ChatScreen> {
           autoPunctuation: true,
         ),
         localeId: 'ar_EG',
-        listenFor: const Duration(
+        listenFor:
+            const Duration(
           seconds: 35,
         ),
-        pauseFor: const Duration(
+        pauseFor:
+            const Duration(
           seconds: 2,
         ),
       );
     } catch (_) {
-      await _stopListening();
+      await stopListening();
 
-      _showMessage(
-        'الصوت حصل فيه تعليق بسيط. جرّب مرة ثانية.',
+      message(
+        'حدث تعليق بسيط في التعرف على الصوت.',
       );
     }
   }
 
-  Future<void> _stopListening() async {
-    try {
-      await _speech.stop();
-    } catch (_) {}
-
-    if (!mounted) return;
-
-    setState(() {
-      _isListening = false;
-    });
-  }
-
-  void _onSpeechResult(
+  void onSpeechResult(
     SpeechRecognitionResult result,
   ) {
     if (!mounted) return;
 
-    final words =
+    final text =
         result.recognizedWords.trim();
 
-    if (words.isNotEmpty) {
-      _controller.text = words;
+    if (text.isNotEmpty) {
+      controller.text = text;
 
-      _controller.selection =
+      controller.selection =
           TextSelection.fromPosition(
         TextPosition(
-          offset: _controller.text.length,
+          offset:
+              controller.text.length,
         ),
       );
     }
@@ -493,77 +462,108 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {});
 
     if (result.finalResult) {
-      _stopListening();
+      stopListening();
 
-      if (words.isNotEmpty) {
-        _sendText();
+      if (text.isNotEmpty) {
+        send();
       }
     }
   }
 
-  // ============================================================
-  // تحويل رد AI إلى صوت
-  // ============================================================
-
-  Future<void> _speak(String text) async {
-    if (text.trim().isEmpty) {
-      return;
-    }
-
+  Future<void> stopListening() async {
     try {
-      await _tts.stop();
-
-      if (mounted) {
-        setState(() {
-          _speaking = true;
-        });
-      }
-
-      await _tts.setLanguage('ar-EG');
-      await _tts.setSpeechRate(0.48);
-      await _tts.speak(text);
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        _speaking = false;
-      });
-    }
-  }
-
-  Future<void> _stopSpeaking() async {
-    try {
-      await _tts.stop();
+      await speech.stop();
     } catch (_) {}
 
     if (!mounted) return;
 
-    setState(() {
-      _speaking = false;
-    });
+    setState(
+      () => listening = false,
+    );
   }
 
-  // ============================================================
-  // إنشاء الصور
-  // ============================================================
+  String cleanSpeech(
+    String value,
+  ) {
+    var text = value;
 
-  Future<void> _generateImageFromPrompt(
+    // إزالة الرموز والإيموجي من الكلام المنطوق
+    text = text.replaceAll(
+      RegExp(
+        r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
+        unicode: true,
+      ),
+      ' ',
+    );
+
+    text = text.replaceAll(
+      RegExp(r'[*_#~`]+'),
+      ' ',
+    );
+
+    text = text.replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+
+    return text.trim();
+  }
+
+  Future<void> speak(
+    String text,
+  ) async {
+    final clean =
+        cleanSpeech(text);
+
+    if (clean.isEmpty) return;
+
+    try {
+      await tts.stop();
+
+      setState(
+        () => speaking = true,
+      );
+
+      await tts.speak(clean);
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(
+        () => speaking = false,
+      );
+    }
+  }
+
+  Future<void> stopSpeaking() async {
+    try {
+      await tts.stop();
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    setState(
+      () => speaking = false,
+    );
+  }
+
+  Future<void> generateImage(
     String prompt,
   ) async {
-    if (_isLoading) return;
+    if (loading) return;
 
     setState(() {
-      _messages.add(
-        _ChatMessage(
-          isUser: true,
-          text: '🎨 طلب صورة\n$prompt',
+      messages.add(
+        _Message(
+          user: true,
+          text:
+              'طلب إنشاء صورة:\n$prompt',
         ),
       );
 
-      _isLoading = true;
+      loading = true;
     });
 
-    _scrollToBottom();
+    scrollBottom();
 
     final result =
         await AiService.generateImage(
@@ -574,65 +574,64 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (!result.isSuccess) {
       setState(() {
-        _messages.add(
-          _ChatMessage(
-            isUser: false,
+        messages.add(
+          _Message(
+            user: false,
             text:
-                'حاولت أعمل الصورة، لكن خدمة الصور قالت:\n'
-                '${result.error ?? 'حدث خطأ غير معروف.'}',
+                result.error ??
+                'تعذر إنشاء الصورة.',
           ),
         );
 
-        _isLoading = false;
+        loading = false;
       });
 
-      _scrollToBottom();
+      scrollBottom();
       return;
     }
 
     setState(() {
-      _messages.add(
-        _ChatMessage(
-          isUser: false,
+      messages.add(
+        _Message(
+          user: false,
           text:
-              'خلصت ✨\nعملت لك الصورة المطلوبة.',
+              'تم إنشاء الصورة.',
           image: result.bytes,
         ),
       );
 
-      _isLoading = false;
+      loading = false;
     });
 
-    _scrollToBottom();
+    scrollBottom();
   }
 
-  Future<void> _generateImage() async {
-    if (_isLoading) return;
+  Future<void> showImageGenerator() async {
+    if (loading) return;
 
-    final promptController =
+    final input =
         TextEditingController();
 
     final prompt =
         await showDialog<String>(
       context: context,
-      builder: (dialogContext) {
+      builder: (dialog) {
         return AlertDialog(
           backgroundColor:
               const Color(0xFF171A24),
           title: const Text(
-            '🎨 إنشاء صورة',
-            textDirection: TextDirection.rtl,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
+            'إنشاء صورة',
+            textDirection:
+                TextDirection.rtl,
           ),
           content: TextField(
-            controller: promptController,
-            autofocus: true,
+            controller: input,
             maxLines: 4,
-            textDirection: TextDirection.rtl,
-            style: const TextStyle(
+            autofocus: true,
+            textDirection:
+                TextDirection.rtl,
+            style:
+                const TextStyle(
               color: Colors.white,
             ),
             decoration:
@@ -641,73 +640,49 @@ class _ChatScreenState extends State<ChatScreen> {
                   'اكتب وصف الصورة...',
               hintTextDirection:
                   TextDirection.rtl,
-              hintStyle: TextStyle(
-                color: Colors.white38,
-              ),
-              enabledBorder:
-                  UnderlineInputBorder(
-                borderSide: BorderSide(
-                  color: Color(0x44FFFFFF),
-                ),
-              ),
-              focusedBorder:
-                  UnderlineInputBorder(
-                borderSide: BorderSide(
-                  color: Color(0xFFFFD76A),
-                ),
-              ),
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                );
-              },
-              child: const Text(
-                'إلغاء',
+              onPressed: () =>
+                  Navigator.pop(
+                dialog,
               ),
+              child:
+                  const Text('إلغاء'),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  promptController.text,
-                );
-              },
-              child: const Text(
-                'إنشاء',
+              onPressed: () =>
+                  Navigator.pop(
+                dialog,
+                input.text,
               ),
+              child:
+                  const Text('إنشاء'),
             ),
           ],
         );
       },
     );
 
-    promptController.dispose();
+    input.dispose();
 
-    if (prompt == null ||
-        prompt.trim().isEmpty) {
+    if (
+      prompt == null ||
+      prompt.trim().isEmpty
+    ) {
       return;
     }
 
-    await _generateImageFromPrompt(
+    await generateImage(
       prompt.trim(),
     );
   }
-
-  // ============================================================
-  // واجهة الشاشة
-  // ============================================================
 
   @override
   Widget build(
     BuildContext context,
   ) {
-    final title =
-        widget.serviceTitle ?? 'صَحبي AI';
-
     return Scaffold(
       backgroundColor:
           const Color(0xFF070911),
@@ -716,30 +691,30 @@ class _ChatScreenState extends State<ChatScreen> {
             const Color(0xFF10131C),
         foregroundColor:
             Colors.white,
-        elevation: 0,
         centerTitle: true,
         title: Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w900,
+          widget.serviceTitle ??
+              'صاحبي AI',
+          style:
+              const TextStyle(
+            fontWeight:
+                FontWeight.w900,
           ),
         ),
         actions: [
           IconButton(
-            tooltip:
-                _speaking
-                    ? 'إيقاف الصوت'
-                    : 'الصوت',
             onPressed:
-                _speaking
-                    ? _stopSpeaking
+                speaking
+                    ? stopSpeaking
                     : null,
             icon: Icon(
-              _speaking
+              speaking
                   ? Icons.volume_off_rounded
                   : Icons.volume_up_rounded,
               color:
-                  const Color(0xFFFFD76A),
+                  const Color(
+                0xFFFFD76A,
+              ),
             ),
           ),
         ],
@@ -748,116 +723,126 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           children: [
             Expanded(
-              child: _messages.isEmpty
-                  ? _buildWelcome()
-                  : ListView.builder(
-                      controller:
-                          _scrollController,
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior
-                              .onDrag,
-                      padding:
-                          const EdgeInsets.fromLTRB(
-                        12,
-                        14,
-                        12,
-                        12,
-                      ),
-                      itemCount:
-                          _messages.length,
-                      itemBuilder:
-                          (context, index) {
-                        return _MessageBubble(
-                          message:
-                              _messages[index],
-                          onSpeak:
-                              _speak,
-                        );
-                      },
-                    ),
+              child:
+                  messages.isEmpty
+                      ? _welcome()
+                      : ListView.builder(
+                          controller:
+                              scrollController,
+                          padding:
+                              const EdgeInsets.all(
+                            12,
+                          ),
+                          itemCount:
+                              messages.length,
+                          itemBuilder:
+                              (_, index) {
+                            final item =
+                                messages[index];
+
+                            return _Bubble(
+                              item: item,
+                              speak: speak,
+                            );
+                          },
+                        ),
             ),
-            if (_isListening)
-              _buildListeningBar(),
-            if (_isLoading)
-              _buildLoadingBar(),
-            _buildInput(),
+
+            if (listening)
+              const Padding(
+                padding:
+                    EdgeInsets.all(8),
+                child: Text(
+                  'سامعك... اتكلم براحتك',
+                  textDirection:
+                      TextDirection.rtl,
+                  style: TextStyle(
+                    color:
+                        Color(0xFF67E8F9),
+                  ),
+                ),
+              ),
+
+            if (loading)
+              const LinearProgressIndicator(
+                minHeight: 2,
+              ),
+
+            _input(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildWelcome() {
+  Widget _welcome() {
     return Center(
       child: Padding(
         padding:
-            const EdgeInsets.all(24),
+            const EdgeInsets.all(25),
         child: Column(
           mainAxisAlignment:
               MainAxisAlignment.center,
           children: [
             Container(
-              width: 88,
-              height: 88,
-              padding:
-                  const EdgeInsets.all(3),
+              width: 84,
+              height: 84,
               decoration:
                   const BoxDecoration(
-                shape: BoxShape.circle,
+                shape:
+                    BoxShape.circle,
                 gradient:
                     SweepGradient(
                   colors: [
                     Color(0xFFFFD76A),
-                    Color(0xFF8B5CF6),
-                    Color(0xFF22D3EE),
+                    Color(0xFF7864FF),
+                    Color(0xFF63E6FF),
                     Color(0xFFFFD76A),
                   ],
                 ),
               ),
-              child: Container(
-                decoration:
-                    const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color:
-                      Color(0xFF10131C),
-                ),
-                child: const Center(
-                  child: Text(
-                    'س',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 46,
-                      fontWeight:
-                          FontWeight.w900,
-                    ),
+              child: const Center(
+                child: Text(
+                  'س',
+                  style:
+                      TextStyle(
+                    color:
+                        Colors.white,
+                    fontSize: 45,
+                    fontWeight:
+                        FontWeight.w900,
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(
+              height: 18,
+            ),
             const Text(
-              'قول يا صاحبي 👋',
+              'قول يا صاحبي',
               textDirection:
                   TextDirection.rtl,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
+              style:
+                  TextStyle(
                 fontSize: 25,
                 fontWeight:
                     FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(
+              height: 8,
+            ),
             const Text(
-              'اكتب أو اتكلم أو ابعت صورة…\n'
-              'ولو عايز صورة جديدة قول له: اعمل لي صورة 🎨',
+              'اكتب أو اتكلم أو ابعت صورة أو اطلب إنشاء صورة.',
               textDirection:
                   TextDirection.rtl,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 15,
-                height: 1.6,
+              textAlign:
+                  TextAlign.center,
+              style:
+                  TextStyle(
+                color:
+                    Colors.white60,
+                height: 1.5,
               ),
             ),
           ],
@@ -866,107 +851,13 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildLoadingBar() {
-    return const Padding(
-      padding:
-          EdgeInsets.only(
-        left: 18,
-        right: 18,
-        bottom: 7,
-      ),
-      child: Row(
-        textDirection:
-            TextDirection.rtl,
-        children: [
-          SizedBox(
-            width: 15,
-            height: 15,
-            child:
-                CircularProgressIndicator(
-              strokeWidth: 2,
-            ),
-          ),
-          SizedBox(width: 8),
-          Text(
-            'صَحبي بيفكر… ✨',
-            style: TextStyle(
-              color: Colors.white60,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildListeningBar() {
-    return Container(
-      margin:
-          const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 4,
-      ),
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 10,
-      ),
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(0x3322D3EE),
-        borderRadius:
-            BorderRadius.circular(16),
-        border:
-            Border.all(
-          color:
-              const Color(0x5533D9FF),
-        ),
-      ),
-      child: Row(
-        textDirection:
-            TextDirection.rtl,
-        children: [
-          const Icon(
-            Icons.mic_rounded,
-            color:
-                Color(0xFF67E8F9),
-          ),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'سامعك… اتكلم براحتك 🎙️',
-              textDirection:
-                  TextDirection.rtl,
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight:
-                    FontWeight.w700,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed:
-                _stopListening,
-            icon:
-                const Icon(
-              Icons.stop_circle,
-              color:
-                  Color(0xFFFF6B6B),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInput() {
+  Widget _input() {
     return Container(
       padding:
           const EdgeInsets.fromLTRB(
-        8,
-        8,
-        8,
+        6,
+        7,
+        6,
         10,
       ),
       decoration:
@@ -986,151 +877,135 @@ class _ChatScreenState extends State<ChatScreen> {
         crossAxisAlignment:
             CrossAxisAlignment.end,
         children: [
-          _InputIconButton(
+          IconButton(
+            onPressed:
+                takePhoto,
             icon:
-                Icons.camera_alt_rounded,
-            color:
-                const Color(0xFFFFD76A),
-            onTap:
-                _takePhoto,
+                const Icon(
+              Icons.camera_alt_rounded,
+              color:
+                  Color(0xFFFFD76A),
+            ),
           ),
-          _InputIconButton(
+          IconButton(
+            onPressed:
+                pickImage,
             icon:
-                Icons.photo_library_rounded,
-            color:
-                const Color(0xFFB794F4),
-            onTap:
-                _pickImage,
+                const Icon(
+              Icons.photo_library_rounded,
+              color:
+                  Color(0xFFB794F4),
+            ),
           ),
-          _InputIconButton(
+          IconButton(
+            onPressed:
+                showImageGenerator,
             icon:
-                Icons.image_rounded,
-            color:
-                const Color(0xFF67E8F9),
-            onTap:
-                _generateImage,
+                const Icon(
+              Icons.auto_awesome_rounded,
+              color:
+                  Color(0xFF67E8F9),
+            ),
           ),
-          _InputIconButton(
-            icon: _isListening
-                ? Icons.stop_rounded
-                : Icons.mic_rounded,
-            color: _isListening
-                ? const Color(0xFFFF6B6B)
-                : const Color(0xFF67E8F9),
-            onTap:
-                _toggleListening,
+          IconButton(
+            onPressed:
+                toggleListening,
+            icon: Icon(
+              listening
+                  ? Icons.stop_rounded
+                  : Icons.mic_rounded,
+              color:
+                  listening
+                      ? const Color(
+                          0xFFFF6B6B,
+                        )
+                      : const Color(
+                          0xFF67E8F9,
+                        ),
+            ),
           ),
           Expanded(
             child: TextField(
               controller:
-                  _controller,
+                  controller,
               enabled:
-                  !_isLoading,
-              minLines: 1,
+                  !loading,
               maxLines: 4,
               textDirection:
                   TextDirection.rtl,
               style:
                   const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
+                color:
+                    Colors.white,
               ),
               decoration:
                   InputDecoration(
                 hintText:
-                    _isListening
-                        ? 'جاري الاستماع…'
-                        : 'اكتب لصَحبي…',
+                    listening
+                        ? 'جاري الاستماع...'
+                        : 'اكتب لصاحبي...',
                 hintTextDirection:
                     TextDirection.rtl,
-                hintStyle:
-                    const TextStyle(
-                  color:
-                      Colors.white38,
-                ),
                 filled: true,
                 fillColor:
                     const Color(
                   0xFF171A24,
                 ),
-                contentPadding:
-                    const EdgeInsets
-                        .symmetric(
-                  horizontal: 14,
-                  vertical: 11,
-                ),
                 border:
                     OutlineInputBorder(
                   borderRadius:
-                      BorderRadius
-                          .circular(20),
-                  borderSide:
-                      BorderSide.none,
-                ),
-                enabledBorder:
-                    OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius
-                          .circular(20),
-                  borderSide:
-                      BorderSide.none,
-                ),
-                focusedBorder:
-                    OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius
-                          .circular(20),
-                  borderSide:
-                      const BorderSide(
-                    color:
-                        Color(0x66FFD76A),
+                      BorderRadius.circular(
+                    20,
                   ),
+                  borderSide:
+                      BorderSide.none,
                 ),
               ),
-              onSubmitted: (_) {
-                if (!_isLoading) {
-                  _sendText();
-                }
-              },
+              onSubmitted: (_) =>
+                  send(),
             ),
           ),
-          const SizedBox(width: 6),
-          _InputIconButton(
+          IconButton(
+            onPressed:
+                send,
             icon:
-                Icons.send_rounded,
-            color:
-                const Color(0xFFFFD76A),
-            onTap:
-                _sendText,
+                const Icon(
+              Icons.send_rounded,
+              color:
+                  Color(0xFFFFD76A),
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _scrollToBottom() {
+  void scrollBottom() {
     WidgetsBinding.instance
-        .addPostFrameCallback((_) {
-      if (!_scrollController
-          .hasClients) {
-        return;
-      }
+        .addPostFrameCallback(
+      (_) {
+        if (!scrollController
+            .hasClients) {
+          return;
+        }
 
-      _scrollController.animateTo(
-        _scrollController
-            .position
-            .maxScrollExtent,
-        duration:
-            const Duration(
-          milliseconds: 220,
-        ),
-        curve: Curves.easeOut,
-      );
-    });
+        scrollController.animateTo(
+          scrollController
+              .position
+              .maxScrollExtent,
+          duration:
+              const Duration(
+            milliseconds: 220,
+          ),
+          curve:
+              Curves.easeOut,
+        );
+      },
+    );
   }
 
-  void _showMessage(
-    String message,
+  void message(
+    String text,
   ) {
     if (!mounted) return;
 
@@ -1139,49 +1014,36 @@ class _ChatScreenState extends State<ChatScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(
-            message,
+            text,
             textDirection:
                 TextDirection.rtl,
           ),
-          behavior:
-              SnackBarBehavior.floating,
         ),
       );
   }
 }
 
-// ============================================================
-// فقاعة الرسائل
-// ============================================================
+class _Bubble
+    extends StatelessWidget {
+  final _Message item;
+  final Future<void> Function(
+    String,
+  ) speak;
 
-class _MessageBubble extends StatelessWidget {
-  final _ChatMessage message;
-  final Future<void> Function(String)
-      onSpeak;
-
-  const _MessageBubble({
-    required this.message,
-    required this.onSpeak,
+  const _Bubble({
+    required this.item,
+    required this.speak,
   });
 
   @override
   Widget build(
     BuildContext context,
   ) {
-    final isUser =
-        message.isUser;
-
-    final emotion =
-        isUser
-            ? '👤'
-            : _emotionFor(
-                message.text,
-              );
-
     return Align(
-      alignment: isUser
-          ? Alignment.centerRight
-          : Alignment.centerLeft,
+      alignment:
+          item.user
+              ? Alignment.centerRight
+              : Alignment.centerLeft,
       child: Container(
         constraints:
             const BoxConstraints(
@@ -1192,234 +1054,121 @@ class _MessageBubble extends StatelessWidget {
           bottom: 12,
         ),
         padding:
-            const EdgeInsets.fromLTRB(
-          14,
-          11,
-          14,
-          8,
-        ),
+            const EdgeInsets.all(13),
         decoration:
             BoxDecoration(
-          gradient: isUser
-              ? const LinearGradient(
-                  begin:
-                      Alignment.topRight,
-                  end:
-                      Alignment.bottomLeft,
-                  colors: [
+          gradient:
+              LinearGradient(
+            colors: item.user
+                ? const [
                     Color(0xFF7546A8),
                     Color(0xFF38215E),
-                  ],
-                )
-              : const LinearGradient(
-                  begin:
-                      Alignment.topRight,
-                  end:
-                      Alignment.bottomLeft,
-                  colors: [
+                  ]
+                : const [
                     Color(0xFF1F2B39),
                     Color(0xFF121821),
                   ],
-                ),
+          ),
           borderRadius:
-              BorderRadius.only(
-            topLeft:
-                const Radius.circular(20),
-            topRight:
-                const Radius.circular(20),
-            bottomLeft:
-                Radius.circular(
-              isUser ? 20 : 5,
-            ),
-            bottomRight:
-                Radius.circular(
-              isUser ? 5 : 20,
-            ),
+              BorderRadius.circular(
+            20,
           ),
           border:
               Border.all(
-            color: isUser
-                ? const Color(0x665E3D88)
-                : const Color(0x3348D7FF),
+            color: item.user
+                ? const Color(
+                    0x665E3D88,
+                  )
+                : const Color(
+                    0x3348D7FF,
+                  ),
           ),
-          boxShadow:
-              const [
-            BoxShadow(
-              color:
-                  Color(0x22000000),
-              blurRadius: 10,
-              offset:
-                  Offset(0, 4),
-            ),
-          ],
         ),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisSize:
-                  MainAxisSize.min,
-              children: [
-                Text(
-                  emotion,
-                  style:
-                      const TextStyle(
-                    fontSize: 15,
+            Text(
+              item.user
+                  ? 'أنت'
+                  : 'صاحبي AI',
+              textDirection:
+                  TextDirection.rtl,
+              style:
+                  TextStyle(
+                color: item.user
+                    ? const Color(
+                        0xFFE9D5FF,
+                      )
+                    : const Color(
+                        0xFF8BE9FD,
+                      ),
+                fontWeight:
+                    FontWeight.w900,
+              ),
+            ),
+            if (item.image != null)
+              Padding(
+                padding:
+                    const EdgeInsets.only(
+                  top: 8,
+                ),
+                child:
+                    ClipRRect(
+                  borderRadius:
+                      BorderRadius.circular(
+                    15,
+                  ),
+                  child:
+                      Image.memory(
+                    item.image!,
+                    width: 330,
+                    height: 230,
+                    fit:
+                        BoxFit.cover,
                   ),
                 ),
-                const SizedBox(
-                  width: 6,
+              ),
+            if (item.text.isNotEmpty)
+              Padding(
+                padding:
+                    const EdgeInsets.only(
+                  top: 8,
                 ),
-                Text(
-                  isUser
-                      ? 'أنت'
-                      : 'صَحبي AI',
+                child:
+                    SelectableText(
+                  item.text,
                   textDirection:
                       TextDirection.rtl,
-                  style: TextStyle(
-                    color: isUser
-                        ? const Color(
-                            0xFFE9D5FF,
-                          )
-                        : const Color(
-                            0xFF8BE9FD,
-                          ),
-                    fontSize: 12,
-                    fontWeight:
-                        FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            if (message.image != null) ...[
-              const SizedBox(height: 9),
-              ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(16),
-                child: Image.memory(
-                  message.image!,
-                  width: 330,
-                  height: 230,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                ),
-              ),
-            ],
-            if (message.text.trim().isNotEmpty) ...[
-              const SizedBox(height: 8),
-              SelectableText(
-                message.text,
-                textDirection:
-                    TextDirection.rtl,
-                textAlign:
-                    TextAlign.right,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  height: 1.55,
-                  fontWeight: isUser
-                      ? FontWeight.w600
-                      : FontWeight.w500,
-                ),
-              ),
-            ],
-            if (!isUser &&
-                message.text.trim().isNotEmpty)
-              Align(
-                alignment:
-                    Alignment.centerLeft,
-                child: IconButton(
-                  visualDensity:
-                      VisualDensity.compact,
-                  onPressed: () =>
-                      onSpeak(
-                    message.text,
-                  ),
-                  icon:
-                      const Icon(
-                    Icons
-                        .volume_up_rounded,
+                  textAlign:
+                      TextAlign.right,
+                  style:
+                      const TextStyle(
                     color:
-                        Color(0xFFFFD76A),
-                    size: 20,
+                        Colors.white,
+                    fontSize: 16,
+                    height: 1.55,
                   ),
+                ),
+              ),
+            if (
+              !item.user &&
+              item.text.trim().isNotEmpty
+            )
+              IconButton(
+                onPressed:
+                    () => speak(
+                  item.text,
+                ),
+                icon:
+                    const Icon(
+                  Icons.volume_up_rounded,
+                  color:
+                      Color(0xFFFFD76A),
                 ),
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  String _emotionFor(
-    String text,
-  ) {
-    final value =
-        text.toLowerCase();
-
-    if (value.contains('مبروك') ||
-        value.contains('ممتاز') ||
-        value.contains('رائع') ||
-        value.contains('نجاح')) {
-      return '🎉';
-    }
-
-    if (value.contains('حزين') ||
-        value.contains('آسف') ||
-        value.contains('صعب') ||
-        value.contains('مشكلة')) {
-      return '🤝';
-    }
-
-    if (value.contains('تحذير') ||
-        value.contains('خطر') ||
-        value.contains('انتبه')) {
-      return '⚠️';
-    }
-
-    if (value.contains('فكرة') ||
-        value.contains('إبداع') ||
-        value.contains('تصميم')) {
-      return '✨';
-    }
-
-    if (value.contains('سؤال') ||
-        value.contains('معلومة')) {
-      return '💡';
-    }
-
-    return '🤖';
-  }
-}
-
-// ============================================================
-// أزرار الإدخال
-// ============================================================
-
-class _InputIconButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _InputIconButton({
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return IconButton(
-      onPressed: onTap,
-      visualDensity:
-          VisualDensity.compact,
-      icon: Icon(
-        icon,
-        color: color,
-        size: 23,
       ),
     );
   }
