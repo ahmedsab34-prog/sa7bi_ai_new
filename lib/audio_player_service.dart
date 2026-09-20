@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
@@ -406,7 +408,7 @@ final value = arguments is num
 : 1.0;
 
   await _player.setVolume(
-    value.clamp(0.0, 1.0),
+    value.clamp(0.0, 1.0).toDouble(),
   );
 }
 
