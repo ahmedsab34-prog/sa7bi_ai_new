@@ -6,7 +6,7 @@ const MAX_TOTAL_CHARS = 24000;
 
 const MAX_IMAGE_CHARS = 6 * 1024 * 1024;
 
-const BACKEND_VERSION = "2.3.0";
+const BACKEND_VERSION = "2.4.0";
 
 const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2.5-flare";
@@ -146,6 +146,15 @@ function stripHtml(value) {
     .trim();
 }
 
+function normalizeArabic(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .trim();
+}
+
 async function callOpenAI(
   env,
   payload,
@@ -193,15 +202,10 @@ async function handleChat(
 
   const contentLength =
     Number(
-      request.headers.get(
-        "content-length"
-      ) || 0
+      request.headers.get("content-length") || 0
     );
 
-  if (
-    contentLength >
-    MAX_BODY_BYTES
-  ) {
+  if (contentLength > MAX_BODY_BYTES) {
     return json(
       {
         ok: false,
@@ -214,14 +218,12 @@ async function handleChat(
   let body;
 
   try {
-    const raw =
-      await request.text();
+    const raw = await request.text();
 
     if (
       new TextEncoder()
         .encode(raw)
-        .byteLength >
-      MAX_BODY_BYTES
+        .byteLength > MAX_BODY_BYTES
     ) {
       return json(
         {
@@ -232,8 +234,7 @@ async function handleChat(
       );
     }
 
-    body =
-      JSON.parse(raw);
+    body = JSON.parse(raw);
   } catch {
     return json(
       {
@@ -245,9 +246,7 @@ async function handleChat(
   }
 
   const messages =
-    cleanMessages(
-      body?.messages
-    );
+    cleanMessages(body?.messages);
 
   if (!messages) {
     return json(
@@ -259,8 +258,7 @@ async function handleChat(
     );
   }
 
-  const image =
-    body?.image;
+  const image = body?.image;
 
   if (
     image !== undefined &&
@@ -291,9 +289,7 @@ async function handleChat(
 
   if (image) {
     const lastMessage =
-      messages[
-        messages.length - 1
-      ];
+      messages[messages.length - 1];
 
     const previousMessages =
       messages.slice(
@@ -339,35 +335,21 @@ async function handleChat(
       await callOpenAI(
         env,
         {
-          instructions:
-            [
-              "أنت صَحبي AI.",
-              "",
-              "أنت مساعد عربي ودود وذكي وقريب من المستخدم.",
-              "افهم نبرة المستخدم ورد بطريقة إنسانية وطبيعية.",
-              "",
-              "اجعل الردود:",
-              "- واضحة ومباشرة.",
-              "- مفيدة وليست طويلة بلا داعٍ.",
-              "- دافئة وقريبة من الكلام الطبيعي.",
-              "- فيها لمسة emotion مناسبة للسياق.",
-              "- استخدم الإيموجي باعتدال عندما يضيف إحساسًا للرد.",
-              "- لا تستخدم نفس الإيموجي في كل رد.",
-              "- لا تبدأ كل رد بعبارات محفوظة.",
-              "",
-              "إذا كان المستخدم حزينًا أو قلقًا، كن هادئًا ومتعاونًا.",
-              "إذا كان متحمسًا أو يطلب فكرة إبداعية، شاركه الحماس.",
-              "إذا كان يسأل سؤالًا تقنيًا، كن عمليًا ودقيقًا.",
-              "إذا كان يريد إجابة قصيرة، لا تطل الرد.",
-              "",
-              "لا تدّعي أنك نفذت شيئًا لم تنفذه.",
-              "لا تخترع معلومات.",
-              "إذا كانت المعلومة غير مؤكدة، وضح ذلك.",
-              "عند تحليل صورة، صف فقط ما يظهر بشكل معقول.",
-              "لا تستنتج معلومات شخصية أو غير مرئية من الصورة.",
-              "",
-              "استخدم العربية افتراضيًا، إلا إذا طلب المستخدم لغة أخرى."
-            ].join(" "),
+          instructions: [
+            "أنت صَحبي AI.",
+            "أنت مساعد عربي ودود وذكي وقريب من المستخدم.",
+            "افهم نبرة المستخدم ورد بطريقة إنسانية وطبيعية.",
+            "اجعل الرد واضحًا ومباشرًا ومفيدًا.",
+            "لا تطل الرد بدون داعٍ.",
+            "استخدم العربية افتراضيًا.",
+            "استخدم الإيموجي باعتدال.",
+            "لا تصف الإيموجي أو الرموز في الكلام المنطوق.",
+            "لا تدّعي أنك نفذت شيئًا لم تنفذه.",
+            "لا تخترع معلومات.",
+            "إذا كانت المعلومة غير مؤكدة وضح ذلك.",
+            "عند تحليل صورة صف فقط ما يظهر بوضوح.",
+            "لا تستنتج معلومات شخصية غير ظاهرة."
+          ].join(" "),
 
           reasoning: {
             effort: "none"
@@ -409,17 +391,16 @@ async function handleChat(
         status:
           openaiResponse.status,
         type:
-          details?.error?.type ||
-          null,
+          details?.error?.type || null,
         code:
-          details?.error?.code ||
-          null
+          details?.error?.code || null,
+        message:
+          details?.error?.message || null
       }
     );
 
     if (
-      openaiResponse.status ===
-      429
+      openaiResponse.status === 429
     ) {
       return json(
         {
@@ -432,10 +413,8 @@ async function handleChat(
     }
 
     if (
-      openaiResponse.status ===
-      401 ||
-      openaiResponse.status ===
-      403
+      openaiResponse.status === 401 ||
+      openaiResponse.status === 403
     ) {
       return json(
         {
@@ -451,6 +430,7 @@ async function handleChat(
       {
         ok: false,
         error:
+          details?.error?.message ||
           "AI service temporarily unavailable"
       },
       502
@@ -466,8 +446,7 @@ async function handleChat(
     return json(
       {
         ok: false,
-        error:
-          "Invalid AI response"
+        error: "Invalid AI response"
       },
       502
     );
@@ -511,31 +490,9 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
-        error:
-          "JSON request required"
+        error: "JSON request required"
       },
       415
-    );
-  }
-
-  const contentLength =
-    Number(
-      request.headers.get(
-        "content-length"
-      ) || 0
-    );
-
-  if (
-    contentLength >
-    64 * 1024
-  ) {
-    return json(
-      {
-        ok: false,
-        error:
-          "Image prompt request is too large"
-      },
-      413
     );
   }
 
@@ -548,8 +505,7 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
-        error:
-          "Invalid JSON"
+        error: "Invalid JSON"
       },
       400
     );
@@ -639,20 +595,16 @@ async function handleImageGeneration(
         status:
           response.status,
         type:
-          details?.error?.type ||
-          null,
+          details?.error?.type || null,
         code:
-          details?.error?.code ||
-          null,
+          details?.error?.code || null,
         message:
-          details?.error?.message ||
-          null
+          details?.error?.message || null
       }
     );
 
     if (
-      response.status ===
-      429
+      response.status === 429
     ) {
       return json(
         {
@@ -665,10 +617,8 @@ async function handleImageGeneration(
     }
 
     if (
-      response.status ===
-      401 ||
-      response.status ===
-      403
+      response.status === 401 ||
+      response.status === 403
     ) {
       return json(
         {
@@ -711,8 +661,7 @@ async function handleImageGeneration(
     data?.data?.[0]?.b64_json;
 
   if (
-    typeof imageBase64 !==
-      "string" ||
+    typeof imageBase64 !== "string" ||
     !imageBase64.trim()
   ) {
     return json(
@@ -733,18 +682,264 @@ async function handleImageGeneration(
   });
 }
 
-async function handleNews(
+async function handleAudioSearch(
   request
 ) {
-  if (
-    request.method !==
-    "GET"
-  ) {
+  if (request.method !== "GET") {
+    return json(
+      {
+        ok: false,
+        error: "GET required"
+      },
+      405
+    );
+  }
+
+  const query =
+    new URL(request.url)
+      .searchParams
+      .get("q")
+      ?.trim() || "";
+
+  if (!query) {
+    return json(
+      {
+        ok: false,
+        error: "Query is required"
+      },
+      400
+    );
+  }
+
+  try {
+    const normalizedQuery =
+      normalizeArabic(query);
+
+    const [suraResponse, reciterResponse] =
+      await Promise.all([
+        fetch(
+          "https://www.mp3quran.net/api/v3/suwar?language=ar",
+          {
+            cf: {
+              cacheTtl: 3600,
+              cacheEverything: true
+            }
+          }
+        ),
+        fetch(
+          "https://www.mp3quran.net/api/v3/reciters?language=ar",
+          {
+            cf: {
+              cacheTtl: 3600,
+              cacheEverything: true
+            }
+          }
+        )
+      ]);
+
+    if (
+      !suraResponse.ok ||
+      !reciterResponse.ok
+    ) {
+      return json(
+        {
+          ok: false,
+          error:
+            "Audio search source unavailable"
+        },
+        502
+      );
+    }
+
+    const suraData =
+      await suraResponse.json();
+
+    const reciterData =
+      await reciterResponse.json();
+
+    const suwar =
+      Array.isArray(suraData?.suwar)
+        ? suraData.suwar
+        : [];
+
+    const reciters =
+      Array.isArray(reciterData?.reciters)
+        ? reciterData.reciters
+        : [];
+
+    const results = [];
+
+    const addResult = ({
+      title,
+      artist,
+      url,
+      type
+    }) => {
+      if (
+        !title ||
+        !url ||
+        !url.startsWith("https://")
+      ) {
+        return;
+      }
+
+      if (
+        results.some(
+          (item) => item.url === url
+        )
+      ) {
+        return;
+      }
+
+      results.push({
+        title,
+        artist,
+        url,
+        type
+      });
+    };
+
+    const matchedSuras =
+      suwar.filter((sura) => {
+        const name =
+          normalizeArabic(
+            sura?.name || ""
+          );
+
+        return (
+          name.includes(
+            normalizedQuery
+          ) ||
+          normalizedQuery.includes(
+            name
+          )
+        );
+      });
+
+    const matchedReciters =
+      reciters.filter((reciter) => {
+        const name =
+          normalizeArabic(
+            reciter?.name || ""
+          );
+
+        return (
+          name.includes(
+            normalizedQuery
+          ) ||
+          normalizedQuery.includes(
+            name
+          )
+        );
+      });
+
+    const selectedSuras =
+      matchedSuras.length > 0
+        ? matchedSuras.slice(0, 5)
+        : suwar.slice(0, 3);
+
+    const selectedReciters =
+      matchedReciters.length > 0
+        ? matchedReciters.slice(0, 3)
+        : reciters.slice(0, 3);
+
+    for (
+      const sura of selectedSuras
+    ) {
+      const suraId =
+        Number(sura?.id);
+
+      if (
+        !Number.isInteger(suraId) ||
+        suraId < 1 ||
+        suraId > 114
+      ) {
+        continue;
+      }
+
+      for (
+        const reciter of selectedReciters
+      ) {
+        const moshaf =
+          Array.isArray(
+            reciter?.moshaf
+          )
+            ? reciter.moshaf[0]
+            : null;
+
+        const server =
+          String(
+            moshaf?.server || ""
+          ).trim();
+
+        if (!server) {
+          continue;
+        }
+
+        const url =
+          server.replace(/\/$/, "") +
+          "/" +
+          String(suraId).padStart(
+            3,
+            "0"
+          ) +
+          ".mp3";
+
+        addResult({
+          title:
+            `${sura?.name || "سورة"} - ${reciter?.name || "قارئ"}`,
+          artist:
+            reciter?.name ||
+            "قارئ",
+          url,
+          type: "quran"
+        });
+
+        if (
+          results.length >= 12
+        ) {
+          break;
+        }
+      }
+
+      if (
+        results.length >= 12
+      ) {
+        break;
+      }
+    }
+
+    return json({
+      ok: true,
+      query,
+      source: "MP3Quran",
+      items: results
+    });
+  } catch (error) {
+    console.error(
+      "Audio search error",
+      String(error)
+    );
+
     return json(
       {
         ok: false,
         error:
-          "GET required"
+          "Audio search temporarily unavailable"
+      },
+      502
+    );
+  }
+}
+
+async function handleNews(
+  request
+) {
+  if (request.method !== "GET") {
+    return json(
+      {
+        ok: false,
+        error: "GET required"
       },
       405
     );
@@ -821,8 +1016,7 @@ async function handleNews(
       const link =
         decodeXml(
           (
-            linkMatch?.[1] ||
-            ""
+            linkMatch?.[1] || ""
           ).trim()
         );
 
@@ -830,7 +1024,7 @@ async function handleNews(
         stripHtml(
           decodeXml(
             sourceMatch?.[1] ||
-            "Google News"
+              "Google News"
           )
         );
 
@@ -850,8 +1044,7 @@ async function handleNews(
 
     return json({
       ok: true,
-      source:
-        "Google News",
+      source: "Google News",
       updated_at:
         new Date().toISOString(),
       items
@@ -882,8 +1075,7 @@ export default {
       new URL(request.url);
 
     if (
-      request.method ===
-      "OPTIONS"
+      request.method === "OPTIONS"
     ) {
       return new Response(
         null,
@@ -896,8 +1088,7 @@ export default {
     }
 
     if (
-      request.method ===
-        "GET" &&
+      request.method === "GET" &&
       url.pathname === "/"
     ) {
       const aiConfigured =
@@ -927,12 +1118,21 @@ export default {
     }
 
     if (
-      request.method ===
-        "GET" &&
+      request.method === "GET" &&
       url.pathname ===
         "/v1/news"
     ) {
       return handleNews(
+        request
+      );
+    }
+
+    if (
+      request.method === "GET" &&
+      url.pathname ===
+        "/v1/audio/search"
+    ) {
+      return handleAudioSearch(
         request
       );
     }
@@ -951,8 +1151,7 @@ export default {
     }
 
     if (
-      request.method ===
-        "POST" &&
+      request.method === "POST" &&
       url.pathname ===
         "/v1/chat"
     ) {
@@ -963,8 +1162,7 @@ export default {
     }
 
     if (
-      request.method ===
-        "POST" &&
+      request.method === "POST" &&
       url.pathname ===
         "/v1/image"
     ) {
@@ -977,8 +1175,7 @@ export default {
     return json(
       {
         ok: false,
-        error:
-          "Not found"
+        error: "Not found"
       },
       404
     );
