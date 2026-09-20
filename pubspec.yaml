@@ -5,7 +5,7 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.3.0 <4.0.0"
+  sdk: ">=3.6.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -13,30 +13,43 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-  # Audio
+  # =========================
+  # AUDIO
+  # =========================
   audio_service: ^0.18.19
   just_audio: ^0.9.39
   audio_session: ^0.1.21
 
-  # Network
+  # =========================
+  # NETWORK / AI
+  # =========================
   http: ^1.2.2
 
-  # Local storage
+  # =========================
+  # STORAGE
+  # =========================
   shared_preferences: ^2.3.2
 
-  # Images / camera
+  # =========================
+  # MEDIA
+  # =========================
   image_picker: ^1.1.2
+  file_picker: ^8.1.2
 
-  # Open external links
+  # =========================
+  # LINKS / SHARING
+  # =========================
   url_launcher: ^6.3.1
-
-  # Sharing
   share_plus: ^10.0.2
 
-  # Permissions
+  # =========================
+  # PERMISSIONS
+  # =========================
   permission_handler: ^11.3.1
 
-  # UI / utilities
+  # =========================
+  # UTILITIES
+  # =========================
   intl: ^0.19.0
 
 dev_dependencies:
@@ -49,4 +62,4 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/
+    - app_icon.png
