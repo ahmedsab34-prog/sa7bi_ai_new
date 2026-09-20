@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:audio_service/audio_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'ai_service.dart';
 import 'audio_player_service.dart';
@@ -119,45 +116,26 @@ class _AudioCenterScreenState
         type: FileType.audio,
       );
 
-      // file_picker 13.1.0 يرجع List<PlatformFile>
-      // مباشرة، وليس FilePickerResult.
+      /*
+       * مهم:
+       * file_picker 13.1.0 في هذا المشروع
+       * يرجع List<PlatformFile> مباشرة.
+       *
+       * PlatformFile في هذه النسخة لا يحتوي
+       * على bytes، لذلك نعتمد على path فقط.
+       */
       if (result == null || result.isEmpty) {
         return;
       }
 
       final picked = result.first;
 
-      /*
-       * file_picker 13.1.0 لا يدعم withData
-       * كـ parameter في pickFiles().
-       *
-       * نعتمد أولًا على path الذي يرجعه Android.
-       * ولو كانت bytes متاحة لأي سبب، نستخدمها
-       * كحل احتياطي وننسخ الملف إلى cache التطبيق.
-       */
-      String? safePath = picked.path;
-
-      if (picked.bytes != null &&
-          picked.bytes!.isNotEmpty) {
-        final directory =
-            await getTemporaryDirectory();
-
-        final file = File(
-          '${directory.path}/sa7bi_audio_${DateTime.now().millisecondsSinceEpoch}_${picked.name}',
-        );
-
-        await file.writeAsBytes(
-          picked.bytes!,
-          flush: true,
-        );
-
-        safePath = file.path;
-      }
+      final safePath = picked.path;
 
       if (safePath == null ||
           safePath.trim().isEmpty) {
         throw Exception(
-          'تعذر الوصول إلى ملف الصوت.',
+          'تعذر الوصول إلى مسار ملف الصوت.',
         );
       }
 
