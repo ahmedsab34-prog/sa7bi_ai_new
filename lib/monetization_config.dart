@@ -16,14 +16,9 @@ class MonetizationConfig {
   static const String facebookShopUrl =
       'https://www.facebook.com/marketplace/';
 
-  /*
-   * دي روابط المتاجر الحالية وليست Affiliate Links.
-   *
-   * بعد إنشاء حسابات Affiliate الحقيقية،
-   * نستبدل القيم فقط بدون تغيير تصميم التطبيق.
-   */
+  static const bool affiliateEnabled =
+      true;
 
-  static const bool affiliateEnabled = true;
-
-  static const bool admobEnabled = false;
+  static const bool admobEnabled =
+      false;
 }
