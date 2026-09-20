@@ -35,8 +35,7 @@ class AiService {
         return false;
       }
 
-      final data =
-          jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
       if (data is! Map) {
         return false;
@@ -67,8 +66,7 @@ class AiService {
           .where(
             (item) =>
                 (item['role'] == 'user' ||
-                    item['role'] ==
-                        'assistant') &&
+                    item['role'] == 'assistant') &&
                 (item['content'] ?? '')
                     .trim()
                     .isNotEmpty,
@@ -77,8 +75,7 @@ class AiService {
 
       final start =
           validHistory.length > maxHistory
-              ? validHistory.length -
-                  maxHistory
+              ? validHistory.length - maxHistory
               : 0;
 
       final messages =
@@ -88,8 +85,7 @@ class AiService {
           in validHistory.sublist(start)) {
         messages.add({
           'role': item['role']!,
-          'content':
-              item['content']!.trim(),
+          'content': item['content']!.trim(),
         });
       }
 
@@ -128,8 +124,7 @@ class AiService {
         return _serverError(response);
       }
 
-      final data =
-          jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
       if (data is Map &&
           data['ok'] == true &&
@@ -156,15 +151,13 @@ class AiService {
     String? serviceContext,
   }) async {
     try {
-      final bytes =
-          await file.readAsBytes();
+      final bytes = await file.readAsBytes();
 
       if (bytes.isEmpty) {
         return 'الصورة لم يتم قراءتها.';
       }
 
-      if (bytes.length >
-          5 * 1024 * 1024) {
+      if (bytes.length > 5 * 1024 * 1024) {
         return 'الصورة كبيرة جدًا. ابعت صورة أصغر.';
       }
 
@@ -205,8 +198,7 @@ class AiService {
         return _serverError(response);
       }
 
-      final data =
-          jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
       if (data is Map &&
           data['ok'] == true &&
@@ -230,8 +222,7 @@ class AiService {
       generateImage(
     String prompt,
   ) async {
-    final cleanPrompt =
-        prompt.trim();
+    final cleanPrompt = prompt.trim();
 
     if (cleanPrompt.isEmpty) {
       return const ImageGenerationResult.failure(
@@ -267,8 +258,7 @@ class AiService {
         );
       }
 
-      final data =
-          jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
       if (data is! Map) {
         return const ImageGenerationResult.failure(
@@ -277,8 +267,7 @@ class AiService {
       }
 
       final base64Image =
-          data['image_base64']
-              ?.toString();
+          data['image_base64']?.toString();
 
       if (data['ok'] != true ||
           base64Image == null ||
@@ -290,8 +279,7 @@ class AiService {
       }
 
       try {
-        final bytes =
-            base64Decode(base64Image);
+        final bytes = base64Decode(base64Image);
 
         if (bytes.isEmpty) {
           return const ImageGenerationResult.failure(
@@ -314,17 +302,14 @@ class AiService {
     }
   }
 
-  static Future<List<NewsItem>>
-      getNews() async {
+  static Future<List<NewsItem>> getNews() async {
     try {
       final uri =
-          Uri.parse(newsEndpoint)
-              .replace(
+          Uri.parse(newsEndpoint).replace(
         queryParameters: {
-          'refresh':
-              DateTime.now()
-                  .millisecondsSinceEpoch
-                  .toString(),
+          'refresh': DateTime.now()
+              .millisecondsSinceEpoch
+              .toString(),
         },
       );
 
@@ -332,8 +317,7 @@ class AiService {
           .get(
             uri,
             headers: const {
-              'Cache-Control':
-                  'no-cache',
+              'Cache-Control': 'no-cache',
               'Pragma': 'no-cache',
             },
           )
@@ -345,8 +329,7 @@ class AiService {
         return [];
       }
 
-      final data =
-          jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
       if (data is! Map) {
         return [];
@@ -363,16 +346,14 @@ class AiService {
           .map(
             (item) => NewsItem(
               title:
-                  item['title']
-                          ?.toString() ??
-                      '',
+                  item['title']?.toString() ?? '',
               source:
-                  item['source']
-                          ?.toString() ??
+                  item['source']?.toString() ??
                       'Google News',
               link:
-                  item['link']
-                          ?.toString() ??
+                  item['link']?.toString() ?? '',
+              imageUrl:
+                  item['imageUrl']?.toString() ??
                       '',
             ),
           )
@@ -391,8 +372,7 @@ class AiService {
       searchAudio(
     String query,
   ) async {
-    final clean =
-        query.trim();
+    final clean = query.trim();
 
     if (clean.isEmpty) {
       return [];
@@ -400,9 +380,7 @@ class AiService {
 
     try {
       final uri =
-          Uri.parse(
-            audioSearchEndpoint,
-          ).replace(
+          Uri.parse(audioSearchEndpoint).replace(
         queryParameters: {
           'q': clean,
         },
@@ -418,8 +396,7 @@ class AiService {
         return [];
       }
 
-      final data =
-          jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
       if (data is! Map ||
           data['items'] is! List) {
@@ -429,23 +406,15 @@ class AiService {
       return (data['items'] as List)
           .whereType<Map>()
           .map(
-            (item) =>
-                AudioSearchItem(
+            (item) => AudioSearchItem(
               title:
-                  item['title']
-                          ?.toString() ??
-                      '',
+                  item['title']?.toString() ?? '',
               artist:
-                  item['artist']
-                      ?.toString(),
+                  item['artist']?.toString(),
               url:
-                  item['url']
-                          ?.toString() ??
-                      '',
+                  item['url']?.toString() ?? '',
               type:
-                  item['type']
-                          ?.toString() ??
-                      'audio',
+                  item['type']?.toString() ?? 'audio',
             ),
           )
           .where(
@@ -459,11 +428,8 @@ class AiService {
     }
   }
 
-  static String _mime(
-    String name,
-  ) {
-    final value =
-        name.toLowerCase();
+  static String _mime(String name) {
+    final value = name.toLowerCase();
 
     if (value.endsWith('.png')) {
       return 'image/png';
@@ -480,18 +446,13 @@ class AiService {
     http.Response response,
   ) {
     try {
-      final data =
-          jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
       if (data is Map) {
-        final error =
-            data['error'];
+        final error = data['error'];
 
         if (error != null &&
-            error
-                .toString()
-                .trim()
-                .isNotEmpty) {
+            error.toString().trim().isNotEmpty) {
           return error.toString();
         }
       }
@@ -500,15 +461,19 @@ class AiService {
     switch (response.statusCode) {
       case 400:
         return 'الطلب غير صحيح.';
+
       case 401:
       case 403:
         return 'خدمة الذكاء الاصطناعي تحتاج إعداد صلاحية صحيح.';
+
       case 429:
         return 'الخدمة مشغولة حاليًا. جرّب بعد لحظات.';
+
       case 500:
       case 502:
       case 503:
         return 'الخادم مشغول أو خدمة الذكاء الاصطناعي غير متاحة حاليًا.';
+
       default:
         return 'حصل خطأ في الاتصال بالخادم.';
     }
@@ -519,11 +484,13 @@ class NewsItem {
   final String title;
   final String source;
   final String link;
+  final String imageUrl;
 
   const NewsItem({
     required this.title,
     required this.source,
     required this.link,
+    this.imageUrl = '',
   });
 }
 
