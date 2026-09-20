@@ -119,19 +119,20 @@ class _AudioCenterScreenState
         type: FileType.audio,
       );
 
-      if (result == null ||
-          result.files.isEmpty) {
+      // file_picker 13.1.0 يرجع List<PlatformFile>
+      // مباشرة، وليس FilePickerResult.
+      if (result == null || result.isEmpty) {
         return;
       }
 
-      final picked =
-          result.files.first;
+      final picked = result.first;
 
       /*
-       * file_picker 13.1.0 لا يدعم withData.
+       * file_picker 13.1.0 لا يدعم withData
+       * كـ parameter في pickFiles().
        *
        * نعتمد أولًا على path الذي يرجعه Android.
-       * ولو كان هناك bytes متاحة لأي سبب، نستخدمها
+       * ولو كانت bytes متاحة لأي سبب، نستخدمها
        * كحل احتياطي وننسخ الملف إلى cache التطبيق.
        */
       String? safePath = picked.path;
@@ -462,7 +463,8 @@ class _AudioCenterScreenState
         ),
       ),
       child: ListTile(
-        onTap: () => _play(item),
+        onTap: () =>
+            _play(item),
         leading: Container(
           width: 45,
           height: 45,
