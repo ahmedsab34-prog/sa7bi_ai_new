@@ -148,7 +148,7 @@ class _AudioCenterScreenState
 
     try {
       final FilePickerResult? result =
-          await FilePicker.pickFiles(
+          await FilePicker.platform.pickFiles(
         type: FileType.audio,
         allowMultiple: false,
       );
@@ -209,7 +209,7 @@ class _AudioCenterScreenState
       await localHandler.playUrl(
         url: item.url,
         title: item.title,
-        artist: item.artist ?? 'صاحبي AI',
+        artist: item.artist ?? 'صحبي AI',
       );
     } catch (e) {
       if (!mounted) {
