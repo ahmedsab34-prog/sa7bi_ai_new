@@ -148,20 +148,26 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> playMediaItem(MediaItem mediaItem) async {
-    try {
-      await _player.setUrl(mediaItem.id);
+    await _player.setUrl(mediaItem.id);
 
-      queue.add([mediaItem]);
+    mediaItem.addTag(
+      'source',
+      mediaItem.id,
+    );
 
-      await _player.play();
-    } catch (_) {
-      rethrow;
-    }
+    this.mediaItem.add(mediaItem);
+    queue.add([mediaItem]);
+
+    await _player.play();
   }
 
   /// تشغيل رابط صوت مباشر.
-  Future<void> playUrl(
-    String url, {
+  ///
+  /// مهم:
+  /// استخدمنا named parameters حتى يتوافق مع
+  /// audio_center_screen.dart الحالي.
+  Future<void> playUrl({
+    required String url,
     String title = 'صحبي AI',
     String? artist,
     String? album,
@@ -185,8 +191,11 @@ class Sa7biAudioHandler extends BaseAudioHandler
   }
 
   /// تشغيل ملف صوت موجود على الهاتف.
-  Future<void> playLocalFile(
-    String path, {
+  ///
+  /// استخدمنا named parameters حتى يتوافق مع
+  /// audio_center_screen.dart الحالي.
+  Future<void> playLocalFile({
+    required String path,
     String title = 'صحبي AI',
     String? artist,
     String? album,
@@ -205,19 +214,15 @@ class Sa7biAudioHandler extends BaseAudioHandler
     await _player.play();
   }
 
-  /// هل الصوت يعمل حاليًا؟
   bool get isPlaying => _player.playing;
 
-  /// موضع التشغيل الحالي.
   Duration get position => _player.position;
 
-  /// مدة الملف الحالي.
   Duration? get duration => _player.duration;
 
   @override
   Future<void> onTaskRemoved() async {
     // لا نوقف الصوت عند إزالة التطبيق من التطبيقات الأخيرة.
-    // يسمح ذلك باستمرار التشغيل في الخلفية.
   }
 
   Future<void> disposePlayer() async {
@@ -231,23 +236,43 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
 /// مدير الصوت الرئيسي للتطبيق.
 ///
-/// يمنع إنشاء AudioHandler أكثر من مرة.
+/// متوافق مع الملفات الحالية في المشروع:
+/// main.dart
+/// audio_center_screen.dart
 class AudioController {
   AudioController._();
 
-  static final AudioController instance =
-      AudioController._();
+  static Sa7biAudioHandler? _handler;
+  static bool _initialized = false;
+  static Future<Sa7biAudioHandler>? _initializing;
 
-  Sa7biAudioHandler? _handler;
-  bool _initialized = false;
+  /// الـ AudioHandler الحالي.
+  static Sa7biAudioHandler? get handler => _handler;
 
-  Sa7biAudioHandler? get handler => _handler;
-
-  Future<void> initialize() async {
+  /// تهيئة نظام الصوت مرة واحدة فقط.
+  ///
+  /// ترجع الـ handler حتى يقدر AudioCenterScreen
+  /// يستخدمه مباشرة.
+  static Future<Sa7biAudioHandler> initialize() async {
     if (_initialized && _handler != null) {
-      return;
+      return _handler!;
     }
 
+    if (_initializing != null) {
+      return _initializing!;
+    }
+
+    _initializing = _createHandler();
+
+    try {
+      final result = await _initializing!;
+      return result;
+    } finally {
+      _initializing = null;
+    }
+  }
+
+  static Future<Sa7biAudioHandler> _createHandler() async {
     try {
       _handler = await AudioService.init(
         builder: () => Sa7biAudioHandler(),
@@ -257,8 +282,6 @@ class AudioController {
           androidNotificationChannelName:
               'صحبي AI - الصوت',
           androidNotificationOngoing: false,
-
-          // لا نوقف الـ foreground service عند إيقاف الصوت.
           androidStopForegroundOnPause: false,
 
           // الملف موجود فعليًا هنا:
@@ -271,24 +294,27 @@ class AudioController {
       );
 
       _initialized = true;
+
+      return _handler!;
     } catch (_) {
+      _handler = null;
       _initialized = false;
       rethrow;
     }
   }
 
-  Future<void> playUrl(
-    String url, {
+  static Future<void> playUrl({
+    required String url,
     String title = 'صحبي AI',
     String? artist,
     String? album,
     Duration? duration,
     Uri? artUri,
   }) async {
-    await initialize();
+    final audioHandler = await initialize();
 
-    await _handler!.playUrl(
-      url,
+    await audioHandler.playUrl(
+      url: url,
       title: title,
       artist: artist,
       album: album,
@@ -297,64 +323,61 @@ class AudioController {
     );
   }
 
-  Future<void> playLocalFile(
-    String path, {
+  static Future<void> playLocalFile({
+    required String path,
     String title = 'صحبي AI',
     String? artist,
     String? album,
   }) async {
-    await initialize();
+    final audioHandler = await initialize();
 
-    await _handler!.playLocalFile(
-      path,
+    await audioHandler.playLocalFile(
+      path: path,
       title: title,
       artist: artist,
       album: album,
     );
   }
 
-  Future<void> pause() async {
+  static Future<void> pause() async {
     await _handler?.pause();
   }
 
-  Future<void> play() async {
+  static Future<void> play() async {
     await _handler?.play();
   }
 
-  Future<void> stop() async {
+  static Future<void> stop() async {
     await _handler?.stop();
   }
 
-  Future<void> seek(Duration position) async {
+  static Future<void> seek(Duration position) async {
     await _handler?.seek(position);
   }
 }
 
 /// اسم توافق قديم في المشروع.
-/// نتركه حتى لا نكسر أي ملف حالي يستخدمه.
+/// نتركه حتى لا نكسر أي ملف قديم يستخدمه.
 class Sa7biAudioService {
   Sa7biAudioService._();
 
   static final Sa7biAudioService instance =
       Sa7biAudioService._();
 
-  AudioController get controller =>
-      AudioController.instance;
-
-  Future<void> initialize() {
-    return controller.initialize();
+  Future<Sa7biAudioHandler> initialize() {
+    return AudioController.initialize();
   }
 
-  Future<void> playUrl(
-    String url, {
+  Future<void> playUrl({
+    required String url,
     String title = 'صحبي AI',
     String? artist,
     String? album,
     Duration? duration,
     Uri? artUri,
   }) {
-    return controller.playUrl(
-      url,
+    return AudioController.playUrl(
+      url: url,
       title: title,
       artist: artist,
       album: album,
@@ -363,14 +386,14 @@ class Sa7biAudioService {
     );
   }
 
-  Future<void> playLocalFile(
-    String path, {
+  Future<void> playLocalFile({
+    required String path,
     String title = 'صحبي AI',
     String? artist,
     String? album,
   }) {
-    return controller.playLocalFile(
-      path,
+    return AudioController.playLocalFile(
+      path: path,
       title: title,
       artist: artist,
       album: album,
@@ -378,18 +401,18 @@ class Sa7biAudioService {
   }
 
   Future<void> pause() {
-    return controller.pause();
+    return AudioController.pause();
   }
 
   Future<void> play() {
-    return controller.play();
+    return AudioController.play();
   }
 
   Future<void> stop() {
-    return controller.stop();
+    return AudioController.stop();
   }
 
   Future<void> seek(Duration position) {
-    return controller.seek(position);
+    return AudioController.seek(position);
   }
 }
