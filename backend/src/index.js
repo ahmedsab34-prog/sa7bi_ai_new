@@ -5,10 +5,27 @@ const CORS_HEADERS = {
   "Cache-Control": "no-store"
 };
 
-const BACKEND_VERSION = "3.1.0";
+const BACKEND_VERSION = "3.2.0";
 
 const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
+
+/*
+ * Permanent APK distribution link.
+ *
+ * The app itself always uses:
+ * https://sa7bi-ai-new.ahmedsab34.workers.dev/download
+ *
+ * This Worker redirects to the latest GitHub Release asset.
+ *
+ * IMPORTANT:
+ * Every future release should contain an APK asset with this exact name:
+ * sa7bi-ai.apk
+ *
+ * Therefore the app/Worker does not need to be changed for every new APK.
+ */
+const APK_DOWNLOAD_URL =
+  "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk";
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const MAX_MESSAGES = 20;
@@ -808,7 +825,7 @@ async function handleNews(request) {
         {
           headers: {
             "User-Agent":
-              "Sa7biAI/3.1 News Reader"
+              "Sa7biAI/3.2 News Reader"
           }
         }
       );
@@ -924,6 +941,23 @@ export default {
       });
     }
 
+    /*
+     * Permanent public APK link.
+     *
+     * The Flutter application points to /download.
+     * This endpoint redirects to the latest GitHub Release
+     * asset named sa7bi-ai.apk.
+     */
+    if (
+      request.method === "GET" &&
+      url.pathname === "/download"
+    ) {
+      return Response.redirect(
+        APK_DOWNLOAD_URL,
+        302
+      );
+    }
+
     if (
       request.method === "GET" &&
       url.pathname === "/"
@@ -945,7 +979,10 @@ export default {
         image_model:
           env.OPENAI_IMAGE_MODEL ||
           DEFAULT_IMAGE_MODEL,
-        version: BACKEND_VERSION
+        download_url:
+          "https://sa7bi-ai-new.ahmedsab34.workers.dev/download",
+        version:
+          BACKEND_VERSION
       });
     }
 
