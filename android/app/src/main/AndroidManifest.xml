@@ -8,7 +8,6 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
-    <!-- Background audio -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
@@ -27,9 +26,10 @@
         android:allowBackup="true"
         android:hardwareAccelerated="true">
 
+        <!-- Google test App ID أثناء التطوير فقط -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-9077658292229374~3333333333"/>
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
 
         <activity
             android:name=".MainActivity"
@@ -51,7 +51,6 @@
 
         </activity>
 
-        <!-- Background audio service -->
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
@@ -64,7 +63,6 @@
 
         </service>
 
-        <!-- Media / headset buttons -->
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true"
