@@ -25,8 +25,8 @@ void main() {
 
   runApp(const Sa7biAiApp());
 
-  // لا ننتظر الصوت قبل ظهور التطبيق.
-  // تهيئة الصوت تعمل في الخلفية.
+  // الصوت يتهيأ في الخلفية حتى لا نؤخر فتح التطبيق.
+  // لا نلمس AudioService نفسه هنا.
   unawaited(AudioController.initialize());
 }
 
@@ -40,17 +40,22 @@ class Sa7biAiApp extends StatelessWidget {
       title: 'صاحبي AI',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF080A10),
+        scaffoldBackgroundColor: const Color(0xFF070A12),
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFFD54F),
+          seedColor: const Color(0xFFFFD76A),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
+        fontFamily: 'sans',
       ),
       home: const MainContainerScreen(),
     );
   }
 }
+
+// ============================================================
+// MAIN CONTAINER
+// ============================================================
 
 class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
@@ -60,8 +65,7 @@ class MainContainerScreen extends StatefulWidget {
       _MainContainerScreenState();
 }
 
-class _MainContainerScreenState
-    extends State<MainContainerScreen> {
+class _MainContainerScreenState extends State<MainContainerScreen> {
   int index = 0;
 
   void openProfile() {
@@ -113,8 +117,8 @@ class _MainContainerScreenState
             ),
 
             const Positioned(
-              left: 12,
-              right: 12,
+              left: 10,
+              right: 10,
               bottom: 8,
               child: MiniAudioPlayer(),
             ),
@@ -130,7 +134,7 @@ class _MainContainerScreenState
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        backgroundColor: const Color(0xFF17181F),
+        backgroundColor: const Color(0xFF11141D),
         indicatorColor: const Color(0x3348D8FF),
         selectedIndex: index,
         onDestinationSelected: (value) {
@@ -141,17 +145,17 @@ class _MainContainerScreenState
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            selectedIcon: Icon(Icons.home_rounded),
             label: 'الرئيسية',
           ),
           NavigationDestination(
             icon: Icon(Icons.apps_outlined),
-            selectedIcon: Icon(Icons.apps),
+            selectedIcon: Icon(Icons.apps_rounded),
             label: 'الخدمات',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
             label: 'حسابي',
           ),
         ],
@@ -217,13 +221,15 @@ class _HomeScreenState extends State<HomeScreen> {
     String url,
     String title,
   ) {
-    if (url.trim().isEmpty) return;
+    final cleanUrl = url.trim();
+
+    if (cleanUrl.isEmpty) return;
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => NewsWebViewScreen(
-          url: url,
+          url: cleanUrl,
           title: title,
         ),
       ),
@@ -233,14 +239,16 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
+      color: const Color(0xFFFFD76A),
+      backgroundColor: const Color(0xFF151923),
       onRefresh: loadNews,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
-          16,
-          10,
-          16,
-          120,
+          14,
+          8,
+          14,
+          125,
         ),
         children: [
           AppHeader(
@@ -248,46 +256,46 @@ class _HomeScreenState extends State<HomeScreen> {
             onAudioTap: widget.onAudio,
           ),
 
-          const SizedBox(height: 10),
-
-          const _WelcomeCard(),
-
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
           const _AffiliateBanner(),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 17),
 
           Row(
             children: [
-              const Expanded(
-                child: Text(
-                  'آخر الأخبار',
-                  textDirection: TextDirection.rtl,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
               IconButton(
                 onPressed: loadNews,
+                tooltip: 'تحديث الأخبار',
                 icon: const Icon(
                   Icons.refresh_rounded,
                   color: Color(0xFFFFD76A),
                 ),
               ),
+
+              const Spacer(),
+
+              const Text(
+                'آخر الأخبار',
+                textDirection: TextDirection.rtl,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ],
           ),
 
-          const SizedBox(height: 5),
+          const SizedBox(height: 4),
 
           if (loadingNews)
             const Padding(
-              padding: EdgeInsets.all(25),
+              padding: EdgeInsets.all(28),
               child: Center(
-                child: CircularProgressIndicator(),
+                child: CircularProgressIndicator(
+                  color: Color(0xFFFFD76A),
+                ),
               ),
             )
           else if (news.isEmpty)
@@ -297,14 +305,14 @@ class _HomeScreenState extends State<HomeScreen> {
           else
             ..._buildNewsList(),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
 
           const Text(
             'تسوق بسرعة',
             textDirection: TextDirection.rtl,
             textAlign: TextAlign.right,
             style: TextStyle(
-              fontSize: 21,
+              fontSize: 20,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -312,8 +320,8 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 9),
 
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 7,
+            runSpacing: 7,
             children: [
               _StoreButton(
                 title: 'Amazon',
@@ -360,10 +368,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
+      // مكان مخصص لاحقًا لمحتوى Reels حقيقي من الـ backend.
+      // لا نعرض Placeholder على أنه محتوى حقيقي.
       if ((i + 1) % 5 == 0 &&
           i != news.length - 1) {
         widgets.add(
-          const _ReelStrip(),
+          const _RealContentNotice(),
         );
       }
     }
@@ -389,29 +399,162 @@ class AppHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment:
-          MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const Sa7biLogo(),
 
-        Row(
-          children: [
-            _HeaderAction(
-              icon: Icons.graphic_eq_rounded,
-              color: const Color(0xFF63E6FF),
-              onTap: onAudioTap,
-            ),
+        const SizedBox(width: 9),
 
-            const SizedBox(width: 8),
+        const Expanded(
+          child: _HeaderWelcome(),
+        ),
 
-            _HeaderAction(
-              icon: Icons.person_rounded,
-              color: const Color(0xFFFFD76A),
-              onTap: onProfileTap,
-            ),
-          ],
+        const SizedBox(width: 7),
+
+        _HeaderAction(
+          icon: Icons.graphic_eq_rounded,
+          color: Color(0xFF63E6FF),
+          onTap: onAudioTap,
+        ),
+
+        const SizedBox(width: 7),
+
+        _HeaderAction(
+          icon: Icons.person_rounded,
+          color: Color(0xFFFFD76A),
+          onTap: onProfileTap,
         ),
       ],
+    );
+  }
+}
+
+class _HeaderWelcome extends StatefulWidget {
+  const _HeaderWelcome();
+
+  @override
+  State<_HeaderWelcome> createState() =>
+      _HeaderWelcomeState();
+}
+
+class _HeaderWelcomeState
+    extends State<_HeaderWelcome>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController controller;
+  late final Timer timer;
+
+  final messages = const [
+    'أهلاً يا صاحبي 👋',
+    'أنا معاك في كل حاجة 🤖',
+    'قول اللي في بالك 💙',
+    'خلينا ننجزها سوا 🚀',
+  ];
+
+  int index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    controller = AnimationController(
+      vsync: this,
+      duration: const Duration(
+        seconds: 4,
+      ),
+    )..repeat(reverse: true);
+
+    timer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) {
+        if (!mounted) return;
+
+        setState(() {
+          index = (index + 1) % messages.length;
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    timer.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (_, __) {
+        final glow =
+            0.06 + controller.value * 0.08;
+
+        return Container(
+          constraints: const BoxConstraints(
+            minHeight: 58,
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 8,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [
+                Color(0xFF1B2130),
+                Color(0xFF10131C),
+              ],
+            ),
+            border: Border.all(
+              color: const Color(0x44FFD76A),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFFD76A)
+                    .withOpacity(glow),
+                blurRadius: 16,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(
+                  milliseconds: 350,
+                ),
+                child: Text(
+                  messages[index],
+                  key: ValueKey(index),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Text(
+                'صاحبي AI معاك كل يوم',
+                textDirection: TextDirection.rtl,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 9,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -432,26 +575,26 @@ class _HeaderAction extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 48,
-        height: 48,
+        width: 43,
+        height: 43,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: const Color(0xFF151820),
+          color: const Color(0xFF10131C),
           border: Border.all(
-            color: color,
-            width: 1.4,
+            color: color.withOpacity(0.75),
+            width: 1.3,
           ),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.18),
-              blurRadius: 14,
+              color: color.withOpacity(0.15),
+              blurRadius: 13,
             ),
           ],
         ),
         child: Icon(
           icon,
           color: color,
-          size: 25,
+          size: 22,
         ),
       ),
     );
@@ -481,7 +624,9 @@ class _Sa7biLogoState
 
     controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 8),
+      duration: const Duration(
+        seconds: 9,
+      ),
     )..repeat();
   }
 
@@ -496,79 +641,81 @@ class _Sa7biLogoState
     return AnimatedBuilder(
       animation: controller,
       builder: (_, __) {
-        final pulse =
-            (math.sin(
-                      controller.value *
-                          math.pi *
-                          2,
-                    ) +
-                    1) /
+        final rotation =
+            controller.value *
+                math.pi *
                 2;
 
+        final glow =
+            0.12 +
+                ((math.sin(rotation) + 1) /
+                        2) *
+                    0.10;
+
         return SizedBox(
-          width: 72,
-          height: 72,
+          width: 62,
+          height: 62,
           child: Stack(
             alignment: Alignment.center,
             children: [
+              // هالة خارجية هادئة
               Container(
-                width: 68,
-                height: 68,
+                width: 59,
+                height: 59,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF63E6FF)
-                          .withOpacity(
-                        0.08 + pulse * 0.10,
-                      ),
+                      color: const Color(
+                        0xFF132A55,
+                      ).withOpacity(glow),
                       blurRadius: 18,
+                      spreadRadius: 2,
                     ),
                     BoxShadow(
-                      color: const Color(0xFFFFD76A)
-                          .withOpacity(
-                        0.08 + pulse * 0.10,
-                      ),
+                      color: const Color(
+                        0xFF651B32,
+                      ).withOpacity(glow),
                       blurRadius: 20,
+                      spreadRadius: 1,
                     ),
                   ],
                 ),
               ),
 
+              // الحلقة أعرض وأصغر من القديمة
               Transform.rotate(
-                angle: controller.value *
-                    math.pi *
-                    2,
+                angle: rotation,
                 child: Container(
-                  width: 67,
-                  height: 67,
-                  decoration:
-                      const BoxDecoration(
+                  width: 58,
+                  height: 58,
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: SweepGradient(
                       colors: [
-                        Color(0xFFFFD76A),
-                        Color(0xFF63E6FF),
-                        Color(0xFF7864FF),
-                        Color(0xFF49E6A8),
-                        Color(0xFFFFD76A),
+                        Color(0xFF8A1834),
+                        Color(0xFF183D72),
+                        Color(0xFF254F82),
+                        Color(0xFF5C1630),
+                        Color(0xFF8A1834),
                       ],
                     ),
                   ),
                 ),
               ),
 
+              // الحلقة الداخلية السميكة
               Container(
-                width: 61,
-                height: 61,
-                padding:
-                    const EdgeInsets.all(3),
+                width: 51,
+                height: 51,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color:
-                      const Color(0xFF080A10),
+                  color: const Color(0xFF070A12),
                   border: Border.all(
-                    color: Colors.white24,
+                    color: const Color(
+                      0xFF315277,
+                    ),
+                    width: 2.2,
                   ),
                 ),
                 child: ClipOval(
@@ -578,40 +725,6 @@ class _Sa7biLogoState
                   ),
                 ),
               ),
-
-              Positioned(
-                right: 7,
-                top: 8,
-                child: AnimatedContainer(
-                  duration: const Duration(
-                    milliseconds: 300,
-                  ),
-                  width: 8,
-                  height: 8,
-                  decoration:
-                      BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color.lerp(
-                      Colors.white,
-                      const Color(
-                        0xFFFFD76A,
-                      ),
-                      pulse,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(
-                          0xFFFFD76A,
-                        ).withOpacity(
-                          0.65 + pulse * 0.35,
-                        ),
-                        blurRadius:
-                            8 + pulse * 7,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         );
@@ -621,182 +734,10 @@ class _Sa7biLogoState
 }
 
 // ============================================================
-// WELCOME
+// AFFILIATE BANNER
 // ============================================================
 
-class _WelcomeCard extends StatefulWidget {
-  const _WelcomeCard();
-
-  @override
-  State<_WelcomeCard> createState() =>
-      _WelcomeCardState();
-}
-
-class _WelcomeCardState
-    extends State<_WelcomeCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController controller;
-  late final Timer timer;
-
-  final List<String> messages = [
-    'أهلاً يا صاحبي 👋',
-    'جاهز أساعدك في أي حاجة 🤖',
-    'قول اللي في بالك وأنا معاك 💙',
-    'خلينا ننجزها سوا 🚀',
-    'صاحبي AI معاك كل يوم ✨',
-  ];
-
-  int index = 0;
-
-  @override
-  void initState() {
-    super.initState();
-
-    controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 5),
-    )..repeat();
-
-    timer = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) {
-        if (!mounted) return;
-
-        setState(() {
-          index =
-              (index + 1) %
-                  messages.length;
-        });
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    timer.cancel();
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (_, __) {
-        return Container(
-          padding:
-              const EdgeInsets.symmetric(
-            horizontal: 15,
-            vertical: 12,
-          ),
-          decoration: BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(19),
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [
-                Color.lerp(
-                  const Color(0xFF2A210E),
-                  const Color(0xFF17283A),
-                  controller.value,
-                )!,
-                const Color(0xFF10141D),
-                Color.lerp(
-                  const Color(0xFF1D1527),
-                  const Color(0xFF102820),
-                  controller.value,
-                )!,
-              ],
-            ),
-            border: Border.all(
-              color: const Color(0x44FFD76A),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration:
-                    const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFFFFD76A),
-                      Color(0xFF63E6FF),
-                    ],
-                  ),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: Colors.black,
-                  size: 19,
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.end,
-                  children: [
-                    AnimatedSwitcher(
-                      duration:
-                          const Duration(
-                        milliseconds: 350,
-                      ),
-                      child: Text(
-                        messages[index],
-                        key: ValueKey(index),
-                        textDirection:
-                            TextDirection.rtl,
-                        textAlign:
-                            TextAlign.right,
-                        style:
-                            const TextStyle(
-                          fontSize: 17,
-                          fontWeight:
-                              FontWeight.w900,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 3),
-
-                    const Text(
-                      'اسأل، اتكلم، ابعت صورة، اسمع صوت، أو افتح خلصانة AI.',
-                      textDirection:
-                          TextDirection.rtl,
-                      textAlign:
-                          TextAlign.right,
-                      maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white60,
-                        height: 1.25,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ============================================================
-// AFFILIATE / ADS BANNER
-// ============================================================
-
-class _AffiliateBanner
-    extends StatefulWidget {
+class _AffiliateBanner extends StatefulWidget {
   const _AffiliateBanner();
 
   @override
@@ -812,40 +753,32 @@ class _AffiliateBannerState
 
   final List<_OfferData> offers = [
     _OfferData(
-      title:
-          'عروض وتسوق من صاحبي AI',
-      subtitle:
-          'Jumia • Noon • Amazon • Facebook',
-      icon:
-          Icons.local_offer_rounded,
-      color:
-          Color(0xFFFFD76A),
-      url:
-          MonetizationConfig.jumiaUrl,
+      title: 'عروض وتسوق',
+      subtitle: 'Amazon • منتجات وعروض',
+      icon: Icons.shopping_cart_rounded,
+      color: Color(0xFFFFB300),
+      url: MonetizationConfig.amazonUrl,
     ),
     _OfferData(
-      title:
-          'تسوق أذكى مع صاحبي',
-      subtitle:
-          'اختيارات من Amazon وNoon',
-      icon:
-          Icons.shopping_cart_rounded,
-      color:
-          Color(0xFF63E6FF),
-      url:
-          MonetizationConfig.amazonUrl,
+      title: 'اكتشف Jumia',
+      subtitle: 'تسوق منتجات متنوعة',
+      icon: Icons.shopping_bag_rounded,
+      color: Color(0xFFB45CFF),
+      url: MonetizationConfig.jumiaUrl,
     ),
     _OfferData(
-      title:
-          'اكتشف عروض جديدة',
-      subtitle:
-          'Jumia • Noon • Facebook Marketplace',
-      icon:
-          Icons.shopping_bag_rounded,
-      color:
-          Color(0xFFB45CFF),
-      url:
-          MonetizationConfig.noonUrl,
+      title: 'Noon',
+      subtitle: 'عروض ومنتجات جديدة',
+      icon: Icons.store_rounded,
+      color: Color(0xFF63E6FF),
+      url: MonetizationConfig.noonUrl,
+    ),
+    _OfferData(
+      title: 'Marketplace',
+      subtitle: 'منتجات من Facebook Marketplace',
+      icon: Icons.facebook_rounded,
+      color: Color(0xFF4D8DFF),
+      url: MonetizationConfig.facebookShopUrl,
     ),
   ];
 
@@ -874,13 +807,14 @@ class _AffiliateBannerState
   }
 
   Future<void> openOffer() async {
-    final offer = offers[index];
+    final url = offers[index].url;
 
-    await launchUrl(
-      Uri.parse(offer.url),
-      mode:
-          LaunchMode.externalApplication,
-    );
+    try {
+      await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
   }
 
   @override
@@ -888,124 +822,107 @@ class _AffiliateBannerState
     final offer = offers[index];
 
     return AnimatedSwitcher(
-      duration:
-          const Duration(milliseconds: 450),
+      duration: const Duration(
+        milliseconds: 450,
+      ),
       child: Container(
         key: ValueKey(index),
-        height: 76,
+        height: 72,
         decoration: BoxDecoration(
-          borderRadius:
-              BorderRadius.circular(20),
-          gradient:
-              const LinearGradient(
-            begin:
-                Alignment.centerRight,
-            end:
-                Alignment.centerLeft,
+          borderRadius: BorderRadius.circular(19),
+          gradient: const LinearGradient(
+            begin: Alignment.centerRight,
+            end: Alignment.centerLeft,
             colors: [
-              Color(0xFF32230B),
-              Color(0xFF171A28),
-              Color(0xFF10151D),
+              Color(0xFF281C0D),
+              Color(0xFF171A27),
+              Color(0xFF0F131C),
             ],
           ),
           border: Border.all(
-            color:
-                const Color(0x55FFD76A),
+            color: const Color(0x55FFD76A),
           ),
           boxShadow: const [
             BoxShadow(
-              color:
-                  Color(0x22000000),
-              blurRadius: 16,
-              offset:
-                  Offset(0, 5),
+              color: Color(0x22000000),
+              blurRadius: 15,
+              offset: Offset(0, 5),
             ),
           ],
         ),
         child: InkWell(
-          borderRadius:
-              BorderRadius.circular(20),
           onTap: openOffer,
+          borderRadius: BorderRadius.circular(19),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(
-              horizontal: 13,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 11,
             ),
             child: Row(
               children: [
                 Container(
-                  width: 45,
-                  height: 45,
-                  decoration:
-                      BoxDecoration(
-                    shape:
-                        BoxShape.circle,
-                    gradient:
-                        LinearGradient(
+                  width: 43,
+                  height: 43,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
                       colors: [
                         offer.color,
-                        const Color(
-                          0xFFB45CFF,
-                        ),
+                        const Color(0xFFB45CFF),
                       ],
                     ),
                   ),
                   child: Icon(
                     offer.icon,
                     color: Colors.black,
+                    size: 22,
                   ),
                 ),
 
-                const SizedBox(width: 10),
+                const SizedBox(width: 9),
 
                 Expanded(
                   child: Column(
                     mainAxisAlignment:
-                        MainAxisAlignment
-                            .center,
+                        MainAxisAlignment.center,
                     crossAxisAlignment:
-                        CrossAxisAlignment
-                            .end,
+                        CrossAxisAlignment.end,
                     children: [
                       Text(
                         offer.title,
                         textDirection:
-                            TextDirection
-                                .rtl,
-                        style:
-                            const TextStyle(
-                          fontSize: 14,
+                            TextDirection.rtl,
+                        maxLines: 1,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
                           fontWeight:
                               FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(
-                        height: 3,
-                      ),
+                      const SizedBox(height: 2),
                       Text(
                         offer.subtitle,
                         textDirection:
-                            TextDirection
-                                .rtl,
-                        style:
-                            const TextStyle(
-                          color:
-                              Colors.white54,
-                          fontSize: 10,
+                            TextDirection.rtl,
+                        maxLines: 1,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 9,
                         ),
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(width: 8),
+                const SizedBox(width: 7),
 
                 const Icon(
-                  Icons
-                      .arrow_forward_ios_rounded,
-                  color:
-                      Color(0xFFFFD76A),
-                  size: 15,
+                  Icons.arrow_forward_ios_rounded,
+                  color: Color(0xFFFFD76A),
+                  size: 14,
                 ),
               ],
             ),
@@ -1036,8 +953,7 @@ class _OfferData {
 // NEWS
 // ============================================================
 
-class _NewsCard
-    extends StatelessWidget {
+class _NewsCard extends StatelessWidget {
   final NewsItem item;
   final VoidCallback onTap;
 
@@ -1049,46 +965,38 @@ class _NewsCard
   @override
   Widget build(BuildContext context) {
     final hasImage =
-        item.imageUrl
-            .trim()
-            .isNotEmpty;
+        item.imageUrl.trim().isNotEmpty;
 
     return Container(
-      margin:
-          const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(
+        bottom: 8,
+      ),
       decoration: BoxDecoration(
-        color:
-            const Color(0xFF11141D),
-        borderRadius:
-            BorderRadius.circular(18),
+        color: const Color(0xFF10141D),
+        borderRadius: BorderRadius.circular(17),
         border: Border.all(
           color: Colors.white10,
         ),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius:
-            BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(17),
         child: Padding(
-          padding:
-              const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(9),
           child: Row(
             children: [
               const Icon(
-                Icons
-                    .arrow_back_ios_new_rounded,
-                color:
-                    Color(0xFFFFD76A),
-                size: 16,
+                Icons.arrow_back_ios_new_rounded,
+                color: Color(0xFFFFD76A),
+                size: 15,
               ),
 
-              const SizedBox(width: 9),
+              const SizedBox(width: 8),
 
               Expanded(
                 child: Column(
                   crossAxisAlignment:
-                      CrossAxisAlignment
-                          .end,
+                      CrossAxisAlignment.end,
                   children: [
                     Text(
                       item.title,
@@ -1099,41 +1007,41 @@ class _NewsCard
                       maxLines: 2,
                       overflow:
                           TextOverflow.ellipsis,
-                      style:
-                          const TextStyle(
+                      style: const TextStyle(
                         fontWeight:
                             FontWeight.w800,
-                        fontSize: 14,
+                        fontSize: 13,
+                        height: 1.25,
                       ),
                     ),
 
-                    const SizedBox(height: 5),
+                    const SizedBox(height: 4),
 
                     Text(
                       item.source,
                       textDirection:
                           TextDirection.rtl,
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.white54,
-                        fontSize: 11,
+                      maxLines: 1,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 10,
                       ),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(width: 10),
+              const SizedBox(width: 9),
 
               ClipRRect(
                 borderRadius:
-                    BorderRadius.circular(13),
+                    BorderRadius.circular(12),
                 child: Container(
                   width: 68,
-                  height: 58,
-                  color:
-                      const Color(0xFF1A2030),
+                  height: 57,
+                  color: const Color(0xFF1A2030),
                   child: hasImage
                       ? Image.network(
                           item.imageUrl,
@@ -1145,16 +1053,14 @@ class _NewsCard
                                   .newspaper_rounded,
                               color:
                                   Color(0xFF63E6FF),
-                              size: 25,
+                              size: 24,
                             );
                           },
                         )
                       : const Icon(
-                          Icons
-                              .newspaper_rounded,
-                          color:
-                              Color(0xFF63E6FF),
-                          size: 25,
+                          Icons.newspaper_rounded,
+                          color: Color(0xFF63E6FF),
+                          size: 24,
                         ),
                 ),
               ),
@@ -1166,8 +1072,7 @@ class _NewsCard
   }
 }
 
-class _EmptyNews
-    extends StatelessWidget {
+class _EmptyNews extends StatelessWidget {
   final VoidCallback onRetry;
 
   const _EmptyNews({
@@ -1177,25 +1082,35 @@ class _EmptyNews
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.all(17),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color:
-            const Color(0xFF11141D),
-        borderRadius:
-            BorderRadius.circular(17),
+        color: const Color(0xFF11141D),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(
+          color: Colors.white10,
+        ),
       ),
       child: Column(
         children: [
+          const Icon(
+            Icons.wifi_tethering_error_rounded,
+            color: Color(0xFF63E6FF),
+            size: 32,
+          ),
+          const SizedBox(height: 7),
           const Text(
             'الأخبار مش متاحة دلوقتي 📡',
-            textDirection:
-                TextDirection.rtl,
+            textDirection: TextDirection.rtl,
           ),
-          TextButton(
+          const SizedBox(height: 5),
+          TextButton.icon(
             onPressed: onRetry,
-            child:
-                const Text('حاول تاني'),
+            icon: const Icon(
+              Icons.refresh_rounded,
+            ),
+            label: const Text(
+              'حاول تاني',
+            ),
           ),
         ],
       ),
@@ -1204,125 +1119,43 @@ class _EmptyNews
 }
 
 // ============================================================
-// REELS STRIP
+// REAL CONTENT NOTICE
 // ============================================================
 
-class _ReelStrip
-    extends StatelessWidget {
-  const _ReelStrip();
+class _RealContentNotice extends StatelessWidget {
+  const _RealContentNotice();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin:
-          const EdgeInsets.only(
-        top: 5,
-        bottom: 13,
+      margin: const EdgeInsets.only(
+        top: 2,
+        bottom: 10,
       ),
-      height: 105,
-      child: ListView(
-        scrollDirection:
-            Axis.horizontal,
-        children: const [
-          _ReelCard(
-            title:
-                'ريلز صاحبي',
-            subtitle:
-                'شاهد المزيد',
-            icon:
-                Icons.play_circle_fill_rounded,
-          ),
-          _ReelCard(
-            title:
-                'فيديوهات مختارة',
-            subtitle:
-                'قريبًا',
-            icon:
-                Icons.movie_filter_rounded,
-          ),
-          _ReelCard(
-            title:
-                'محتوى جديد',
-            subtitle:
-                'اكتشف',
-            icon:
-                Icons.auto_awesome_rounded,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReelCard
-    extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-
-  const _ReelCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 155,
-      margin:
-          const EdgeInsets.only(
-        left: 8,
-      ),
+      height: 82,
       decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(19),
-        gradient:
-            const LinearGradient(
-          begin:
-              Alignment.topRight,
-          end:
-              Alignment.bottomLeft,
+        borderRadius: BorderRadius.circular(18),
+        gradient: const LinearGradient(
           colors: [
-            Color(0xFF2D2042),
-            Color(0xFF101521),
+            Color(0xFF171C2B),
+            Color(0xFF10131B),
           ],
         ),
         border: Border.all(
-          color:
-              const Color(0x4463E6FF),
+          color: Color(0x335FCFFF),
         ),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const SizedBox(width: 10),
+          SizedBox(width: 12),
 
-          Container(
-            width: 45,
-            height: 70,
-            decoration:
-                const BoxDecoration(
-              borderRadius:
-                  BorderRadius.all(
-                Radius.circular(15),
-              ),
-              gradient:
-                  LinearGradient(
-                colors: [
-                  Color(0xFF63E6FF),
-                  Color(0xFFB45CFF),
-                ],
-              ),
-            ),
-            child: Icon(
-              icon,
-              color:
-                  Colors.black,
-              size: 27,
-            ),
+          Icon(
+            Icons.play_circle_outline_rounded,
+            color: Color(0xFF63E6FF),
+            size: 34,
           ),
 
-          const SizedBox(width: 8),
+          SizedBox(width: 10),
 
           Expanded(
             child: Column(
@@ -1332,37 +1165,32 @@ class _ReelCard
                   CrossAxisAlignment.end,
               children: [
                 Text(
-                  title,
+                  'محتوى قصير',
+                  textDirection:
+                      TextDirection.rtl,
+                  style: TextStyle(
+                    fontWeight:
+                        FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'سيظهر هنا المحتوى الحقيقي عند ربط مصدر الريلز.',
                   textDirection:
                       TextDirection.rtl,
                   textAlign:
                       TextAlign.right,
-                  style:
-                      const TextStyle(
-                    fontWeight:
-                        FontWeight.w900,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(
-                  height: 4,
-                ),
-                Text(
-                  subtitle,
-                  textDirection:
-                      TextDirection.rtl,
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.white54,
-                    fontSize: 10,
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 9,
                   ),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(width: 8),
+          SizedBox(width: 12),
         ],
       ),
     );
@@ -1373,8 +1201,7 @@ class _ReelCard
 // STORE BUTTON
 // ============================================================
 
-class _StoreButton
-    extends StatelessWidget {
+class _StoreButton extends StatelessWidget {
   final String title;
   final IconData icon;
   final String url;
@@ -1388,32 +1215,32 @@ class _StoreButton
   @override
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
-      onPressed: () {
-        launchUrl(
-          Uri.parse(url),
-          mode:
-              LaunchMode.externalApplication,
-        );
+      onPressed: () async {
+        try {
+          await launchUrl(
+            Uri.parse(url),
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (_) {}
       },
       icon: Icon(
         icon,
-        color:
-            const Color(0xFFFFD76A),
-        size: 18,
+        color: const Color(0xFFFFD76A),
+        size: 17,
       ),
       label: Text(title),
-      style:
-          OutlinedButton.styleFrom(
-        foregroundColor:
-            Colors.white,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
         side: const BorderSide(
-          color:
-              Color(0x44FFD76A),
+          color: Color(0x44FFD76A),
         ),
-        shape:
-            RoundedRectangleBorder(
+        shape: RoundedRectangleBorder(
           borderRadius:
-              BorderRadius.circular(14),
+              BorderRadius.circular(13),
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 11,
+          vertical: 8,
         ),
       ),
     );
@@ -1424,8 +1251,7 @@ class _StoreButton
 // MINI AUDIO PLAYER
 // ============================================================
 
-class MiniAudioPlayer
-    extends StatelessWidget {
+class MiniAudioPlayer extends StatelessWidget {
   const MiniAudioPlayer({
     super.key,
   });
@@ -1433,54 +1259,48 @@ class MiniAudioPlayer
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<MediaItem?>(
-      stream:
-          AudioController
-              .handler
-              ?.mediaItem,
-      builder:
-          (context, mediaSnapshot) {
-        final item =
-            mediaSnapshot.data;
+      stream: AudioController
+          .handler
+          ?.mediaItem,
+      builder: (
+        context,
+        mediaSnapshot,
+      ) {
+        final item = mediaSnapshot.data;
 
         if (item == null) {
-          return const SizedBox
-              .shrink();
+          return const SizedBox.shrink();
         }
 
         final handler =
             AudioController.handler;
 
         if (handler == null) {
-          return const SizedBox
-              .shrink();
+          return const SizedBox.shrink();
         }
 
         return Material(
           color: Colors.transparent,
           child: Container(
-            height: 66,
+            height: 62,
             padding:
                 const EdgeInsets.symmetric(
-              horizontal: 8,
+              horizontal: 7,
             ),
-            decoration:
-                BoxDecoration(
+            decoration: BoxDecoration(
               color:
-                  const Color(0xFF151923)
+                  const Color(0xFF121720)
                       .withOpacity(0.98),
               borderRadius:
-                  BorderRadius.circular(20),
+                  BorderRadius.circular(19),
               border: Border.all(
-                color:
-                    const Color(0x55FFD76A),
+                color: const Color(0x55FFD76A),
               ),
               boxShadow: const [
                 BoxShadow(
-                  color:
-                      Color(0x66000000),
-                  blurRadius: 20,
-                  offset:
-                      Offset(0, 7),
+                  color: Color(0x66000000),
+                  blurRadius: 19,
+                  offset: Offset(0, 6),
                 ),
               ],
             ),
@@ -1497,14 +1317,12 @@ class MiniAudioPlayer
                     );
                   },
                   child: Container(
-                    width: 46,
-                    height: 46,
+                    width: 44,
+                    height: 44,
                     decoration:
                         const BoxDecoration(
-                      shape:
-                          BoxShape.circle,
-                      gradient:
-                          LinearGradient(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
                         colors: [
                           Color(0xFFFFD76A),
                           Color(0xFF7164FF),
@@ -1512,15 +1330,13 @@ class MiniAudioPlayer
                       ),
                     ),
                     child: const Icon(
-                      Icons
-                          .graphic_eq_rounded,
-                      color:
-                          Colors.black,
+                      Icons.graphic_eq_rounded,
+                      color: Colors.black,
                     ),
                   ),
                 ),
 
-                const SizedBox(width: 9),
+                const SizedBox(width: 8),
 
                 Expanded(
                   child: GestureDetector(
@@ -1535,44 +1351,37 @@ class MiniAudioPlayer
                     },
                     child: Column(
                       mainAxisAlignment:
-                          MainAxisAlignment
-                              .center,
+                          MainAxisAlignment.center,
                       crossAxisAlignment:
-                          CrossAxisAlignment
-                              .end,
+                          CrossAxisAlignment.end,
                       children: [
                         Text(
                           item.title,
                           textDirection:
-                              TextDirection
-                                  .rtl,
+                              TextDirection.rtl,
                           maxLines: 1,
                           overflow:
-                              TextOverflow
-                                  .ellipsis,
+                              TextOverflow.ellipsis,
                           style:
                               const TextStyle(
                             fontWeight:
-                                FontWeight
-                                    .w900,
-                            fontSize: 12,
+                                FontWeight.w900,
+                            fontSize: 11,
                           ),
                         ),
                         Text(
                           item.artist ??
                               'صاحبي AI',
                           textDirection:
-                              TextDirection
-                                  .rtl,
+                              TextDirection.rtl,
                           maxLines: 1,
                           overflow:
-                              TextOverflow
-                                  .ellipsis,
+                              TextOverflow.ellipsis,
                           style:
                               const TextStyle(
                             color:
                                 Colors.white54,
-                            fontSize: 10,
+                            fontSize: 9,
                           ),
                         ),
                       ],
@@ -1580,21 +1389,24 @@ class MiniAudioPlayer
                   ),
                 ),
 
-                StreamBuilder<
-                    PlaybackState>(
+                StreamBuilder<PlaybackState>(
                   stream:
                       handler.playbackState,
-                  builder:
-                      (
+                  builder: (
                     context,
                     snapshot,
                   ) {
                     final playing =
-                        snapshot.data
-                                ?.playing ??
+                        snapshot.data?.playing ??
                             false;
 
                     return IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
                       onPressed: () {
                         if (playing) {
                           handler.pause();
@@ -1604,30 +1416,33 @@ class MiniAudioPlayer
                       },
                       icon: Icon(
                         playing
-                            ? Icons
-                                .pause_rounded
+                            ? Icons.pause_rounded
                             : Icons
                                 .play_arrow_rounded,
                         color:
                             const Color(
                           0xFFFFD76A,
                         ),
-                        size: 28,
+                        size: 27,
                       ),
                     );
                   },
                 ),
 
                 IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 40,
+                  ),
                   onPressed: () {
                     handler.stop();
                   },
                   icon: const Icon(
-                    Icons
-                        .close_rounded,
-                    color:
-                        Colors.white54,
-                    size: 20,
+                    Icons.close_rounded,
+                    color: Colors.white54,
+                    size: 19,
                   ),
                 ),
               ],
@@ -1643,8 +1458,7 @@ class MiniAudioPlayer
 // PROFILE
 // ============================================================
 
-class ProfileScreen
-    extends StatefulWidget {
+class ProfileScreen extends StatefulWidget {
   final VoidCallback onAudio;
 
   const ProfileScreen({
@@ -1679,13 +1493,10 @@ class _ProfileScreenState
 
   Future<void> loadProfile() async {
     final prefs =
-        await SharedPreferences
-            .getInstance();
+        await SharedPreferences.getInstance();
 
     final savedName =
-        prefs.getString(
-      'profile_name',
-    );
+        prefs.getString('profile_name');
 
     final savedPhoto =
         prefs.getString(
@@ -1704,9 +1515,7 @@ class _ProfileScreenState
       try {
         decodedPhoto =
             Uint8List.fromList(
-          base64Decode(
-            savedPhoto,
-          ),
+          base64Decode(savedPhoto),
         );
       } catch (_) {}
     }
@@ -1729,64 +1538,64 @@ class _ProfileScreenState
   }
 
   Future<void> choosePhoto() async {
-    final file =
-        await picker.pickImage(
-      source:
-          ImageSource.gallery,
-      imageQuality: 70,
-      maxWidth: 900,
-    );
+    try {
+      final file =
+          await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxWidth: 900,
+      );
 
-    if (file == null) return;
+      if (file == null) return;
 
-    final bytes =
-        await file.readAsBytes();
+      final bytes =
+          await file.readAsBytes();
 
-    if (bytes.isEmpty) return;
+      if (bytes.isEmpty) return;
 
-    final prefs =
-        await SharedPreferences
-            .getInstance();
+      final prefs =
+          await SharedPreferences
+              .getInstance();
 
-    await prefs.setString(
-      'profile_photo_base64',
-      base64Encode(bytes),
-    );
+      await prefs.setString(
+        'profile_photo_base64',
+        base64Encode(bytes),
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      photo = bytes;
-    });
+      setState(() {
+        photo = bytes;
+      });
+    } catch (_) {}
   }
 
   Future<void> chooseReel() async {
-    final file =
-        await picker.pickVideo(
-      source:
-          ImageSource.gallery,
-      maxDuration:
-          const Duration(
-        minutes: 2,
-      ),
-    );
+    try {
+      final file =
+          await picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration:
+            const Duration(minutes: 2),
+      );
 
-    if (file == null) return;
+      if (file == null) return;
 
-    final prefs =
-        await SharedPreferences
-            .getInstance();
+      final prefs =
+          await SharedPreferences
+              .getInstance();
 
-    await prefs.setString(
-      'profile_reel_name',
-      file.name,
-    );
+      await prefs.setString(
+        'profile_reel_name',
+        file.name,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      reelName = file.name;
-    });
+      setState(() {
+        reelName = file.name;
+      });
+    } catch (_) {}
   }
 
   Future<void> saveName() async {
@@ -1806,19 +1615,21 @@ class _ProfileScreenState
 
     if (!mounted) return;
 
-    FocusScope.of(context)
-        .unfocus();
+    FocusScope.of(context).unfocus();
 
     setState(() {});
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(
-      const SnackBar(
-        content:
-            Text('تم حفظ الاسم'),
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text(
+            'تم حفظ الاسم ✅',
+            textDirection:
+                TextDirection.rtl,
+          ),
+        ),
+      );
   }
 
   Future<void> shareApp() async {
@@ -1830,64 +1641,40 @@ class _ProfileScreenState
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     if (loadingProfile) {
       return const Center(
-        child:
-            CircularProgressIndicator(),
+        child: CircularProgressIndicator(
+          color: Color(0xFFFFD76A),
+        ),
       );
     }
 
     final displayName =
-        nameController.text
-                .trim()
-                .isEmpty
+        nameController.text.trim().isEmpty
             ? 'صاحبي'
-            : nameController.text
-                .trim();
+            : nameController.text.trim();
 
     return ListView(
       padding:
           const EdgeInsets.fromLTRB(
-        16,
-        10,
-        16,
-        120,
+        14,
+        8,
+        14,
+        125,
       ),
       children: [
         AppHeader(
-          onAudioTap:
-              widget.onAudio,
+          onAudioTap: widget.onAudio,
         ),
 
-        const SizedBox(height: 10),
-
-        const Text(
-          'حسابي',
-          textDirection:
-              TextDirection.rtl,
-          textAlign:
-              TextAlign.right,
-          style: TextStyle(
-            fontSize: 25,
-            fontWeight:
-                FontWeight.w900,
-          ),
-        ),
-
-        const SizedBox(height: 12),
+        const SizedBox(height: 13),
 
         Container(
-          padding:
-              const EdgeInsets.all(16),
-          decoration:
-              BoxDecoration(
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(
             borderRadius:
-                BorderRadius.circular(
-              23,
-            ),
+                BorderRadius.circular(23),
             gradient:
                 const LinearGradient(
               colors: [
@@ -1895,12 +1682,9 @@ class _ProfileScreenState
                 Color(0xFF10131C),
               ],
             ),
-            border:
-                Border.all(
+            border: Border.all(
               color:
-                  const Color(
-                0x44FFD76A,
-              ),
+                  const Color(0x44FFD76A),
             ),
           ),
           child: Column(
@@ -1908,14 +1692,11 @@ class _ProfileScreenState
               GestureDetector(
                 onTap: choosePhoto,
                 child: Container(
-                  width: 98,
-                  height: 98,
-                  decoration:
-                      BoxDecoration(
-                    shape:
-                        BoxShape.circle,
-                    border:
-                        Border.all(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
                       color:
                           const Color(
                         0xFFFFD76A,
@@ -1925,9 +1706,7 @@ class _ProfileScreenState
                     boxShadow: const [
                       BoxShadow(
                         color:
-                            Color(
-                          0x44FFD76A,
-                        ),
+                            Color(0x44FFD76A),
                         blurRadius: 18,
                       ),
                     ],
@@ -1941,12 +1720,11 @@ class _ProfileScreenState
                                 Color(
                               0xFFFFD76A,
                             ),
-                            size: 46,
+                            size: 45,
                           )
                         : Image.memory(
                             photo!,
-                            fit:
-                                BoxFit.cover,
+                            fit: BoxFit.cover,
                           ),
                   ),
                 ),
@@ -1969,41 +1747,32 @@ class _ProfileScreenState
               const SizedBox(height: 10),
 
               TextField(
-                controller:
-                    nameController,
+                controller: nameController,
                 textDirection:
                     TextDirection.rtl,
                 textAlign:
                     TextAlign.right,
                 decoration:
                     InputDecoration(
-                  hintText:
-                      'اكتب اسمك',
+                  hintText: 'اكتب اسمك',
                   prefixIcon:
                       const Icon(
-                    Icons
-                        .badge_outlined,
+                    Icons.badge_outlined,
                   ),
                   suffixIcon:
                       IconButton(
-                    onPressed:
-                        saveName,
-                    icon:
-                        const Icon(
-                      Icons
-                          .check_rounded,
+                    onPressed: saveName,
+                    icon: const Icon(
+                      Icons.check_rounded,
                     ),
                   ),
                   filled: true,
                   fillColor:
-                      const Color(
-                    0xFF0D1018,
-                  ),
+                      const Color(0xFF0D1018),
                   border:
                       OutlineInputBorder(
                     borderRadius:
-                        BorderRadius
-                            .circular(
+                        BorderRadius.circular(
                       15,
                     ),
                     borderSide:
@@ -2011,8 +1780,7 @@ class _ProfileScreenState
                   ),
                 ),
                 onSubmitted:
-                    (_) =>
-                        saveName(),
+                    (_) => saveName(),
               ),
 
               const SizedBox(height: 10),
@@ -2021,13 +1789,12 @@ class _ProfileScreenState
                 children: [
                   Expanded(
                     child:
-                        OutlinedButton
-                            .icon(
+                        OutlinedButton.icon(
                       onPressed:
                           choosePhoto,
                       icon:
                           const Icon(
-                        Icons.photo,
+                        Icons.photo_rounded,
                       ),
                       label:
                           const Text(
@@ -2035,20 +1802,15 @@ class _ProfileScreenState
                       ),
                     ),
                   ),
-
-                  const SizedBox(
-                    width: 8,
-                  ),
-
+                  const SizedBox(width: 8),
                   Expanded(
                     child:
-                        OutlinedButton
-                            .icon(
+                        OutlinedButton.icon(
                       onPressed:
                           chooseReel,
                       icon:
                           const Icon(
-                        Icons.movie,
+                        Icons.movie_rounded,
                       ),
                       label:
                           const Text(
@@ -2060,9 +1822,7 @@ class _ProfileScreenState
               ),
 
               if (reelName != null) ...[
-                const SizedBox(
-                  height: 8,
-                ),
+                const SizedBox(height: 8),
                 Text(
                   '🎬 $reelName',
                   textDirection:
@@ -2072,8 +1832,7 @@ class _ProfileScreenState
                       TextOverflow.ellipsis,
                   style:
                       const TextStyle(
-                    color:
-                        Colors.white60,
+                    color: Colors.white60,
                   ),
                 ),
               ],
@@ -2084,32 +1843,29 @@ class _ProfileScreenState
         const SizedBox(height: 12),
 
         _ReminderCard(
-          icon:
-              Icons.mosque_rounded,
+          icon: Icons.mosque_rounded,
           title: 'عبادات',
           subtitle:
-              'تذكيرات للعبادات والأذكار والمهام الدينية.',
+              'إعدادات تذكيرات العبادات والأذكار.',
           color:
               const Color(0xFF26A69A),
         ),
 
         _ReminderCard(
           icon:
-              Icons
-                  .sports_soccer_rounded,
+              Icons.sports_soccer_rounded,
           title: 'هوايات',
           subtitle:
-              'تذكيرات للرياضة والهوايات والأشياء التي تحبها.',
+              'إعدادات تذكيرات الرياضة والهوايات.',
           color:
               const Color(0xFF2196F3),
         ),
 
         _ReminderCard(
-          icon:
-              Icons.person_rounded,
+          icon: Icons.person_rounded,
           title: 'شخصي',
           subtitle:
-              'تذكيرات شخصية للمهام والمواعيد والأهداف.',
+              'إعدادات التذكيرات الشخصية.',
           color:
               const Color(0xFFB45CFF),
         ),
@@ -2117,21 +1873,16 @@ class _ProfileScreenState
         const SizedBox(height: 4),
 
         _ProfileButton(
-          icon:
-              Icons.share_rounded,
-          title:
-              'مشاركة التطبيق',
+          icon: Icons.share_rounded,
+          title: 'مشاركة التطبيق',
           subtitle:
-              'شارك صاحبي مع أصحابك برابط التحميل عبر التطبيقات المتاحة.',
-          onTap:
-              shareApp,
+              'شارك رابط تحميل صاحبي AI مع أصحابك.',
+          onTap: shareApp,
         ),
 
         _ProfileButton(
-          icon:
-              Icons.settings_rounded,
-          title:
-              'الإعدادات',
+          icon: Icons.settings_rounded,
+          title: 'الإعدادات',
           subtitle:
               'إعدادات التطبيق والذكاء الاصطناعي.',
           onTap: () {
@@ -2150,7 +1901,7 @@ class _ProfileScreenState
 }
 
 // ============================================================
-// REMINDERS
+// REMINDER CARD
 // ============================================================
 
 class _ReminderCard
@@ -2171,13 +1922,10 @@ class _ReminderCard
   Widget build(BuildContext context) {
     return Container(
       margin:
-          const EdgeInsets.only(
-        bottom: 8,
-      ),
+          const EdgeInsets.only(bottom: 8),
       padding:
           const EdgeInsets.all(11),
-      decoration:
-          BoxDecoration(
+      decoration: BoxDecoration(
         color:
             const Color(0xFF131620),
         borderRadius:
@@ -2191,8 +1939,7 @@ class _ReminderCard
         children: [
           const Icon(
             Icons.chevron_left_rounded,
-            color:
-                Colors.white38,
+            color: Colors.white38,
           ),
 
           const Spacer(),
@@ -2213,11 +1960,7 @@ class _ReminderCard
                         FontWeight.w900,
                   ),
                 ),
-
-                const SizedBox(
-                  height: 2,
-                ),
-
+                const SizedBox(height: 2),
                 Text(
                   subtitle,
                   textDirection:
@@ -2240,20 +1983,13 @@ class _ReminderCard
           Container(
             width: 43,
             height: 43,
-            decoration:
-                BoxDecoration(
-              shape:
-                  BoxShape.circle,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
               color:
-                  color.withOpacity(
-                0.16,
-              ),
-              border:
-                  Border.all(
+                  color.withOpacity(0.16),
+              border: Border.all(
                 color:
-                    color.withOpacity(
-                  0.4,
-                ),
+                    color.withOpacity(0.4),
               ),
             ),
             child: Icon(
@@ -2290,18 +2026,15 @@ class _ProfileButton
   Widget build(BuildContext context) {
     return Container(
       margin:
-          const EdgeInsets.only(
-        bottom: 9,
-      ),
-      decoration:
-          BoxDecoration(
+          const EdgeInsets.only(bottom: 9),
+      decoration: BoxDecoration(
         color:
             const Color(0xFF131620),
         borderRadius:
             BorderRadius.circular(18),
-        border: Border.all(
-          color:
-              Colors.white10,
+        border:
+            Border.all(
+          color: Colors.white10,
         ),
       ),
       child: ListTile(
@@ -2311,8 +2044,7 @@ class _ProfileButton
           height: 44,
           decoration:
               const BoxDecoration(
-            shape:
-                BoxShape.circle,
+            shape: BoxShape.circle,
             gradient:
                 LinearGradient(
               colors: [
@@ -2323,8 +2055,7 @@ class _ProfileButton
           ),
           child: Icon(
             icon,
-            color:
-                Colors.black,
+            color: Colors.black,
           ),
         ),
         title: Text(
@@ -2350,8 +2081,7 @@ class _ProfileButton
         ),
         trailing:
             const Icon(
-          Icons
-              .chevron_left_rounded,
+          Icons.chevron_left_rounded,
         ),
       ),
     );
