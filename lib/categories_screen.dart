@@ -16,64 +16,95 @@ class CategoriesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF080A10),
+      backgroundColor: const Color(0xFF070910),
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  16,
-                  12,
-                  16,
-                  4,
-                ),
-                child: _ServicesHeader(
-                  onAudio: onAudio,
-                ),
+        child: Column(
+          children: [
+            // شريط علوي صغير بدون عنوان كبير.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                12,
+                8,
+                12,
+                6,
+              ),
+              child: Row(
+                children: [
+                  _AudioButton(
+                    onTap: onAudio,
+                  ),
+                  const Spacer(),
+                  const Text(
+                    'خدمات صاحبي',
+                    textDirection: TextDirection.rtl,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
               ),
             ),
 
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                12,
-                12,
-                12,
-                120,
-              ),
-              sliver: SliverGrid(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final service =
-                        sa7biServices[index];
+            // الـ10 خدمات كلها داخل الشاشة.
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableHeight =
+                      constraints.maxHeight;
 
-                    return _GlassServiceCard(
-                      service: service,
-                      index: index,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ServiceDetailScreen(
-                              service: service,
-                            ),
-                          ),
+                  // 5 صفوف × 2 خدمة.
+                  // نحسب الحجم تلقائيًا حسب حجم الشاشة.
+                  final rowHeight =
+                      ((availableHeight - 18) / 5)
+                          .clamp(82.0, 118.0);
+
+                  final cardHeight =
+                      rowHeight - 4;
+
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      10,
+                      2,
+                      10,
+                      10,
+                    ),
+                    child: GridView.builder(
+                      physics:
+                          const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      itemCount: sa7biServices.length,
+                      gridDelegate:
+                          SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 7,
+                        mainAxisExtent: cardHeight,
+                      ),
+                      itemBuilder: (context, index) {
+                        final service =
+                            sa7biServices[index];
+
+                        return _CompactServiceCard(
+                          service: service,
+                          index: index,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ServiceDetailScreen(
+                                  service: service,
+                                ),
+                              ),
+                            );
+                          },
                         );
                       },
-                    );
-                  },
-                  childCount:
-                      sa7biServices.length,
-                ),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 0.86,
-                ),
+                    ),
+                  );
+                },
               ),
             ),
           ],
@@ -84,161 +115,80 @@ class CategoriesScreen extends StatelessWidget {
 }
 
 // ============================================================
-// HEADER
+// AUDIO BUTTON
 // ============================================================
 
-class _ServicesHeader extends StatelessWidget {
-  final VoidCallback onAudio;
+class _AudioButton extends StatelessWidget {
+  final VoidCallback onTap;
 
-  const _ServicesHeader({
-    required this.onAudio,
+  const _AudioButton({
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            GestureDetector(
-              onTap: onAudio,
-              child: Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF141822),
-                  border: Border.all(
-                    color: const Color(0x4463E6FF),
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x2263E6FF),
-                      blurRadius: 15,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.graphic_eq_rounded,
-                  color: Color(0xFF63E6FF),
-                  size: 24,
-                ),
-              ),
-            ),
-
-            const SizedBox(width: 10),
-
-            const Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'خدمات صاحبي AI',
-                    textDirection:
-                        TextDirection.rtl,
-                    textAlign:
-                        TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 25,
-                      fontWeight:
-                          FontWeight.w900,
-                    ),
-                  ),
-                  SizedBox(height: 3),
-                  Text(
-                    'اختار المجال اللي محتاج صاحبي يساعدك فيه',
-                    textDirection:
-                        TextDirection.rtl,
-                    textAlign:
-                        TextAlign.right,
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 13),
-
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 11,
-          ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 43,
+          height: 43,
           decoration: BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
             gradient: const LinearGradient(
-              begin: Alignment.centerRight,
-              end: Alignment.centerLeft,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
               colors: [
-                Color(0xFF222031),
-                Color(0xFF111722),
+                Color(0xFF1C2533),
+                Color(0xFF0E131D),
               ],
             ),
             border: Border.all(
-              color: const Color(0x335EECFF),
+              color: const Color(0x4463E6FF),
             ),
-          ),
-          child: const Row(
-            children: [
-              Icon(
-                Icons.auto_awesome_rounded,
-                color: Color(0xFFFFD76A),
-                size: 19,
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'كل خدمة لها شخصية وسياق AI مختلف عشان الإجابة تكون مناسبة للمجال.',
-                  textDirection:
-                      TextDirection.rtl,
-                  textAlign:
-                      TextAlign.right,
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11,
-                    height: 1.35,
-                  ),
-                ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1663E6FF),
+                blurRadius: 16,
+                spreadRadius: 1,
               ),
             ],
           ),
+          child: const Icon(
+            Icons.graphic_eq_rounded,
+            color: Color(0xFF63E6FF),
+            size: 22,
+          ),
         ),
-      ],
+      ),
     );
   }
 }
 
 // ============================================================
-// GLASS SERVICE CARD
+// COMPACT GLASS SERVICE CARD
 // ============================================================
 
-class _GlassServiceCard
-    extends StatefulWidget {
+class _CompactServiceCard extends StatefulWidget {
   final Sa7biService service;
   final int index;
   final VoidCallback onTap;
 
-  const _GlassServiceCard({
+  const _CompactServiceCard({
     required this.service,
     required this.index,
     required this.onTap,
   });
 
   @override
-  State<_GlassServiceCard> createState() =>
-      _GlassServiceCardState();
+  State<_CompactServiceCard> createState() =>
+      _CompactServiceCardState();
 }
 
-class _GlassServiceCardState
-    extends State<_GlassServiceCard>
+class _CompactServiceCardState
+    extends State<_CompactServiceCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController controller;
 
@@ -276,152 +226,143 @@ class _GlassServiceCardState
                     1) /
                 2;
 
-        return GestureDetector(
-          onTap: widget.onTap,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius:
-                  BorderRadius.circular(25),
-              gradient: LinearGradient(
-                begin:
-                    Alignment.topRight,
-                end:
-                    Alignment.bottomLeft,
-                colors: [
-                  service.color.withOpacity(
-                    0.16 + pulse * 0.06,
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(19),
+            child: Ink(
+              decoration: BoxDecoration(
+                borderRadius:
+                    BorderRadius.circular(19),
+                gradient: LinearGradient(
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                  colors: [
+                    service.color.withOpacity(
+                      0.18 + pulse * 0.045,
+                    ),
+                    const Color(0xFF151923),
+                    const Color(0xFF0C0F16),
+                  ],
+                ),
+                border: Border.all(
+                  color: service.color.withOpacity(
+                    0.25 + pulse * 0.08,
                   ),
-                  const Color(0xFF171A24),
-                  const Color(0xFF0D1017),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: service.color.withOpacity(
+                      0.045 + pulse * 0.035,
+                    ),
+                    blurRadius: 16 + pulse * 5,
+                    spreadRadius: 1,
+                  ),
                 ],
               ),
-              border: Border.all(
-                color:
-                    service.color.withOpacity(
-                  0.24 + pulse * 0.10,
-                ),
-                width: 1.1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color:
-                      service.color.withOpacity(
-                    0.05 + pulse * 0.05,
-                  ),
-                  blurRadius:
-                      20 + pulse * 7,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius:
-                  BorderRadius.circular(25),
-              child: Stack(
-                children: [
-                  // Moving glass light
-                  Positioned(
-                    top: -35 +
-                        (controller.value *
-                                160) %
-                            160,
-                    left: -50 +
-                        (controller.value *
-                                90) %
-                            120,
-                    child: Transform.rotate(
-                      angle: -0.35,
-                      child: Container(
-                        width: 95,
-                        height: 150,
-                        decoration:
-                            BoxDecoration(
-                          gradient:
-                              LinearGradient(
-                            colors: [
-                              Colors.white
-                                  .withOpacity(
-                                0.00,
-                              ),
-                              Colors.white
-                                  .withOpacity(
-                                0.045,
-                              ),
-                              Colors.white
-                                  .withOpacity(
-                                0.00,
-                              ),
-                            ],
+              child: ClipRRect(
+                borderRadius:
+                    BorderRadius.circular(19),
+                child: Stack(
+                  children: [
+                    // انعكاس زجاجي متحرك.
+                    Positioned(
+                      left: -35 +
+                          controller.value * 150,
+                      top: -20,
+                      child: Transform.rotate(
+                        angle: -0.35,
+                        child: Container(
+                          width: 42,
+                          height: 150,
+                          decoration: BoxDecoration(
+                            gradient:
+                                LinearGradient(
+                              colors: [
+                                Colors.white
+                                    .withOpacity(0),
+                                Colors.white
+                                    .withOpacity(
+                                  0.035,
+                                ),
+                                Colors.white
+                                    .withOpacity(0),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
 
-                  Padding(
-                    padding:
-                        const EdgeInsets.all(11),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.end,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 27,
-                              height: 27,
-                              decoration:
-                                  BoxDecoration(
-                                shape:
-                                    BoxShape.circle,
-                                color: service
-                                    .color
-                                    .withOpacity(
-                                  0.10,
-                                ),
-                                border:
-                                    Border.all(
-                                  color: service
-                                      .color
-                                      .withOpacity(
-                                    0.20,
-                                  ),
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '${widget.index + 1}',
+                    Padding(
+                      padding:
+                          const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      child: Row(
+                        textDirection:
+                            TextDirection.rtl,
+                        children: [
+                          // الاسم والوصف.
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.center,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  service.title,
+                                  textDirection:
+                                      TextDirection.rtl,
+                                  textAlign:
+                                      TextAlign.right,
+                                  maxLines: 1,
+                                  overflow:
+                                      TextOverflow.ellipsis,
                                   style:
-                                      TextStyle(
-                                    color:
-                                        service.color,
-                                    fontSize: 10,
+                                      const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
                                     fontWeight:
                                         FontWeight.w900,
                                   ),
                                 ),
-                              ),
+                                const SizedBox(
+                                  height: 3,
+                                ),
+                                Text(
+                                  service.description,
+                                  textDirection:
+                                      TextDirection.rtl,
+                                  textAlign:
+                                      TextAlign.right,
+                                  maxLines: 2,
+                                  overflow:
+                                      TextOverflow.ellipsis,
+                                  style:
+                                      const TextStyle(
+                                    color:
+                                        Colors.white54,
+                                    fontSize: 8.5,
+                                    height: 1.15,
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
 
-                            const Spacer(),
+                          const SizedBox(
+                            width: 7,
+                          ),
 
-                            Icon(
-                              Icons
-                                  .arrow_forward_ios_rounded,
-                              color:
-                                  Colors.white38,
-                              size: 12,
-                            ),
-                          ],
-                        ),
-
-                        const Spacer(),
-
-                        // Main glass icon
-                        Center(
-                          child: Container(
-                            width: 92,
-                            height: 92,
+                          // أيقونة الخدمة.
+                          Container(
+                            width: 51,
+                            height: 51,
                             decoration:
                                 BoxDecoration(
                               shape:
@@ -442,34 +383,26 @@ class _GlassServiceCardState
                                     0.07,
                                   ),
                                   const Color(
-                                    0xFF0E1118,
+                                    0xFF0D1119,
                                   ),
                                 ],
                               ),
-                              border:
-                                  Border.all(
-                                color: service
-                                    .color
+                              border: Border.all(
+                                color: service.color
                                     .withOpacity(
-                                  0.38 +
-                                      pulse *
-                                          0.10,
+                                  0.35 +
+                                      pulse * 0.08,
                                 ),
-                                width: 1.5,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: service
-                                      .color
+                                  color: service.color
                                       .withOpacity(
-                                    0.13 +
+                                    0.10 +
                                         pulse *
-                                            0.08,
+                                            0.05,
                                   ),
-                                  blurRadius:
-                                      25,
-                                  spreadRadius:
-                                      2,
+                                  blurRadius: 14,
                                 ),
                               ],
                             ),
@@ -478,8 +411,8 @@ class _GlassServiceCardState
                                   Alignment.center,
                               children: [
                                 Container(
-                                  width: 72,
-                                  height: 72,
+                                  width: 40,
+                                  height: 40,
                                   decoration:
                                       BoxDecoration(
                                     shape:
@@ -494,61 +427,69 @@ class _GlassServiceCardState
                                     ),
                                   ),
                                 ),
-
                                 Icon(
                                   service.icon,
                                   color:
                                       service.color,
-                                  size: 42,
+                                  size: 25,
                                 ),
                               ],
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+
+                    // رقم الخدمة الصغير.
+                    Positioned(
+                      top: 5,
+                      left: 6,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        alignment:
+                            Alignment.center,
+                        decoration:
+                            BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: service.color
+                              .withOpacity(
+                            0.10,
+                          ),
+                          border: Border.all(
+                            color: service.color
+                                .withOpacity(
+                              0.20,
+                            ),
+                          ),
                         ),
-
-                        const Spacer(),
-
-                        Text(
-                          service.title,
-                          textDirection:
-                              TextDirection.rtl,
-                          textAlign:
-                              TextAlign.right,
-                          maxLines: 1,
-                          overflow:
-                              TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 16,
+                        child: Text(
+                          '${widget.index + 1}',
+                          style: TextStyle(
+                            color:
+                                service.color,
+                            fontSize: 8,
                             fontWeight:
                                 FontWeight.w900,
                           ),
                         ),
-
-                        const SizedBox(
-                          height: 4,
-                        ),
-
-                        Text(
-                          service.description,
-                          textDirection:
-                              TextDirection.rtl,
-                          textAlign:
-                              TextAlign.right,
-                          maxLines: 2,
-                          overflow:
-                              TextOverflow.ellipsis,
-                          style:
-                              const TextStyle(
-                            color:
-                                Colors.white54,
-                            fontSize: 9.5,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+
+                    // سهم صغير.
+                    Positioned(
+                      bottom: 6,
+                      left: 8,
+                      child: Icon(
+                        Icons
+                            .arrow_back_ios_rounded,
+                        color:
+                            Colors.white24,
+                        size: 9,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
