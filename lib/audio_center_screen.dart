@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 
 import 'ai_service.dart';
 import 'audio_player_service.dart';
@@ -32,17 +32,18 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
   bool _loading = false;
   String _error = '';
 
-  List<Map<String, dynamic>> _items = [];
+  List<AudioSearchItem> _audioItems = [];
 
-  List<QuranReciter> _reciters = [];
-  List<RadioCountry> _countries = [];
-  List<RadioStation> _stations = [];
-
+  QuranCatalog? _quranCatalog;
   QuranReciter? _selectedReciter;
   QuranMoshaf? _selectedMoshaf;
-  RadioCountry? _selectedCountry;
+  QuranSura? _selectedSura;
 
-  StreamSubscription<PlaybackState>? _playbackSubscription;
+  List<RadioCountry> _countries = [];
+  RadioCountry? _selectedCountry;
+  List<RadioStation> _stations = [];
+
+  StreamSubscription? _playbackSubscription;
 
   bool _isPlaying = false;
   String _currentTitle = '';
@@ -55,34 +56,40 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
-      lowerBound: 0.85,
-      upperBound: 1.15,
+      duration: const Duration(milliseconds: 900),
+      lowerBound: 0.88,
+      upperBound: 1.12,
     );
 
     _initialize();
   }
 
   Future<void> _initialize() async {
-    await AudioController.initialize();
+    try {
+      await AudioController.initialize();
 
-    _playbackSubscription =
-        AudioController.playbackStateStream.listen((state) {
-      if (!mounted) return;
+      _playbackSubscription =
+          AudioController.playbackStateStream.listen((state) {
+        if (!mounted) return;
 
-      setState(() {
-        _isPlaying = state.playing;
-      });
+        final playing = state.playing;
 
-      if (state.playing) {
-        if (!_pulseController.isAnimating) {
-          _pulseController.repeat(reverse: true);
+        setState(() {
+          _isPlaying = playing;
+        });
+
+        if (playing) {
+          if (!_pulseController.isAnimating) {
+            _pulseController.repeat(reverse: true);
+          }
+        } else {
+          _pulseController.stop();
+          _pulseController.value = 1;
         }
-      } else {
-        _pulseController.stop();
-        _pulseController.value = 1;
-      }
-    });
+      });
+    } catch (_) {
+      // الصوت يظل متاحًا للمحاولة من الشاشة.
+    }
 
     await _loadCategory();
   }
@@ -95,13 +102,31 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     super.dispose();
   }
 
+  // ============================================================
+  // CATEGORY
+  // ============================================================
+
+  Future<void> _changeCategory(int index) async {
+    if (_categoryIndex == index && !_loading) {
+      return;
+    }
+
+    setState(() {
+      _categoryIndex = index;
+      _error = '';
+      _audioItems = [];
+      _stations = [];
+    });
+
+    await _loadCategory();
+  }
+
   Future<void> _loadCategory() async {
     if (!mounted) return;
 
     setState(() {
       _loading = true;
       _error = '';
-      _items = [];
     });
 
     try {
@@ -109,24 +134,29 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         case 0:
           await _loadQuran();
           break;
+
         case 1:
           await _loadAdhkar();
           break;
+
         case 2:
           await _loadMusic();
           break;
+
         case 3:
           await _loadPodcast();
           break;
+
         case 4:
-          await _loadRadioCountries();
+          await _loadRadio();
           break;
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _error = 'حصلت مشكلة في تحميل المحتوى.';
+        _error =
+            'حصلت مشكلة أثناء تحميل المحتوى. جرّب التحديث مرة أخرى.';
       });
     } finally {
       if (!mounted) return;
@@ -137,123 +167,281 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     }
   }
 
+  // ============================================================
+  // QURAN
+  // ============================================================
+
   Future<void> _loadQuran() async {
     final catalog = await AiService.getQuranCatalog();
 
     if (!mounted) return;
 
-    setState(() {
-      _reciters = catalog.reciters;
+    if (catalog == null) {
+      setState(() {
+        _quranCatalog = null;
+        _selectedReciter = null;
+        _selectedMoshaf = null;
+        _selectedSura = null;
+        _error = 'تعذر تحميل قائمة القراء حاليًا.';
+      });
+      return;
+    }
 
-      if (_reciters.isNotEmpty) {
-        _selectedReciter = _reciters.first;
+    setState(() {
+      _quranCatalog = catalog;
+
+      if (catalog.reciters.isNotEmpty) {
+        _selectedReciter = catalog.reciters.first;
 
         if (_selectedReciter!.moshaf.isNotEmpty) {
           _selectedMoshaf =
               _selectedReciter!.moshaf.first;
+        } else {
+          _selectedMoshaf = null;
         }
+      } else {
+        _selectedReciter = null;
+        _selectedMoshaf = null;
+      }
+
+      if (catalog.suwar.isNotEmpty) {
+        _selectedSura = catalog.suwar.first;
+      } else {
+        _selectedSura = null;
       }
     });
   }
 
+  void _onReciterChanged(QuranReciter? reciter) {
+    if (reciter == null) return;
+
+    setState(() {
+      _selectedReciter = reciter;
+
+      if (reciter.moshaf.isNotEmpty) {
+        _selectedMoshaf = reciter.moshaf.first;
+      } else {
+        _selectedMoshaf = null;
+      }
+    });
+  }
+
+  void _onMoshafChanged(QuranMoshaf? moshaf) {
+    if (moshaf == null) return;
+
+    setState(() {
+      _selectedMoshaf = moshaf;
+    });
+  }
+
+  void _onSuraChanged(QuranSura? sura) {
+    if (sura == null) return;
+
+    setState(() {
+      _selectedSura = sura;
+    });
+  }
+
+  String? _buildQuranUrl(
+    QuranMoshaf moshaf,
+    QuranSura sura,
+  ) {
+    final server = moshaf.server.trim();
+
+    if (server.isEmpty) {
+      return null;
+    }
+
+    var base = server;
+
+    if (!base.endsWith('/')) {
+      base = '$base/';
+    }
+
+    final number =
+        sura.id.toString().padLeft(3, '0');
+
+    return '${base} $number.mp3'.replaceAll(' ', '');
+  }
+
+  Future<void> _playSelectedSura() async {
+    final moshaf = _selectedMoshaf;
+    final sura = _selectedSura;
+
+    if (moshaf == null || sura == null) {
+      _showMessage(
+        'اختار القارئ والرواية والسورة أولًا.',
+      );
+      return;
+    }
+
+    final url = _buildQuranUrl(
+      moshaf,
+      sura,
+    );
+
+    if (url == null) {
+      _showMessage(
+        'رابط الصوت الخاص بهذه الرواية غير متاح.',
+      );
+      return;
+    }
+
+    final title =
+        '${sura.name} - ${_selectedReciter?.name ?? 'القرآن'}';
+
+    await _playUrl(
+      url: url,
+      title: title,
+      artist: _selectedReciter?.name,
+    );
+  }
+
+  // ============================================================
+  // ADHKAR
+  // ============================================================
+
   Future<void> _loadAdhkar() async {
+    final query =
+        _searchController.text.trim();
+
     final items = await AiService.searchAudio(
-      _searchController.text.trim(),
+      query.isEmpty ? 'أذكار' : query,
       type: 'adhkar',
     );
 
     if (!mounted) return;
 
     setState(() {
-      _items = items;
+      _audioItems = items;
     });
+
+    if (items.isEmpty) {
+      setState(() {
+        _error =
+            'لم يتم العثور على أذكار حاليًا. جرّب التحديث.';
+      });
+    }
   }
 
+  // ============================================================
+  // MUSIC
+  // ============================================================
+
   Future<void> _loadMusic() async {
+    final query =
+        _searchController.text.trim();
+
     final items = await AiService.searchAudio(
-      _searchController.text.trim(),
+      query.isEmpty ? 'Arabic music' : query,
       type: 'music',
     );
 
     if (!mounted) return;
 
     setState(() {
-      _items = items;
+      _audioItems = items;
     });
   }
 
+  // ============================================================
+  // PODCAST
+  // ============================================================
+
   Future<void> _loadPodcast() async {
+    final query =
+        _searchController.text.trim();
+
     final items = await AiService.searchAudio(
-      _searchController.text.trim(),
+      query.isEmpty ? 'Arabic podcast' : query,
       type: 'podcast',
     );
 
     if (!mounted) return;
 
     setState(() {
-      _items = items;
+      _audioItems = items;
     });
   }
 
-  Future<void> _loadRadioCountries() async {
+  // ============================================================
+  // RADIO
+  // ============================================================
+
+  Future<void> _loadRadio() async {
     final countries =
         await AiService.getRadioCountries();
 
     if (!mounted) return;
 
-    setState(() {
-      _countries = countries;
-
-      if (_countries.isNotEmpty) {
-        _selectedCountry =
-            _findEgyptOrFirst(_countries);
-      }
-    });
-
-    if (_selectedCountry != null) {
-      await _loadRadioStations(
-        _selectedCountry!,
-      );
+    if (countries.isEmpty) {
+      setState(() {
+        _countries = [];
+        _selectedCountry = null;
+        _stations = [];
+        _error =
+            'تعذر تحميل قائمة الدول والإذاعات حاليًا.';
+      });
+      return;
     }
-  }
 
-  RadioCountry _findEgyptOrFirst(
-    List<RadioCountry> countries,
-  ) {
+    RadioCountry selected =
+        countries.first;
+
     for (final country in countries) {
       final name =
           country.name.toLowerCase();
 
-      final iso =
-          country.iso.toUpperCase();
+      final code =
+          country.code.toUpperCase();
 
-      if (
-        iso == 'EG' ||
-        name.contains('egypt') ||
-        name.contains('مصر')
-      ) {
-        return country;
+      if (code == 'EG' ||
+          name.contains('egypt') ||
+          name.contains('مصر')) {
+        selected = country;
+        break;
       }
     }
 
-    return countries.first;
-  }
-
-  Future<void> _loadRadioStations(
-    RadioCountry country,
-  ) async {
-    if (!mounted) return;
-
     setState(() {
-      _loading = true;
-      _error = '';
+      _countries = countries;
+      _selectedCountry = selected;
       _stations = [];
     });
 
+    await _loadStations(
+      selected,
+    );
+  }
+
+  Future<void> _changeCountry(
+    RadioCountry? country,
+  ) async {
+    if (country == null) return;
+
+    setState(() {
+      _selectedCountry = country;
+      _stations = [];
+      _error = '';
+      _loading = true;
+    });
+
+    await _loadStations(country);
+
+    if (!mounted) return;
+
+    setState(() {
+      _loading = false;
+    });
+  }
+
+  Future<void> _loadStations(
+    RadioCountry country,
+  ) async {
     try {
       final stations =
           await AiService.getRadioStations(
-        country.iso,
+        country.code,
       );
 
       if (!mounted) return;
@@ -265,17 +453,16 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
       if (!mounted) return;
 
       setState(() {
+        _stations = [];
         _error =
             'تعذر تحميل محطات هذه الدولة.';
       });
-    } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _loading = false;
-      });
     }
   }
+
+  // ============================================================
+  // SEARCH
+  // ============================================================
 
   Future<void> _search() async {
     switch (_categoryIndex) {
@@ -296,7 +483,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
       case 4:
         if (_selectedCountry != null) {
-          await _loadRadioStations(
+          await _loadStations(
             _selectedCountry!,
           );
         }
@@ -304,31 +491,47 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     }
   }
 
+  // ============================================================
+  // AUDIO CONTROL
+  // ============================================================
+
   Future<void> _playUrl({
     required String url,
     required String title,
     String? artist,
     String? artwork,
   }) async {
-    if (url.trim().isEmpty) {
+    final cleanUrl = url.trim();
+
+    if (cleanUrl.isEmpty) {
       _showMessage(
-        'المصدر الصوتي غير متاح حاليًا.',
+        'المصدر الصوتي غير متاح لهذا العنصر.',
       );
       return;
     }
 
     try {
+      Uri? artUri;
+
+      if (artwork != null &&
+          artwork.trim().isNotEmpty) {
+        artUri = Uri.tryParse(
+          artwork.trim(),
+        );
+      }
+
       await AudioController.playUrl(
-        url: url,
+        url: cleanUrl,
         title: title,
         artist: artist,
-        artUri: artwork,
+        artUri: artUri,
       );
 
       if (!mounted) return;
 
       setState(() {
         _currentTitle = title;
+        _isPlaying = true;
       });
     } catch (_) {
       if (!mounted) return;
@@ -337,6 +540,18 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         'تعذر تشغيل الصوت. جرّب عنصرًا آخر.',
       );
     }
+  }
+
+  Future<void> _stopAudio() async {
+    try {
+      await AudioController.stop();
+
+      if (!mounted) return;
+
+      setState(() {
+        _isPlaying = false;
+      });
+    } catch (_) {}
   }
 
   Future<void> _pickLocalAudio() async {
@@ -351,25 +566,29 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         return;
       }
 
-      final path =
-          result.files.single.path;
+      final file =
+          result.files.single;
 
-      if (path == null || path.isEmpty) {
+      final path = file.path;
+
+      if (path == null ||
+          path.trim().isEmpty) {
+        _showMessage(
+          'تعذر الوصول إلى الملف.',
+        );
         return;
       }
 
-      final title =
-          result.files.single.name;
-
       await AudioController.playLocalFile(
         path: path,
-        title: title,
+        title: file.name,
       );
 
       if (!mounted) return;
 
       setState(() {
-        _currentTitle = title;
+        _currentTitle = file.name;
+        _isPlaying = true;
       });
     } catch (_) {
       if (!mounted) return;
@@ -380,22 +599,9 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     }
   }
 
-  void _showMessage(String message) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            message,
-            textAlign: TextAlign.right,
-          ),
-          behavior:
-              SnackBarBehavior.floating,
-        ),
-      );
-  }
+  // ============================================================
+  // UI
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -412,13 +618,13 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
           title: const Text(
             'مركز الصوت',
             style: TextStyle(
-              fontWeight: FontWeight.w800,
               color: Colors.white,
+              fontWeight: FontWeight.w800,
             ),
           ),
           actions: [
             IconButton(
-              tooltip: 'ملف صوتي من الجهاز',
+              tooltip: 'ملف صوتي من الهاتف',
               onPressed: _pickLocalAudio,
               icon: const Icon(
                 Icons.folder_open_rounded,
@@ -434,6 +640,9 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
               _buildPlayingBar(),
             Expanded(
               child: RefreshIndicator(
+                color: Colors.white,
+                backgroundColor:
+                    const Color(0xFF17283E),
                 onRefresh: _loadCategory,
                 child: _buildContent(),
               ),
@@ -455,61 +664,32 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         ),
         scrollDirection: Axis.horizontal,
         itemCount: _categories.length,
-        separatorBuilder:
-            (_, __) =>
-                const SizedBox(width: 8),
+        separatorBuilder: (_, __) =>
+            const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final selected =
               index == _categoryIndex;
 
           return GestureDetector(
-            onTap: () async {
-              if (_categoryIndex == index) {
-                return;
-              }
-
-              setState(() {
-                _categoryIndex = index;
-                _selectedReciter = null;
-                _selectedMoshaf = null;
-                _selectedCountry = null;
-                _items = [];
-                _stations = [];
-                _error = '';
-              });
-
-              await _loadCategory();
-            },
+            onTap: () =>
+                _changeCategory(index),
             child: AnimatedContainer(
               duration:
-                  const Duration(
-                milliseconds: 250,
-              ),
+                  const Duration(milliseconds: 220),
               padding:
                   const EdgeInsets.symmetric(
                 horizontal: 18,
               ),
               decoration: BoxDecoration(
                 borderRadius:
-                    BorderRadius.circular(
-                  22,
-                ),
-                gradient: selected
-                    ? const LinearGradient(
-                        colors: [
-                          Color(0xFF8B5CF6),
-                          Color(0xFF06B6D4),
-                        ],
-                      )
-                    : null,
+                    BorderRadius.circular(18),
                 color: selected
-                    ? null
-                    : const Color(
-                        0xFF142338,
-                      ),
+                    ? const Color(0xFFB9913E)
+                    : const Color(0xFF132238),
                 border: Border.all(
-                  color: Colors.white
-                      .withOpacity(0.08),
+                  color: selected
+                      ? const Color(0xFFE6C875)
+                      : Colors.white10,
                 ),
               ),
               child: Center(
@@ -535,89 +715,81 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
       margin:
           const EdgeInsets.fromLTRB(
         12,
-        2,
+        4,
         12,
         8,
       ),
       padding:
           const EdgeInsets.symmetric(
         horizontal: 14,
-        vertical: 9,
+        vertical: 10,
       ),
       decoration: BoxDecoration(
         borderRadius:
             BorderRadius.circular(18),
-        color:
-            const Color(0xFF122238),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF182D46),
+            Color(0xFF0D1A2C),
+          ],
+        ),
         border: Border.all(
-          color:
-              const Color(0xFF8B5CF6)
-                  .withOpacity(0.35),
+          color: Colors.white12,
         ),
       ),
       child: Row(
         children: [
           AnimatedBuilder(
             animation: _pulseController,
-            builder: (context, child) {
+            builder: (_, child) {
               return Transform.scale(
                 scale:
-                    _pulseController.value,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration:
-                      BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color:
-                            const Color(
-                              0xFF8B5CF6,
-                            ).withOpacity(
-                              _isPlaying
-                                  ? 0.55
-                                  : 0,
-                            ),
-                        blurRadius: 18,
-                        spreadRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.graphic_eq_rounded,
-                    color:
-                        Color(0xFF67E8F9),
-                  ),
-                ),
+                    _isPlaying
+                        ? _pulseController.value
+                        : 1,
+                child: child,
               );
             },
+            child: Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color:
+                    const Color(0xFFB9913E)
+                        .withOpacity(.18),
+                border: Border.all(
+                  color:
+                      const Color(0xFFE6C875)
+                          .withOpacity(.45),
+                ),
+              ),
+              child: const Icon(
+                Icons.graphic_eq_rounded,
+                color: Color(0xFFE6C875),
+              ),
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               _currentTitle.isEmpty
-                  ? 'جاري التشغيل'
+                  ? 'يتم تشغيل الصوت'
                   : _currentTitle,
               maxLines: 1,
               overflow:
                   TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
-                fontWeight:
-                    FontWeight.w700,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
           IconButton(
-            onPressed: () async {
-              try {
-                await AudioController.stop();
-              } catch (_) {}
-            },
+            onPressed: _stopAudio,
             icon: const Icon(
               Icons.stop_circle_outlined,
-              color: Colors.white70,
+              color: Colors.white,
             ),
           ),
         ],
@@ -627,14 +799,15 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
   Widget _buildContent() {
     if (_loading) {
-      return const ListView(
+      return ListView(
         physics:
-            AlwaysScrollableScrollPhysics(),
-        children: [
-          SizedBox(height: 180),
+            const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 90),
           Center(
-            child:
-                CircularProgressIndicator(),
+            child: CircularProgressIndicator(
+              color: Color(0xFFE6C875),
+            ),
           ),
         ],
       );
@@ -647,11 +820,11 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         padding:
             const EdgeInsets.all(24),
         children: [
-          const SizedBox(height: 100),
+          const SizedBox(height: 80),
           const Icon(
             Icons.cloud_off_rounded,
-            color: Colors.white54,
             size: 54,
+            color: Colors.white38,
           ),
           const SizedBox(height: 16),
           Text(
@@ -659,18 +832,20 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 16,
+              fontSize: 15,
+              height: 1.6,
             ),
           ),
           const SizedBox(height: 18),
           Center(
-            child: FilledButton.icon(
+            child: ElevatedButton.icon(
               onPressed: _loadCategory,
               icon: const Icon(
                 Icons.refresh_rounded,
               ),
-              label:
-                  const Text('إعادة المحاولة'),
+              label: const Text(
+                'إعادة المحاولة',
+              ),
             ),
           ),
         ],
@@ -682,19 +857,18 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         return _buildQuran();
 
       case 1:
-        return _buildGenericList(
-          emptyText:
-              'لم يتم العثور على أذكار.',
-        );
+        return _buildAdhkar();
 
       case 2:
-        return _buildGenericList(
+        return _buildSearchAudioList(
+          title: 'الموسيقى',
           emptyText:
-              'ابحث عن أغنية أو فنان.',
+              'ابحث عن فنان أو أغنية.',
         );
 
       case 3:
-        return _buildGenericList(
+        return _buildSearchAudioList(
+          title: 'البودكاست',
           emptyText:
               'ابحث عن بودكاست أو برنامج.',
         );
@@ -707,255 +881,326 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     }
   }
 
+  // ============================================================
+  // QURAN UI
+  // ============================================================
+
   Widget _buildQuran() {
-    if (_reciters.isEmpty) {
+    final catalog = _quranCatalog;
+
+    if (catalog == null ||
+        catalog.reciters.isEmpty) {
       return ListView(
         physics:
             const AlwaysScrollableScrollPhysics(),
-        padding:
-            const EdgeInsets.all(24),
         children: const [
           SizedBox(height: 80),
-          Icon(
-            Icons.menu_book_rounded,
-            color: Colors.white54,
-            size: 64,
-          ),
-          SizedBox(height: 18),
-          Text(
-            'تعذر تحميل القرّاء حاليًا.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
+          Center(
+            child: Text(
+              'لا توجد قائمة قراء متاحة حاليًا.',
+              style: TextStyle(
+                color: Colors.white70,
+              ),
             ),
           ),
         ],
       );
     }
 
+    final reciters =
+        catalog.reciters;
+
+    final moshaf =
+        _selectedReciter?.moshaf ?? [];
+
     return ListView(
       physics:
           const AlwaysScrollableScrollPhysics(),
       padding:
           const EdgeInsets.fromLTRB(
-        12,
+        14,
         8,
-        12,
+        14,
         30,
       ),
       children: [
-        _buildSectionTitle(
-          'اختر القارئ',
-          Icons.record_voice_over_rounded,
-        ),
-        const SizedBox(height: 8),
-        _buildReciterSelector(),
-        const SizedBox(height: 18),
-        if (_selectedReciter != null)
-          _buildMoshafSelector(),
-        const SizedBox(height: 18),
-        _buildLocalAudioCard(),
-      ],
-    );
-  }
-
-  Widget _buildReciterSelector() {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 14,
-      ),
-      decoration: BoxDecoration(
-        color:
-            const Color(0xFF122238),
-        borderRadius:
-            BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white
-              .withOpacity(0.08),
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<QuranReciter>(
-          value: _selectedReciter,
-          isExpanded: true,
-          dropdownColor:
-              const Color(0xFF122238),
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: Colors.white70,
-          ),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
-          items: _reciters.map(
-            (reciter) {
-              return DropdownMenuItem<
-                  QuranReciter>(
-                value: reciter,
-                child: Text(
-                  reciter.name,
-                  overflow:
-                      TextOverflow.ellipsis,
-                ),
-              );
-            },
-          ).toList(),
-          onChanged: (value) {
-            if (value == null) return;
-
-            setState(() {
-              _selectedReciter = value;
-
-              _selectedMoshaf =
-                  value.moshaf.isNotEmpty
-                      ? value.moshaf.first
-                      : null;
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMoshafSelector() {
-    final reciter = _selectedReciter;
-
-    if (reciter == null ||
-        reciter.moshaf.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.stretch,
-      children: [
-        _buildSectionTitle(
-          'اختر الرواية',
-          Icons.library_music_rounded,
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding:
-              const EdgeInsets.symmetric(
-            horizontal: 14,
-          ),
-          decoration: BoxDecoration(
-            color:
-                const Color(0xFF122238),
-            borderRadius:
-                BorderRadius.circular(18),
-            border: Border.all(
-              color: Colors.white
-                  .withOpacity(0.08),
-            ),
-          ),
-          child:
-              DropdownButtonHideUnderline(
-            child:
-                DropdownButton<QuranMoshaf>(
-              value: _selectedMoshaf,
-              isExpanded: true,
-              dropdownColor:
-                  const Color(0xFF122238),
-              icon: const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: Colors.white70,
-              ),
-              style:
-                  const TextStyle(
-                color: Colors.white,
-                fontWeight:
-                    FontWeight.w700,
-              ),
-              items:
-                  reciter.moshaf.map(
-                (moshaf) {
-                  return DropdownMenuItem<
-                      QuranMoshaf>(
-                    value: moshaf,
-                    child: Text(
-                      moshaf.name,
-                      overflow:
-                          TextOverflow
-                              .ellipsis,
-                    ),
-                  );
-                },
-              ).toList(),
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-
-                setState(() {
-                  _selectedMoshaf =
-                      value;
-                });
-              },
-            ),
-          ),
+        _buildSectionIntro(
+          icon: Icons.menu_book_rounded,
+          title: 'القرآن الكريم',
+          subtitle:
+              'اختار القارئ أولًا ثم الرواية والسورة.',
         ),
         const SizedBox(height: 14),
-        Text(
-          'يمكنك اختيار السورة من القائمة القادمة عند اكتمال الكتالوج.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.white
-                .withOpacity(0.5),
-            fontSize: 12,
+        _buildDropdown<QuranReciter>(
+          label: 'القارئ',
+          value: _selectedReciter,
+          items: reciters,
+          labelBuilder: (item) =>
+              item.name,
+          onChanged: _onReciterChanged,
+        ),
+        const SizedBox(height: 12),
+        if (moshaf.isNotEmpty)
+          _buildDropdown<QuranMoshaf>(
+            label: 'الرواية / المصحف',
+            value: _selectedMoshaf,
+            items: moshaf,
+            labelBuilder: (item) =>
+                item.name.isEmpty
+                    ? 'رواية'
+                    : item.name,
+            onChanged:
+                _onMoshafChanged,
           ),
+        if (catalog.suwar.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildDropdown<QuranSura>(
+            label: 'السورة',
+            value: _selectedSura,
+            items: catalog.suwar,
+            labelBuilder: (item) =>
+                '${item.id}. ${item.name}',
+            onChanged: _onSuraChanged,
+          ),
+        ],
+        const SizedBox(height: 18),
+        SizedBox(
+          height: 54,
+          child: ElevatedButton.icon(
+            onPressed:
+                _selectedMoshaf != null &&
+                        _selectedSura != null
+                    ? _playSelectedSura
+                    : null,
+            icon: const Icon(
+              Icons.play_arrow_rounded,
+            ),
+            label: const Text(
+              'تشغيل السورة',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 22),
+        _buildInfoCard(
+          icon: Icons.people_alt_rounded,
+          title:
+              'عدد القراء المتاحين',
+          value:
+              '${reciters.length} قارئ',
         ),
       ],
     );
   }
 
-  Widget _buildLocalAudioCard() {
+  // ============================================================
+  // ADHKAR UI
+  // ============================================================
+
+  Widget _buildAdhkar() {
+    return ListView(
+      physics:
+          const AlwaysScrollableScrollPhysics(),
+      padding:
+          const EdgeInsets.fromLTRB(
+        14,
+        8,
+        14,
+        30,
+      ),
+      children: [
+        _buildSearchBox(
+          hint:
+              'ابحث في الأذكار...',
+          onSearch: _search,
+        ),
+        const SizedBox(height: 14),
+        _buildSectionIntro(
+          icon: Icons.favorite_rounded,
+          title: 'الأذكار',
+          subtitle:
+              'محتوى الأذكار متاح داخل التطبيق.',
+        ),
+        const SizedBox(height: 12),
+        if (_audioItems.isEmpty)
+          _buildEmptyCard(
+            'لا توجد نتائج أذكار حاليًا.',
+          )
+        else
+          ..._audioItems.map(
+            _buildAdhkarCard,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAdhkarCard(
+    AudioSearchItem item,
+  ) {
     return Container(
+      margin:
+          const EdgeInsets.only(bottom: 10),
       padding:
           const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(20),
-        gradient:
-            const LinearGradient(
-          colors: [
-            Color(0xFF162A45),
-            Color(0xFF102036),
-          ],
-        ),
-      ),
-      child: Row(
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.audio_file_rounded,
-            color: Color(0xFF67E8F9),
-            size: 34,
+          Text(
+            item.title,
+            style: const TextStyle(
+              color: Color(0xFFE6C875),
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'عندك ملف صوتي على الموبايل؟ شغّله مباشرة داخل التطبيق.',
-              style: TextStyle(
-                color: Colors.white70,
-                height: 1.4,
+          const SizedBox(height: 9),
+          Text(
+            item.text.isEmpty
+                ? item.title
+                : item.text,
+            textDirection:
+                TextDirection.rtl,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              height: 1.8,
+            ),
+          ),
+          if (item.url.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Align(
+              alignment:
+                  Alignment.centerLeft,
+              child: IconButton(
+                onPressed: () =>
+                    _playUrl(
+                  url: item.url,
+                  title: item.title,
+                ),
+                icon: const Icon(
+                  Icons.play_circle_fill_rounded,
+                  color:
+                      Color(0xFFE6C875),
+                  size: 34,
+                ),
               ),
             ),
-          ),
-          IconButton(
-            onPressed: _pickLocalAudio,
-            icon: const Icon(
-              Icons.play_circle_fill_rounded,
-              color: Colors.white,
-              size: 34,
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
+
+  // ============================================================
+  // MUSIC / PODCAST UI
+  // ============================================================
+
+  Widget _buildSearchAudioList({
+    required String title,
+    required String emptyText,
+  }) {
+    return ListView(
+      physics:
+          const AlwaysScrollableScrollPhysics(),
+      padding:
+          const EdgeInsets.fromLTRB(
+        14,
+        8,
+        14,
+        30,
+      ),
+      children: [
+        _buildSearchBox(
+          hint:
+              'ابحث في $title...',
+          onSearch: _search,
+        ),
+        const SizedBox(height: 14),
+        _buildSectionIntro(
+          icon: title == 'الموسيقى'
+              ? Icons.music_note_rounded
+              : Icons.podcasts_rounded,
+          title: title,
+          subtitle:
+              'نتائج متاحة من المصادر الصوتية.',
+        ),
+        const SizedBox(height: 12),
+        if (_audioItems.isEmpty)
+          _buildEmptyCard(emptyText)
+        else
+          ..._audioItems.map(
+            _buildAudioCard,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAudioCard(
+    AudioSearchItem item,
+  ) {
+    return Container(
+      margin:
+          const EdgeInsets.only(bottom: 10),
+      decoration: _cardDecoration(),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 6,
+        ),
+        leading: _buildArtwork(
+          item.artwork,
+        ),
+        title: Text(
+          item.title,
+          maxLines: 2,
+          overflow:
+              TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: item.artist == null ||
+                item.artist!.isEmpty
+            ? null
+            : Text(
+                item.artist!,
+                maxLines: 1,
+                overflow:
+                    TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white54,
+                ),
+              ),
+        trailing: item.url.isEmpty
+            ? null
+            : IconButton(
+                onPressed: () =>
+                    _playUrl(
+                  url: item.url,
+                  title: item.title,
+                  artist: item.artist,
+                  artwork:
+                      item.artwork,
+                ),
+                icon: const Icon(
+                  Icons.play_circle_fill_rounded,
+                  color:
+                      Color(0xFFE6C875),
+                  size: 36,
+                ),
+              ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // RADIO UI
+  // ============================================================
 
   Widget _buildRadio() {
     return ListView(
@@ -963,384 +1208,170 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
           const AlwaysScrollableScrollPhysics(),
       padding:
           const EdgeInsets.fromLTRB(
-        12,
+        14,
         8,
-        12,
+        14,
         30,
       ),
       children: [
-        _buildSectionTitle(
-          'اختر الدولة أولًا',
-          Icons.public_rounded,
+        _buildSectionIntro(
+          icon: Icons.radio_rounded,
+          title: 'الراديو',
+          subtitle:
+              'اختار الدولة أولًا ثم اختار المحطة.',
         ),
-        const SizedBox(height: 8),
-        _buildCountrySelector(),
-        const SizedBox(height: 18),
-        if (_selectedCountry != null)
-          _buildSectionTitle(
-            'محطات ${_selectedCountry!.name}',
-            Icons.radio_rounded,
+        const SizedBox(height: 14),
+        if (_countries.isNotEmpty)
+          _buildDropdown<RadioCountry>(
+            label: 'الدولة',
+            value: _selectedCountry,
+            items: _countries,
+            labelBuilder: (item) =>
+                '${item.name} (${item.stationCount})',
+            onChanged:
+                _changeCountry,
           ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         if (_stations.isEmpty)
           _buildEmptyCard(
-            'لا توجد محطات متاحة حاليًا لهذه الدولة.',
+            'لا توجد محطات متاحة لهذه الدولة حاليًا.',
           )
         else
           ..._stations.map(
-            _buildStationCard,
+            _buildRadioStationCard,
           ),
       ],
     );
   }
 
-  Widget _buildCountrySelector() {
-    if (_countries.isEmpty) {
-      return _buildEmptyCard(
-        'لم يتم تحميل قائمة الدول.',
-      );
-    }
-
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 14,
-      ),
-      decoration: BoxDecoration(
-        color:
-            const Color(0xFF122238),
-        borderRadius:
-            BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white
-              .withOpacity(0.08),
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child:
-            DropdownButton<RadioCountry>(
-          value: _selectedCountry,
-          isExpanded: true,
-          dropdownColor:
-              const Color(0xFF122238),
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: Colors.white70,
-          ),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
-          items: _countries.map(
-            (country) {
-              return DropdownMenuItem<
-                  RadioCountry>(
-                value: country,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        country.name,
-                        overflow:
-                            TextOverflow
-                                .ellipsis,
-                      ),
-                    ),
-                    Text(
-                      '${country.stationCount}',
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ).toList(),
-          onChanged: (value) async {
-            if (value == null) return;
-
-            setState(() {
-              _selectedCountry =
-                  value;
-              _stations = [];
-            });
-
-            await _loadRadioStations(
-              value,
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStationCard(
+  Widget _buildRadioStationCard(
     RadioStation station,
   ) {
     return Container(
       margin:
-          const EdgeInsets.only(
-        bottom: 10,
-      ),
-      decoration: BoxDecoration(
-        color:
-            const Color(0xFF122238),
-        borderRadius:
-            BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white
-              .withOpacity(0.07),
-        ),
-      ),
+          const EdgeInsets.only(bottom: 10),
+      decoration: _cardDecoration(),
       child: ListTile(
         contentPadding:
             const EdgeInsets.symmetric(
           horizontal: 12,
-          vertical: 5,
+          vertical: 6,
         ),
-        leading: _buildStationImage(
+        leading: _buildArtwork(
           station.favicon,
         ),
         title: Text(
           station.name,
-          maxLines: 1,
+          maxLines: 2,
           overflow:
               TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white,
-            fontWeight:
-                FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
         subtitle: Text(
-          station.tags.isEmpty
-              ? station.codec
-              : station.tags,
-          maxLines: 1,
-          overflow:
-              TextOverflow.ellipsis,
+          [
+            if (station.codec.isNotEmpty)
+              station.codec,
+            if (station.bitrate > 0)
+              '${station.bitrate} kbps',
+          ].join(' • '),
           style: const TextStyle(
             color: Colors.white54,
           ),
         ),
         trailing: IconButton(
-          onPressed: () {
-            _playUrl(
-              url: station.streamUrl,
-              title: station.name,
-              artwork:
-                  station.favicon,
-            );
-          },
+          onPressed: station.url.isEmpty
+              ? null
+              : () => _playUrl(
+                    url: station.url,
+                    title: station.name,
+                    artwork:
+                        station.favicon,
+                  ),
           icon: const Icon(
             Icons.play_circle_fill_rounded,
-            color: Color(0xFF67E8F9),
-            size: 38,
+            color: Color(0xFFE6C875),
+            size: 36,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildGenericList({
-    required String emptyText,
+  // ============================================================
+  // COMMON WIDGETS
+  // ============================================================
+
+  Widget _buildSearchBox({
+    required String hint,
+    required VoidCallback onSearch,
   }) {
-    return Column(
-      children: [
-        Padding(
-          padding:
-              const EdgeInsets.fromLTRB(
-            12,
-            8,
-            12,
-            8,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller:
-                      _searchController,
-                  style:
-                      const TextStyle(
-                    color: Colors.white,
-                  ),
-                  textDirection:
-                      TextDirection.rtl,
-                  onSubmitted: (_) =>
-                      _search(),
-                  decoration:
-                      InputDecoration(
-                    hintText:
-                        _searchHint(),
-                    hintStyle:
-                        const TextStyle(
-                      color:
-                          Colors.white38,
-                    ),
-                    filled: true,
-                    fillColor:
-                        const Color(
-                      0xFF122238,
-                    ),
-                    border:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius
-                              .circular(
-                        18,
-                      ),
-                      borderSide:
-                          BorderSide.none,
-                    ),
-                    prefixIcon:
-                        const Icon(
-                      Icons.search_rounded,
-                      color:
-                          Colors.white54,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: _search,
-                style:
-                    IconButton.styleFrom(
-                  backgroundColor:
-                      const Color(
-                    0xFF8B5CF6,
-                  ),
-                  foregroundColor:
-                      Colors.white,
-                ),
-                icon: const Icon(
-                  Icons.arrow_forward_rounded,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _items.isEmpty
-              ? ListView(
-                  physics:
-                      const AlwaysScrollableScrollPhysics(),
-                  children: [
-                    const SizedBox(
-                      height: 120,
-                    ),
-                    const Icon(
-                      Icons.library_music_rounded,
-                      color:
-                          Colors.white30,
-                      size: 60,
-                    ),
-                    const SizedBox(
-                      height: 15,
-                    ),
-                    Text(
-                      emptyText,
-                      textAlign:
-                          TextAlign.center,
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.white60,
-                      ),
-                    ),
-                  ],
-                )
-              : ListView.builder(
-                  physics:
-                      const AlwaysScrollableScrollPhysics(),
-                  padding:
-                      const EdgeInsets
-                          .fromLTRB(
-                    12,
-                    0,
-                    12,
-                    30,
-                  ),
-                  itemCount:
-                      _items.length,
-                  itemBuilder:
-                      (context, index) {
-                    return _buildAudioItem(
-                      _items[index],
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  String _searchHint() {
-    switch (_categoryIndex) {
-      case 1:
-        return 'ابحث عن ذكر أو قسم...';
-      case 2:
-        return 'اسم أغنية أو فنان...';
-      case 3:
-        return 'اسم بودكاست أو برنامج...';
-      default:
-        return 'بحث...';
-    }
-  }
-
-  Widget _buildAudioItem(
-    Map<String, dynamic> item,
-  ) {
-    final title =
-        String(item['title'] ?? 'بدون عنوان');
-
-    final artist =
-        String(item['artist'] ?? '');
-
-    final artwork =
-        String(item['artwork'] ?? '');
-
-    final previewUrl =
-        String(item['previewUrl'] ?? '');
-
-    final text =
-        String(item['text'] ?? '');
-
-    final type =
-        String(item['type'] ?? '');
-
-    final playable =
-        previewUrl.isNotEmpty;
-
     return Container(
-      margin:
-          const EdgeInsets.only(
-        bottom: 10,
-      ),
-      padding:
-          const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color:
-            const Color(0xFF122238),
+        color: const Color(0xFF101E31),
         borderRadius:
             BorderRadius.circular(18),
         border: Border.all(
-          color: Colors.white
-              .withOpacity(0.07),
+          color: Colors.white10,
         ),
       ),
+      child: TextField(
+        controller: _searchController,
+        textDirection: TextDirection.rtl,
+        style: const TextStyle(
+          color: Colors.white,
+        ),
+        onSubmitted: (_) => onSearch(),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(
+            color: Colors.white38,
+          ),
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 15,
+          ),
+          prefixIcon: IconButton(
+            onPressed: onSearch,
+            icon: const Icon(
+              Icons.search_rounded,
+              color: Color(0xFFE6C875),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionIntro({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding:
+          const EdgeInsets.all(16),
+      decoration: _cardDecoration(),
       child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
         children: [
-          _buildArtwork(
-            artwork,
-            type,
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color:
+                  const Color(0xFFE6C875)
+                      .withOpacity(.12),
+            ),
+            child: Icon(
+              icon,
+              color:
+                  const Color(0xFFE6C875),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1350,223 +1381,216 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
               children: [
                 Text(
                   title,
-                  maxLines: 2,
-                  overflow:
-                      TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight:
                         FontWeight.w800,
+                    fontSize: 18,
                   ),
                 ),
-                if (artist.isNotEmpty)
-                  Padding(
-                    padding:
-                        const EdgeInsets
-                            .only(
-                      top: 4,
-                    ),
-                    child: Text(
-                      artist,
-                      maxLines: 1,
-                      overflow:
-                          TextOverflow
-                              .ellipsis,
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    height: 1.4,
                   ),
-                if (text.isNotEmpty)
-                  Padding(
-                    padding:
-                        const EdgeInsets
-                            .only(
-                      top: 7,
-                    ),
-                    child: Text(
-                      text,
-                      maxLines: 3,
-                      overflow:
-                          TextOverflow
-                              .ellipsis,
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.white70,
-                        height: 1.4,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
-          if (playable)
-            IconButton(
-              onPressed: () {
-                _playUrl(
-                  url: previewUrl,
-                  title: title,
-                  artist: artist,
-                  artwork: artwork,
-                );
-              },
-              icon: const Icon(
-                Icons.play_circle_fill_rounded,
-                color:
-                    Color(0xFF67E8F9),
-                size: 38,
-              ),
-            ),
         ],
       ),
     );
   }
 
-  Widget _buildArtwork(
-    String url,
-    String type,
-  ) {
-    if (url.isNotEmpty) {
-      return ClipRRect(
-        borderRadius:
-            BorderRadius.circular(14),
-        child: Image.network(
-          url,
-          width: 62,
-          height: 62,
-          fit: BoxFit.cover,
-          errorBuilder:
-              (_, __, ___) {
-            return _defaultArtwork(type);
-          },
-        ),
-      );
-    }
-
-    return _defaultArtwork(type);
-  }
-
-  Widget _defaultArtwork(
-    String type,
-  ) {
-    IconData icon;
-
-    switch (type) {
-      case 'music':
-        icon = Icons.music_note_rounded;
-        break;
-      case 'podcast':
-        icon = Icons.podcasts_rounded;
-        break;
-      case 'adhkar':
-        icon = Icons.auto_awesome_rounded;
-        break;
-      default:
-        icon = Icons.graphic_eq_rounded;
-    }
-
+  Widget _buildInfoCard({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
     return Container(
-      width: 62,
-      height: 62,
-      decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(14),
-        gradient:
-            const LinearGradient(
-          colors: [
-            Color(0xFF8B5CF6),
-            Color(0xFF06B6D4),
-          ],
-        ),
-      ),
-      child: Icon(
-        icon,
-        color: Colors.white,
-        size: 30,
+      padding:
+          const EdgeInsets.all(15),
+      decoration: _cardDecoration(),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: const Color(0xFFE6C875),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white70,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildStationImage(
-    String url,
-  ) {
-    if (url.isEmpty) {
-      return _defaultArtwork(
-        'radio',
+  Widget _buildEmptyCard(String text) {
+    return Container(
+      padding:
+          const EdgeInsets.all(22),
+      decoration: _cardDecoration(),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white54,
+          height: 1.6,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdown<T>({
+    required String label,
+    required T? value,
+    required List<T> items,
+    required String Function(T item)
+        labelBuilder,
+    required ValueChanged<T?> onChanged,
+  }) {
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final safeValue =
+        items.contains(value)
+            ? value
+            : items.first;
+
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 3,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF101E31),
+        borderRadius:
+            BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: safeValue,
+          isExpanded: true,
+          dropdownColor:
+              const Color(0xFF14243A),
+          iconEnabledColor:
+              const Color(0xFFE6C875),
+          style: const TextStyle(
+            color: Colors.white,
+          ),
+          hint: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white54,
+            ),
+          ),
+          items: items.map(
+            (item) {
+              return DropdownMenuItem<T>(
+                value: item,
+                child: Text(
+                  labelBuilder(item),
+                  maxLines: 1,
+                  overflow:
+                      TextOverflow.ellipsis,
+                ),
+              );
+            },
+          ).toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArtwork(String url) {
+    final clean = url.trim();
+
+    if (clean.isEmpty) {
+      return Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          borderRadius:
+              BorderRadius.circular(13),
+          color: Colors.white10,
+        ),
+        child: const Icon(
+          Icons.music_note_rounded,
+          color: Colors.white54,
+        ),
       );
     }
 
     return ClipRRect(
       borderRadius:
-          BorderRadius.circular(12),
+          BorderRadius.circular(13),
       child: Image.network(
-        url,
-        width: 52,
-        height: 52,
+        clean,
+        width: 48,
+        height: 48,
         fit: BoxFit.cover,
         errorBuilder:
             (_, __, ___) {
-          return _defaultArtwork(
-            'radio',
+          return Container(
+            width: 48,
+            height: 48,
+            color: Colors.white10,
+            child: const Icon(
+              Icons.music_note_rounded,
+              color: Colors.white54,
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _buildSectionTitle(
-    String title,
-    IconData icon,
-  ) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          color: const Color(
-            0xFF67E8F9,
-          ),
-          size: 21,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight:
-                FontWeight.w900,
-            fontSize: 17,
-          ),
-        ),
-      ],
+  BoxDecoration _cardDecoration() {
+    return BoxDecoration(
+      color: const Color(0xFF101E31),
+      borderRadius:
+          BorderRadius.circular(18),
+      border: Border.all(
+        color: Colors.white10,
+      ),
     );
   }
 
-  Widget _buildEmptyCard(
-    String message,
-  ) {
-    return Container(
-      padding:
-          const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color:
-            const Color(0xFF122238),
-        borderRadius:
-            BorderRadius.circular(18),
-      ),
-      child: Text(
-        message,
-        textAlign:
-            TextAlign.center,
-        style: const TextStyle(
-          color: Colors.white60,
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            textAlign: TextAlign.right,
+          ),
+          behavior:
+              SnackBarBehavior.floating,
         ),
-      ),
-    );
+      );
   }
 }
