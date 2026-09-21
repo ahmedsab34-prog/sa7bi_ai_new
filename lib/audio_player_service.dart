@@ -4,16 +4,17 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
-/// خدمة الصوت الأساسية للتطبيق.
+/// خدمة الصوت الأساسية لتطبيق صاحبي AI.
 ///
 /// مسؤولة عن:
 /// - تشغيل الصوت من الإنترنت.
 /// - تشغيل الملفات المحلية.
 /// - التشغيل في الخلفية.
 /// - إشعار Android.
-/// - أزرار التشغيل والإيقاف والتقديم والترجيع.
+/// - أزرار التشغيل والإيقاف.
 /// - التحكم من شاشة القفل.
-/// - استمرار الخدمة عند إزالة التطبيق من التطبيقات الأخيرة.
+/// - استمرار الصوت أثناء التنقل داخل التطبيق.
+/// - إيقاف الصوت عند إغلاق التطبيق بالكامل حسب سلوك Android.
 class Sa7biAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
@@ -34,17 +35,22 @@ class Sa7biAudioHandler extends BaseAudioHandler
         const AudioSessionConfiguration.music(),
       );
 
-      _playerStateSubscription = _player.playerStateStream.listen(
-        (_) => _broadcastState(),
-      );
+      _playerStateSubscription =
+          _player.playerStateStream.listen((_) {
+        _broadcastState();
+      });
 
-      _positionSubscription = _player.positionStream.listen(
-        (_) => _broadcastState(),
-      );
+      _positionSubscription =
+          _player.positionStream.listen((_) {
+        _broadcastState();
+      });
 
-      _durationSubscription = _player.durationStream.listen(
-        (_) => _broadcastState(),
-      );
+      _durationSubscription =
+          _player.durationStream.listen((_) {
+        _broadcastState();
+      });
+
+      _broadcastState();
     } catch (_) {
       // لا نوقف التطبيق إذا فشل إعداد جلسة الصوت.
     }
@@ -157,9 +163,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
   }
 
   /// تشغيل رابط صوت مباشر.
-  ///
-  /// يستخدم named parameters حتى يتوافق مع
-  /// audio_center_screen.dart الحالي.
   Future<void> playUrl({
     required String url,
     String title = 'صحبي AI',
@@ -168,8 +171,14 @@ class Sa7biAudioHandler extends BaseAudioHandler
     Duration? duration,
     Uri? artUri,
   }) async {
+    final cleanUrl = url.trim();
+
+    if (cleanUrl.isEmpty) {
+      throw ArgumentError('Audio URL is empty');
+    }
+
     final item = MediaItem(
-      id: url,
+      id: cleanUrl,
       title: title,
       artist: artist,
       album: album,
@@ -180,22 +189,25 @@ class Sa7biAudioHandler extends BaseAudioHandler
     mediaItem.add(item);
     queue.add([item]);
 
-    await _player.setUrl(url);
+    await _player.setUrl(cleanUrl);
     await _player.play();
   }
 
   /// تشغيل ملف صوت موجود على الهاتف.
-  ///
-  /// يستخدم named parameters حتى يتوافق مع
-  /// audio_center_screen.dart الحالي.
   Future<void> playLocalFile({
     required String path,
     String title = 'صحبي AI',
     String? artist,
     String? album,
   }) async {
+    final cleanPath = path.trim();
+
+    if (cleanPath.isEmpty) {
+      throw ArgumentError('Audio file path is empty');
+    }
+
     final item = MediaItem(
-      id: path,
+      id: cleanPath,
       title: title,
       artist: artist,
       album: album,
@@ -204,7 +216,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
     mediaItem.add(item);
     queue.add([item]);
 
-    await _player.setFilePath(path);
+    await _player.setFilePath(cleanPath);
     await _player.play();
   }
 
@@ -216,7 +228,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> onTaskRemoved() async {
-    // لا نوقف الصوت عند إزالة التطبيق من التطبيقات الأخيرة.
+    // نحافظ على السلوك الحالي:
+    // لا نوقف الصوت بمجرد إزالة التطبيق من شاشة التطبيقات الأخيرة.
   }
 
   Future<void> disposePlayer() async {
@@ -229,10 +242,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
 }
 
 /// مدير الصوت الرئيسي للتطبيق.
-///
-/// متوافق مع:
-/// - main.dart
-/// - audio_center_screen.dart
 class AudioController {
   AudioController._();
 
@@ -243,10 +252,23 @@ class AudioController {
   /// الـ AudioHandler الحالي.
   static Sa7biAudioHandler? get handler => _handler;
 
-  /// تهيئة نظام الصوت مرة واحدة فقط.
+  /// Stream حالة التشغيل.
   ///
-  /// ترجع الـ handler حتى يستطيع
-  /// AudioCenterScreen استخدامه مباشرة.
+  /// يستخدمه:
+  /// - AudioCenterScreen
+  /// - MiniAudioPlayer
+  /// - أي واجهة تحتاج معرفة هل الصوت يعمل أم متوقف.
+  static Stream<PlaybackState> get playbackStateStream {
+    final currentHandler = _handler;
+
+    if (currentHandler == null) {
+      return const Stream<PlaybackState>.empty();
+    }
+
+    return currentHandler.playbackState;
+  }
+
+  /// تهيئة نظام الصوت مرة واحدة فقط.
   static Future<Sa7biAudioHandler> initialize() async {
     if (_initialized && _handler != null) {
       return _handler!;
@@ -346,8 +368,7 @@ class AudioController {
   }
 }
 
-/// اسم توافق قديم في المشروع.
-/// نتركه حتى لا نكسر أي ملف قديم يستخدمه.
+/// توافق مع أي كود قديم يستخدم Sa7biAudioService.
 class Sa7biAudioService {
   Sa7biAudioService._();
 
