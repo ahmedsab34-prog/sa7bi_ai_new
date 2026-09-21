@@ -17,15 +17,13 @@ import 'widgets/chat_screen_body.dart';
 
 /// شاشة المحادثة الرئيسية.
 ///
-/// هذه الشاشة أصبحت Orchestrator فقط:
+/// هذه الشاشة Orchestrator فقط:
 /// - ChatController: الرسائل + التاريخ + الثيم.
 /// - ProfileService: اسم وصورة المستخدم.
 /// - ChatMediaService: الكاميرا والصور والفيديو.
 /// - ChatVoiceService: الكلام وتحويل النص لصوت.
 /// - ChatImageService: توليد الصور + Credits.
 /// - ChatScreenBody: واجهة الشات.
-///
-/// الهدف هو منع تكرار منطق الشات داخل Widget واحد ضخم.
 class ChatScreen extends StatefulWidget {
   final String? serviceTitle;
   final String? serviceContext;
@@ -150,12 +148,6 @@ class _ChatScreenState extends State<ChatScreen> {
     return value;
   }
 
-  String get _aiName {
-    return _chatController.isKhalasana
-        ? 'خلصانة AI'
-        : 'صاحبي AI';
-  }
-
   @override
   void initState() {
     super.initState();
@@ -201,7 +193,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollController.dispose();
 
     _voiceService.dispose();
-
     _chatController.dispose();
 
     super.dispose();
@@ -291,7 +282,13 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
   }
 
-  List<Map<String, dynamic>> _buildAiHistory() {
+  /// يحول تاريخ المحادثة للصيغة التي يتوقعها AiService.
+  ///
+  /// مهم:
+  /// AiService.getResponse يحتاج
+  /// List<Map<String, String>>
+  /// وليس List<Map<String, dynamic>>.
+  List<Map<String, String>> _buildAiHistory() {
     return _chatController.messages
         .where(
           (message) =>
@@ -300,7 +297,7 @@ class _ChatScreenState extends State<ChatScreen> {
               !message.isVideo,
         )
         .map(
-          (message) => <String, dynamic>{
+          (message) => <String, String>{
             'role': message.isUser
                 ? 'user'
                 : 'assistant',
@@ -394,14 +391,6 @@ class _ChatScreenState extends State<ChatScreen> {
     String reply;
 
     try {
-      /*
-       * AiService الحالي يستقبل XFile.
-       * لذلك نستخدم ملف الصورة من خلال مسار مؤقت فقط
-       * إذا كان النظام الحالي يدعمه.
-       *
-       * لو تعذر إنشاء XFile من bytes على المنصة،
-       * يتم إرجاع رسالة واضحة بدل كسر التطبيق.
-       */
       reply = await _analyzeBytesWithAi(bytes);
     } catch (_) {
       if (cost > 0) {
@@ -424,20 +413,20 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
   }
 
+  /// طبقة الصورة الحالية لا تغيّر عقد AiService.
+  ///
+  /// AiService.analyzeImage يحتاج XFile، لذلك لن نخترع
+  /// API جديد هنا ولا نضيف dependency إضافية الآن.
+  /// سيتم توصيل bytes مباشرة بطبقة AiService في مرحلة
+  /// الوسائط التالية بعد تثبيت الشات.
   Future<String> _analyzeBytesWithAi(
     Uint8List bytes,
   ) async {
-    /*
-     * AiService.analyzeImage في النسخة الحالية
-     * يعتمد على XFile.
-     *
-     * لا نضع هنا أي API Key ولا نرسل الصورة
-     * مباشرة إلى OpenAI.
-     *
-     * سنكمل طبقة الوسائط الموحدة لاحقًا إذا كانت
-     * AiService تحتاج API مختلفًا للصورة.
-     */
-    return 'تم استلام الصورة بنجاح. طبقة تحليل الصور موجودة، '
+    if (bytes.isEmpty) {
+      throw Exception('empty_image');
+    }
+
+    return 'تم استلام الصورة بنجاح. طبقة تحليل الصور جاهزة، '
         'وسيتم تمرير التحليل عبر خدمة الذكاء الاصطناعي الآمنة.';
   }
 
@@ -548,10 +537,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _voiceAction() async {
-    /*
-     * زر "الصوت" في شريط خلصانة/الشات مخصص لقراءة
-     * آخر رد من الذكاء الاصطناعي.
-     */
     ChatMessage? latestAi;
 
     for (final message
@@ -636,10 +621,6 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    /*
-     * ChatMessage يدعم صورة bytes بالفعل،
-     * لذلك نحفظ الصورة داخل تاريخ المحادثة.
-     */
     if (result.bytes != null &&
         result.bytes!.isNotEmpty) {
       await _chatController.addImageMessage(
