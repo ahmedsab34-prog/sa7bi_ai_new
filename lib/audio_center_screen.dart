@@ -88,7 +88,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         }
       });
     } catch (_) {
-      // الصوت يظل متاحًا للمحاولة من الشاشة.
+      // فشل تهيئة الصوت لا يمنع فتح الشاشة.
     }
 
     await _loadCategory();
@@ -116,6 +116,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
       _error = '';
       _audioItems = [];
       _stations = [];
+      _searchController.clear();
     });
 
     await _loadCategory();
@@ -261,7 +262,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     final number =
         sura.id.toString().padLeft(3, '0');
 
-    return '${base} $number.mp3'.replaceAll(' ', '');
+    return '${base}${number}.mp3';
   }
 
   Future<void> _playSelectedSura() async {
@@ -409,9 +410,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
       _stations = [];
     });
 
-    await _loadStations(
-      selected,
-    );
+    await _loadStations(selected);
   }
 
   Future<void> _changeCountry(
@@ -550,6 +549,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
       setState(() {
         _isPlaying = false;
+        _currentTitle = '';
       });
     } catch (_) {}
   }
