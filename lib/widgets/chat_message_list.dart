@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../models/chat_message.dart';
@@ -16,7 +18,7 @@ class ChatMessageList extends StatelessWidget {
   final String userName;
 
   /// صورة المستخدم المحفوظة.
-  final dynamic userPhoto;
+  final Uint8List? userPhoto;
 
   /// اسم الذكاء الاصطناعي.
   final String aiName;
@@ -63,7 +65,7 @@ class ChatMessageList extends StatelessWidget {
             isUser: false,
             theme: theme,
             userName: userName,
-            userPhoto: _photoBytes(),
+            userPhoto: userPhoto,
             aiName: aiName,
             isLoading: true,
           );
@@ -76,15 +78,11 @@ class ChatMessageList extends StatelessWidget {
           isUser: message.isUser,
           theme: theme,
           userName: userName,
-          userPhoto: _photoBytes(),
+          userPhoto: userPhoto,
           imageBytes: message.image,
           aiName: aiName,
         );
       },
     );
-  }
-
-  dynamic _photoBytes() {
-    return userPhoto;
   }
 }
