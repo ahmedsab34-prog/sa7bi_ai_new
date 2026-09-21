@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 
 import '../config/service_keys.dart';
@@ -7,46 +5,45 @@ import 'storage_service.dart';
 
 /// مسؤول عن حفظ واسترجاع سجل كل محادثة بشكل مستقل.
 ///
-/// المميزات:
-/// - كل خدمة لها سجل منفصل.
-/// - يدعم محادثة صاحبي AI العامة.
-/// - يدعم خلصانة AI.
-/// - يدعم الأقسام العشرة.
-/// - الحد الأقصى 80 رسالة.
-/// - يحافظ على ترتيب الرسائل.
-/// - يعتمد على StorageService بدل التعامل المباشر مع SharedPreferences.
-/// - يستخدم ServiceKeys ثابتة حتى لا تتأثر اللغة أو اسم الشاشة بتغيير مفتاح التخزين.
+/// يستخدم مفاتيح StorageService الموحدة حتى لا تتكون
+/// نسختان مختلفتان من سجل المحادثة.
 class ChatHistoryService {
   ChatHistoryService._();
 
   static final ChatHistoryService instance =
       ChatHistoryService._();
 
+  /// الحد الأقصى للرسائل المحفوظة لكل محادثة.
   static const int maxMessages = 80;
 
-  /// مفتاح أساسي موحد لسجلات المحادثات.
-  static const String _storagePrefix = 'chat_history_';
+  StorageService get _storage =>
+      StorageService.instance;
 
-  StorageService get _storage => StorageService.instance;
-
-  /// يرجع مفتاح التخزين الخاص بالخدمة.
-  String _key(String serviceKey) {
-    final normalized = serviceKey.trim();
-
-    if (normalized.isEmpty) {
-      return '${_storagePrefix}${ServiceKeys.general}';
+  /// الاحتفاظ بآخر 80 رسالة فقط.
+  List<Map<String, dynamic>> _limit(
+    List<Map<String, dynamic>> messages,
+  ) {
+    if (messages.length <= maxMessages) {
+      return List<Map<String, dynamic>>.from(
+        messages,
+      );
     }
 
-    return '$_storagePrefix$normalized';
+    return messages.sublist(
+      messages.length - maxMessages,
+    );
   }
 
-  /// يضمن أن الرسالة قابلة للحفظ.
+  /// تنظيف الرسالة قبل التخزين.
   ///
-  /// نقوم بتنظيف البيانات الأساسية فقط، بدون حذف أي محتوى كتبه المستخدم.
+  /// نحافظ على البيانات البسيطة التي يستخدمها الشات:
+  /// النص، الدور، الوقت، الصورة، وأي بيانات إضافية قابلة
+  /// للتخزين بصيغة SharedPreferences/JSON.
   Map<String, dynamic> _normalizeMessage(
     Map<String, dynamic> message,
   ) {
-    final normalized = <String, dynamic>{};
+    final normalized =
+        <String, dynamic>{};
 
     message.forEach((key, value) {
       if (value == null) {
@@ -67,46 +64,26 @@ class ChatHistoryService {
     return normalized;
   }
 
-  /// تحميل تاريخ المحادثة.
+  /// تحميل تاريخ المحادثة الخاصة بالخدمة.
   Future<List<Map<String, dynamic>>> load(
     String serviceKey,
   ) async {
     try {
-      final raw = await _storage.getString(_key(serviceKey));
-
-      if (raw == null || raw.trim().isEmpty) {
-        return <Map<String, dynamic>>[];
-      }
-
-      final decoded = jsonDecode(raw);
-
-      if (decoded is! List) {
-        return <Map<String, dynamic>>[];
-      }
-
-      final messages = <Map<String, dynamic>>[];
-
-      for (final item in decoded) {
-        if (item is Map) {
-          messages.add(
-            _normalizeMessage(
-              Map<String, dynamic>.from(item),
-            ),
-          );
-        }
-      }
-
-      if (messages.length <= maxMessages) {
-        return messages;
-      }
-
-      return messages.sublist(
-        messages.length - maxMessages,
+      final messages =
+          await _storage.getChatHistory(
+        serviceKey,
       );
+
+      final normalized = messages
+          .map(_normalizeMessage)
+          .toList();
+
+      return _limit(normalized);
     } catch (e) {
       debugPrint(
         'ChatHistoryService.load error: $e',
       );
+
       return <Map<String, dynamic>>[];
     }
   }
@@ -121,81 +98,85 @@ class ChatHistoryService {
           .map(_normalizeMessage)
           .toList();
 
-      final limited = normalized.length <= maxMessages
-          ? normalized
-          : normalized.sublist(
-              normalized.length - maxMessages,
-            );
+      final limited = _limit(normalized);
 
-      return await _storage.setString(
-        _key(serviceKey),
-        jsonEncode(limited),
+      return await _storage.saveChatHistory(
+        serviceKey,
+        limited,
       );
     } catch (e) {
       debugPrint(
         'ChatHistoryService.save error: $e',
       );
+
       return false;
     }
   }
 
-  /// إضافة رسالة واحدة مع الاحتفاظ بآخر 80 رسالة فقط.
+  /// إضافة رسالة واحدة إلى المحادثة.
+  ///
+  /// إذا تجاوزت المحادثة 80 رسالة يتم الاحتفاظ
+  /// بآخر 80 رسالة فقط.
   Future<bool> addMessage(
     String serviceKey,
     Map<String, dynamic> message,
   ) async {
-    final messages = await load(serviceKey);
+    final messages =
+        await load(serviceKey);
 
     messages.add(
       _normalizeMessage(message),
     );
 
-    if (messages.length > maxMessages) {
-      messages.removeRange(
-        0,
-        messages.length - maxMessages,
-      );
-    }
-
-    return save(serviceKey, messages);
+    return save(
+      serviceKey,
+      messages,
+    );
   }
 
   /// حذف محادثة خدمة واحدة فقط.
+  ///
+  /// لا يؤثر على باقي المحادثات.
   Future<bool> clear(
     String serviceKey,
   ) async {
     try {
-      return await _storage.remove(
-        _key(serviceKey),
+      return await _storage.clearChatHistory(
+        serviceKey,
       );
     } catch (e) {
       debugPrint(
         'ChatHistoryService.clear error: $e',
       );
+
       return false;
     }
   }
 
-  /// هل توجد محادثة محفوظة لهذه الخدمة؟
+  /// معرفة هل توجد رسائل محفوظة لهذه الخدمة.
   Future<bool> hasHistory(
     String serviceKey,
   ) async {
-    final messages = await load(serviceKey);
+    final messages =
+        await load(serviceKey);
+
     return messages.isNotEmpty;
   }
 
-  /// عدد الرسائل المحفوظة.
+  /// عدد الرسائل المحفوظة للخدمة.
   Future<int> messageCount(
     String serviceKey,
   ) async {
-    final messages = await load(serviceKey);
+    final messages =
+        await load(serviceKey);
+
     return messages.length;
   }
 
-  /// حذف كل سجلات المحادثات التي نعرف مفاتيحها.
+  /// حذف جميع محادثات الخدمات المعروفة.
   ///
-  /// لا يتم استخدام هذا أثناء التشغيل العادي.
-  /// موجود فقط للحالات التي نحتاج فيها تنظيف بيانات التطبيق.
+  /// هذه الدالة للاستخدام الإداري أو عند تنظيف بيانات
+  /// التطبيق، وليست جزءًا من الاستخدام الطبيعي للشات.
   Future<void> clearAllKnownChats() async {
     for (final key in ServiceKeys.chatServices) {
       await clear(key);
