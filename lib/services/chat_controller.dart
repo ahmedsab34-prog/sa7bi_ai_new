@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 
 import '../config/service_keys.dart';
@@ -30,7 +32,8 @@ class ChatController extends ChangeNotifier {
   final ChatHistoryService _history =
       ChatHistoryService.instance;
 
-  final List<ChatMessage> _messages = <ChatMessage>[];
+  final List<ChatMessage> _messages =
+      <ChatMessage>[];
 
   ChatThemeData _theme;
 
@@ -125,8 +128,12 @@ class ChatController extends ChangeNotifier {
   Future<void> addImageMessage({
     required String text,
     required bool isUser,
-    required dynamic image,
+    required Uint8List image,
   }) async {
+    if (image.isEmpty) {
+      return;
+    }
+
     final cleanText = text.trim();
 
     final message = ChatMessage.image(
@@ -158,18 +165,22 @@ class ChatController extends ChangeNotifier {
     required String text,
     required bool isUser,
   }) async {
+    final cleanText = text.trim();
+
+    if (cleanText.isEmpty) {
+      return;
+    }
+
     final message = ChatMessage.video(
       isUser: isUser,
-      text: text.trim(),
+      text: cleanText,
     );
 
     _messages.add(message);
 
-    if (text.trim().isNotEmpty) {
-      _updateThemeForMessage(
-        text.trim(),
-      );
-    }
+    _updateThemeForMessage(
+      cleanText,
+    );
 
     _trimMessages();
 
