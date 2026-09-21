@@ -34,9 +34,9 @@ class AiService {
 
   static const int maxHistory = 8;
 
-  // ------------------------------------------------------------
+  // ============================================================
   // CONNECTION
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<bool> checkConnection() async {
     try {
@@ -57,29 +57,27 @@ class AiService {
         return false;
       }
 
-      final data = jsonDecode(response.body);
+      final data = _decodeMap(response.body);
 
-      if (data is! Map) {
+      if (data == null) {
         return false;
       }
 
       return data['ok'] == true &&
-          data['status'] == 'online' &&
-          data['ai_configured'] == true;
+          data['status'] == 'online';
     } catch (_) {
       return false;
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // CHAT
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<String> getResponse(
     String prompt, {
     String? serviceContext,
-    List<Map<String, String>> history =
-        const [],
+    List<Map<String, String>> history = const [],
   }) async {
     final text = prompt.trim();
 
@@ -152,18 +150,18 @@ class AiService {
         return _serverError(response);
       }
 
-      final data = _decodeMap(response.body);
+      final data =
+          _decodeMap(response.body);
+
+      // الـWorker الحالي يرجع answer.
+      final answer =
+          data?['answer']?.toString().trim();
 
       if (data != null &&
           data['ok'] == true &&
-          data['reply'] is String &&
-          data['reply']
-              .toString()
-              .trim()
-              .isNotEmpty) {
-        return data['reply']
-            .toString()
-            .trim();
+          answer != null &&
+          answer.isNotEmpty) {
+        return answer;
       }
 
       return data?['error']?.toString() ??
@@ -173,9 +171,9 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // IMAGE ANALYSIS
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<String> analyzeImage(
     XFile file, {
@@ -184,7 +182,8 @@ class AiService {
     String? serviceContext,
   }) async {
     try {
-      final bytes = await file.readAsBytes();
+      final bytes =
+          await file.readAsBytes();
 
       if (bytes.isEmpty) {
         return 'الصورة لم يتم قراءتها.';
@@ -194,7 +193,8 @@ class AiService {
         return 'الصورة كبيرة جدًا. ابعت صورة أصغر من 5 ميجابايت.';
       }
 
-      String finalPrompt = prompt.trim();
+      String finalPrompt =
+          prompt.trim();
 
       if (serviceContext != null &&
           serviceContext.trim().isNotEmpty) {
@@ -205,7 +205,8 @@ class AiService {
             '$finalPrompt';
       }
 
-      final mime = _mime(file.name);
+      final mime =
+          _mime(file.name);
 
       final response = await http
           .post(
@@ -221,7 +222,7 @@ class AiService {
                   'content': finalPrompt,
                 },
               ],
-              'image':
+              'imageDataUrl':
                   'data:$mime;base64,${base64Encode(bytes)}',
             }),
           )
@@ -233,18 +234,17 @@ class AiService {
         return _serverError(response);
       }
 
-      final data = _decodeMap(response.body);
+      final data =
+          _decodeMap(response.body);
+
+      final answer =
+          data?['answer']?.toString().trim();
 
       if (data != null &&
           data['ok'] == true &&
-          data['reply'] is String &&
-          data['reply']
-              .toString()
-              .trim()
-              .isNotEmpty) {
-        return data['reply']
-            .toString()
-            .trim();
+          answer != null &&
+          answer.isNotEmpty) {
+        return answer;
       }
 
       return data?['error']?.toString() ??
@@ -254,15 +254,16 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // IMAGE GENERATION
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<ImageGenerationResult>
       generateImage(
     String prompt,
   ) async {
-    final cleanPrompt = prompt.trim();
+    final cleanPrompt =
+        prompt.trim();
 
     if (cleanPrompt.isEmpty) {
       return const ImageGenerationResult.failure(
@@ -300,7 +301,8 @@ class AiService {
         );
       }
 
-      final data = _decodeMap(response.body);
+      final data =
+          _decodeMap(response.body);
 
       if (data == null) {
         return const ImageGenerationResult.failure(
@@ -315,34 +317,33 @@ class AiService {
         );
       }
 
-      String? base64Image;
+      String? imageDataUrl;
 
       final direct =
-          data['image_base64'];
+          data['imageDataUrl'];
 
       if (direct is String &&
           direct.trim().isNotEmpty) {
-        base64Image = direct.trim();
+        imageDataUrl =
+            direct.trim();
       }
 
-      if (base64Image == null) {
-        final nested = data['data'];
+      // احتياطًا لو رجع الخادم رابط صورة.
+      if (imageDataUrl == null) {
+        final imageUrl =
+            data['imageUrl'];
 
-        if (nested is List &&
-            nested.isNotEmpty &&
-            nested.first is Map) {
-          final value =
-              nested.first['b64_json'];
-
-          if (value is String &&
-              value.trim().isNotEmpty) {
-            base64Image = value.trim();
-          }
+        if (imageUrl is String &&
+            imageUrl.trim().isNotEmpty) {
+          return ImageGenerationResult
+              .successUrl(
+            imageUrl.trim(),
+          );
         }
       }
 
-      if (base64Image == null ||
-          base64Image.isEmpty) {
+      if (imageDataUrl == null ||
+          imageDataUrl.isEmpty) {
         return const ImageGenerationResult.failure(
           'خدمة الصور لم ترجع صورة.',
         );
@@ -350,11 +351,10 @@ class AiService {
 
       try {
         String cleanBase64 =
-            base64Image;
+            imageDataUrl;
 
-        if (cleanBase64.startsWith(
-          'data:image/',
-        )) {
+        if (cleanBase64
+            .startsWith('data:image/')) {
           final comma =
               cleanBase64.indexOf(',');
 
@@ -390,9 +390,9 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // NEWS
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<List<NewsItem>> getNews() async {
     try {
@@ -421,7 +421,8 @@ class AiService {
         return [];
       }
 
-      final data = _decodeMap(response.body);
+      final data =
+          _decodeMap(response.body);
 
       if (data == null ||
           data['items'] is! List) {
@@ -433,14 +434,27 @@ class AiService {
           .map(
             (item) => NewsItem(
               title:
-                  item['title']?.toString() ?? '',
+                  item['title']?.toString() ??
+                      '',
               source:
                   item['source']?.toString() ??
                       'الأخبار',
               link:
-                  item['link']?.toString() ?? '',
+                  item['link']?.toString() ??
+                      '',
               imageUrl:
-                  item['imageUrl']?.toString() ??
+                  (
+                    item['imageUrl'] ??
+                    item['image'] ??
+                    ''
+                  ).toString(),
+              description:
+                  item['description']
+                          ?.toString() ??
+                      '',
+              pubDate:
+                  item['pubDate']
+                          ?.toString() ??
                       '',
             ),
           )
@@ -455,20 +469,17 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
-  // GENERIC AUDIO SEARCH
-  // ------------------------------------------------------------
+  // ============================================================
+  // AUDIO SEARCH
+  // ============================================================
 
   static Future<List<AudioSearchItem>>
       searchAudio(
     String query, {
     String type = 'quran',
   }) async {
-    final clean = query.trim();
-
-    if (clean.isEmpty) {
-      return [];
-    }
+    final clean =
+        query.trim();
 
     try {
       final uri =
@@ -490,7 +501,8 @@ class AiService {
         return [];
       }
 
-      final data = _decodeMap(response.body);
+      final data =
+          _decodeMap(response.body);
 
       if (data == null ||
           data['items'] is! List) {
@@ -501,32 +513,53 @@ class AiService {
           .whereType<Map>()
           .map(
             (item) => AudioSearchItem(
+              id:
+                  item['id']?.toString() ??
+                      '',
               title:
                   item['title']?.toString() ??
                       '',
               artist:
                   item['artist']?.toString(),
               url:
-                  item['url']?.toString() ??
-                      '',
+                  (
+                    item['url'] ??
+                    item['previewUrl'] ??
+                    ''
+                  ).toString(),
               type:
                   item['type']?.toString() ??
                       type,
               artwork:
-                  item['artwork']?.toString() ??
-                      '',
+                  (
+                    item['artwork'] ??
+                    ''
+                  ).toString(),
               storeUrl:
-                  item['storeUrl']?.toString() ??
-                      '',
+                  (
+                    item['storeUrl'] ??
+                    ''
+                  ).toString(),
               text:
-                  item['text']?.toString() ??
+                  (
+                    item['text'] ??
+                    ''
+                  ).toString(),
+              repeat:
+                  item['repeat']?.toString() ??
+                      '',
+              collection:
+                  item['collection']
+                          ?.toString() ??
+                      '',
+              feedUrl:
+                  item['feedUrl']?.toString() ??
                       '',
             ),
           )
           .where(
             (item) =>
-                item.title.isNotEmpty &&
-                item.url.isNotEmpty,
+                item.title.isNotEmpty,
           )
           .toList();
     } catch (_) {
@@ -534,9 +567,9 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // QURAN CATALOG
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<QuranCatalog?>
       getQuranCatalog() async {
@@ -553,7 +586,8 @@ class AiService {
         return null;
       }
 
-      final data = _decodeMap(response.body);
+      final data =
+          _decodeMap(response.body);
 
       if (data == null ||
           data['ok'] != true) {
@@ -564,7 +598,8 @@ class AiService {
           data['reciters'];
 
       final suraList =
-          data['suwar'];
+          data['suras'] ??
+              data['suwar'];
 
       final reciters =
           <QuranReciter>[];
@@ -572,7 +607,9 @@ class AiService {
       if (reciterList is List) {
         for (final item
             in reciterList) {
-          if (item is! Map) continue;
+          if (item is! Map) {
+            continue;
+          }
 
           final moshafRaw =
               item['moshaf'];
@@ -583,7 +620,9 @@ class AiService {
           if (moshafRaw is List) {
             for (final m
                 in moshafRaw) {
-              if (m is! Map) continue;
+              if (m is! Map) {
+                continue;
+              }
 
               moshafList.add(
                 QuranMoshaf(
@@ -598,15 +637,19 @@ class AiService {
                           '',
                   surahTotal:
                       int.tryParse(
-                            m['surahTotal']
-                                    ?.toString() ??
-                                '',
+                            (
+                              m['surahTotal'] ??
+                              m['surah_total'] ??
+                              ''
+                            ).toString(),
                           ) ??
                           0,
                   surahList:
-                      m['surahList']
-                              ?.toString() ??
-                          '',
+                      (
+                        m['suras'] ??
+                        m['surahList'] ??
+                        ''
+                      ).toString(),
                 ),
               );
             }
@@ -633,13 +676,19 @@ class AiService {
       if (suraList is List) {
         for (final item
             in suraList) {
-          if (item is! Map) continue;
+          if (item is! Map) {
+            continue;
+          }
 
           final id =
               int.tryParse(
-                item['id']?.toString() ??
-                    '',
-              );
+            (
+              item['id'] ??
+              item['sura_id'] ??
+              item['number'] ??
+              ''
+            ).toString(),
+          );
 
           if (id == null ||
               id < 1 ||
@@ -651,8 +700,11 @@ class AiService {
             QuranSura(
               id: id,
               name:
-                  item['name']?.toString() ??
-                      'سورة',
+                  (
+                    item['name'] ??
+                    item['sura_name'] ??
+                    'سورة'
+                  ).toString(),
             ),
           );
         }
@@ -667,9 +719,9 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // RADIO COUNTRIES
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<List<RadioCountry>>
       getRadioCountries() async {
@@ -704,20 +756,25 @@ class AiService {
                   item['name']?.toString() ??
                       '',
               code:
-                  item['code']?.toString() ??
-                      '',
+                  (
+                    item['iso'] ??
+                    item['code'] ??
+                    ''
+                  ).toString(),
               stationCount:
                   int.tryParse(
-                        item['stationCount']
-                                ?.toString() ??
-                            '',
+                        (
+                          item['stationCount'] ??
+                          0
+                        ).toString(),
                       ) ??
                       0,
             ),
           )
           .where(
             (item) =>
-                item.name.isNotEmpty,
+                item.name.isNotEmpty &&
+                item.code.isNotEmpty,
           )
           .toList();
     } catch (_) {
@@ -725,15 +782,16 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // RADIO STATIONS
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<List<RadioStation>>
       getRadioStations(
     String country,
   ) async {
-    final clean = country.trim();
+    final clean =
+        country.trim();
 
     if (clean.isEmpty) {
       return [];
@@ -771,12 +829,18 @@ class AiService {
           .whereType<Map>()
           .map(
             (item) => RadioStation(
+              id:
+                  item['id']?.toString() ??
+                      '',
               name:
                   item['name']?.toString() ??
                       'محطة',
               url:
-                  item['url']?.toString() ??
-                      '',
+                  (
+                    item['streamUrl'] ??
+                    item['url'] ??
+                    ''
+                  ).toString(),
               homepage:
                   item['homepage']?.toString() ??
                       '',
@@ -791,9 +855,10 @@ class AiService {
                       '',
               bitrate:
                   int.tryParse(
-                        item['bitrate']
-                                ?.toString() ??
-                            '',
+                        (
+                          item['bitrate'] ??
+                          0
+                        ).toString(),
                       ) ??
                       0,
             ),
@@ -809,9 +874,9 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // SHORTS
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Future<List<ShortVideoItem>>
       getShorts() async {
@@ -819,6 +884,10 @@ class AiService {
       final response = await http
           .get(
             Uri.parse(shortsEndpoint),
+            headers: const {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+            },
           )
           .timeout(
             const Duration(seconds: 25),
@@ -840,23 +909,41 @@ class AiService {
           .whereType<Map>()
           .map(
             (item) => ShortVideoItem(
+              id:
+                  item['id']?.toString() ??
+                      '',
               title:
                   item['title']?.toString() ??
                       '',
               creator:
-                  item['creator']?.toString() ??
-                      '',
+                  (
+                    item['creator'] ??
+                    item['source'] ??
+                    ''
+                  ).toString(),
               videoUrl:
-                  item['videoUrl']?.toString() ??
-                      '',
+                  (
+                    item['videoUrl'] ??
+                    item['url'] ??
+                    ''
+                  ).toString(),
               thumbnail:
-                  item['thumbnail']?.toString() ??
+                  (
+                    item['thumbnail'] ??
+                    item['image'] ??
+                    item['cover'] ??
+                    ''
+                  ).toString(),
+              description:
+                  item['description']
+                          ?.toString() ??
                       '',
             ),
           )
           .where(
             (item) =>
-                item.videoUrl.isNotEmpty,
+                item.videoUrl.isNotEmpty ||
+                item.thumbnail.isNotEmpty,
           )
           .toList();
     } catch (_) {
@@ -864,9 +951,9 @@ class AiService {
     }
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // HELPERS
-  // ------------------------------------------------------------
+  // ============================================================
 
   static Map<String, dynamic>?
       _decodeMap(String body) {
@@ -957,12 +1044,16 @@ class NewsItem {
   final String source;
   final String link;
   final String imageUrl;
+  final String description;
+  final String pubDate;
 
   const NewsItem({
     required this.title,
     required this.source,
     required this.link,
     this.imageUrl = '',
+    this.description = '',
+    this.pubDate = '',
   });
 }
 
@@ -971,6 +1062,7 @@ class NewsItem {
 // ============================================================
 
 class AudioSearchItem {
+  final String id;
   final String title;
   final String? artist;
   final String url;
@@ -978,8 +1070,12 @@ class AudioSearchItem {
   final String artwork;
   final String storeUrl;
   final String text;
+  final String repeat;
+  final String collection;
+  final String feedUrl;
 
   const AudioSearchItem({
+    this.id = '',
     required this.title,
     required this.url,
     this.artist,
@@ -987,6 +1083,9 @@ class AudioSearchItem {
     this.artwork = '',
     this.storeUrl = '',
     this.text = '',
+    this.repeat = '',
+    this.collection = '',
+    this.feedUrl = '',
   });
 }
 
@@ -996,10 +1095,12 @@ class AudioSearchItem {
 
 class ImageGenerationResult {
   final Uint8List? bytes;
+  final String? imageUrl;
   final String? error;
 
   const ImageGenerationResult._({
     this.bytes,
+    this.imageUrl,
     this.error,
   });
 
@@ -1009,6 +1110,12 @@ class ImageGenerationResult {
           bytes: bytes,
         );
 
+  const ImageGenerationResult.successUrl(
+    String url,
+  ) : this._(
+          imageUrl: url,
+        );
+
   const ImageGenerationResult.failure(
     String error,
   ) : this._(
@@ -1016,8 +1123,10 @@ class ImageGenerationResult {
         );
 
   bool get isSuccess =>
-      bytes != null &&
-      bytes!.isNotEmpty;
+      (bytes != null &&
+          bytes!.isNotEmpty) ||
+      (imageUrl != null &&
+          imageUrl!.isNotEmpty);
 }
 
 // ============================================================
@@ -1089,6 +1198,7 @@ class RadioCountry {
 }
 
 class RadioStation {
+  final String id;
   final String name;
   final String url;
   final String homepage;
@@ -1098,6 +1208,7 @@ class RadioStation {
   final int bitrate;
 
   const RadioStation({
+    this.id = '',
     required this.name,
     required this.url,
     required this.homepage,
@@ -1113,15 +1224,19 @@ class RadioStation {
 // ============================================================
 
 class ShortVideoItem {
+  final String id;
   final String title;
   final String creator;
   final String videoUrl;
   final String thumbnail;
+  final String description;
 
   const ShortVideoItem({
+    this.id = '',
     required this.title,
     required this.creator,
     required this.videoUrl,
     required this.thumbnail,
+    this.description = '',
   });
 }
