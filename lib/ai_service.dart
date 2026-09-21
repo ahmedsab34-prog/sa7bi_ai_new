@@ -153,7 +153,6 @@ class AiService {
       final data =
           _decodeMap(response.body);
 
-      // الـWorker الحالي يرجع answer.
       final answer =
           data?['answer']?.toString().trim();
 
