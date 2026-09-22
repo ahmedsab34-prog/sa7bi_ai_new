@@ -3,14 +3,22 @@ import 'dart:async';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
-/// خدمات الصوت الخاصة بالمحادثة.
+/// خدمة الصوت الخاصة بالمحادثة في صاحبي AI.
 ///
-/// مسؤول عن:
-/// - Speech To Text: تحويل كلام المستخدم إلى نص.
-/// - Text To Speech: قراءة رد الـAI بصوت.
+/// المسؤوليات:
+/// - تحويل كلام المستخدم إلى نص Speech To Text.
+/// - قراءة ردود الذكاء الاصطناعي Text To Speech.
+/// - دعم العربية المصرية ar-EG.
+/// - إدارة حالة الاستماع.
+/// - إدارة حالة قراءة الرد.
+/// - منع تعارض الاستماع مع القراءة الصوتية.
 ///
-/// لا يحفظ الرسائل ولا يتعامل مع الـAI API.
-/// هذه المسؤوليات تظل في ChatController / ChatScreen / AiService.
+/// لا تتعامل هذه الخدمة مع:
+/// - رسائل المحادثة.
+/// - API.
+/// - تخزين المحادثات.
+/// - الرصيد / Credits.
+/// - الصور أو الفيديو.
 class ChatVoiceService {
   ChatVoiceService({
     SpeechToText? speechToText,
@@ -22,53 +30,106 @@ class ChatVoiceService {
   final FlutterTts _tts;
 
   bool _speechInitialized = false;
+  bool _ttsInitialized = false;
+
   bool _isListening = false;
   bool _isSpeaking = false;
 
+  String _ttsLanguage = 'ar-EG';
+
+  /// هل Speech To Text يعمل حاليًا؟
   bool get isListening => _isListening;
+
+  /// هل Text To Speech يعمل حاليًا؟
   bool get isSpeaking => _isSpeaking;
 
-  /// تهيئة خدمة التعرف على الكلام.
+  /// هل Speech To Text تم تهيئته؟
+  bool get isSpeechInitialized => _speechInitialized;
+
+  /// هل TTS تم تهيئته؟
+  bool get isTtsInitialized => _ttsInitialized;
+
+  // ============================================================
+  // SPEECH TO TEXT
+  // ============================================================
+
+  /// تهيئة التعرف على الكلام.
+  ///
+  /// يتم استدعاؤها عند أول استخدام فقط.
   Future<bool> initializeSpeech() async {
     if (_speechInitialized) {
       return true;
     }
 
     try {
-      _speechInitialized = await _speech.initialize(
-        onStatus: (status) {
-          if (status == 'notListening' || status == 'done') {
-            _isListening = false;
-          } else if (status == 'listening') {
-            _isListening = true;
-          }
-        },
-        onError: (_) {
-          _isListening = false;
-        },
+      final available = await _speech.initialize(
+        onStatus: _handleSpeechStatus,
+        onError: _handleSpeechError,
+        debugLogging: false,
       );
 
-      return _speechInitialized;
+      _speechInitialized = available;
+
+      if (!available) {
+        _isListening = false;
+      }
+
+      return available;
     } catch (_) {
       _speechInitialized = false;
+      _isListening = false;
       return false;
     }
   }
 
-  /// بدء الاستماع وتحويل كلام المستخدم إلى نص.
-  ///
-  /// onResult يتم استدعاؤها أثناء التعرف على الكلام.
-  Future<bool> startListening({
-    required void Function(String text, bool isFinal) onResult,
-    String localeId = 'ar-EG',
-  }) async {
-    final initialized = await initializeSpeech();
+  void _handleSpeechStatus(String status) {
+    final normalized = status.trim().toLowerCase();
 
-    if (!initialized) {
-      return false;
+    if (normalized == 'listening') {
+      _isListening = true;
+      return;
     }
 
+    if (normalized == 'notlistening' ||
+        normalized == 'not listening' ||
+        normalized == 'done') {
+      _isListening = false;
+    }
+  }
+
+  void _handleSpeechError(dynamic error) {
+    _isListening = false;
+  }
+
+  /// بدء تحويل الكلام إلى نص.
+  ///
+  /// [onResult] يتم استدعاؤها أثناء الكلام:
+  ///
+  /// text:
+  /// النص الذي تم التعرف عليه.
+  ///
+  /// isFinal:
+  /// هل النتيجة نهائية أم ما زالت مؤقتة؟
+  Future<bool> startListening({
+    required void Function(
+      String text,
+      bool isFinal,
+    ) onResult,
+    String localeId = 'ar-EG',
+  }) async {
     try {
+      // لو TTS يعمل، نوقفه أولًا حتى لا يتداخل مع الميكروفون.
+      if (_isSpeaking) {
+        await stopSpeaking();
+      }
+
+      final initialized = await initializeSpeech();
+
+      if (!initialized) {
+        return false;
+      }
+
+      // لو هناك جلسة استماع قديمة، نغلقها أولًا.
       if (_speech.isListening) {
         await _speech.stop();
       }
@@ -81,8 +142,10 @@ class ChatVoiceService {
         partialResults: true,
         cancelOnError: true,
         onResult: (result) {
+          final text = result.recognizedWords.trim();
+
           onResult(
-            result.recognizedWords,
+            text,
             result.finalResult,
           );
 
@@ -102,18 +165,24 @@ class ChatVoiceService {
   /// إيقاف الاستماع.
   Future<void> stopListening() async {
     try {
-      await _speech.stop();
+      if (_speech.isListening) {
+        await _speech.stop();
+      }
     } catch (_) {
-      // لا نسمح بخطأ الصوت بإيقاف التطبيق.
+      // لا نسمح بخطأ الميكروفون بإغلاق التطبيق.
     }
 
     _isListening = false;
   }
 
-  /// إلغاء الاستماع بدون الاعتماد على النتيجة الحالية.
+  /// إلغاء جلسة الاستماع الحالية.
+  ///
+  /// لا نعتمد على النتيجة الحالية.
   Future<void> cancelListening() async {
     try {
-      await _speech.cancel();
+      if (_speech.isListening) {
+        await _speech.cancel();
+      }
     } catch (_) {
       // تجاهل خطأ الإلغاء.
     }
@@ -121,12 +190,39 @@ class ChatVoiceService {
     _isListening = false;
   }
 
-  /// تهيئة إعدادات تحويل النص إلى كلام.
-  Future<void> initializeTts() async {
+  /// إيقاف أو تشغيل الاستماع حسب الحالة الحالية.
+  Future<bool> toggleListening({
+    required void Function(
+      String text,
+      bool isFinal,
+    ) onResult,
+    String localeId = 'ar-EG',
+  }) async {
+    if (_isListening || _speech.isListening) {
+      await stopListening();
+      return false;
+    }
+
+    return startListening(
+      onResult: onResult,
+      localeId: localeId,
+    );
+  }
+
+  // ============================================================
+  // TEXT TO SPEECH
+  // ============================================================
+
+  /// تهيئة Text To Speech.
+  Future<bool> initializeTts() async {
+    if (_ttsInitialized) {
+      return true;
+    }
+
     try {
       await _tts.awaitSpeakCompletion(false);
 
-      await _tts.setLanguage('ar-EG');
+      await _tts.setLanguage(_ttsLanguage);
       await _tts.setSpeechRate(0.48);
       await _tts.setPitch(1.0);
       await _tts.setVolume(1.0);
@@ -146,8 +242,38 @@ class ChatVoiceService {
       _tts.setErrorHandler((_) {
         _isSpeaking = false;
       });
+
+      _ttsInitialized = true;
+
+      return true;
     } catch (_) {
-      // إعدادات TTS تختلف من جهاز لآخر.
+      _ttsInitialized = false;
+      _isSpeaking = false;
+      return false;
+    }
+  }
+
+  /// تغيير لغة TTS.
+  Future<bool> setLanguage(String language) async {
+    final clean = language.trim();
+
+    if (clean.isEmpty) {
+      return false;
+    }
+
+    try {
+      final initialized = await initializeTts();
+
+      if (!initialized) {
+        return false;
+      }
+
+      await _tts.setLanguage(clean);
+      _ttsLanguage = clean;
+
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -166,10 +292,27 @@ class ChatVoiceService {
     }
 
     try {
-      await initializeTts();
+      // لا نريد الميكروفون يعمل أثناء قراءة AI.
+      if (_isListening || _speech.isListening) {
+        await stopListening();
+      }
 
-      if (language != null && language.trim().isNotEmpty) {
-        await _tts.setLanguage(language);
+      final initialized = await initializeTts();
+
+      if (!initialized) {
+        return false;
+      }
+
+      if (language != null &&
+          language.trim().isNotEmpty) {
+        final cleanLanguage = language.trim();
+
+        try {
+          await _tts.setLanguage(cleanLanguage);
+          _ttsLanguage = cleanLanguage;
+        } catch (_) {
+          // نكمل باللغة الحالية إذا كانت اللغة المطلوبة غير متاحة.
+        }
       }
 
       if (rate != null) {
@@ -184,10 +327,32 @@ class ChatVoiceService {
         await _tts.setVolume(volume);
       }
 
+      // إيقاف أي قراءة قديمة قبل بدء الجديدة.
       await _tts.stop();
 
       _isSpeaking = true;
-      await _tts.speak(cleaned);
+
+      final result = await _tts.speak(cleaned);
+
+      // بعض محركات Android تعيد رقمًا بدل bool.
+      // نعتبر 1 أو true نجاحًا.
+      if (result is bool) {
+        if (!result) {
+          _isSpeaking = false;
+        }
+
+        return result;
+      }
+
+      if (result is int) {
+        final success = result == 1;
+
+        if (!success) {
+          _isSpeaking = false;
+        }
+
+        return success;
+      }
 
       return true;
     } catch (_) {
@@ -196,25 +361,57 @@ class ChatVoiceService {
     }
   }
 
-  /// إيقاف قراءة النص الحالي.
+  /// إيقاف قراءة AI.
   Future<void> stopSpeaking() async {
     try {
       await _tts.stop();
     } catch (_) {
-      // تجاهل خطأ الإيقاف.
+      // تجاهل خطأ TTS.
     }
 
     _isSpeaking = false;
   }
 
-  /// إيقاف كل خدمات الصوت.
+  /// تشغيل / إيقاف قراءة النص.
+  Future<bool> toggleSpeaking(
+    String text, {
+    String? language,
+    double? rate,
+    double? pitch,
+    double? volume,
+  }) async {
+    if (_isSpeaking) {
+      await stopSpeaking();
+      return false;
+    }
+
+    return speak(
+      text,
+      language: language,
+      rate: rate,
+      pitch: pitch,
+      volume: volume,
+    );
+  }
+
+  // ============================================================
+  // GENERAL
+  // ============================================================
+
+  /// إيقاف كل وظائف الصوت.
   Future<void> stopAll() async {
     await stopListening();
     await stopSpeaking();
   }
 
-  /// تنظيف الموارد.
+  /// تنظيف الخدمة.
+  ///
+  /// الخدمة لا تمتلك موارد native مستقلة تحتاج dispose،
+  /// لكننا نوقف أي جلسة صوت قبل التخلص منها.
   Future<void> dispose() async {
     await stopAll();
+
+    _speechInitialized = false;
+    _ttsInitialized = false;
   }
 }
