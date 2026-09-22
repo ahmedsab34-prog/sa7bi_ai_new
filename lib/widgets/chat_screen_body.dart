@@ -1,26 +1,36 @@
 import 'package:flutter/material.dart';
 
-import '../services/credits_service.dart';
-import '../widgets/rewarded_ad_button.dart';
-import '../widgets/credits_status.dart';
+import '../services/chat_controller.dart';
+import '../services/profile_service.dart';
 import 'chat_composer.dart';
 import 'chat_dynamic_background.dart';
 import 'chat_empty_state.dart';
 import 'chat_message_list.dart';
 import 'chat_status_header.dart';
+import 'credits_status.dart';
+import 'rewarded_ad_button.dart';
 
-class ChatScreenBody extends StatefulWidget {
-  final String serviceTitle;
-  final String serviceKey;
-
-  final List<dynamic> messages;
-
-  final bool isLoading;
-  final bool isListening;
-  final bool isGeneratingImage;
+/// جسم شاشة المحادثة.
+///
+/// هذه الطبقة مسؤولة عن تركيب واجهة الشات فقط.
+/// منطق الذكاء الاصطناعي والوسائط والحفظ موجود في ChatScreen
+/// والخدمات الخاصة به.
+class ChatScreenBody extends StatelessWidget {
+  final ChatController chatController;
+  final ProfileService profileService;
 
   final TextEditingController textController;
   final FocusNode focusNode;
+  final ScrollController scrollController;
+
+  final String title;
+  final String? topic;
+
+  /// هل الشاشة تسمح بالتفاعل؟
+  final bool enabled;
+
+  final bool isListening;
+  final bool isGeneratingImage;
 
   final VoidCallback onSend;
   final VoidCallback? onCamera;
@@ -32,19 +42,18 @@ class ChatScreenBody extends StatefulWidget {
   final VoidCallback? onImageGeneration;
   final VoidCallback onClear;
 
-  final String? userName;
-  final String? userImagePath;
-
   const ChatScreenBody({
     super.key,
-    required this.serviceTitle,
-    required this.serviceKey,
-    required this.messages,
-    required this.isLoading,
-    required this.isListening,
-    required this.isGeneratingImage,
+    required this.chatController,
+    required this.profileService,
     required this.textController,
     required this.focusNode,
+    required this.scrollController,
+    required this.title,
+    this.topic,
+    this.enabled = true,
+    this.isListening = false,
+    this.isGeneratingImage = false,
     required this.onSend,
     this.onCamera,
     this.onGallery,
@@ -54,106 +63,186 @@ class ChatScreenBody extends StatefulWidget {
     this.onSpeechToText,
     this.onImageGeneration,
     required this.onClear,
-    this.userName,
-    this.userImagePath,
   });
 
   @override
-  State<ChatScreenBody> createState() => _ChatScreenBodyState();
-}
-
-class _ChatScreenBodyState extends State<ChatScreenBody> {
-  int _credits = 0;
-  int _remainingRewardedAds = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _refreshCredits();
-  }
-
-  Future<void> _refreshCredits() async {
-    try {
-      final service = CreditsService.instance;
-
-      await service.initialize();
-
-      if (!mounted) return;
-
-      setState(() {
-        _credits = service.balance;
-        _remainingRewardedAds = service.remainingRewardedAds;
-      });
-    } catch (_) {
-      // لا نوقف شاشة الشات إذا حصل خطأ في نظام الرصيد.
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: ChatDynamicBackground(
-        serviceKey: widget.serviceKey,
-        child: SafeArea(
-          child: Column(
-            children: [
-              ChatStatusHeader(
-                title: widget.serviceTitle,
-                isLoading: widget.isLoading,
-                isListening: widget.isListening,
-                isGeneratingImage: widget.isGeneratingImage,
-                onClear: widget.onClear,
-              ),
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        chatController,
+        profileService.changes,
+      ]),
+      builder: (context, _) {
+        final theme = chatController.theme;
 
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: CreditsStatus(
-                        compact: true,
-                        showRewardButton: false,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    RewardedAdButton(
-                      compact: true,
-                      onRewarded: _refreshCredits,
-                    ),
-                  ],
+        final messages = chatController.messages;
+
+        final userName =
+            profileService.displayName;
+
+        final userPhoto =
+            profileService.photoBytes;
+
+        final aiName =
+            chatController.isKhalasana
+                ? 'خلصانة AI'
+                : 'صاحبي AI';
+
+        final safeTopic =
+            topic?.trim().isNotEmpty == true
+                ? topic!.trim()
+                : null;
+
+        return ChatDynamicBackground(
+          theme: theme,
+          animated: true,
+          child: SafeArea(
+            child: Column(
+              children: [
+                // ==================================================
+                // CHAT HEADER
+                // ==================================================
+
+                ChatStatusHeader(
+                  theme: theme,
+                  title: title,
+                  topic: safeTopic,
+                  isLoading:
+                      chatController.isLoading,
+                  canClear:
+                      messages.isNotEmpty &&
+                      !chatController.isLoading,
+                  onClear:
+                      chatController.isLoading
+                          ? null
+                          : onClear,
                 ),
-              ),
 
-              Expanded(
-                child: widget.messages.isEmpty
-                    ? const ChatEmptyState()
-                    : ChatMessageList(
-                        messages: widget.messages,
-                        userName: widget.userName,
-                        userImagePath: widget.userImagePath,
+                // ==================================================
+                // CREDITS
+                // ==================================================
+
+                Padding(
+                  padding:
+                      const EdgeInsets.fromLTRB(
+                    10,
+                    3,
+                    10,
+                    5,
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: CreditsStatus(
+                          compact: true,
+                          showRewardButton: false,
+                        ),
                       ),
-              ),
+                      const SizedBox(width: 8),
+                      RewardedAdButton(
+                        compact: true,
+                        onRewarded: () {
+                          // CreditsStatus يحدث نفسه داخليًا
+                          // عند إعادة بناء الواجهة.
+                        },
+                      ),
+                    ],
+                  ),
+                ),
 
-              ChatComposer(
-                controller: widget.textController,
-                focusNode: widget.focusNode,
-                isLoading: widget.isLoading,
-                isListening: widget.isListening,
-                isGeneratingImage: widget.isGeneratingImage,
-                onSend: widget.onSend,
-                onCamera: widget.onCamera,
-                onGallery: widget.onGallery,
-                onVideo: widget.onVideo,
-                onVoice: widget.onVoice,
-                onText: widget.onText,
-                onSpeechToText: widget.onSpeechToText,
-                onImageGeneration: widget.onImageGeneration,
-              ),
-            ],
+                // ==================================================
+                // MESSAGES
+                // ==================================================
+
+                Expanded(
+                  child: messages.isEmpty
+                      ? ChatEmptyState(
+                          theme: theme,
+                          title: aiName,
+                          subtitle:
+                              chatController
+                                      .isKhalasana
+                                  ? 'اتكلم مع خلصانة براحتك، '
+                                      'والمحادثة تتغير حسب الموضوع.'
+                                  : 'اتكلم معايا براحتك، '
+                                      'وأنا هساعدك على قد ما أقدر.',
+                        )
+                      : ChatMessageList(
+                          messages: messages,
+                          theme: theme,
+                          userName: userName,
+                          userPhoto: userPhoto,
+                          aiName: aiName,
+                          isLoading:
+                              chatController.isLoading,
+                          controller:
+                              scrollController,
+                        ),
+                ),
+
+                // ==================================================
+                // COMPOSER
+                // ==================================================
+
+                ChatComposer(
+                  controller: textController,
+                  focusNode: focusNode,
+                  isLoading:
+                      !enabled ||
+                      chatController.isLoading,
+                  isListening: isListening,
+                  isGeneratingImage:
+                      isGeneratingImage,
+
+                  onSend: onSend,
+
+                  // الكاميرا
+                  onCamera:
+                      !enabled
+                          ? null
+                          : onCamera,
+
+                  // المعرض / الصور
+                  onGallery:
+                      !enabled
+                          ? null
+                          : onGallery,
+
+                  // الفيديو
+                  onVideo:
+                      !enabled
+                          ? null
+                          : onVideo,
+
+                  // قراءة آخر رد بصوت
+                  onVoice:
+                      !enabled
+                          ? null
+                          : onVoice,
+
+                  // فتح لوحة الكتابة
+                  onText:
+                      !enabled
+                          ? null
+                          : onText,
+
+                  // تحويل الكلام إلى نص
+                  onSpeechToText:
+                      !enabled
+                          ? null
+                          : onSpeechToText,
+
+                  // إنشاء صورة
+                  onImageGeneration:
+                      !enabled
+                          ? null
+                          : onImageGeneration,
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
