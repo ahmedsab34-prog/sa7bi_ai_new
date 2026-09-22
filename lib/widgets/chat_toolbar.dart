@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 
 /// شريط الأدوات السفلي للمحادثة.
 ///
-/// يحتوي فقط على الأدوات الأساسية:
+/// الأدوات:
 /// - الكاميرا
+/// - المعرض / الصور
 /// - الفيديو
 /// - الصوت
 /// - الكتابة
 /// - تحويل الكلام إلى نص
 /// - توليد الصور
 ///
-/// هذا الملف مسؤول عن شكل الشريط واستدعاء الأحداث فقط.
-/// منطق الكاميرا والصوت والذكاء الاصطناعي يظل في ChatScreen.
+/// هذا الملف مسؤول عن شكل الأدوات واستدعاء الأحداث فقط.
+/// منطق الوسائط والذكاء الاصطناعي يظل داخل ChatScreen والخدمات.
 class ChatToolbar extends StatelessWidget {
   final VoidCallback? onCamera;
+  final VoidCallback? onGallery;
   final VoidCallback? onVideo;
   final VoidCallback? onVoice;
   final VoidCallback? onText;
@@ -27,6 +29,7 @@ class ChatToolbar extends StatelessWidget {
   const ChatToolbar({
     super.key,
     this.onCamera,
+    this.onGallery,
     this.onVideo,
     this.onVoice,
     this.onText,
@@ -42,7 +45,12 @@ class ChatToolbar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+        margin: const EdgeInsets.fromLTRB(
+          10,
+          4,
+          10,
+          8,
+        ),
         padding: const EdgeInsets.symmetric(
           horizontal: 8,
           vertical: 7,
@@ -62,52 +70,77 @@ class ChatToolbar extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          children: [
-            _ToolButton(
-              icon: Icons.camera_alt_rounded,
-              tooltip: 'الكاميرا',
-              onPressed: enabled ? onCamera : null,
-            ),
-            _ToolButton(
-              icon: Icons.videocam_rounded,
-              tooltip: 'فيديو',
-              onPressed: enabled ? onVideo : null,
-            ),
-            _ToolButton(
-              icon: Icons.mic_rounded,
-              tooltip: isListening ? 'إيقاف التسجيل' : 'صوت',
-              active: isListening,
-              onPressed: enabled ? onVoice : null,
-            ),
-            _ToolButton(
-              icon: Icons.keyboard_rounded,
-              tooltip: 'كتابة',
-              onPressed: enabled ? onText : null,
-            ),
-            _ToolButton(
-              icon: isListening
-                  ? Icons.stop_circle_rounded
-                  : Icons.graphic_eq_rounded,
-              tooltip: isListening
-                  ? 'إيقاف تحويل الكلام'
-                  : 'تحويل الكلام إلى نص',
-              active: isListening,
-              onPressed: enabled ? onSpeechToText : null,
-            ),
-            const Spacer(),
-            _ToolButton(
-              icon: isGeneratingImage
-                  ? Icons.hourglass_top_rounded
-                  : Icons.auto_awesome_rounded,
-              tooltip: 'توليد صورة',
-              active: isGeneratingImage,
-              onPressed: enabled && !isGeneratingImage
-                  ? onImageGeneration
-                  : null,
-              emphasized: true,
-            ),
-          ],
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              _ToolButton(
+                icon: Icons.camera_alt_rounded,
+                tooltip: 'الكاميرا',
+                onPressed:
+                    enabled ? onCamera : null,
+              ),
+
+              _ToolButton(
+                icon: Icons.photo_library_rounded,
+                tooltip: 'الصور والمعرض',
+                onPressed:
+                    enabled ? onGallery : null,
+              ),
+
+              _ToolButton(
+                icon: Icons.videocam_rounded,
+                tooltip: 'فيديو',
+                onPressed:
+                    enabled ? onVideo : null,
+              ),
+
+              _ToolButton(
+                icon: Icons.mic_rounded,
+                tooltip: isListening
+                    ? 'إيقاف التسجيل'
+                    : 'صوت',
+                active: isListening,
+                onPressed:
+                    enabled ? onVoice : null,
+              ),
+
+              _ToolButton(
+                icon: Icons.keyboard_rounded,
+                tooltip: 'كتابة',
+                onPressed:
+                    enabled ? onText : null,
+              ),
+
+              _ToolButton(
+                icon: isListening
+                    ? Icons.stop_circle_rounded
+                    : Icons.graphic_eq_rounded,
+                tooltip: isListening
+                    ? 'إيقاف تحويل الكلام'
+                    : 'تحويل الكلام إلى نص',
+                active: isListening,
+                onPressed:
+                    enabled ? onSpeechToText : null,
+              ),
+
+              const SizedBox(width: 4),
+
+              _ToolButton(
+                icon: isGeneratingImage
+                    ? Icons.hourglass_top_rounded
+                    : Icons.auto_awesome_rounded,
+                tooltip: 'توليد صورة',
+                active: isGeneratingImage,
+                onPressed:
+                    enabled && !isGeneratingImage
+                        ? onImageGeneration
+                        : null,
+                emphasized: true,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -118,6 +151,7 @@ class _ToolButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
+
   final bool active;
   final bool emphasized;
 
@@ -134,16 +168,20 @@ class _ToolButton extends StatelessWidget {
     final disabled = onPressed == null;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 1,
+      ),
       child: Tooltip(
         message: tooltip,
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius:
+                BorderRadius.circular(18),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
+              duration:
+                  const Duration(milliseconds: 180),
               width: 42,
               height: 42,
               decoration: BoxDecoration(
