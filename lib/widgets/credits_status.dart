@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../config/credits_config.dart';
 import '../services/credits_service.dart';
 
-/// ويدجت صغيرة لعرض رصيد المستخدم.
+/// عرض رصيد الـCredits.
 ///
-/// لا تحتوي على منطق الإعلان نفسه.
-/// عند الضغط على زر المكافأة نستدعي onRewardPressed،
-/// وسيتم ربطه لاحقًا بخدمة Rewarded Ads.
+/// المسؤول عن:
+/// - عرض الرصيد الحالي.
+/// - عرض عدد إعلانات المكافأة المتبقية.
+/// - توفير زر مكافأة اختياري.
+/// - إعادة قراءة الرصيد عند عودة الواجهة للحياة.
 class CreditsStatus extends StatefulWidget {
   const CreditsStatus({
     super.key,
@@ -21,10 +23,13 @@ class CreditsStatus extends StatefulWidget {
   final VoidCallback? onRewardPressed;
 
   @override
-  State<CreditsStatus> createState() => _CreditsStatusState();
+  State<CreditsStatus> createState() =>
+      _CreditsStatusState();
 }
 
-class _CreditsStatusState extends State<CreditsStatus> {
+class _CreditsStatusState
+    extends State<CreditsStatus>
+    with WidgetsBindingObserver {
   final CreditsService _creditsService =
       CreditsService.instance;
 
@@ -35,85 +40,163 @@ class _CreditsStatusState extends State<CreditsStatus> {
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance
+        .addObserver(this);
+
     _loadCredits();
   }
 
-  Future<void> _loadCredits() async {
-    await _creditsService.initialize();
-    await _creditsService.refresh();
+  @override
+  void dispose() {
+    WidgetsBinding.instance
+        .removeObserver(this);
 
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _credits = _creditsService.credits;
-      _remainingRewardedAds =
-          _creditsService.remainingRewardedAdsToday;
-      _loading = false;
-    });
+    super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(
+    AppLifecycleState state,
+  ) {
+    if (state == AppLifecycleState.resumed) {
+      _loadCredits();
+    }
+  }
+
+  /// قراءة أحدث قيمة من التخزين.
+  Future<void> _loadCredits() async {
+    try {
+      await _creditsService.initialize();
+      await _creditsService.refresh();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _credits =
+            _creditsService.credits;
+
+        _remainingRewardedAds =
+            _creditsService
+                .remainingRewardedAdsToday;
+
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  /// يمكن استدعاؤها من أي شاشة تحتاج تحديث الرصيد.
   Future<void> refresh() async {
     await _loadCredits();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     if (widget.compact) {
-      return _buildCompact(theme);
+      return _buildCompact();
     }
 
-    return _buildFull(theme);
+    return _buildFull();
   }
 
-  Widget _buildCompact(ThemeData theme) {
+  // ============================================================
+  // COMPACT
+  // ============================================================
+
+  Widget _buildCompact() {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 13,
         vertical: 8,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFFFFD76A)
+                .withOpacity(0.13),
+            Colors.white
+                .withOpacity(0.055),
+          ],
+        ),
+        borderRadius:
+            BorderRadius.circular(18),
         border: Border.all(
           color: const Color(0xFFFFD76A)
-              .withOpacity(0.35),
+              .withOpacity(0.32),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFFD76A)
+                .withOpacity(0.07),
+            blurRadius: 14,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.bolt_rounded,
-            size: 18,
-            color: Color(0xFFFFD76A),
+          Container(
+            width: 27,
+            height: 27,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFFFD76A)
+                  .withOpacity(0.14),
+            ),
+            child: const Icon(
+              Icons.bolt_rounded,
+              size: 17,
+              color: Color(0xFFFFD76A),
+            ),
           ),
-          const SizedBox(width: 6),
+
+          const SizedBox(width: 7),
+
           if (_loading)
             const SizedBox(
-              width: 32,
-              height: 14,
-              child: LinearProgressIndicator(
+              width: 35,
+              height: 15,
+              child:
+                  LinearProgressIndicator(
                 minHeight: 2,
               ),
             )
           else
             Text(
               '$_credits',
-              style: theme.textTheme.titleSmall?.copyWith(
+              textDirection:
+                  TextDirection.ltr,
+              style: const TextStyle(
                 color: Colors.white,
-                fontWeight: FontWeight.w800,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
               ),
             ),
+
           const SizedBox(width: 5),
-          Text(
+
+          const Text(
             'Credits',
-            style: theme.textTheme.labelSmall?.copyWith(
+            textDirection:
+                TextDirection.ltr,
+            style: TextStyle(
               color: Colors.white70,
-              fontWeight: FontWeight.w600,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -121,21 +204,28 @@ class _CreditsStatusState extends State<CreditsStatus> {
     );
   }
 
-  Widget _buildFull(ThemeData theme) {
+  // ============================================================
+  // FULL
+  // ============================================================
+
+  Widget _buildFull() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding:
+          const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius:
+            BorderRadius.circular(22),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
             const Color(0xFFFFD76A)
-                .withOpacity(0.14),
+                .withOpacity(0.15),
             const Color(0xFF7C4DFF)
                 .withOpacity(0.10),
-            Colors.white.withOpacity(0.04),
+            Colors.white
+                .withOpacity(0.04),
           ],
         ),
         border: Border.all(
@@ -153,13 +243,17 @@ class _CreditsStatusState extends State<CreditsStatus> {
       ),
       child: Row(
         children: [
+          // ======================================================
+          // ICON
+          // ======================================================
+
           Container(
-            width: 48,
-            height: 48,
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: const Color(0xFFFFD76A)
-                  .withOpacity(0.12),
+                  .withOpacity(0.13),
               border: Border.all(
                 color: const Color(0xFFFFD76A)
                     .withOpacity(0.35),
@@ -168,112 +262,151 @@ class _CreditsStatusState extends State<CreditsStatus> {
             child: const Icon(
               Icons.bolt_rounded,
               color: Color(0xFFFFD76A),
-              size: 27,
+              size: 28,
             ),
           ),
+
           const SizedBox(width: 12),
+
+          // ======================================================
+          // BALANCE
+          // ======================================================
+
           Expanded(
             child: Column(
               crossAxisAlignment:
                   CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'رصيدك',
-                  style:
-                      theme.textTheme.labelMedium?.copyWith(
+                  textDirection:
+                      TextDirection.rtl,
+                  style: TextStyle(
                     color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 2),
+
+                const SizedBox(height: 3),
+
                 if (_loading)
                   const SizedBox(
-                    width: 70,
-                    height: 18,
-                    child: LinearProgressIndicator(
+                    width: 80,
+                    height: 20,
+                    child:
+                        LinearProgressIndicator(
                       minHeight: 3,
                     ),
                   )
                 else
                   Text(
                     '$_credits Credits',
-                    style:
-                        theme.textTheme.titleLarge?.copyWith(
+                    textDirection:
+                        TextDirection.ltr,
+                    style: const TextStyle(
                       color: Colors.white,
-                      fontWeight: FontWeight.w900,
+                      fontSize: 21,
+                      fontWeight:
+                          FontWeight.w900,
                     ),
                   ),
-                if (!_loading &&
-                    widget.showRewardButton)
+
+                const SizedBox(height: 4),
+
+                if (!_loading)
                   Text(
-                    'متاح $ _remainingRewardedAds إعلان مكافأة اليوم'
-                        .replaceFirst(
-                          r'$ ',
-                          '',
-                        ),
-                    style:
-                        theme.textTheme.bodySmall?.copyWith(
+                    'إعلانات المكافأة المتبقية اليوم: '
+                    '$_remainingRewardedAds',
+                    textDirection:
+                        TextDirection.rtl,
+                    style: const TextStyle(
                       color: Colors.white54,
+                      fontSize: 10.5,
+                      fontWeight:
+                          FontWeight.w500,
                     ),
                   ),
               ],
             ),
           ),
+
+          // ======================================================
+          // REWARD BUTTON
+          // ======================================================
+
           if (widget.showRewardButton)
-            _buildRewardButton(theme),
+            _buildRewardButton(),
         ],
       ),
     );
   }
 
-  Widget _buildRewardButton(ThemeData theme) {
+  Widget _buildRewardButton() {
     final canReward =
-        _remainingRewardedAds > 0;
+        _remainingRewardedAds > 0 &&
+        !_loading;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(15),
         onTap: canReward
             ? widget.onRewardPressed
             : null,
+        borderRadius:
+            BorderRadius.circular(15),
         child: Container(
-          padding: const EdgeInsets.symmetric(
+          padding:
+              const EdgeInsets.symmetric(
             horizontal: 12,
-            vertical: 10,
+            vertical: 9,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius:
+                BorderRadius.circular(15),
             color: canReward
                 ? const Color(0xFFFFD76A)
                     .withOpacity(0.14)
-                : Colors.white.withOpacity(0.04),
+                : Colors.white
+                    .withOpacity(0.04),
             border: Border.all(
               color: canReward
                   ? const Color(0xFFFFD76A)
                       .withOpacity(0.35)
-                  : Colors.white.withOpacity(0.08),
+                  : Colors.white
+                      .withOpacity(0.08),
             ),
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize:
+                MainAxisSize.min,
             children: [
               Icon(
-                Icons.play_circle_fill_rounded,
-                size: 22,
+                Icons
+                    .play_circle_fill_rounded,
+                size: 23,
                 color: canReward
-                    ? const Color(0xFFFFD76A)
+                    ? const Color(
+                        0xFFFFD76A,
+                      )
                     : Colors.white30,
               ),
+
               const SizedBox(height: 3),
+
               Text(
                 canReward
                     ? '+${CreditsConfig.rewardedAdCredits}'
                     : 'خلص',
-                style: theme.textTheme.labelMedium?.copyWith(
+                textDirection:
+                    TextDirection.ltr,
+                style: TextStyle(
                   color: canReward
                       ? Colors.white
                       : Colors.white30,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                  fontWeight:
+                      FontWeight.w900,
                 ),
               ),
             ],
