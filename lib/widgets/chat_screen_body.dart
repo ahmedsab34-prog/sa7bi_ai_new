@@ -8,14 +8,24 @@ import 'chat_dynamic_background.dart';
 import 'chat_empty_state.dart';
 import 'chat_message_list.dart';
 import 'chat_status_header.dart';
+import 'credits_status.dart';
+import 'rewarded_ad_button.dart';
 
 /// جسم شاشة المحادثة.
 ///
-/// يجمع مكونات الشات الجديدة في مكان واحد، بينما يظل
-/// منطق الذكاء الاصطناعي والوسائط والصوت داخل الخدمات/الشاشة.
-class ChatScreenBody extends StatelessWidget {
+/// المسؤوليات:
+/// - عرض حالة الخدمة.
+/// - عرض المحادثة.
+/// - عرض Credits.
+/// - عرض أدوات الشات.
+/// - الحفاظ على جميع callbacks القادمة من ChatScreen.
+///
+/// منطق الذكاء الاصطناعي والوسائط والصوت والإعلانات
+/// يظل خارج هذا الملف.
+class ChatScreenBody extends StatefulWidget {
   final ChatController chatController;
   final ProfileService profileService;
+
   final TextEditingController textController;
   final FocusNode? focusNode;
   final ScrollController? scrollController;
@@ -61,7 +71,29 @@ class ChatScreenBody extends StatelessWidget {
     this.suggestions = const <String>[],
   });
 
-  ChatThemeData get theme => chatController.theme;
+  @override
+  State<ChatScreenBody> createState() =>
+      _ChatScreenBodyState();
+}
+
+class _ChatScreenBodyState
+    extends State<ChatScreenBody> {
+  /// نستخدم مفتاحًا لتحديث CreditsStatus بعد الحصول
+  /// على مكافأة إعلان حقيقية.
+  int _creditsRefreshKey = 0;
+
+  ChatThemeData get theme =>
+      widget.chatController.theme;
+
+  void _refreshCredits() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _creditsRefreshKey++;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,67 +102,143 @@ class ChatScreenBody extends StatelessWidget {
       child: SafeArea(
         child: Column(
           children: [
+            // ====================================================
+            // STATUS HEADER
+            // ====================================================
+
             ChatStatusHeader(
               theme: theme,
-              title: title,
-              topic: topic,
-              isLoading: chatController.isLoading,
-              canClear: chatController.messages.isNotEmpty,
-              onClear: onClear,
+              title: widget.title,
+              topic: widget.topic,
+              isLoading:
+                  widget.chatController.isLoading,
+              canClear:
+                  widget.chatController.messages.isNotEmpty,
+              onClear: widget.onClear,
             ),
 
+            // ====================================================
+            // CREDITS
+            // ====================================================
+
+            Padding(
+              padding:
+                  const EdgeInsets.fromLTRB(
+                10,
+                6,
+                10,
+                4,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: CreditsStatus(
+                      key: ValueKey(
+                        'credits_status_$_creditsRefreshKey',
+                      ),
+                      compact: true,
+                      showRewardButton: false,
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  RewardedAdButton(
+                    compact: true,
+                    onRewarded:
+                        _refreshCredits,
+                  ),
+                ],
+              ),
+            ),
+
+            // ====================================================
+            // MESSAGES
+            // ====================================================
+
             Expanded(
-              child: chatController.messages.isEmpty
+              child: widget.chatController.messages.isEmpty
                   ? ChatEmptyState(
                       theme: theme,
-                      title: title,
-                      subtitle: chatController.isKhalasana
-                          ? 'اتكلم مع خلصانة AI براحتك. الموضوع ممكن يتغير، والمظهر هيتفاعل مع كلامك.'
-                          : 'اتكلم، اكتب، ابعت صورة أو استخدم الأدوات المتاحة.',
-                      suggestions: suggestions,
-                      onSuggestionTap: enabled
-                          ? (value) {
-                              textController.text = value;
+                      title: widget.title,
+                      subtitle:
+                          widget.chatController.isKhalasana
+                              ? 'اتكلم مع خلصانة AI براحتك. الموضوع ممكن يتغير، والمظهر هيتفاعل مع كلامك.'
+                              : 'اتكلم، اكتب، ابعت صورة أو استخدم الأدوات المتاحة.',
+                      suggestions:
+                          widget.suggestions,
+                      onSuggestionTap:
+                          widget.enabled
+                              ? (value) {
+                                  widget.textController.text =
+                                      value;
 
-                              textController.selection =
-                                  TextSelection.fromPosition(
-                                TextPosition(
-                                  offset:
-                                      textController.text.length,
-                                ),
-                              );
+                                  widget.textController
+                                      .selection =
+                                      TextSelection
+                                          .fromPosition(
+                                    TextPosition(
+                                      offset: widget
+                                          .textController
+                                          .text
+                                          .length,
+                                    ),
+                                  );
 
-                              focusNode?.requestFocus();
-                            }
-                          : null,
+                                  widget.focusNode
+                                      ?.requestFocus();
+                                }
+                              : null,
                     )
                   : ChatMessageList(
-                      messages: chatController.messages,
+                      messages:
+                          widget.chatController.messages,
                       theme: theme,
-                      userName: profileService.displayName,
-                      userPhoto: profileService.photoBytes,
-                      aiName: chatController.isKhalasana
-                          ? 'خلصانة AI'
-                          : 'صاحبي AI',
-                      isLoading: chatController.isLoading,
-                      controller: scrollController,
+                      userName:
+                          widget.profileService.displayName,
+                      userPhoto:
+                          widget.profileService.photoBytes,
+                      aiName:
+                          widget.chatController.isKhalasana
+                              ? 'خلصانة AI'
+                              : 'صاحبي AI',
+                      isLoading:
+                          widget.chatController.isLoading,
+                      controller:
+                          widget.scrollController,
                     ),
             ),
 
+            // ====================================================
+            // COMPOSER
+            // ====================================================
+
             ChatComposer(
-              controller: textController,
-              focusNode: focusNode,
+              controller:
+                  widget.textController,
+              focusNode:
+                  widget.focusNode,
               enabled:
-                  enabled && !chatController.isLoading,
-              isListening: isListening,
-              isGeneratingImage: isGeneratingImage,
-              onSend: onSend,
-              onCamera: onCamera,
-              onVideo: onVideo,
-              onVoice: onVoice,
-              onText: onText,
-              onSpeechToText: onSpeechToText,
-              onImageGeneration: onImageGeneration,
+                  widget.enabled &&
+                  !widget.chatController.isLoading,
+              isListening:
+                  widget.isListening,
+              isGeneratingImage:
+                  widget.isGeneratingImage,
+              onSend:
+                  widget.onSend,
+              onCamera:
+                  widget.onCamera,
+              onVideo:
+                  widget.onVideo,
+              onVoice:
+                  widget.onVoice,
+              onText:
+                  widget.onText,
+              onSpeechToText:
+                  widget.onSpeechToText,
+              onImageGeneration:
+                  widget.onImageGeneration,
             ),
           ],
         ),
