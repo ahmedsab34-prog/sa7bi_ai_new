@@ -30,10 +30,17 @@ class ChatScreen extends StatefulWidget {
   final String? serviceTitle;
   final String? serviceContext;
 
+  /// المفتاح الصريح للخدمة.
+  ///
+  /// استخدامه أفضل من محاولة معرفة الخدمة من العنوان
+  /// أو من نص الـ context.
+  final String? serviceKey;
+
   const ChatScreen({
     super.key,
     this.serviceTitle,
     this.serviceContext,
+    this.serviceKey,
   });
 
   @override
@@ -44,23 +51,18 @@ class _ChatScreenState extends State<ChatScreen> {
   late final ChatController _chatController;
   late final ProfileService _profileService;
 
-  final ChatMediaService _mediaService =
-      ChatMediaService();
+  final ChatMediaService _mediaService = ChatMediaService();
 
-  final ChatVoiceService _voiceService =
-      ChatVoiceService();
+  final ChatVoiceService _voiceService = ChatVoiceService();
 
-  final ChatImageService _imageService =
-      ChatImageService();
+  final ChatImageService _imageService = ChatImageService();
 
-  final CreditsService _creditsService =
-      CreditsService.instance;
+  final CreditsService _creditsService = CreditsService.instance;
 
   final TextEditingController _textController =
       TextEditingController();
 
-  final FocusNode _focusNode =
-      FocusNode();
+  final FocusNode _focusNode = FocusNode();
 
   final ScrollController _scrollController =
       ScrollController();
@@ -73,7 +75,26 @@ class _ChatScreenState extends State<ChatScreen> {
   // SERVICE KEY
   // ============================================================
 
+  /// يرجع serviceKey الصريح إذا كان صحيحًا.
+  ///
+  /// الـfallback القديم موجود فقط للحالات القديمة التي
+  /// ما زالت تفتح ChatScreen بدون serviceKey.
+  ///
+  /// هذا يمنع كسر أي شاشة قديمة في المشروع أثناء الدمج.
   String get _serviceKey {
+    final explicitKey =
+        (widget.serviceKey ?? '').trim();
+
+    if (explicitKey.isNotEmpty &&
+        ServiceKeys.isValid(explicitKey)) {
+      return explicitKey;
+    }
+
+    return _inferServiceKey();
+  }
+
+  /// Fallback فقط للتوافق مع الاستدعاءات القديمة.
+  String _inferServiceKey() {
     final title =
         (widget.serviceTitle ?? '').trim();
 
@@ -560,10 +581,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// يحول bytes إلى XFile ثم يرسلها فعليًا إلى
   /// AiRequestService.
-  ///
-  /// XFile.fromData لا يحتاج ملفًا فعليًا على الجهاز،
-  /// وبالتالي نقدر نستخدمه مع صورة الكاميرا أو المعرض
-  /// التي رجعت بالفعل كـUint8List.
   Future<String> _analyzeBytesWithAi(
     Uint8List bytes,
   ) async {
