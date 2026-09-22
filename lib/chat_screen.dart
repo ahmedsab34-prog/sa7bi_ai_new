@@ -75,12 +75,6 @@ class _ChatScreenState extends State<ChatScreen> {
   // SERVICE KEY
   // ============================================================
 
-  /// يرجع serviceKey الصريح إذا كان صحيحًا.
-  ///
-  /// الـfallback القديم موجود فقط للحالات القديمة التي
-  /// ما زالت تفتح ChatScreen بدون serviceKey.
-  ///
-  /// هذا يمنع كسر أي شاشة قديمة في المشروع أثناء الدمج.
   String get _serviceKey {
     final explicitKey =
         (widget.serviceKey ?? '').trim();
@@ -93,7 +87,6 @@ class _ChatScreenState extends State<ChatScreen> {
     return _inferServiceKey();
   }
 
-  /// Fallback فقط للتوافق مع الاستدعاءات القديمة.
   String _inferServiceKey() {
     final title =
         (widget.serviceTitle ?? '').trim();
@@ -340,7 +333,6 @@ class _ChatScreenState extends State<ChatScreen> {
         isUser: false,
       );
     } on AiRequestException catch (error) {
-      // الطلب فشل فعليًا، لذلك نرجع الـCredits.
       if (textCost > 0) {
         await _creditsService.add(
           textCost,
@@ -354,7 +346,6 @@ class _ChatScreenState extends State<ChatScreen> {
         isUser: false,
       );
     } catch (_) {
-      // حماية إضافية لأي خطأ غير متوقع.
       if (textCost > 0) {
         await _creditsService.add(
           textCost,
@@ -379,13 +370,6 @@ class _ChatScreenState extends State<ChatScreen> {
   // AI HISTORY
   // ============================================================
 
-  /// يحول تاريخ المحادثة للصيغة التي يحتاجها
-  /// AiRequestService.
-  ///
-  /// نستبعد:
-  /// - الصور.
-  /// - الفيديو.
-  /// - الرسائل التي ليس لها نص.
   List<Map<String, String>>
       _buildAiHistory() {
     return _chatController.messages
@@ -444,7 +428,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // ============================================================
-  // PICK IMAGE
+  // PICK IMAGE / GALLERY
   // ============================================================
 
   Future<void> _pickImage() async {
@@ -482,10 +466,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     await _creditsService.initialize();
 
-    // ----------------------------------------------------------
-    // CHECK CREDIT
-    // ----------------------------------------------------------
-
     if (cost > 0) {
       final canAfford =
           await _creditsService.canAfford(
@@ -512,10 +492,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    // ----------------------------------------------------------
-    // SAVE USER IMAGE
-    // ----------------------------------------------------------
-
     await _chatController.addImageMessage(
       text:
           'أرسلت صورة لتحليلها.',
@@ -526,10 +502,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     _chatController.setLoading(true);
-
-    // ----------------------------------------------------------
-    // AI IMAGE ANALYSIS
-    // ----------------------------------------------------------
 
     try {
       final reply =
@@ -544,8 +516,6 @@ class _ChatScreenState extends State<ChatScreen> {
         isUser: false,
       );
     } on AiRequestException catch (error) {
-      // التحليل فشل فعليًا.
-      // نرجع الـCredits للمستخدم.
       if (cost > 0) {
         await _creditsService.add(
           cost,
@@ -579,8 +549,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  /// يحول bytes إلى XFile ثم يرسلها فعليًا إلى
-  /// AiRequestService.
   Future<String> _analyzeBytesWithAi(
     Uint8List bytes,
   ) async {
@@ -1275,6 +1243,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 _send,
             onCamera:
                 _takePhoto,
+            onGallery:
+                _pickImage,
             onVideo:
                 _pickVideo,
             onVoice:
