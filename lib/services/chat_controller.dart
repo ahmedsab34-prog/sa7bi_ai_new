@@ -8,18 +8,6 @@ import 'chat_history_service.dart';
 import 'chat_theme_service.dart';
 
 /// مدير حالة المحادثة.
-///
-/// مسؤول عن:
-/// - الرسائل الحالية.
-/// - تحميل المحادثة المحفوظة.
-/// - حفظ الرسائل.
-/// - حذف محادثة الخدمة الحالية.
-/// - تحديد الثيم الحالي.
-/// - تغيير الثيم ديناميكيًا في خلصانة AI.
-///
-/// لا يتعامل مع واجهة Flutter مباشرة،
-/// ولا يتعامل مع OpenAI أو الصوت أو الكاميرا.
-/// هذه المسؤوليات تظل في الطبقات المتخصصة.
 class ChatController extends ChangeNotifier {
   ChatController({
     required String serviceKey,
@@ -35,7 +23,8 @@ class ChatController extends ChangeNotifier {
   final List<ChatMessage> _messages =
       <ChatMessage>[];
 
-  ChatThemeData _theme;
+  // late مطلوبة لأن القيمة يتم تحديدها داخل constructor.
+  late ChatThemeData _theme;
 
   bool _isLoading = false;
   bool _isInitialized = false;
@@ -54,7 +43,6 @@ class ChatController extends ChangeNotifier {
   bool get isKhalasana =>
       _serviceKey == ServiceKeys.khalasana;
 
-  /// تهيئة المحادثة وتحميل التاريخ المحفوظ.
   Future<void> initialize() async {
     if (_isInitialized) {
       return;
@@ -95,7 +83,6 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// إضافة رسالة نصية.
   Future<void> addTextMessage({
     required String text,
     required bool isUser,
@@ -113,9 +100,7 @@ class ChatController extends ChangeNotifier {
 
     _messages.add(message);
 
-    _updateThemeForMessage(
-      cleanText,
-    );
+    _updateThemeForMessage(cleanText);
 
     _trimMessages();
 
@@ -124,7 +109,6 @@ class ChatController extends ChangeNotifier {
     await _save();
   }
 
-  /// إضافة رسالة صورة.
   Future<void> addImageMessage({
     required String text,
     required bool isUser,
@@ -145,9 +129,7 @@ class ChatController extends ChangeNotifier {
     _messages.add(message);
 
     if (cleanText.isNotEmpty) {
-      _updateThemeForMessage(
-        cleanText,
-      );
+      _updateThemeForMessage(cleanText);
     }
 
     _trimMessages();
@@ -157,10 +139,6 @@ class ChatController extends ChangeNotifier {
     await _save();
   }
 
-  /// إضافة رسالة فيديو.
-  ///
-  /// يتم حفظها كرسالة فيديو حتى تظل موجودة
-  /// في سجل المحادثة، بدون افتراض طريقة تحليل الفيديو.
   Future<void> addVideoMessage({
     required String text,
     required bool isUser,
@@ -178,9 +156,7 @@ class ChatController extends ChangeNotifier {
 
     _messages.add(message);
 
-    _updateThemeForMessage(
-      cleanText,
-    );
+    _updateThemeForMessage(cleanText);
 
     _trimMessages();
 
@@ -189,7 +165,6 @@ class ChatController extends ChangeNotifier {
     await _save();
   }
 
-  /// تغيير حالة تحميل رد الذكاء الاصطناعي.
   void setLoading(bool value) {
     if (_isLoading == value) {
       return;
@@ -199,10 +174,7 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// تحديث الثيم يدويًا حسب النص.
-  void updateThemeFromText(
-    String text,
-  ) {
+  void updateThemeFromText(String text) {
     final nextTheme =
         ChatThemeService.detectFromText(
       text,
@@ -217,7 +189,6 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// حذف محادثة هذه الخدمة فقط.
   Future<bool> clearChat() async {
     final result =
         await _history.clear(_serviceKey);
@@ -238,11 +209,9 @@ class ChatController extends ChangeNotifier {
     return true;
   }
 
-  /// عدد الرسائل الحالية.
   int get messageCount =>
       _messages.length;
 
-  /// هل المحادثة فارغة؟
   bool get isEmpty =>
       _messages.isEmpty;
 
