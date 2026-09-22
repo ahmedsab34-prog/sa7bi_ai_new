@@ -1,26 +1,50 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- ===================================================== -->
     <!-- Internet -->
+    <!-- ===================================================== -->
+
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Background audio / wake lock -->
+    <!-- ===================================================== -->
+    <!-- Background Audio / Wake Lock -->
+    <!-- ===================================================== -->
+
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- ===================================================== -->
     <!-- Camera / Microphone -->
+    <!-- ===================================================== -->
+
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- ===================================================== -->
+    <!-- Application -->
+    <!-- ===================================================== -->
+
     <application
         android:name="${applicationName}"
-        android:label="صحبي AI"
+        android:label="صاحبي AI"
         android:icon="@drawable/app_icon"
         android:usesCleartextTraffic="false">
 
+        <!-- ================================================= -->
+        <!-- Google Mobile Ads / AdMob -->
+        <!-- ================================================= -->
+
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-9077658292229374~9135705635" />
+
+        <!-- ================================================= -->
         <!-- Main Flutter Activity -->
+        <!-- ================================================= -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -41,7 +65,10 @@
 
         </activity>
 
+        <!-- ================================================= -->
         <!-- Background Audio Service -->
+        <!-- ================================================= -->
+
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
@@ -54,7 +81,10 @@
 
         </service>
 
-        <!-- Media / Headset / Lock-screen buttons -->
+        <!-- ================================================= -->
+        <!-- Media / Headset / Lock-screen Buttons -->
+        <!-- ================================================= -->
+
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true"
@@ -66,7 +96,10 @@
 
         </receiver>
 
-        <!-- Flutter embedding -->
+        <!-- ================================================= -->
+        <!-- Flutter Embedding -->
+        <!-- ================================================= -->
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
