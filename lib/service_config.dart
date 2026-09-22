@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 
+import 'config/service_keys.dart';
+
+/// بيانات خدمة واحدة داخل صاحبي AI.
+///
+/// serviceKey هو المعرف الداخلي الثابت للخدمة.
+/// الاسم العربي والتصميم ممكن يتغيروا مستقبلًا،
+/// لكن serviceKey يفضل ثابتًا حتى لا تتغير محادثة المستخدم
+/// أو يحصل تعارض بين سجلات الخدمات.
 class Sa7biService {
+  final String serviceKey;
   final String title;
   final String description;
   final IconData icon;
@@ -8,6 +17,7 @@ class Sa7biService {
   final String aiRole;
 
   const Sa7biService({
+    required this.serviceKey,
     required this.title,
     required this.description,
     required this.icon,
@@ -16,10 +26,13 @@ class Sa7biService {
   });
 }
 
+/// الخدمات الأساسية العشرة في صاحبي AI.
 const List<Sa7biService> sa7biServices = [
   Sa7biService(
+    serviceKey: ServiceKeys.kitchen,
     title: 'المطبخ',
-    description: 'الأكل والوصفات والمكونات وتحليل صور الطعام',
+    description:
+        'الأكل والوصفات والمكونات وتحليل صور الطعام',
     icon: Icons.restaurant_menu,
     color: Color(0xFFFF8A00),
     aiRole:
@@ -33,9 +46,12 @@ const List<Sa7biService> sa7biServices = [
         'إذا سأل عن شيء متعلق بالحساسية أو سلامة الطعام، '
         'كن حذرًا واذكر متى يحتاج إلى مختص.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.merchant,
     title: 'التجارة',
-    description: 'المنتجات والمتاجر والأسعار والتسويق',
+    description:
+        'المنتجات والمتاجر والأسعار والتسويق',
     icon: Icons.storefront,
     color: Color(0xFF00C853),
     aiRole:
@@ -46,9 +62,12 @@ const List<Sa7biService> sa7biServices = [
         'إذا أرسل المستخدم صورة منتج، حلل ما يظهر فيها فقط. '
         'لا تدّعي سعرًا أو توفرًا لحظيًا ما لم تكن لديك بيانات مؤكدة.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.pharmacy,
     title: 'الصيدلية والأعشاب',
-    description: 'معلومات عامة عن الأدوية والأعشاب والصور',
+    description:
+        'معلومات عامة عن الأدوية والأعشاب والصور',
     icon: Icons.local_pharmacy,
     color: Color(0xFF00B8D4),
     aiRole:
@@ -61,9 +80,12 @@ const List<Sa7biService> sa7biServices = [
         'عند وجود أعراض خطيرة أو تداخلات دوائية محتملة، '
         'وجّه المستخدم إلى مختص.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.tradesperson,
     title: 'الحرفيين',
-    description: 'صيانة المنزل والكهرباء والسباكة والأعمال اليدوية',
+    description:
+        'صيانة المنزل والكهرباء والسباكة والأعمال اليدوية',
     icon: Icons.handyman,
     color: Color(0xFFFFC107),
     aiRole:
@@ -75,9 +97,12 @@ const List<Sa7biService> sa7biServices = [
         'نبّه بوضوح عند وجود خطر كهرباء أو غاز أو أعمال '
         'تحتاج متخصصًا ولا تعطِ تعليمات خطرة بثقة زائفة.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.worship,
     title: 'العبادة',
-    description: 'القرآن والأذكار والمعلومات الإسلامية',
+    description:
+        'القرآن والأذكار والمعلومات الإسلامية',
     icon: Icons.mosque,
     color: Color(0xFF26A69A),
     aiRole:
@@ -89,9 +114,12 @@ const List<Sa7biService> sa7biServices = [
         'لا تنسب نصًا دينيًا إلى مصدر دون ثقة. '
         'لا تدخل في إساءة أو جدال ديني غير محترم.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.shopping,
     title: 'التسوق',
-    description: 'مقارنة المنتجات وفهم المواصفات والشراء الذكي',
+    description:
+        'مقارنة المنتجات وفهم المواصفات والشراء الذكي',
     icon: Icons.shopping_cart,
     color: Color(0xFFE91E63),
     aiRole:
@@ -103,9 +131,12 @@ const List<Sa7biService> sa7biServices = [
         'إذا أرسل المستخدم صورة منتج، ساعده في التعرف على '
         'التفاصيل الظاهرة وشرحها بحذر.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.social,
     title: 'التواصل',
-    description: 'رسائل ومحادثات وأفكار للتواصل الاجتماعي',
+    description:
+        'رسائل ومحادثات وأفكار للتواصل الاجتماعي',
     icon: Icons.people_alt,
     color: Color(0xFF7C4DFF),
     aiRole:
@@ -118,9 +149,12 @@ const List<Sa7biService> sa7biServices = [
         'إذا طلب المستخدم صياغة رسالة، اجعلها طبيعية '
         'ومناسبة للعلاقة والموقف.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.venting,
     title: 'فضفضة',
-    description: 'مساحة خاصة للكلام وترتيب الأفكار',
+    description:
+        'مساحة خاصة للكلام وترتيب الأفكار',
     icon: Icons.lock_outline,
     color: Color(0xFF9C27B0),
     aiRole:
@@ -131,9 +165,12 @@ const List<Sa7biService> sa7biServices = [
         'إذا ظهرت مؤشرات على خطر مباشر أو أذى للنفس أو الآخرين، '
         'شجع المستخدم على طلب مساعدة بشرية عاجلة ومناسبة.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.hobbiesSports,
     title: 'الهوايات والرياضة',
-    description: 'رياضة وألعاب وأفلام وهوايات',
+    description:
+        'رياضة وألعاب وأفلام وهوايات',
     icon: Icons.sports_soccer,
     color: Color(0xFF2196F3),
     aiRole:
@@ -143,9 +180,12 @@ const List<Sa7biService> sa7biServices = [
         'إذا كانت المعلومة مرتبطة بنتيجة أو موعد أو خبر حديث '
         'ولا توجد لديك بيانات حديثة مؤكدة، وضح ذلك بدل التخمين.',
   ),
+
   Sa7biService(
+    serviceKey: ServiceKeys.podcasts,
     title: 'البودكاست',
-    description: 'أفكار الحلقات والمحتوى الصوتي والمرئي',
+    description:
+        'أفكار الحلقات والمحتوى الصوتي والمرئي',
     icon: Icons.podcasts,
     color: Color(0xFFFF4081),
     aiRole:
