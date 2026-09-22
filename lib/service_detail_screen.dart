@@ -14,10 +14,12 @@ class ServiceDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<ServiceDetailScreen> createState() => _ServiceDetailScreenState();
+  State<ServiceDetailScreen> createState() =>
+      _ServiceDetailScreenState();
 }
 
-class _ServiceDetailScreenState extends State<ServiceDetailScreen>
+class _ServiceDetailScreenState
+    extends State<ServiceDetailScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
@@ -44,6 +46,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen>
       context,
       MaterialPageRoute(
         builder: (_) => ChatScreen(
+          serviceKey: service.serviceKey,
           serviceTitle: service.title,
           serviceContext: service.aiRole,
         ),
@@ -61,7 +64,8 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen>
             child: AnimatedBuilder(
               animation: _controller,
               builder: (_, __) {
-                final angle = _controller.value * math.pi * 2;
+                final angle =
+                    _controller.value * math.pi * 2;
 
                 return CustomPaint(
                   painter: _ServiceBackgroundPainter(
@@ -72,7 +76,6 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen>
               },
             ),
           ),
-
           SafeArea(
             child: Column(
               children: [
@@ -80,11 +83,12 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen>
                   service: service,
                   onBack: () => Navigator.pop(context),
                 ),
-
                 Expanded(
                   child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
+                    physics:
+                        const BouncingScrollPhysics(),
+                    padding:
+                        const EdgeInsets.fromLTRB(
                       18,
                       8,
                       18,
@@ -93,36 +97,29 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen>
                     child: Column(
                       children: [
                         const SizedBox(height: 8),
-
                         _HeroCard(
                           service: service,
                           animation: _controller,
                         ),
-
                         const SizedBox(height: 18),
-
                         _CapabilitiesCard(
                           service: service,
                         ),
-
                         const SizedBox(height: 18),
-
                         _HowItWorksCard(
                           service: service,
                         ),
-
                         const SizedBox(height: 22),
-
                         _StartButton(
                           color: service.color,
-                          onPressed: () => _openChat(context),
+                          onPressed: () =>
+                              _openChat(context),
                         ),
-
                         const SizedBox(height: 11),
-
                         const Text(
                           'اكتب أو اتكلم أو ابعت صورة أو استخدم الكاميرا، وصاحبي هيساعدك داخل الخدمة.',
-                          textDirection: TextDirection.rtl,
+                          textDirection:
+                              TextDirection.rtl,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.white54,
@@ -130,7 +127,6 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen>
                             height: 1.5,
                           ),
                         ),
-
                         const SizedBox(height: 10),
                       ],
                     ),
@@ -222,7 +218,8 @@ class _CircleButton extends StatelessWidget {
           height: 44,
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.07),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius:
+                BorderRadius.circular(16),
             border: Border.all(
               color: Colors.white.withOpacity(0.10),
             ),
@@ -253,7 +250,14 @@ class _HeroCard extends StatelessWidget {
       animation: animation,
       builder: (_, __) {
         final pulse =
-            0.92 + (math.sin(animation.value * math.pi * 2) + 1) * 0.04;
+            0.92 +
+            (math.sin(
+                      animation.value *
+                          math.pi *
+                          2,
+                    ) +
+                    1) *
+                0.04;
 
         return Container(
           width: double.infinity,
@@ -264,7 +268,8 @@ class _HeroCard extends StatelessWidget {
             24,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(32),
+            borderRadius:
+                BorderRadius.circular(32),
             gradient: LinearGradient(
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
@@ -275,11 +280,13 @@ class _HeroCard extends StatelessWidget {
               ],
             ),
             border: Border.all(
-              color: service.color.withOpacity(0.34),
+              color:
+                  service.color.withOpacity(0.34),
             ),
             boxShadow: [
               BoxShadow(
-                color: service.color.withOpacity(0.13),
+                color:
+                    service.color.withOpacity(0.13),
                 blurRadius: 35,
                 spreadRadius: 1,
               ),
@@ -296,13 +303,16 @@ class _HeroCard extends StatelessWidget {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        service.color.withOpacity(0.32),
-                        service.color.withOpacity(0.08),
+                        service.color
+                            .withOpacity(0.32),
+                        service.color
+                            .withOpacity(0.08),
                         Colors.transparent,
                       ],
                     ),
                     border: Border.all(
-                      color: service.color.withOpacity(0.55),
+                      color: service.color
+                          .withOpacity(0.55),
                       width: 1.5,
                     ),
                   ),
@@ -312,13 +322,16 @@ class _HeroCard extends StatelessWidget {
                       height: 78,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: const Color(0xFF0C1019),
+                        color:
+                            const Color(0xFF0C1019),
                         border: Border.all(
-                          color: service.color.withOpacity(0.30),
+                          color: service.color
+                              .withOpacity(0.30),
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: service.color.withOpacity(0.25),
+                            color: service.color
+                                .withOpacity(0.25),
                             blurRadius: 22,
                           ),
                         ],
@@ -332,12 +345,11 @@ class _HeroCard extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 18),
-
               Text(
                 service.title,
-                textDirection: TextDirection.rtl,
+                textDirection:
+                    TextDirection.rtl,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
@@ -346,12 +358,11 @@ class _HeroCard extends StatelessWidget {
                   height: 1.2,
                 ),
               ),
-
               const SizedBox(height: 9),
-
               Text(
                 service.description,
-                textDirection: TextDirection.rtl,
+                textDirection:
+                    TextDirection.rtl,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white70,
@@ -359,23 +370,26 @@ class _HeroCard extends StatelessWidget {
                   height: 1.65,
                 ),
               ),
-
               const SizedBox(height: 15),
-
               Container(
-                padding: const EdgeInsets.symmetric(
+                padding:
+                    const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: service.color.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(30),
+                  color: service.color
+                      .withOpacity(0.10),
+                  borderRadius:
+                      BorderRadius.circular(30),
                   border: Border.all(
-                    color: service.color.withOpacity(0.22),
+                    color: service.color
+                        .withOpacity(0.22),
                   ),
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize:
+                      MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.auto_awesome_rounded,
@@ -385,11 +399,13 @@ class _HeroCard extends StatelessWidget {
                     const SizedBox(width: 6),
                     const Text(
                       'مساعد ذكي متخصص',
-                      textDirection: TextDirection.rtl,
+                      textDirection:
+                          TextDirection.rtl,
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                        fontWeight:
+                            FontWeight.w800,
                       ),
                     ),
                   ],
@@ -403,7 +419,8 @@ class _HeroCard extends StatelessWidget {
   }
 }
 
-class _CapabilitiesCard extends StatelessWidget {
+class _CapabilitiesCard
+    extends StatelessWidget {
   final Sa7biService service;
 
   const _CapabilitiesCard({
@@ -415,20 +432,22 @@ class _CapabilitiesCard extends StatelessWidget {
     return _GlassSection(
       color: service.color,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment:
+            CrossAxisAlignment.stretch,
         children: [
           const _SectionTitle(
-            icon: Icons.auto_awesome_rounded,
-            title: 'إيه اللي تقدر تعمله هنا؟',
+            icon:
+                Icons.auto_awesome_rounded,
+            title:
+                'إيه اللي تقدر تعمله هنا؟',
           ),
-
           const SizedBox(height: 15),
-
           Row(
             children: [
               Expanded(
                 child: _Capability(
-                  icon: Icons.chat_bubble_outline_rounded,
+                  icon:
+                      Icons.chat_bubble_outline_rounded,
                   title: 'محادثة',
                   color: service.color,
                 ),
@@ -436,7 +455,8 @@ class _CapabilitiesCard extends StatelessWidget {
               const SizedBox(width: 9),
               Expanded(
                 child: _Capability(
-                  icon: Icons.mic_none_rounded,
+                  icon:
+                      Icons.mic_none_rounded,
                   title: 'صوت',
                   color: service.color,
                 ),
@@ -444,7 +464,8 @@ class _CapabilitiesCard extends StatelessWidget {
               const SizedBox(width: 9),
               Expanded(
                 child: _Capability(
-                  icon: Icons.camera_alt_outlined,
+                  icon:
+                      Icons.camera_alt_outlined,
                   title: 'كاميرا',
                   color: service.color,
                 ),
@@ -452,7 +473,8 @@ class _CapabilitiesCard extends StatelessWidget {
               const SizedBox(width: 9),
               Expanded(
                 child: _Capability(
-                  icon: Icons.image_outlined,
+                  icon:
+                      Icons.image_outlined,
                   title: 'صورة',
                   color: service.color,
                 ),
@@ -465,7 +487,8 @@ class _CapabilitiesCard extends StatelessWidget {
   }
 }
 
-class _Capability extends StatelessWidget {
+class _Capability
+    extends StatelessWidget {
   final IconData icon;
   final String title;
   final Color color;
@@ -479,15 +502,19 @@ class _Capability extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         vertical: 12,
         horizontal: 4,
       ),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.045),
-        borderRadius: BorderRadius.circular(16),
+        color:
+            Colors.white.withOpacity(0.045),
+        borderRadius:
+            BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.white.withOpacity(0.08),
+          color:
+              Colors.white.withOpacity(0.08),
         ),
       ),
       child: Column(
@@ -500,11 +527,13 @@ class _Capability extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             title,
-            textDirection: TextDirection.rtl,
+            textDirection:
+                TextDirection.rtl,
             style: const TextStyle(
               color: Colors.white70,
               fontSize: 10,
-              fontWeight: FontWeight.w800,
+              fontWeight:
+                  FontWeight.w800,
             ),
           ),
         ],
@@ -513,7 +542,8 @@ class _Capability extends StatelessWidget {
   }
 }
 
-class _HowItWorksCard extends StatelessWidget {
+class _HowItWorksCard
+    extends StatelessWidget {
   final Sa7biService service;
 
   const _HowItWorksCard({
@@ -525,37 +555,39 @@ class _HowItWorksCard extends StatelessWidget {
     return _GlassSection(
       color: service.color,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment:
+            CrossAxisAlignment.stretch,
         children: [
           const _SectionTitle(
-            icon: Icons.tips_and_updates_outlined,
+            icon:
+                Icons.tips_and_updates_outlined,
             title: 'ابدأ ببساطة',
           ),
-
           const SizedBox(height: 14),
-
           _StepRow(
             number: '1',
-            title: 'احكي لصاحبي إنت محتاج إيه',
-            subtitle: 'اكتب أو استخدم صوتك أو ابعت صورة.',
+            title:
+                'احكي لصاحبي إنت محتاج إيه',
+            subtitle:
+                'اكتب أو استخدم صوتك أو ابعت صورة.',
             color: service.color,
           ),
-
           const SizedBox(height: 11),
-
           _StepRow(
             number: '2',
-            title: 'صاحبي يفهم نوع الخدمة',
-            subtitle: 'الذكاء الاصطناعي بيشتغل حسب المجال ده.',
+            title:
+                'صاحبي يفهم نوع الخدمة',
+            subtitle:
+                'الذكاء الاصطناعي بيشتغل حسب المجال ده.',
             color: service.color,
           ),
-
           const SizedBox(height: 11),
-
           _StepRow(
             number: '3',
-            title: 'خد المساعدة ونفّذ اللي يناسبك',
-            subtitle: 'وتقدر تكمل المحادثة وتضيف تفاصيل في أي وقت.',
+            title:
+                'خد المساعدة ونفّذ اللي يناسبك',
+            subtitle:
+                'وتقدر تكمل المحادثة وتضيف تفاصيل في أي وقت.',
             color: service.color,
           ),
         ],
@@ -580,16 +612,19 @@ class _StepRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
       children: [
         Container(
           width: 34,
           height: 34,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: color.withOpacity(0.14),
+            color:
+                color.withOpacity(0.14),
             border: Border.all(
-              color: color.withOpacity(0.35),
+              color:
+                  color.withOpacity(0.35),
             ),
           ),
           alignment: Alignment.center,
@@ -598,32 +633,37 @@ class _StepRow extends StatelessWidget {
             style: TextStyle(
               color: color,
               fontSize: 13,
-              fontWeight: FontWeight.w900,
+              fontWeight:
+                  FontWeight.w900,
             ),
           ),
         ),
-
         const SizedBox(width: 11),
-
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment:
+                CrossAxisAlignment.end,
             children: [
               Text(
                 title,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.right,
+                textDirection:
+                    TextDirection.rtl,
+                textAlign:
+                    TextAlign.right,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 13,
-                  fontWeight: FontWeight.w900,
+                  fontWeight:
+                      FontWeight.w900,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 subtitle,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.right,
+                textDirection:
+                    TextDirection.rtl,
+                textAlign:
+                    TextAlign.right,
                 style: const TextStyle(
                   color: Colors.white54,
                   fontSize: 11,
@@ -638,7 +678,8 @@ class _StepRow extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
+class _SectionTitle
+    extends StatelessWidget {
   final IconData icon;
   final String title;
 
@@ -650,7 +691,8 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      textDirection: TextDirection.rtl,
+      textDirection:
+          TextDirection.rtl,
       children: [
         Icon(
           icon,
@@ -661,12 +703,15 @@ class _SectionTitle extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.right,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 15,
-              fontWeight: FontWeight.w900,
+              fontWeight:
+                  FontWeight.w900,
             ),
           ),
         ),
@@ -675,7 +720,8 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _GlassSection extends StatelessWidget {
+class _GlassSection
+    extends StatelessWidget {
   final Color color;
   final Widget child;
 
@@ -690,14 +736,19 @@ class _GlassSection extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D111A).withOpacity(0.88),
-        borderRadius: BorderRadius.circular(24),
+        color:
+            const Color(0xFF0D111A)
+                .withOpacity(0.88),
+        borderRadius:
+            BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withOpacity(0.08),
+          color:
+              Colors.white.withOpacity(0.08),
         ),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.05),
+            color:
+                color.withOpacity(0.05),
             blurRadius: 24,
           ),
         ],
@@ -707,7 +758,8 @@ class _GlassSection extends StatelessWidget {
   }
 }
 
-class _StartButton extends StatelessWidget {
+class _StartButton
+    extends StatelessWidget {
   final Color color;
   final VoidCallback onPressed;
 
@@ -721,10 +773,12 @@ class _StartButton extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius:
+            BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.24),
+            color:
+                color.withOpacity(0.24),
             blurRadius: 24,
             spreadRadius: 1,
           ),
@@ -734,13 +788,16 @@ class _StartButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius:
+              BorderRadius.circular(20),
           child: Ink(
-            padding: const EdgeInsets.symmetric(
+            padding:
+                const EdgeInsets.symmetric(
               vertical: 16,
             ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius:
+                  BorderRadius.circular(20),
               gradient: LinearGradient(
                 colors: [
                   color,
@@ -754,21 +811,25 @@ class _StartButton extends StatelessWidget {
               ),
             ),
             child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.auto_awesome_rounded,
+                  Icons
+                      .auto_awesome_rounded,
                   color: Colors.black,
                   size: 21,
                 ),
                 SizedBox(width: 9),
                 Text(
                   'ابدأ مع صاحبي',
-                  textDirection: TextDirection.rtl,
+                  textDirection:
+                      TextDirection.rtl,
                   style: TextStyle(
                     color: Colors.black,
                     fontSize: 17,
-                    fontWeight: FontWeight.w900,
+                    fontWeight:
+                        FontWeight.w900,
                   ),
                 ),
                 SizedBox(width: 7),
@@ -786,7 +847,8 @@ class _StartButton extends StatelessWidget {
   }
 }
 
-class _ServiceBackgroundPainter extends CustomPainter {
+class _ServiceBackgroundPainter
+    extends CustomPainter {
   final Color color;
   final double angle;
 
@@ -796,7 +858,10 @@ class _ServiceBackgroundPainter extends CustomPainter {
   });
 
   @override
-  void paint(Canvas canvas, Size size) {
+  void paint(
+    Canvas canvas,
+    Size size,
+  ) {
     final paint = Paint()
       ..shader = RadialGradient(
         center: Alignment(
@@ -823,10 +888,15 @@ class _ServiceBackgroundPainter extends CustomPainter {
     );
 
     final dotPaint = Paint()
-      ..color = color.withOpacity(0.035);
+      ..color =
+          color.withOpacity(0.035);
 
-    for (double y = 0; y < size.height; y += 42) {
-      for (double x = 0; x < size.width; x += 42) {
+    for (double y = 0;
+        y < size.height;
+        y += 42) {
+      for (double x = 0;
+          x < size.width;
+          x += 42) {
         canvas.drawCircle(
           Offset(x + 21, y + 21),
           1.1,
@@ -838,7 +908,9 @@ class _ServiceBackgroundPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(
-    covariant _ServiceBackgroundPainter oldDelegate,
+    covariant
+        _ServiceBackgroundPainter
+            oldDelegate,
   ) {
     return oldDelegate.angle != angle ||
         oldDelegate.color != color;
