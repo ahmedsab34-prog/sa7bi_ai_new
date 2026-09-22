@@ -4,16 +4,28 @@ import 'package:flutter/material.dart';
 
 import '../services/profile_service.dart';
 
-/// أيقونة المستخدم داخل المحادثة.
+/// صورة المستخدم داخل المحادثة.
 ///
 /// الأولوية:
 /// 1. صورة البروفايل المحفوظة.
-/// 2. صورة افتراضية جميلة إذا لم توجد صورة.
+/// 2. صورة افتراضية إذا لم توجد صورة.
 ///
-/// هذا الـWidget مستقل عن شعار صاحبي AI وعن أيقونة الذكاء الاصطناعي.
+/// هذا الـWidget مستقل تمامًا عن:
+/// - شعار صاحبي AI.
+/// - أيقونة الذكاء الاصطناعي.
+/// - تصميم Khalasana.
+///
+/// كما أنه يستمع إلى ProfileService حتى تتحدث الصورة والاسم
+/// فورًا بعد تعديلهما من صفحة الحساب.
 class ChatUserAvatar extends StatefulWidget {
   final double size;
+
+  /// إظهار اسم المستخدم أسفل الصورة.
   final bool showName;
+
+  /// اسم اختياري يفرضه المكان المستخدم فيه الـWidget.
+  ///
+  /// إذا لم يتم تمريره، يستخدم الاسم المحفوظ في ProfileService.
   final String? name;
 
   const ChatUserAvatar({
@@ -24,33 +36,75 @@ class ChatUserAvatar extends StatefulWidget {
   });
 
   @override
-  State<ChatUserAvatar> createState() => _ChatUserAvatarState();
+  State<ChatUserAvatar> createState() =>
+      _ChatUserAvatarState();
 }
 
-class _ChatUserAvatarState extends State<ChatUserAvatar> {
+class _ChatUserAvatarState
+    extends State<ChatUserAvatar> {
+  final ProfileService _profile =
+      ProfileService.instance;
+
   Uint8List? _photoBytes;
-  String _displayName = 'صاحبي';
+
+  String _displayName =
+      ProfileService.defaultProfileName;
 
   @override
   void initState() {
     super.initState();
+
+    _profile.changes.addListener(
+      _onProfileChanged,
+    );
+
     _loadProfile();
   }
 
-  Future<void> _loadProfile() async {
-    final profile = ProfileService.instance;
+  @override
+  void dispose() {
+    _profile.changes.removeListener(
+      _onProfileChanged,
+    );
 
-    await profile.initialize();
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    if (!mounted) {
+      return;
+    }
+
+    _readCurrentProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      await _profile.initialize();
+    } catch (_) {
+      // في حالة فشل SharedPreferences نستخدم
+      // الصورة والاسم الافتراضيين.
+    }
 
     if (!mounted) {
       return;
     }
 
+    _readCurrentProfile();
+  }
+
+  void _readCurrentProfile() {
+    final name =
+        _profile.displayName.trim();
+
     setState(() {
-      _photoBytes = profile.photoBytes;
-      _displayName = profile.displayName.trim().isEmpty
-          ? 'صاحبي'
-          : profile.displayName.trim();
+      _photoBytes =
+          _profile.photoBytes;
+
+      _displayName =
+          name.isEmpty
+              ? ProfileService.defaultProfileName
+              : name;
     });
   }
 
@@ -62,9 +116,14 @@ class _ChatUserAvatarState extends State<ChatUserAvatar> {
       return avatar;
     }
 
-    final name = widget.name?.trim().isNotEmpty == true
-        ? widget.name!.trim()
-        : _displayName;
+    final customName =
+        widget.name?.trim();
+
+    final name =
+        customName != null &&
+                customName.isNotEmpty
+            ? customName
+            : _displayName;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -75,7 +134,8 @@ class _ChatUserAvatarState extends State<ChatUserAvatar> {
           name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          textDirection: TextDirection.rtl,
+          textDirection:
+              TextDirection.rtl,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 11,
@@ -89,7 +149,10 @@ class _ChatUserAvatarState extends State<ChatUserAvatar> {
   Widget _buildAvatar() {
     final diameter = widget.size;
 
-    if (_photoBytes != null && _photoBytes!.isNotEmpty) {
+    final bytes = _photoBytes;
+
+    if (bytes != null &&
+        bytes.isNotEmpty) {
       return Container(
         width: diameter,
         height: diameter,
@@ -97,7 +160,9 @@ class _ChatUserAvatarState extends State<ChatUserAvatar> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.white.withValues(alpha: 0.12),
+              color: Colors.white.withValues(
+                alpha: 0.12,
+              ),
               blurRadius: 12,
               spreadRadius: 1,
             ),
@@ -105,11 +170,16 @@ class _ChatUserAvatarState extends State<ChatUserAvatar> {
         ),
         child: ClipOval(
           child: Image.memory(
-            _photoBytes!,
+            bytes,
             width: diameter,
             height: diameter,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
+            gaplessPlayback: true,
+            errorBuilder: (
+              context,
+              error,
+              stackTrace,
+            ) {
               return _fallbackAvatar();
             },
           ),
@@ -138,7 +208,11 @@ class _ChatUserAvatarState extends State<ChatUserAvatar> {
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6C63FF).withValues(alpha: 0.25),
+            color: const Color(
+              0xFF6C63FF,
+            ).withValues(
+              alpha: 0.25,
+            ),
             blurRadius: 12,
             spreadRadius: 1,
           ),
