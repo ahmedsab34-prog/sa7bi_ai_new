@@ -2,50 +2,37 @@ import 'package:flutter/material.dart';
 
 import 'chat_toolbar.dart';
 
-/// منطقة إدخال الرسالة في المحادثة.
-///
-/// المسؤوليات:
-/// - خانة كتابة الرسالة.
-/// - زر الإرسال.
-/// - إظهار/إخفاء لوحة الأدوات.
-/// - دمج ChatToolbar مع خانة الكتابة.
-///
-/// لا تحتوي على منطق OpenAI أو الحفظ أو الكاميرا.
-/// هذه المسؤوليات تظل في ChatScreen / الخدمات المتخصصة.
 class ChatComposer extends StatefulWidget {
   final TextEditingController controller;
-  final FocusNode? focusNode;
+  final FocusNode focusNode;
+  final bool isLoading;
+  final bool isListening;
+  final bool isGeneratingImage;
 
-  final VoidCallback? onSend;
-
+  final VoidCallback onSend;
   final VoidCallback? onCamera;
+  final VoidCallback? onGallery;
   final VoidCallback? onVideo;
   final VoidCallback? onVoice;
   final VoidCallback? onText;
   final VoidCallback? onSpeechToText;
   final VoidCallback? onImageGeneration;
 
-  final bool enabled;
-  final bool isListening;
-  final bool isGeneratingImage;
-
-  final String hintText;
-
   const ChatComposer({
     super.key,
     required this.controller,
-    this.focusNode,
-    this.onSend,
+    required this.focusNode,
+    required this.isLoading,
+    required this.isListening,
+    required this.isGeneratingImage,
+    required this.onSend,
     this.onCamera,
+    this.onGallery,
     this.onVideo,
     this.onVoice,
     this.onText,
     this.onSpeechToText,
     this.onImageGeneration,
-    this.enabled = true,
-    this.isListening = false,
-    this.isGeneratingImage = false,
-    this.hintText = 'اكتب رسالتك...',
   });
 
   @override
@@ -53,24 +40,13 @@ class ChatComposer extends StatefulWidget {
 }
 
 class _ChatComposerState extends State<ChatComposer> {
-  bool _showTools = false;
-
-  bool get _hasText => widget.controller.text.trim().isNotEmpty;
+  bool _hasText = false;
 
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onTextChanged);
-  }
-
-  @override
-  void didUpdateWidget(covariant ChatComposer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_onTextChanged);
-      widget.controller.addListener(_onTextChanged);
-    }
+    _hasText = widget.controller.text.trim().isNotEmpty;
   }
 
   @override
@@ -80,242 +56,173 @@ class _ChatComposerState extends State<ChatComposer> {
   }
 
   void _onTextChanged() {
-    if (mounted) {
-      setState(() {});
+    final hasText = widget.controller.text.trim().isNotEmpty;
+
+    if (hasText != _hasText && mounted) {
+      setState(() {
+        _hasText = hasText;
+      });
     }
   }
 
   void _send() {
-    if (!widget.enabled || !_hasText) {
-      return;
-    }
+    if (widget.isLoading || widget.isGeneratingImage) return;
 
-    widget.onSend?.call();
-  }
+    if (widget.controller.text.trim().isEmpty) return;
 
-  void _toggleTools() {
-    if (!widget.enabled) {
-      return;
-    }
-
-    setState(() {
-      _showTools = !_showTools;
-    });
-
-    if (_showTools) {
-      FocusManager.instance.primaryFocus?.unfocus();
-    }
+    widget.onSend();
   }
 
   @override
   Widget build(BuildContext context) {
+    final disabled = widget.isLoading || widget.isGeneratingImage;
+
     return SafeArea(
       top: false,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_showTools)
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.22),
+          border: Border(
+            top: BorderSide(
+              color: Colors.white.withOpacity(0.10),
+              width: 1,
+            ),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             ChatToolbar(
-              onCamera: widget.onCamera,
-              onVideo: widget.onVideo,
-              onVoice: widget.onVoice,
-              onText: () {
-                _hideToolsAndFocus();
-                widget.onText?.call();
-              },
-              onSpeechToText: widget.onSpeechToText,
-              onImageGeneration: widget.onImageGeneration,
-              enabled: widget.enabled,
+              onCamera: disabled ? null : widget.onCamera,
+              onGallery: disabled ? null : widget.onGallery,
+              onVideo: disabled ? null : widget.onVideo,
+              onVoice: disabled ? null : widget.onVoice,
+              onText: disabled ? null : widget.onText,
+              onSpeechToText: disabled ? null : widget.onSpeechToText,
+              onImageGeneration:
+                  disabled ? null : widget.onImageGeneration,
+              isLoading: widget.isLoading,
               isListening: widget.isListening,
               isGeneratingImage: widget.isGeneratingImage,
             ),
-
-          _buildInputRow(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputRow() {
-    final disabled = !widget.enabled;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.085),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.14),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          _roundButton(
-            icon: _showTools
-                ? Icons.keyboard_arrow_down_rounded
-                : Icons.add_rounded,
-            tooltip: _showTools ? 'إخفاء الأدوات' : 'الأدوات',
-            onPressed: disabled ? null : _toggleTools,
-          ),
-
-          const SizedBox(width: 4),
-
-          Expanded(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minHeight: 42,
-                maxHeight: 120,
-              ),
-              child: TextField(
-                controller: widget.controller,
-                focusNode: widget.focusNode,
-                enabled: widget.enabled,
-                minLines: 1,
-                maxLines: 5,
-                textInputAction: TextInputAction.newline,
-                textDirection: TextDirection.rtl,
-                keyboardType: TextInputType.multiline,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15.5,
-                  height: 1.35,
-                ),
-                cursorColor: Colors.white,
-                decoration: InputDecoration(
-                  hintText: widget.hintText,
-                  hintTextDirection: TextDirection.rtl,
-                  hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.45),
-                    fontSize: 15,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 10,
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minHeight: 48,
+                      maxHeight: 130,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.09),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.14),
+                      ),
+                    ),
+                    child: TextField(
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      enabled: !disabled,
+                      minLines: 1,
+                      maxLines: 5,
+                      textInputAction: TextInputAction.newline,
+                      keyboardType: TextInputType.multiline,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        height: 1.35,
+                      ),
+                      cursorColor: Colors.white,
+                      decoration: InputDecoration(
+                        hintText: widget.isListening
+                            ? 'جاري الاستماع...'
+                            : 'اكتب رسالتك لصاحبي...',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.50),
+                          fontSize: 15,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 13,
+                        ),
+                      ),
+                      onSubmitted: (_) {
+                        if (!disabled && _hasText) {
+                          _send();
+                        }
+                      },
+                    ),
                   ),
                 ),
-                onSubmitted: (_) {
-                  _send();
-                },
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 4),
-
-          _sendButton(disabled),
-        ],
-      ),
-    );
-  }
-
-  Widget _sendButton(bool disabled) {
-    final canSend = !disabled && _hasText;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: canSend ? _send : null,
-        borderRadius: BorderRadius.circular(22),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: canSend
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFFFFD76A),
-                      Color(0xFFFFB84D),
-                    ],
-                  )
-                : null,
-            color: canSend
-                ? null
-                : Colors.white.withOpacity(0.055),
-            border: Border.all(
-              color: canSend
-                  ? Colors.white.withOpacity(0.30)
-                  : Colors.white.withOpacity(0.08),
-            ),
-          ),
-          child: Icon(
-            Icons.arrow_upward_rounded,
-            size: 22,
-            color: canSend
-                ? Colors.black.withOpacity(0.82)
-                : Colors.white.withOpacity(0.28),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _roundButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback? onPressed,
-  }) {
-    final disabled = onPressed == null;
-
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(21),
-          child: Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withOpacity(
-                disabled ? 0.025 : 0.055,
-              ),
-              border: Border.all(
-                color: Colors.white.withOpacity(
-                  disabled ? 0.04 : 0.09,
+                const SizedBox(width: 8),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: disabled || !_hasText ? null : _send,
+                    borderRadius: BorderRadius.circular(24),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: _hasText && !disabled
+                            ? const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFFFFD76A),
+                                  Color(0xFFFF9F43),
+                                ],
+                              )
+                            : LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.white.withOpacity(0.10),
+                                  Colors.white.withOpacity(0.06),
+                                ],
+                              ),
+                        boxShadow: _hasText && !disabled
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFFFFD76A)
+                                      .withOpacity(0.28),
+                                  blurRadius: 12,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: widget.isLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(14),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.arrow_upward_rounded,
+                              color: Colors.black,
+                              size: 25,
+                            ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-            child: Icon(
-              icon,
-              size: 22,
-              color: disabled
-                  ? Colors.white.withOpacity(0.22)
-                  : Colors.white.withOpacity(0.78),
-            ),
-          ),
+          ],
         ),
       ),
     );
-  }
-
-  void _hideToolsAndFocus() {
-    setState(() {
-      _showTools = false;
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !widget.enabled) {
-        return;
-      }
-
-      widget.focusNode?.requestFocus();
-    });
   }
 }
