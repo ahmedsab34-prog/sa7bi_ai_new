@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 
+import '../config/credits_config.dart';
+import '../services/credits_service.dart';
 import '../services/rewarded_ad_service.dart';
 
-/// زر مشاهدة إعلان Rewarded والحصول على Credits.
+/// زر إعلان المكافأة.
 ///
-/// الإعلان الحقيقي يتم تشغيله من RewardedAdService.
-/// الـCredits لا تضاف إلا إذا أكدت AdMob حصول المستخدم
-/// على المكافأة فعلًا.
+/// عند اكتمال مشاهدة الإعلان فعليًا:
+/// - RewardedAdService يسجل المكافأة.
+/// - CreditsService يزيد الرصيد.
+/// - الواجهة تعيد قراءة الرصيد فورًا.
+/// - يتم تجهيز إعلان جديد تلقائيًا.
 class RewardedAdButton extends StatefulWidget {
   const RewardedAdButton({
     super.key,
     this.onRewarded,
     this.compact = false,
-    this.label = 'شاهد إعلان واحصل على Credits',
+    this.label =
+        'شاهد إعلان واحصل على Credits',
   });
 
   final VoidCallback? onRewarded;
@@ -25,46 +30,65 @@ class RewardedAdButton extends StatefulWidget {
 }
 
 class _RewardedAdButtonState
-    extends State<RewardedAdButton> {
+    extends State<RewardedAdButton>
+    with WidgetsBindingObserver {
   final RewardedAdService _rewarded =
       RewardedAdService.instance;
 
+  final CreditsService _credits =
+      CreditsService.instance;
+
   bool _loading = false;
-  int _remainingAds = 0;
   bool _adReady = false;
+
+  int _remainingAds = 0;
+  int _creditsBalance = 0;
 
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance
+        .addObserver(this);
+
     _initialize();
   }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance
+        .removeObserver(this);
+
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(
+    AppLifecycleState state,
+  ) {
+    if (state ==
+        AppLifecycleState.resumed) {
+      _refreshState();
+    }
+  }
+
+  // ============================================================
+  // INITIALIZATION
+  // ============================================================
 
   Future<void> _initialize() async {
     try {
       await _rewarded.initialize();
+      await _credits.initialize();
+      await _credits.refresh();
 
       if (!mounted) {
         return;
       }
 
-      setState(() {
-        _remainingAds =
-            _rewarded.remainingToday;
-      });
-
-      // تجهيز الإعلان مسبقًا بدون عرضه.
-      final ready =
-          await _rewarded.preloadRewardedAd();
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _adReady = ready;
-        _remainingAds =
-            _rewarded.remainingToday;
-      });
+      await _refreshState(
+        loadAd: true,
+      );
     } catch (_) {
       if (!mounted) {
         return;
@@ -73,20 +97,98 @@ class _RewardedAdButtonState
       setState(() {
         _adReady = false;
         _remainingAds =
-            _rewarded.remainingToday;
+            _credits.remainingRewardedAdsToday;
+        _creditsBalance =
+            _credits.credits;
       });
     }
   }
+
+  // ============================================================
+  // REFRESH
+  // ============================================================
+
+  Future<void> _refreshState({
+    bool loadAd = false,
+  }) async {
+    try {
+      await _credits.refresh();
+
+      bool ready = _adReady;
+
+      if (loadAd || !_adReady) {
+        ready =
+            await _rewarded
+                .preloadRewardedAd();
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _adReady = ready;
+
+        _remainingAds =
+            _credits.remainingRewardedAdsToday;
+
+        _creditsBalance =
+            _credits.credits;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _adReady = false;
+
+        _remainingAds =
+            _credits
+                .remainingRewardedAdsToday;
+
+        _creditsBalance =
+            _credits.credits;
+      });
+    }
+  }
+
+  // ============================================================
+  // WATCH AD
+  // ============================================================
 
   Future<void> _handlePressed() async {
     if (_loading) {
       return;
     }
 
-    if (_remainingAds <= 0) {
+    await _credits.refresh();
+
+    if (!mounted) {
+      return;
+    }
+
+    final remaining =
+        _credits.remainingRewardedAdsToday;
+
+    if (remaining <= 0) {
       _showMessage(
         'وصلت للحد اليومي للإعلانات المكافِئة.',
       );
+
+      await _refreshState();
+      return;
+    }
+
+    if (!_adReady) {
+      _showMessage(
+        'الإعلان لسه بيجهز، حاول بعد لحظات.',
+      );
+
+      await _refreshState(
+        loadAd: true,
+      );
+
       return;
     }
 
@@ -96,13 +198,21 @@ class _RewardedAdButtonState
 
     try {
       final result =
-          await _rewarded.showRewardedAd();
+          await _rewarded
+              .showRewardedAd();
 
       if (!mounted) {
         return;
       }
 
       if (result.success) {
+        // قراءة الرصيد بعد تسجيل المكافأة.
+        await _credits.refresh();
+
+        if (!mounted) {
+          return;
+        }
+
         _showMessage(
           '+${result.rewardCredits} Credits 🎁',
         );
@@ -115,9 +225,17 @@ class _RewardedAdButtonState
         );
       }
 
-      // تجهيز الإعلان التالي مسبقًا.
+      // تحديث الرصيد والحد اليومي.
+      await _credits.refresh();
+
+      if (!mounted) {
+        return;
+      }
+
+      // تجهيز الإعلان التالي.
       final ready =
-          await _rewarded.preloadRewardedAd();
+          await _rewarded
+              .preloadRewardedAd();
 
       if (!mounted) {
         return;
@@ -125,8 +243,13 @@ class _RewardedAdButtonState
 
       setState(() {
         _adReady = ready;
+
         _remainingAds =
-            _rewarded.remainingToday;
+            _credits
+                .remainingRewardedAdsToday;
+
+        _creditsBalance =
+            _credits.credits;
       });
     } catch (_) {
       if (!mounted) {
@@ -139,21 +262,37 @@ class _RewardedAdButtonState
 
       setState(() {
         _adReady = false;
+
         _remainingAds =
-            _rewarded.remainingToday;
+            _credits
+                .remainingRewardedAdsToday;
+
+        _creditsBalance =
+            _credits.credits;
       });
     } finally {
       if (mounted) {
         setState(() {
           _loading = false;
+
           _remainingAds =
-              _rewarded.remainingToday;
+              _credits
+                  .remainingRewardedAdsToday;
+
+          _creditsBalance =
+              _credits.credits;
         });
       }
     }
   }
 
-  void _showMessage(String message) {
+  // ============================================================
+  // MESSAGE
+  // ============================================================
+
+  void _showMessage(
+    String message,
+  ) {
     if (!mounted) {
       return;
     }
@@ -164,15 +303,23 @@ class _RewardedAdButtonState
         SnackBar(
           content: Text(
             message,
-            textDirection: TextDirection.rtl,
+            textDirection:
+                TextDirection.rtl,
           ),
-          behavior: SnackBarBehavior.floating,
+          behavior:
+              SnackBarBehavior.floating,
         ),
       );
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     if (widget.compact) {
       return _buildCompact();
     }
@@ -181,7 +328,7 @@ class _RewardedAdButtonState
   }
 
   // ============================================================
-  // Compact
+  // COMPACT
   // ============================================================
 
   Widget _buildCompact() {
@@ -201,8 +348,8 @@ class _RewardedAdButtonState
         child: Container(
           padding:
               const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 11,
+            horizontal: 13,
+            vertical: 10,
           ),
           decoration: BoxDecoration(
             borderRadius:
@@ -210,7 +357,7 @@ class _RewardedAdButtonState
             color:
                 const Color(0xFFFFD76A)
                     .withOpacity(
-              enabled ? 0.12 : 0.04,
+              enabled ? 0.13 : 0.04,
             ),
             border: Border.all(
               color:
@@ -227,12 +374,14 @@ class _RewardedAdButtonState
               _buildIcon(
                 enabled: enabled,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 7),
               Text(
                 _buttonText(),
-                style:
-                    const TextStyle(
+                textDirection:
+                    TextDirection.ltr,
+                style: const TextStyle(
                   color: Colors.white,
+                  fontSize: 12,
                   fontWeight:
                       FontWeight.w800,
                 ),
@@ -245,7 +394,7 @@ class _RewardedAdButtonState
   }
 
   // ============================================================
-  // Full
+  // FULL
   // ============================================================
 
   Widget _buildFull() {
@@ -267,8 +416,7 @@ class _RewardedAdButtonState
           child: Container(
             padding:
                 const EdgeInsets.all(16),
-            decoration:
-                BoxDecoration(
+            decoration: BoxDecoration(
               borderRadius:
                   BorderRadius.circular(20),
               gradient:
@@ -327,9 +475,11 @@ class _RewardedAdButtonState
                     enabled: enabled,
                   ),
                 ),
+
                 const SizedBox(
                   width: 12,
                 ),
+
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
@@ -346,14 +496,15 @@ class _RewardedAdButtonState
                           color:
                               Colors.white,
                           fontWeight:
-                              FontWeight
-                                  .w800,
+                              FontWeight.w800,
                           fontSize: 14,
                         ),
                       ),
+
                       const SizedBox(
                         height: 4,
                       ),
+
                       Text(
                         _statusText(),
                         textDirection:
@@ -366,12 +517,36 @@ class _RewardedAdButtonState
                           fontSize: 12,
                         ),
                       ),
+
+                      if (!_loading)
+                        Padding(
+                          padding:
+                              const EdgeInsets
+                                  .only(
+                            top: 3,
+                          ),
+                          child: Text(
+                            'الرصيد الحالي: '
+                            '$_creditsBalance',
+                            textDirection:
+                                TextDirection
+                                    .rtl,
+                            style:
+                                const TextStyle(
+                              color:
+                                  Colors.white38,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
+
                 const SizedBox(
                   width: 8,
                 ),
+
                 const Icon(
                   Icons
                       .chevron_left_rounded,
@@ -387,12 +562,12 @@ class _RewardedAdButtonState
   }
 
   // ============================================================
-  // Text
+  // TEXT
   // ============================================================
 
   String _buttonText() {
     if (_loading) {
-      return 'جارٍ التحضير...';
+      return 'جارٍ تشغيل الإعلان...';
     }
 
     if (_remainingAds <= 0) {
@@ -403,7 +578,7 @@ class _RewardedAdButtonState
       return 'جارٍ تجهيز الإعلان...';
     }
 
-    return '+${_rewarded.rewardCredits} Credits';
+    return '+${CreditsConfig.rewardedAdCredits} Credits';
   }
 
   String _statusText() {
@@ -416,14 +591,15 @@ class _RewardedAdButtonState
     }
 
     if (!_adReady) {
-      return 'جارٍ تجهيز الإعلان';
+      return 'الإعلان غير جاهز حاليًا';
     }
 
-    return 'مكافأة: +${_rewarded.rewardCredits} Credits • متبقي اليوم: $_remainingAds';
+    return 'مكافأة +${CreditsConfig.rewardedAdCredits} Credits'
+        ' • متبقي $_remainingAds اليوم';
   }
 
   // ============================================================
-  // Icon
+  // ICON
   // ============================================================
 
   Widget _buildIcon({
