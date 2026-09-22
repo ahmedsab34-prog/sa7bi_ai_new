@@ -19,6 +19,8 @@ import 'monetization_config.dart';
 import 'news_webview_screen.dart';
 import 'settings_screen.dart';
 import 'shorts_feed_screen.dart';
+import 'services/ads_service.dart';
+import 'services/credits_service.dart';
 import 'widgets/khalasana_portal.dart';
 
 void main() {
@@ -26,20 +28,27 @@ void main() {
 
   runApp(const Sa7biAiApp());
 
-  // نعرض أول إطار للتطبيق أولاً، ثم نهيّئ نظام الصوت
-  // بعده بقليل حتى لا يعطل بداية تشغيل التطبيق.
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(
-      Future<void>.delayed(
-        const Duration(milliseconds: 700),
-        () async {
-          try {
-            await AudioController.initialize();
-          } catch (_) {}
-        },
-      ),
-    );
-  });
+  // مهم:
+  // لا ننتظر أي خدمة قبل ظهور التطبيق.
+  // كل الخدمات الأساسية تبدأ في الخلفية.
+  unawaited(_initializeCoreServices());
+}
+
+Future<void> _initializeCoreServices() async {
+  // Credits
+  try {
+    await CreditsService.instance.initialize();
+  } catch (_) {}
+
+  // AdMob
+  try {
+    await AdsService.instance.initialize();
+  } catch (_) {}
+
+  // Audio
+  try {
+    await AudioController.initialize();
+  } catch (_) {}
 }
 
 class Sa7biAiApp extends StatelessWidget {
@@ -58,7 +67,6 @@ class Sa7biAiApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
-        fontFamily: 'sans',
       ),
       home: const MainContainerScreen(),
     );
@@ -77,7 +85,8 @@ class MainContainerScreen extends StatefulWidget {
       _MainContainerScreenState();
 }
 
-class _MainContainerScreenState extends State<MainContainerScreen> {
+class _MainContainerScreenState
+    extends State<MainContainerScreen> {
   int index = 0;
 
   void openProfile() {
@@ -270,6 +279,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const SizedBox(height: 12),
 
+          const _WelcomeCard(),
+
+          const SizedBox(height: 12),
+
           const _AffiliateBanner(),
 
           const SizedBox(height: 17),
@@ -380,7 +393,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-      // بعد كل 5 أخبار نعرض محتوى Shorts حقيقي من الـ backend.
+      // كل 5 أخبار نضع مدخل الريلز.
       if ((i + 1) % 5 == 0 &&
           i != news.length - 1) {
         widgets.add(
@@ -424,7 +437,7 @@ class AppHeader extends StatelessWidget {
 
         _HeaderAction(
           icon: Icons.graphic_eq_rounded,
-          color: Color(0xFF63E6FF),
+          color: const Color(0xFF63E6FF),
           onTap: onAudioTap,
         ),
 
@@ -432,7 +445,7 @@ class AppHeader extends StatelessWidget {
 
         _HeaderAction(
           icon: Icons.person_rounded,
-          color: Color(0xFFFFD76A),
+          color: const Color(0xFFFFD76A),
           onTap: onProfileTap,
         ),
       ],
@@ -469,9 +482,7 @@ class _HeaderWelcomeState
 
     controller = AnimationController(
       vsync: this,
-      duration: const Duration(
-        seconds: 4,
-      ),
+      duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
 
     timer = Timer.periodic(
@@ -613,7 +624,7 @@ class _HeaderAction extends StatelessWidget {
 }
 
 // ============================================================
-// LOGO
+// SA7BI LOGO
 // ============================================================
 
 class Sa7biLogo extends StatefulWidget {
@@ -635,9 +646,7 @@ class _Sa7biLogoState
 
     controller = AnimationController(
       vsync: this,
-      duration: const Duration(
-        seconds: 9,
-      ),
+      duration: const Duration(seconds: 9),
     )..repeat();
   }
 
@@ -693,6 +702,8 @@ class _Sa7biLogoState
                 ),
               ),
 
+              // الحلقة الخارجية فقط هي التي تدور.
+              // محتوى الشعار نفسه لا يتم تغييره.
               Transform.rotate(
                 angle: rotation,
                 child: Container(
@@ -720,9 +731,7 @@ class _Sa7biLogoState
                   shape: BoxShape.circle,
                   color: const Color(0xFF070A12),
                   border: Border.all(
-                    color: const Color(
-                      0xFF315277,
-                    ),
+                    color: const Color(0xFF315277),
                     width: 2.2,
                   ),
                 ),
@@ -730,7 +739,172 @@ class _Sa7biLogoState
                   child: Image.asset(
                     'app_icon.png',
                     fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) {
+                      return const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: Color(0xFFFFD76A),
+                      );
+                    },
                   ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ============================================================
+// WELCOME CARD
+// ============================================================
+
+class _WelcomeCard extends StatefulWidget {
+  const _WelcomeCard();
+
+  @override
+  State<_WelcomeCard> createState() =>
+      _WelcomeCardState();
+}
+
+class _WelcomeCardState
+    extends State<_WelcomeCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController controller;
+  late final Timer timer;
+
+  final messages = const [
+    'أهلاً يا صاحبي 👋',
+    'جاهز أساعدك في أي حاجة 🤖',
+    'قول اللي في بالك وأنا معاك 💙',
+    'خلينا ننجزها سوا 🚀',
+    'صاحبي AI معاك كل يوم ✨',
+  ];
+
+  int index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    )..repeat();
+
+    timer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) {
+        if (!mounted) return;
+
+        setState(() {
+          index = (index + 1) % messages.length;
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    timer.cancel();
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (_, __) {
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(19),
+            gradient: LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [
+                Color.lerp(
+                  const Color(0xFF2A210E),
+                  const Color(0xFF17283A),
+                  controller.value,
+                )!,
+                const Color(0xFF10141D),
+                Color.lerp(
+                  const Color(0xFF1D1527),
+                  const Color(0xFF102820),
+                  controller.value,
+                )!,
+              ],
+            ),
+            border: Border.all(
+              color: const Color(0x44FFD76A),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFFFFD76A),
+                      Color(0xFF63E6FF),
+                    ],
+                  ),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.black,
+                  size: 19,
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.end,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(
+                        milliseconds: 350,
+                      ),
+                      child: Text(
+                        messages[index],
+                        key: ValueKey(index),
+                        textDirection:
+                            TextDirection.rtl,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 3),
+
+                    const Text(
+                      'اسأل، اتكلم، ابعت صورة، اسمع صوت، أو افتح خلصانة AI.',
+                      textDirection: TextDirection.rtl,
+                      textAlign: TextAlign.right,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white60,
+                        height: 1.25,
+                        fontSize: 10.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -764,28 +938,28 @@ class _AffiliateBannerState
       title: 'عروض وتسوق',
       subtitle: 'Amazon • منتجات وعروض',
       icon: Icons.shopping_cart_rounded,
-      color: Color(0xFFFFB300),
+      color: const Color(0xFFFFB300),
       url: MonetizationConfig.amazonUrl,
     ),
     _OfferData(
       title: 'اكتشف Jumia',
       subtitle: 'تسوق منتجات متنوعة',
       icon: Icons.shopping_bag_rounded,
-      color: Color(0xFFB45CFF),
+      color: const Color(0xFFB45CFF),
       url: MonetizationConfig.jumiaUrl,
     ),
     _OfferData(
       title: 'Noon',
       subtitle: 'عروض ومنتجات جديدة',
       icon: Icons.store_rounded,
-      color: Color(0xFF63E6FF),
+      color: const Color(0xFF63E6FF),
       url: MonetizationConfig.noonUrl,
     ),
     _OfferData(
       title: 'Marketplace',
       subtitle: 'منتجات من Facebook Marketplace',
       icon: Icons.facebook_rounded,
-      color: Color(0xFF4D8DFF),
+      color: const Color(0xFF4D8DFF),
       url: MonetizationConfig.facebookShopUrl,
     ),
   ];
@@ -795,4 +969,1232 @@ class _AffiliateBannerState
     super.initState();
 
     timer = Timer.periodic(
-      const Duration(seconds:
+      const Duration(seconds: 5),
+      (_) {
+        if (!mounted) return;
+
+        setState(() {
+          index = (index + 1) % offers.length;
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    timer.cancel();
+    super.dispose();
+  }
+
+  Future<void> openOffer() async {
+    final offer = offers[index];
+
+    final uri = Uri.tryParse(offer.url);
+
+    if (uri == null) return;
+
+    try {
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final offer = offers[index];
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 450),
+      child: Container(
+        key: ValueKey(index),
+        height: 76,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(
+            begin: Alignment.centerRight,
+            end: Alignment.centerLeft,
+            colors: [
+              Color(0xFF32230B),
+              Color(0xFF171A28),
+              Color(0xFF10151D),
+            ],
+          ),
+          border: Border.all(
+            color: const Color(0x55FFD76A),
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x22000000),
+              blurRadius: 16,
+              offset: Offset(0, 5),
+            ),
+          ],
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: openOffer,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 13,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 45,
+                  height: 45,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        offer.color,
+                        const Color(0xFFB45CFF),
+                      ],
+                    ),
+                  ),
+                  child: Icon(
+                    offer.icon,
+                    color: Colors.black,
+                  ),
+                ),
+
+                const SizedBox(width: 10),
+
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment:
+                        MainAxisAlignment.center,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        offer.title,
+                        textDirection:
+                            TextDirection.rtl,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        offer.subtitle,
+                        textDirection:
+                            TextDirection.rtl,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Color(0xFFFFD76A),
+                  size: 15,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OfferData {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final String url;
+
+  const _OfferData({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.url,
+  });
+}
+
+// ============================================================
+// NEWS CARD
+// ============================================================
+
+class _NewsCard extends StatelessWidget {
+  final NewsItem item;
+  final VoidCallback onTap;
+
+  const _NewsCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage =
+        item.imageUrl.trim().isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF11141D),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Color(0xFFFFD76A),
+                size: 16,
+              ),
+
+              const SizedBox(width: 9),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      item.title,
+                      textDirection:
+                          TextDirection.rtl,
+                      textAlign:
+                          TextAlign.right,
+                      maxLines: 2,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+
+                    const SizedBox(height: 5),
+
+                    Text(
+                      item.source,
+                      textDirection:
+                          TextDirection.rtl,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              ClipRRect(
+                borderRadius:
+                    BorderRadius.circular(13),
+                child: Container(
+                  width: 68,
+                  height: 58,
+                  color: const Color(0xFF1A2030),
+                  child: hasImage
+                      ? Image.network(
+                          item.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder:
+                              (_, __, ___) {
+                            return const Icon(
+                              Icons.newspaper_rounded,
+                              color:
+                                  Color(0xFF63E6FF),
+                              size: 25,
+                            );
+                          },
+                        )
+                      : const Icon(
+                          Icons.newspaper_rounded,
+                          color: Color(0xFF63E6FF),
+                          size: 25,
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// EMPTY NEWS
+// ============================================================
+
+class _EmptyNews extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _EmptyNews({
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: const Color(0xFF11141D),
+        borderRadius: BorderRadius.circular(17),
+      ),
+      child: Column(
+        children: [
+          const Text(
+            'الأخبار مش متاحة دلوقتي 📡',
+            textDirection: TextDirection.rtl,
+          ),
+          TextButton(
+            onPressed: onRetry,
+            child: const Text('حاول تاني'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// SHORTS ENTRY
+// ============================================================
+
+class _ShortsEntryCard extends StatelessWidget {
+  const _ShortsEntryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(
+        top: 4,
+        bottom: 13,
+      ),
+      height: 100,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            Color(0xFF2C1C42),
+            Color(0xFF121725),
+          ],
+        ),
+        border: Border.all(
+          color: const Color(0x4463E6FF),
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  const ShortsFeedScreen(),
+            ),
+          );
+        },
+        child: Row(
+          children: [
+            const SizedBox(width: 12),
+
+            Container(
+              width: 62,
+              height: 72,
+              decoration: BoxDecoration(
+                borderRadius:
+                    BorderRadius.circular(17),
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF63E6FF),
+                    Color(0xFFB45CFF),
+                  ],
+                ),
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.black,
+                size: 34,
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            const Expanded(
+              child: Column(
+                mainAxisAlignment:
+                    MainAxisAlignment.center,
+                crossAxisAlignment:
+                    CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'ريلز صاحبي',
+                    textDirection:
+                        TextDirection.rtl,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: 5),
+                  Text(
+                    'شاهد الفيديوهات القصيرة واكتشف محتوى جديد',
+                    textDirection:
+                        TextDirection.rtl,
+                    textAlign: TextAlign.right,
+                    maxLines: 2,
+                    overflow:
+                        TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 10.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFFFFD76A),
+              size: 16,
+            ),
+
+            const SizedBox(width: 10),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// STORE BUTTON
+// ============================================================
+
+class _StoreButton extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final String url;
+
+  const _StoreButton({
+    required this.title,
+    required this.icon,
+    required this.url,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () async {
+        final uri = Uri.tryParse(url);
+
+        if (uri == null) return;
+
+        try {
+          await launchUrl(
+            uri,
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (_) {}
+      },
+      icon: Icon(
+        icon,
+        color: const Color(0xFFFFD76A),
+        size: 18,
+      ),
+      label: Text(title),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        side: const BorderSide(
+          color: Color(0x44FFD76A),
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// MINI AUDIO PLAYER
+// ============================================================
+
+class MiniAudioPlayer extends StatelessWidget {
+  const MiniAudioPlayer({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<MediaItem?>(
+      stream: AudioController.handler?.mediaItem,
+      builder: (context, mediaSnapshot) {
+        final item = mediaSnapshot.data;
+
+        if (item == null) {
+          return const SizedBox.shrink();
+        }
+
+        final handler = AudioController.handler;
+
+        if (handler == null) {
+          return const SizedBox.shrink();
+        }
+
+        return Material(
+          color: Colors.transparent,
+          child: Container(
+            height: 66,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+            ),
+            decoration: BoxDecoration(
+              color:
+                  const Color(0xFF151923)
+                      .withOpacity(0.98),
+              borderRadius:
+                  BorderRadius.circular(20),
+              border: Border.all(
+                color: const Color(0x55FFD76A),
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x66000000),
+                  blurRadius: 20,
+                  offset: Offset(0, 7),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const AudioCenterScreen(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration:
+                        const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          Color(0xFFFFD76A),
+                          Color(0xFF7164FF),
+                        ],
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.graphic_eq_rounded,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 9),
+
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const AudioCenterScreen(),
+                        ),
+                      );
+                    },
+                    child: Column(
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          item.title,
+                          textDirection:
+                              TextDirection.rtl,
+                          maxLines: 1,
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight:
+                                FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          item.artist ?? 'صاحبي AI',
+                          textDirection:
+                              TextDirection.rtl,
+                          maxLines: 1,
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                StreamBuilder<PlaybackState>(
+                  stream: handler.playbackState,
+                  builder: (
+                    context,
+                    snapshot,
+                  ) {
+                    final playing =
+                        snapshot.data?.playing ??
+                            false;
+
+                    return IconButton(
+                      onPressed: () {
+                        if (playing) {
+                          handler.pause();
+                        } else {
+                          handler.play();
+                        }
+                      },
+                      icon: Icon(
+                        playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        color:
+                            const Color(0xFFFFD76A),
+                        size: 28,
+                      ),
+                    );
+                  },
+                ),
+
+                IconButton(
+                  onPressed: () {
+                    handler.stop();
+                  },
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white54,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ============================================================
+// PROFILE
+// ============================================================
+
+class ProfileScreen extends StatefulWidget {
+  final VoidCallback onAudio;
+
+  const ProfileScreen({
+    super.key,
+    required this.onAudio,
+  });
+
+  @override
+  State<ProfileScreen> createState() =>
+      _ProfileScreenState();
+}
+
+class _ProfileScreenState
+    extends State<ProfileScreen> {
+  final ImagePicker picker = ImagePicker();
+
+  final TextEditingController nameController =
+      TextEditingController();
+
+  Uint8List? photo;
+  String? reelName;
+
+  bool loadingProfile = true;
+
+  @override
+  void initState() {
+    super.initState();
+    loadProfile();
+  }
+
+  Future<void> loadProfile() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    final savedName =
+        prefs.getString('profile_name');
+
+    final savedPhoto =
+        prefs.getString(
+      'profile_photo_base64',
+    );
+
+    final savedReel =
+        prefs.getString('profile_reel_name');
+
+    Uint8List? decodedPhoto;
+
+    if (savedPhoto != null &&
+        savedPhoto.isNotEmpty) {
+      try {
+        decodedPhoto =
+            Uint8List.fromList(
+          base64Decode(savedPhoto),
+        );
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      nameController.text = savedName ?? '';
+      photo = decodedPhoto;
+      reelName = savedReel;
+      loadingProfile = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> choosePhoto() async {
+    try {
+      final file = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+        maxWidth: 900,
+      );
+
+      if (file == null) return;
+
+      final bytes = await file.readAsBytes();
+
+      if (bytes.isEmpty) return;
+
+      final prefs =
+          await SharedPreferences.getInstance();
+
+      await prefs.setString(
+        'profile_photo_base64',
+        base64Encode(bytes),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        photo = bytes;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> chooseReel() async {
+    try {
+      final file = await picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(
+          minutes: 2,
+        ),
+      );
+
+      if (file == null) return;
+
+      final prefs =
+          await SharedPreferences.getInstance();
+
+      await prefs.setString(
+        'profile_reel_name',
+        file.name,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        reelName = file.name;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> saveName() async {
+    final name =
+        nameController.text.trim();
+
+    if (name.isEmpty) {
+      return;
+    }
+
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    await prefs.setString(
+      'profile_name',
+      name,
+    );
+
+    if (!mounted) return;
+
+    FocusScope.of(context).unfocus();
+
+    setState(() {});
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('تم حفظ الاسم'),
+      ),
+    );
+  }
+
+  Future<void> shareApp() async {
+    try {
+      await Share.share(
+        'جرّب تطبيق صاحبي AI 🤖\n'
+        'مساعدك الذكي في كل يوم.\n'
+        '${MonetizationConfig.appDownloadUrl}',
+      );
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loadingProfile) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFFFFD76A),
+        ),
+      );
+    }
+
+    final displayName =
+        nameController.text.trim().isEmpty
+            ? 'صاحبي'
+            : nameController.text.trim();
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        14,
+        8,
+        14,
+        125,
+      ),
+      children: [
+        AppHeader(
+          onAudioTap: widget.onAudio,
+        ),
+
+        const SizedBox(height: 10),
+
+        const Text(
+          'حسابي',
+          textDirection: TextDirection.rtl,
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            fontSize: 25,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(23),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF20243A),
+                Color(0xFF10131C),
+              ],
+            ),
+            border: Border.all(
+              color: const Color(0x44FFD76A),
+            ),
+          ),
+          child: Column(
+            children: [
+              GestureDetector(
+                onTap: choosePhoto,
+                child: Container(
+                  width: 98,
+                  height: 98,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color:
+                          const Color(0xFFFFD76A),
+                      width: 2,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x44FFD76A),
+                        blurRadius: 18,
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: photo == null
+                        ? const Icon(
+                            Icons.person_rounded,
+                            color:
+                                Color(0xFFFFD76A),
+                            size: 46,
+                          )
+                        : Image.memory(
+                            photo!,
+                            fit: BoxFit.cover,
+                          ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Text(
+                displayName,
+                textDirection: TextDirection.rtl,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              TextField(
+                controller: nameController,
+                textDirection: TextDirection.rtl,
+                textAlign: TextAlign.right,
+                decoration: InputDecoration(
+                  hintText: 'اكتب اسمك',
+                  prefixIcon: const Icon(
+                    Icons.badge_outlined,
+                  ),
+                  suffixIcon: IconButton(
+                    onPressed: saveName,
+                    icon: const Icon(
+                      Icons.check_rounded,
+                    ),
+                  ),
+                  filled: true,
+                  fillColor:
+                      const Color(0xFF0D1018),
+                  border: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(15),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onSubmitted: (_) => saveName(),
+              ),
+
+              const SizedBox(height: 10),
+
+              Row(
+                children: [
+                  Expanded(
+                    child:
+                        OutlinedButton.icon(
+                      onPressed: choosePhoto,
+                      icon: const Icon(
+                        Icons.photo,
+                      ),
+                      label: const Text(
+                        'الصورة',
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  Expanded(
+                    child:
+                        OutlinedButton.icon(
+                      onPressed: chooseReel,
+                      icon: const Icon(
+                        Icons.movie,
+                      ),
+                      label: const Text(
+                        'ريلز',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              if (reelName != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '🎬 $reelName',
+                  textDirection:
+                      TextDirection.rtl,
+                  maxLines: 1,
+                  overflow:
+                      TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white60,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        const _ReminderCard(
+          icon: Icons.mosque_rounded,
+          title: 'عبادات',
+          subtitle:
+              'تذكيرات للعبادات والأذكار والمهام الدينية.',
+          color: Color(0xFF26A69A),
+        ),
+
+        const _ReminderCard(
+          icon: Icons.sports_soccer_rounded,
+          title: 'هوايات',
+          subtitle:
+              'تذكيرات للرياضة والهوايات والأشياء التي تحبها.',
+          color: Color(0xFF2196F3),
+        ),
+
+        const _ReminderCard(
+          icon: Icons.person_rounded,
+          title: 'شخصي',
+          subtitle:
+              'تذكيرات شخصية للمهام والمواعيد والأهداف.',
+          color: Color(0xFFB45CFF),
+        ),
+
+        const SizedBox(height: 4),
+
+        _ProfileButton(
+          icon: Icons.share_rounded,
+          title: 'مشاركة التطبيق',
+          subtitle:
+              'شارك صاحبي مع أصحابك برابط التحميل عبر التطبيقات المتاحة.',
+          onTap: shareApp,
+        ),
+
+        _ProfileButton(
+          icon: Icons.settings_rounded,
+          title: 'الإعدادات',
+          subtitle:
+              'إعدادات التطبيق والذكاء الاصطناعي.',
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    const SettingsScreen(),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// ============================================================
+// REMINDER CARD
+// ============================================================
+
+class _ReminderCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+
+  const _ReminderCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(
+        bottom: 8,
+      ),
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131620),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: color.withOpacity(0.28),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.chevron_left_rounded,
+            color: Colors.white38,
+          ),
+
+          const Spacer(),
+
+          Expanded(
+            flex: 7,
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.end,
+              children: [
+                Text(
+                  title,
+                  textDirection:
+                      TextDirection.rtl,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+
+                const SizedBox(height: 2),
+
+                Text(
+                  subtitle,
+                  textDirection:
+                      TextDirection.rtl,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 10),
+
+          Container(
+            width: 43,
+            height: 43,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withOpacity(0.16),
+              border: Border.all(
+                color: color.withOpacity(0.4),
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 22,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// PROFILE BUTTON
+// ============================================================
+
+class _ProfileButton extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ProfileButton({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(
+        bottom: 9,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131620),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              colors: [
+                Color(0xFFFFD54F),
+                Color(0xFFB45CFF),
+              ],
+            ),
+          ),
+          child: Icon(
+            icon,
+            color: Colors.black,
+          ),
+        ),
+        title: Text(
+          title,
+          textDirection: TextDirection.rtl,
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          textDirection: TextDirection.rtl,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+          ),
+        ),
+        trailing: const Icon(
+          Icons.chevron_left_rounded,
+        ),
+      ),
+    );
+  }
+}
