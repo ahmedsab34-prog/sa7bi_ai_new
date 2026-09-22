@@ -12,9 +12,9 @@ import 'rewarded_ad_button.dart';
 
 /// جسم شاشة المحادثة.
 ///
-/// هذه الطبقة مسؤولة عن تركيب واجهة الشات فقط.
-/// منطق الذكاء الاصطناعي والوسائط والحفظ موجود في ChatScreen
-/// والخدمات الخاصة به.
+/// مسؤول عن تركيب واجهة المحادثة فقط.
+/// منطق الذكاء الاصطناعي والوسائط والحفظ موجود
+/// في ChatScreen والخدمات الخاصة به.
 class ChatScreenBody extends StatelessWidget {
   final ChatController chatController;
   final ProfileService profileService;
@@ -33,6 +33,7 @@ class ChatScreenBody extends StatelessWidget {
   final bool isGeneratingImage;
 
   final VoidCallback onSend;
+
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
   final VoidCallback? onVideo;
@@ -40,6 +41,7 @@ class ChatScreenBody extends StatelessWidget {
   final VoidCallback? onText;
   final VoidCallback? onSpeechToText;
   final VoidCallback? onImageGeneration;
+
   final VoidCallback onClear;
 
   const ChatScreenBody({
@@ -74,19 +76,14 @@ class ChatScreenBody extends StatelessWidget {
       ]),
       builder: (context, _) {
         final theme = chatController.theme;
-
         final messages = chatController.messages;
 
-        final userName =
-            profileService.displayName;
+        final userName = profileService.displayName;
+        final userPhoto = profileService.photoBytes;
 
-        final userPhoto =
-            profileService.photoBytes;
-
-        final aiName =
-            chatController.isKhalasana
-                ? 'خلصانة AI'
-                : 'صاحبي AI';
+        final aiName = chatController.isKhalasana
+            ? 'خلصانة AI'
+            : 'صاحبي AI';
 
         final safeTopic =
             topic?.trim().isNotEmpty == true
@@ -100,15 +97,14 @@ class ChatScreenBody extends StatelessWidget {
             child: Column(
               children: [
                 // ==================================================
-                // CHAT HEADER
+                // HEADER
                 // ==================================================
 
                 ChatStatusHeader(
                   theme: theme,
                   title: title,
                   topic: safeTopic,
-                  isLoading:
-                      chatController.isLoading,
+                  isLoading: chatController.isLoading,
                   canClear:
                       messages.isNotEmpty &&
                       !chatController.isLoading,
@@ -123,8 +119,7 @@ class ChatScreenBody extends StatelessWidget {
                 // ==================================================
 
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(
+                  padding: const EdgeInsets.fromLTRB(
                     10,
                     3,
                     10,
@@ -138,11 +133,13 @@ class ChatScreenBody extends StatelessWidget {
                           showRewardButton: false,
                         ),
                       ),
+
                       const SizedBox(width: 8),
+
                       RewardedAdButton(
                         compact: true,
                         onRewarded: () {
-                          // CreditsStatus يحدث نفسه داخليًا
+                          // CreditsStatus يعيد قراءة الرصيد
                           // عند إعادة بناء الواجهة.
                         },
                       ),
@@ -160,8 +157,7 @@ class ChatScreenBody extends StatelessWidget {
                           theme: theme,
                           title: aiName,
                           subtitle:
-                              chatController
-                                      .isKhalasana
+                              chatController.isKhalasana
                                   ? 'اتكلم مع خلصانة براحتك، '
                                       'والمحادثة تتغير حسب الموضوع.'
                                   : 'اتكلم معايا براحتك، '
@@ -175,13 +171,12 @@ class ChatScreenBody extends StatelessWidget {
                           aiName: aiName,
                           isLoading:
                               chatController.isLoading,
-                          controller:
-                              scrollController,
+                          controller: scrollController,
                         ),
                 ),
 
                 // ==================================================
-                // COMPOSER
+                // CHAT COMPOSER
                 // ==================================================
 
                 ChatComposer(
@@ -191,9 +186,9 @@ class ChatScreenBody extends StatelessWidget {
                       !enabled ||
                       chatController.isLoading,
                   isListening: isListening,
-                  isGeneratingImage:
-                      isGeneratingImage,
+                  isGeneratingImage: isGeneratingImage,
 
+                  // إرسال النص
                   onSend: onSend,
 
                   // الكاميرا
@@ -202,7 +197,7 @@ class ChatScreenBody extends StatelessWidget {
                           ? null
                           : onCamera,
 
-                  // المعرض / الصور
+                  // الصور والمعرض
                   onGallery:
                       !enabled
                           ? null
@@ -214,7 +209,7 @@ class ChatScreenBody extends StatelessWidget {
                           ? null
                           : onVideo,
 
-                  // قراءة آخر رد بصوت
+                  // قراءة آخر رد AI بالصوت
                   onVoice:
                       !enabled
                           ? null
@@ -232,7 +227,7 @@ class ChatScreenBody extends StatelessWidget {
                           ? null
                           : onSpeechToText,
 
-                  // إنشاء صورة
+                  // توليد صورة بالذكاء الاصطناعي
                   onImageGeneration:
                       !enabled
                           ? null
