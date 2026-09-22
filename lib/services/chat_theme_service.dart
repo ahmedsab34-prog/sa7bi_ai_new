@@ -1,22 +1,8 @@
 import 'package:flutter/material.dart';
 
 /// مسؤول عن تحديد مظهر المحادثة حسب موضوع الكلام.
-///
-/// المسؤولية هنا هي بيانات الثيم فقط:
-/// - ألوان الخلفية.
-/// - ألوان الفقاعات.
-/// - لون الإضاءة.
-/// - أيقونة AI.
-/// - الحالة البصرية للمحادثة.
-///
-/// في خلصانة AI يمكن للثيم أن يتغير تلقائيًا
-/// حسب موضوع الحوار الحالي، بدون تغيير شعار صاحبي AI.
 class ChatThemeService {
   ChatThemeService._();
-
-  // ============================================================
-  // الثيم العام
-  // ============================================================
 
   static ChatThemeData general() {
     return const ChatThemeData(
@@ -34,10 +20,6 @@ class ChatThemeService {
     );
   }
 
-  // ============================================================
-  // خلصانة AI
-  // ============================================================
-
   static ChatThemeData khalasana() {
     return const ChatThemeData(
       id: 'khalasana',
@@ -53,10 +35,6 @@ class ChatThemeService {
       mood: ChatMood.dynamic,
     );
   }
-
-  // ============================================================
-  // المطبخ
-  // ============================================================
 
   static ChatThemeData kitchen() {
     return const ChatThemeData(
@@ -74,10 +52,6 @@ class ChatThemeService {
     );
   }
 
-  // ============================================================
-  // التجارة
-  // ============================================================
-
   static ChatThemeData merchant() {
     return const ChatThemeData(
       id: 'merchant',
@@ -93,10 +67,6 @@ class ChatThemeService {
       mood: ChatMood.business,
     );
   }
-
-  // ============================================================
-  // الصحة والصيدلية
-  // ============================================================
 
   static ChatThemeData pharmacy() {
     return const ChatThemeData(
@@ -114,10 +84,6 @@ class ChatThemeService {
     );
   }
 
-  // ============================================================
-  // الصيانة والحرف
-  // ============================================================
-
   static ChatThemeData tradesperson() {
     return const ChatThemeData(
       id: 'tradesperson',
@@ -133,10 +99,6 @@ class ChatThemeService {
       mood: ChatMood.technical,
     );
   }
-
-  // ============================================================
-  // العبادة
-  // ============================================================
 
   static ChatThemeData worship() {
     return const ChatThemeData(
@@ -154,10 +116,6 @@ class ChatThemeService {
     );
   }
 
-  // ============================================================
-  // التسوق
-  // ============================================================
-
   static ChatThemeData shopping() {
     return const ChatThemeData(
       id: 'shopping',
@@ -173,10 +131,6 @@ class ChatThemeService {
       mood: ChatMood.shopping,
     );
   }
-
-  // ============================================================
-  // التواصل الاجتماعي
-  // ============================================================
 
   static ChatThemeData social() {
     return const ChatThemeData(
@@ -194,10 +148,6 @@ class ChatThemeService {
     );
   }
 
-  // ============================================================
-  // فضفضة
-  // ============================================================
-
   static ChatThemeData venting() {
     return const ChatThemeData(
       id: 'venting',
@@ -213,10 +163,6 @@ class ChatThemeService {
       mood: ChatMood.emotional,
     );
   }
-
-  // ============================================================
-  // الهوايات والرياضة
-  // ============================================================
 
   static ChatThemeData hobbiesSports() {
     return const ChatThemeData(
@@ -234,10 +180,6 @@ class ChatThemeService {
     );
   }
 
-  // ============================================================
-  // البودكاست
-  // ============================================================
-
   static ChatThemeData podcasts() {
     return const ChatThemeData(
       id: 'podcasts',
@@ -254,59 +196,35 @@ class ChatThemeService {
     );
   }
 
-  // ============================================================
-  // اختيار الثيم من مفتاح الخدمة
-  // ============================================================
-
   static ChatThemeData forService(String serviceKey) {
     switch (serviceKey.trim().toLowerCase()) {
       case 'khalasana':
         return khalasana();
-
       case 'kitchen':
         return kitchen();
-
       case 'merchant':
         return merchant();
-
       case 'pharmacy':
         return pharmacy();
-
       case 'tradesperson':
         return tradesperson();
-
       case 'worship':
         return worship();
-
       case 'shopping':
         return shopping();
-
       case 'social':
         return social();
-
       case 'venting':
         return venting();
-
       case 'hobbies_sports':
         return hobbiesSports();
-
       case 'podcasts':
         return podcasts();
-
       default:
         return general();
     }
   }
 
-  // ============================================================
-  // اكتشاف موضوع المحادثة
-  // ============================================================
-
-  /// يحدد الثيم المناسب للنص الحالي.
-  ///
-  /// داخل الخدمات المتخصصة نحافظ على هوية الخدمة.
-  /// داخل خلصانة AI نسمح للموضوع بالتغير.
-  /// داخل المحادثة العامة يمكن أيضًا اكتشاف الموضوع.
   static ChatThemeData detectFromText(
     String text, {
     String serviceKey = 'general',
@@ -320,12 +238,10 @@ class ChatThemeService {
     final normalizedServiceKey =
         serviceKey.trim().toLowerCase();
 
-    // خلصانة AI هي المحادثة الديناميكية الرئيسية.
     if (normalizedServiceKey == 'khalasana') {
       return _detectDynamicTopic(value);
     }
 
-    // الخدمات المتخصصة تحافظ على هويتها.
     if (normalizedServiceKey != 'general') {
       return forService(normalizedServiceKey);
     }
@@ -333,24 +249,12 @@ class ChatThemeService {
     return _detectDynamicTopic(value);
   }
 
-  /// اكتشاف الموضوع داخل المحادثة الديناميكية.
-  ///
-  /// ترتيب القواعد مهم:
-  /// نضع الموضوعات الأكثر تحديدًا قبل الكلمات العامة
-  /// حتى لا يتم تصنيف "شراء منتج" كتجارة قبل التسوق.
   static ChatThemeData _detectDynamicTopic(String text) {
-    // ----------------------------------------------------------
-    // التسوق
-    // ----------------------------------------------------------
-
     if (_containsAny(text, <String>[
       'شراء',
       'اشتري',
-      'اشتري',
-      'اشتري',
       'منتج',
       'منتجات',
-      'اماوزن',
       'امازون',
       'جوميا',
       'نون',
@@ -367,10 +271,6 @@ class ChatThemeService {
     ])) {
       return shopping();
     }
-
-    // ----------------------------------------------------------
-    // المطبخ
-    // ----------------------------------------------------------
 
     if (_containsAny(text, <String>[
       'طبخ',
@@ -389,10 +289,6 @@ class ChatThemeService {
     ])) {
       return kitchen();
     }
-
-    // ----------------------------------------------------------
-    // الصيانة والحرف
-    // ----------------------------------------------------------
 
     if (_containsAny(text, <String>[
       'كهرباء',
@@ -413,10 +309,6 @@ class ChatThemeService {
       return tradesperson();
     }
 
-    // ----------------------------------------------------------
-    // الصحة والصيدلية
-    // ----------------------------------------------------------
-
     if (_containsAny(text, <String>[
       'صيدليه',
       'دواء',
@@ -433,10 +325,6 @@ class ChatThemeService {
       return pharmacy();
     }
 
-    // ----------------------------------------------------------
-    // العبادة
-    // ----------------------------------------------------------
-
     if (_containsAny(text, <String>[
       'صلاه',
       'قران',
@@ -452,16 +340,11 @@ class ChatThemeService {
       return worship();
     }
 
-    // ----------------------------------------------------------
-    // فضفضة
-    // ----------------------------------------------------------
-
     if (_containsAny(text, <String>[
       'متضايق',
       'مضايق',
       'زعلان',
       'حزين',
-      'فضفضه',
       'فضفضه',
       'مش مبسوط',
       'تعبان نفسيا',
@@ -472,10 +355,6 @@ class ChatThemeService {
     ])) {
       return venting();
     }
-
-    // ----------------------------------------------------------
-    // الهوايات والرياضة
-    // ----------------------------------------------------------
 
     if (_containsAny(text, <String>[
       'رياضه',
@@ -494,10 +373,6 @@ class ChatThemeService {
       return hobbiesSports();
     }
 
-    // ----------------------------------------------------------
-    // البودكاست والصوت
-    // ----------------------------------------------------------
-
     if (_containsAny(text, <String>[
       'بودكاست',
       'بود كاست',
@@ -510,10 +385,6 @@ class ChatThemeService {
     ])) {
       return podcasts();
     }
-
-    // ----------------------------------------------------------
-    // التواصل الاجتماعي
-    // ----------------------------------------------------------
 
     if (_containsAny(text, <String>[
       'فيسبوك',
@@ -530,10 +401,6 @@ class ChatThemeService {
     ])) {
       return social();
     }
-
-    // ----------------------------------------------------------
-    // التجارة والمشروعات
-    // ----------------------------------------------------------
 
     if (_containsAny(text, <String>[
       'بيع',
@@ -553,23 +420,17 @@ class ChatThemeService {
       return merchant();
     }
 
-    // لا يوجد موضوع واضح:
-    // نرجع إلى الهوية الخاصة بخلصانة AI.
     return khalasana();
   }
 
-  /// تطبيع بسيط للنص العربي لتقليل اختلافات الكتابة.
-  ///
-  /// لا يغير معنى النص؛ فقط يساعد على مطابقة الكلمات:
-  /// أ / إ / آ -> ا
-  /// ة -> ه
-  /// ى -> ي
-  /// يزيل التشكيل.
   static String _normalizeArabic(String text) {
     return text
         .trim()
         .toLowerCase()
-        .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '')
+        .replaceAll(
+          RegExp(r'[\u064B-\u065F\u0670]'),
+          '',
+        )
         .replaceAll('أ', 'ا')
         .replaceAll('إ', 'ا')
         .replaceAll('آ', 'ا')
@@ -594,7 +455,6 @@ class ChatThemeService {
   }
 }
 
-/// الحالة البصرية للمحادثة.
 enum ChatMood {
   normal,
   dynamic,
@@ -609,7 +469,6 @@ enum ChatMood {
   media,
 }
 
-/// بيانات ثيم المحادثة.
 class ChatThemeData {
   final String id;
   final String name;
@@ -642,5 +501,3 @@ class ChatThemeData {
     required this.mood,
   });
 }
-
-ده التعديل الوحيد في الخطوة دي. بعد لصقه، ما تعملش أي ملف تاني دلوقتي؛ الخطوة التالية هنراجع "chat_dynamic_background.dart" لأنه هو اللي بيحوّل بيانات الثيم دي إلى خلفية متحركة فعلية.
