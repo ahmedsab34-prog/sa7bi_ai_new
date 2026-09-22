@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'ai_service.dart';
+import 'audio_player_service.dart';
 import 'monetization_config.dart';
 import 'news_webview_screen.dart';
+import 'services/profile_service.dart';
 import 'shorts_feed_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,10 +22,12 @@ class HomeScreen extends StatefulWidget {
   });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() =>
+      _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState
+    extends State<HomeScreen> {
   bool loadingNews = true;
   List<NewsItem> news = [];
 
@@ -40,7 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
-      final result = await AiService.getNews();
+      final result =
+          await AiService.getNews();
 
       if (!mounted) return;
 
@@ -68,7 +74,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => NewsWebViewScreen(
+        builder: (_) =>
+            NewsWebViewScreen(
           url: cleanUrl,
           title: title,
         ),
@@ -79,12 +86,16 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      color: const Color(0xFFFFD76A),
-      backgroundColor: const Color(0xFF151923),
+      color:
+          const Color(0xFFFFD76A),
+      backgroundColor:
+          const Color(0xFF151923),
       onRefresh: loadNews,
       child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding:
+            const EdgeInsets.fromLTRB(
           14,
           8,
           14,
@@ -92,8 +103,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         children: [
           AppHeader(
-            onProfileTap: widget.onProfile,
-            onAudioTap: widget.onAudio,
+            onProfileTap:
+                widget.onProfile,
+            onAudioTap:
+                widget.onAudio,
           ),
 
           const SizedBox(height: 12),
@@ -109,11 +122,16 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             children: [
               IconButton(
-                onPressed: loadNews,
-                tooltip: 'تحديث الأخبار',
+                onPressed:
+                    loadNews,
+                tooltip:
+                    'تحديث الأخبار',
                 icon: const Icon(
-                  Icons.refresh_rounded,
-                  color: Color(0xFFFFD76A),
+                  Icons
+                      .refresh_rounded,
+                  color: Color(
+                    0xFFFFD76A,
+                  ),
                 ),
               ),
 
@@ -121,11 +139,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const Text(
                 'آخر الأخبار',
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.right,
+                textDirection:
+                    TextDirection.rtl,
+                textAlign:
+                    TextAlign.right,
                 style: TextStyle(
                   fontSize: 21,
-                  fontWeight: FontWeight.w900,
+                  fontWeight:
+                      FontWeight.w900,
                 ),
               ),
             ],
@@ -135,10 +156,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
           if (loadingNews)
             const Padding(
-              padding: EdgeInsets.all(28),
+              padding:
+                  EdgeInsets.all(28),
               child: Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFFFFD76A),
+                child:
+                    CircularProgressIndicator(
+                  color: Color(
+                    0xFFFFD76A,
+                  ),
                 ),
               ),
             )
@@ -153,11 +178,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
           const Text(
             'تسوق بسرعة',
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.right,
             style: TextStyle(
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight:
+                  FontWeight.w900,
             ),
           ),
 
@@ -169,23 +197,35 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _StoreButton(
                 title: 'Amazon',
-                icon: Icons.shopping_cart_rounded,
-                url: MonetizationConfig.amazonUrl,
+                icon: Icons
+                    .shopping_cart_rounded,
+                url:
+                    MonetizationConfig
+                        .amazonUrl,
               ),
               _StoreButton(
                 title: 'Jumia',
-                icon: Icons.shopping_bag_rounded,
-                url: MonetizationConfig.jumiaUrl,
+                icon: Icons
+                    .shopping_bag_rounded,
+                url:
+                    MonetizationConfig
+                        .jumiaUrl,
               ),
               _StoreButton(
                 title: 'Noon',
-                icon: Icons.store_rounded,
-                url: MonetizationConfig.noonUrl,
+                icon:
+                    Icons.store_rounded,
+                url:
+                    MonetizationConfig
+                        .noonUrl,
               ),
               _StoreButton(
                 title: 'Facebook',
-                icon: Icons.facebook_rounded,
-                url: MonetizationConfig.facebookShopUrl,
+                icon:
+                    Icons.facebook_rounded,
+                url:
+                    MonetizationConfig
+                        .facebookShopUrl,
               ),
             ],
           ),
@@ -195,9 +235,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Widget> _buildNewsList() {
-    final widgets = <Widget>[];
+    final widgets =
+        <Widget>[];
 
-    for (int i = 0; i < news.length; i++) {
+    for (int i = 0;
+        i < news.length;
+        i++) {
       final item = news[i];
 
       widgets.add(
@@ -228,7 +271,8 @@ class _HomeScreenState extends State<HomeScreen> {
 // HEADER
 // ============================================================
 
-class AppHeader extends StatelessWidget {
+class AppHeader
+    extends StatefulWidget {
   final VoidCallback? onProfileTap;
   final VoidCallback? onAudioTap;
 
@@ -239,32 +283,100 @@ class AppHeader extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  State<AppHeader> createState() =>
+      _AppHeaderState();
+}
+
+class _AppHeaderState
+    extends State<AppHeader> {
+  final ProfileService
+      profileService =
+      ProfileService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+
+    profileService.changes
+        .addListener(
+      _profileChanged,
+    );
+
+    _initializeProfile();
+  }
+
+  Future<void>
+      _initializeProfile() async {
+    try {
+      await profileService
+          .initialize();
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (_) {}
+  }
+
+  void _profileChanged() {
+    if (!mounted) return;
+
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    profileService.changes
+        .removeListener(
+      _profileChanged,
+    );
+
+    super.dispose();
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment:
+          CrossAxisAlignment.center,
       children: [
         const Sa7biLogo(),
 
-        const SizedBox(width: 9),
+        const SizedBox(
+          width: 9,
+        ),
 
         const Expanded(
-          child: _HeaderWelcome(),
+          child:
+              _HeaderWelcome(),
         ),
 
-        const SizedBox(width: 7),
-
-        _HeaderAction(
-          icon: Icons.graphic_eq_rounded,
-          color: const Color(0xFF63E6FF),
-          onTap: onAudioTap,
+        const SizedBox(
+          width: 6,
         ),
 
-        const SizedBox(width: 7),
+        _AudioHeaderAction(
+          onTap:
+              widget.onAudioTap,
+        ),
 
-        _HeaderAction(
-          icon: Icons.person_rounded,
-          color: const Color(0xFFFFD76A),
-          onTap: onProfileTap,
+        const SizedBox(
+          width: 5,
+        ),
+
+        _ProfileHeaderAction(
+          name:
+              profileService
+                  .displayName,
+          photo:
+              profileService
+                  .photoBytes,
+          hasReel:
+              profileService
+                  .hasReel,
+          onTap:
+              widget.onProfileTap,
         ),
       ],
     );
@@ -272,992 +384,331 @@ class AppHeader extends StatelessWidget {
 }
 
 // ============================================================
-// HEADER WELCOME
+// PROFILE HEADER ACTION
 // ============================================================
 
-class _HeaderWelcome extends StatefulWidget {
-  const _HeaderWelcome();
-
-  @override
-  State<_HeaderWelcome> createState() =>
-      _HeaderWelcomeState();
-}
-
-class _HeaderWelcomeState
-    extends State<_HeaderWelcome>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController controller;
-  late final Timer timer;
-
-  final messages = const [
-    'أهلاً يا صاحبي 👋',
-    'أنا معاك في كل حاجة 🤖',
-    'قول اللي في بالك 💙',
-    'خلينا ننجزها سوا 🚀',
-  ];
-
-  int index = 0;
-
-  @override
-  void initState() {
-    super.initState();
-
-    controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
-
-    timer = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) {
-        if (!mounted) return;
-
-        setState(() {
-          index = (index + 1) % messages.length;
-        });
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    timer.cancel();
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (_, __) {
-        final glow =
-            0.06 + controller.value * 0.08;
-
-        return Container(
-          constraints: const BoxConstraints(
-            minHeight: 58,
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 8,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: const LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [
-                Color(0xFF1B2130),
-                Color(0xFF10131C),
-              ],
-            ),
-            border: Border.all(
-              color: const Color(0x44FFD76A),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFFD76A)
-                    .withOpacity(glow),
-                blurRadius: 16,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              AnimatedSwitcher(
-                duration: const Duration(
-                  milliseconds: 350,
-                ),
-                child: Text(
-                  messages[index],
-                  key: ValueKey(index),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textDirection: TextDirection.rtl,
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'صاحبي AI معاك كل يوم',
-                textDirection: TextDirection.rtl,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 9,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ============================================================
-// HEADER ACTION
-// ============================================================
-
-class _HeaderAction extends StatelessWidget {
-  final IconData icon;
-  final Color color;
+class _ProfileHeaderAction
+    extends StatelessWidget {
+  final String name;
+  final Uint8List? photo;
+  final bool hasReel;
   final VoidCallback? onTap;
 
-  const _HeaderAction({
-    required this.icon,
-    required this.color,
+  const _ProfileHeaderAction({
+    required this.name,
+    required this.photo,
+    required this.hasReel,
     required this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
+    final safeName =
+        name.trim().isEmpty
+            ? 'صاحبي'
+            : name.trim();
+
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 43,
-        height: 43,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: const Color(0xFF10131C),
-          border: Border.all(
-            color: color.withOpacity(0.75),
-            width: 1.3,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.15),
-              blurRadius: 13,
-            ),
-          ],
-        ),
-        child: Icon(
-          icon,
-          color: color,
-          size: 22,
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// SA7BI LOGO
-// ============================================================
-
-class Sa7biLogo extends StatefulWidget {
-  const Sa7biLogo({super.key});
-
-  @override
-  State<Sa7biLogo> createState() =>
-      _Sa7biLogoState();
-}
-
-class _Sa7biLogoState
-    extends State<Sa7biLogo>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController controller;
-
-  @override
-  void initState() {
-    super.initState();
-
-    controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 9),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (_, __) {
-        final rotation =
-            controller.value * 3.141592653589793 * 2;
-
-        final glow =
-            0.12 +
-            (((rotation == rotation) ? 0 : 0) +
-                    1) *
-                0.05;
-
-        return SizedBox(
-          width: 62,
-          height: 62,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 59,
-                height: 59,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(
-                        0xFF132A55,
-                      ).withOpacity(glow),
-                      blurRadius: 18,
-                      spreadRadius: 2,
-                    ),
-                    BoxShadow(
-                      color: const Color(
-                        0xFF651B32,
-                      ).withOpacity(glow),
-                      blurRadius: 20,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-              ),
-
-              // الحلقة الخارجية فقط هي التي تدور.
-              // محتوى الشعار نفسه لا يتم تغييره.
-              Transform.rotate(
-                angle: rotation,
-                child: Container(
-                  width: 58,
-                  height: 58,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: SweepGradient(
-                      colors: [
-                        Color(0xFF8A1834),
-                        Color(0xFF183D72),
-                        Color(0xFF254F82),
-                        Color(0xFF5C1630),
-                        Color(0xFF8A1834),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              Container(
-                width: 51,
-                height: 51,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF070A12),
-                  border: Border.all(
-                    color: const Color(0xFF315277),
-                    width: 2.2,
-                  ),
-                ),
-                child: ClipOval(
-                  child: Image.asset(
-                    'app_icon.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) {
-                      return const Icon(
-                        Icons.auto_awesome_rounded,
-                        color: Color(0xFFFFD76A),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ============================================================
-// WELCOME CARD
-// ============================================================
-
-class _WelcomeCard extends StatefulWidget {
-  const _WelcomeCard();
-
-  @override
-  State<_WelcomeCard> createState() =>
-      _WelcomeCardState();
-}
-
-class _WelcomeCardState
-    extends State<_WelcomeCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController controller;
-  late final Timer timer;
-
-  final messages = const [
-    'أهلاً يا صاحبي 👋',
-    'جاهز أساعدك في أي حاجة 🤖',
-    'قول اللي في بالك وأنا معاك 💙',
-    'خلينا ننجزها سوا 🚀',
-    'صاحبي AI معاك كل يوم ✨',
-  ];
-
-  int index = 0;
-
-  @override
-  void initState() {
-    super.initState();
-
-    controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 5),
-    )..repeat();
-
-    timer = Timer.periodic(
-      const Duration(seconds: 4),
-      (_) {
-        if (!mounted) return;
-
-        setState(() {
-          index = (index + 1) % messages.length;
-        });
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    timer.cancel();
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (_, __) {
-        return Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 12,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(19),
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [
-                Color.lerp(
-                  const Color(0xFF2A210E),
-                  const Color(0xFF17283A),
-                  controller.value,
-                )!,
-                const Color(0xFF10141D),
-                Color.lerp(
-                  const Color(0xFF1D1527),
-                  const Color(0xFF102820),
-                  controller.value,
-                )!,
-              ],
-            ),
-            border: Border.all(
-              color: const Color(0x44FFD76A),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFFFFD76A),
-                      Color(0xFF63E6FF),
-                    ],
-                  ),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: Colors.black,
-                  size: 19,
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.end,
-                  children: [
-                    AnimatedSwitcher(
-                      duration: const Duration(
-                        milliseconds: 350,
-                      ),
-                      child: Text(
-                        messages[index],
-                        key: ValueKey(index),
-                        textDirection:
-                            TextDirection.rtl,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 3),
-
-                    const Text(
-                      'اسأل، اتكلم، ابعت صورة، اسمع صوت، أو افتح خلصانة AI.',
-                      textDirection: TextDirection.rtl,
-                      textAlign: TextAlign.right,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white60,
-                        height: 1.25,
-                        fontSize: 10.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ============================================================
-// AFFILIATE BANNER
-// ============================================================
-
-class _AffiliateBanner extends StatefulWidget {
-  const _AffiliateBanner();
-
-  @override
-  State<_AffiliateBanner> createState() =>
-      _AffiliateBannerState();
-}
-
-class _AffiliateBannerState
-    extends State<_AffiliateBanner> {
-  late final Timer timer;
-
-  int index = 0;
-
-  final List<_OfferData> offers = [
-    _OfferData(
-      title: 'عروض وتسوق',
-      subtitle: 'Amazon • منتجات وعروض',
-      icon: Icons.shopping_cart_rounded,
-      color: const Color(0xFFFFB300),
-      url: MonetizationConfig.amazonUrl,
-    ),
-    _OfferData(
-      title: 'اكتشف Jumia',
-      subtitle: 'تسوق منتجات متنوعة',
-      icon: Icons.shopping_bag_rounded,
-      color: const Color(0xFFB45CFF),
-      url: MonetizationConfig.jumiaUrl,
-    ),
-    _OfferData(
-      title: 'Noon',
-      subtitle: 'عروض ومنتجات جديدة',
-      icon: Icons.store_rounded,
-      color: const Color(0xFF63E6FF),
-      url: MonetizationConfig.noonUrl,
-    ),
-    _OfferData(
-      title: 'Marketplace',
-      subtitle: 'منتجات من Facebook Marketplace',
-      icon: Icons.facebook_rounded,
-      color: const Color(0xFF4D8DFF),
-      url: MonetizationConfig.facebookShopUrl,
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-
-    timer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) {
-        if (!mounted) return;
-
-        setState(() {
-          index = (index + 1) % offers.length;
-        });
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    timer.cancel();
-    super.dispose();
-  }
-
-  Future<void> openOffer() async {
-    final offer = offers[index];
-
-    final uri = Uri.tryParse(offer.url);
-
-    if (uri == null) return;
-
-    try {
-      await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final offer = offers[index];
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 450),
-      child: Container(
-        key: ValueKey(index),
-        height: 76,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            begin: Alignment.centerRight,
-            end: Alignment.centerLeft,
-            colors: [
-              Color(0xFF32230B),
-              Color(0xFF171A28),
-              Color(0xFF10151D),
-            ],
-          ),
-          border: Border.all(
-            color: const Color(0x55FFD76A),
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x22000000),
-              blurRadius: 16,
-              offset: Offset(0, 5),
-            ),
-          ],
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: openOffer,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 13,
-            ),
-            child: Row(
+      behavior:
+          HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 62,
+        height: 61,
+        child: Column(
+          mainAxisAlignment:
+              MainAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior:
+                  Clip.none,
               children: [
                 Container(
-                  width: 45,
-                  height: 45,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [
-                        offer.color,
-                        const Color(0xFFB45CFF),
-                      ],
-                    ),
-                  ),
-                  child: Icon(
-                    offer.icon,
-                    color: Colors.black,
-                  ),
-                ),
-
-                const SizedBox(width: 10),
-
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment:
-                        MainAxisAlignment.center,
-                    crossAxisAlignment:
-                        CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        offer.title,
-                        textDirection:
-                            TextDirection.rtl,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        ),
+                  width: 40,
+                  height: 40,
+                  decoration:
+                      BoxDecoration(
+                    shape:
+                        BoxShape.circle,
+                    border:
+                        Border.all(
+                      color:
+                          const Color(
+                        0xFFFFD76A,
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        offer.subtitle,
-                        textDirection:
-                            TextDirection.rtl,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 10,
+                      width: 1.5,
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color:
+                            Color(
+                          0x33FFD76A,
                         ),
+                        blurRadius: 10,
                       ),
                     ],
                   ),
+                  child: ClipOval(
+                    child: photo ==
+                            null
+                        ? const ColoredBox(
+                            color: Color(
+                              0xFF10131C,
+                            ),
+                            child:
+                                Icon(
+                              Icons
+                                  .person_rounded,
+                              color:
+                                  Color(
+                                0xFFFFD76A,
+                              ),
+                              size: 22,
+                            ),
+                          )
+                        : Image.memory(
+                            photo!,
+                            fit: BoxFit
+                                .cover,
+                            errorBuilder:
+                                (
+                              _,
+                              __,
+                              ___,
+                            ) {
+                              return const ColoredBox(
+                                color:
+                                    Color(
+                                  0xFF10131C,
+                                ),
+                                child:
+                                    Icon(
+                                  Icons
+                                      .person_rounded,
+                                  color:
+                                      Color(
+                                    0xFFFFD76A,
+                                  ),
+                                  size: 22,
+                                ),
+                              );
+                            },
+                          ),
+                  ),
                 ),
 
-                const SizedBox(width: 8),
-
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: Color(0xFFFFD76A),
-                  size: 15,
-                ),
+                if (hasReel)
+                  Positioned(
+                    right: -3,
+                    bottom: -2,
+                    child:
+                        Container(
+                      width: 17,
+                      height: 17,
+                      decoration:
+                          BoxDecoration(
+                        shape:
+                            BoxShape
+                                .circle,
+                        gradient:
+                            const LinearGradient(
+                          colors: [
+                            Color(
+                              0xFFFFD54F,
+                            ),
+                            Color(
+                              0xFFB45CFF,
+                            ),
+                            Color(
+                              0xFF63E6FF,
+                            ),
+                          ],
+                        ),
+                        border:
+                            Border.all(
+                          color:
+                              const Color(
+                            0xFF10131C,
+                          ),
+                          width: 2,
+                        ),
+                      ),
+                      child:
+                          const Icon(
+                        Icons
+                            .play_arrow_rounded,
+                        color:
+                            Colors.black,
+                        size: 10,
+                      ),
+                    ),
+                  ),
               ],
             ),
-          ),
+
+            const SizedBox(
+              height: 2,
+            ),
+
+            SizedBox(
+              width: 60,
+              child: Text(
+                safeName,
+                textDirection:
+                    TextDirection.rtl,
+                textAlign:
+                    TextAlign.center,
+                maxLines: 1,
+                overflow:
+                    TextOverflow.ellipsis,
+                style:
+                    const TextStyle(
+                  color: Colors.white,
+                  fontSize: 8.5,
+                  fontWeight:
+                      FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _OfferData {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final String url;
-
-  const _OfferData({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.url,
-  });
-}
-
 // ============================================================
-// NEWS CARD
+// AUDIO HEADER ACTION
 // ============================================================
 
-class _NewsCard extends StatelessWidget {
-  final NewsItem item;
-  final VoidCallback onTap;
+class _AudioHeaderAction
+    extends StatelessWidget {
+  final VoidCallback? onTap;
 
-  const _NewsCard({
-    required this.item,
+  const _AudioHeaderAction({
     required this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final hasImage =
-        item.imageUrl.trim().isNotEmpty;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF11141D),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white10,
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: Color(0xFFFFD76A),
-                size: 16,
-              ),
-
-              const SizedBox(width: 9),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      item.title,
-                      textDirection:
-                          TextDirection.rtl,
-                      textAlign:
-                          TextAlign.right,
-                      maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-
-                    const SizedBox(height: 5),
-
-                    Text(
-                      item.source,
-                      textDirection:
-                          TextDirection.rtl,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(13),
-                child: Container(
-                  width: 68,
-                  height: 58,
-                  color: const Color(0xFF1A2030),
-                  child: hasImage
-                      ? Image.network(
-                          item.imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder:
-                              (_, __, ___) {
-                            return const Icon(
-                              Icons.newspaper_rounded,
-                              color:
-                                  Color(0xFF63E6FF),
-                              size: 25,
-                            );
-                          },
-                        )
-                      : const Icon(
-                          Icons.newspaper_rounded,
-                          color: Color(0xFF63E6FF),
-                          size: 25,
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// EMPTY NEWS
-// ============================================================
-
-class _EmptyNews extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _EmptyNews({
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: const Color(0xFF11141D),
-        borderRadius: BorderRadius.circular(17),
-      ),
-      child: Column(
-        children: [
-          const Text(
-            'الأخبار مش متاحة دلوقتي 📡',
-            textDirection: TextDirection.rtl,
-          ),
-          TextButton(
-            onPressed: onRetry,
-            child: const Text('حاول تاني'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================
-// SHORTS ENTRY
-// ============================================================
-
-class _ShortsEntryCard extends StatelessWidget {
-  const _ShortsEntryCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(
-        top: 4,
-        bottom: 13,
-      ),
-      height: 100,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [
-            Color(0xFF2C1C42),
-            Color(0xFF121725),
-          ],
-        ),
-        border: Border.all(
-          color: const Color(0x4463E6FF),
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  const ShortsFeedScreen(),
+  Widget build(
+    BuildContext context,
+  ) {
+    return ValueListenableBuilder<
+        bool>(
+      valueListenable:
+          AudioController
+              .isPlayingNotifier,
+      builder: (
+        context,
+        playing,
+        child,
+      ) {
+        return GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration:
+                const Duration(
+              milliseconds: 280,
             ),
-          );
-        },
-        child: Row(
-          children: [
-            const SizedBox(width: 12),
-
-            Container(
-              width: 62,
-              height: 72,
-              decoration: BoxDecoration(
-                borderRadius:
-                    BorderRadius.circular(17),
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF63E6FF),
-                    Color(0xFFB45CFF),
-                  ],
+            curve:
+                Curves.easeOut,
+            width: playing
+                ? 47
+                : 43,
+            height: playing
+                ? 47
+                : 43,
+            decoration:
+                BoxDecoration(
+              shape:
+                  BoxShape.circle,
+              color:
+                  const Color(
+                0xFF10131C,
+              ),
+              border:
+                  Border.all(
+                color:
+                    const Color(
+                  0xFF63E6FF,
+                ).withOpacity(
+                  playing
+                      ? 1
+                      : 0.75,
                 ),
+                width:
+                    playing ? 2 : 1.3,
               ),
-              child: const Icon(
-                Icons.play_arrow_rounded,
-                color: Colors.black,
-                size: 34,
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
-            const Expanded(
-              child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
-                crossAxisAlignment:
-                    CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'ريلز صاحبي',
-                    textDirection:
-                        TextDirection.rtl,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      const Color(
+                    0xFF63E6FF,
+                  ).withOpacity(
+                    playing
+                        ? 0.45
+                        : 0.15,
                   ),
-                  SizedBox(height: 5),
-                  Text(
-                    'شاهد الفيديوهات القصيرة واكتشف محتوى جديد',
-                    textDirection:
-                        TextDirection.rtl,
-                    textAlign: TextAlign.right,
-                    maxLines: 2,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white60,
-                      fontSize: 10.5,
-                    ),
-                  ),
-                ],
-              ),
+                  blurRadius:
+                      playing
+                          ? 20
+                          : 13,
+                  spreadRadius:
+                      playing ? 2 : 0,
+                ),
+              ],
             ),
-
-            const SizedBox(width: 10),
-
-            const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: Color(0xFFFFD76A),
-              size: 16,
+            child:
+                _PulsingAudioIcon(
+              playing: playing,
             ),
-
-            const SizedBox(width: 10),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// STORE BUTTON
-// ============================================================
-
-class _StoreButton extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final String url;
-
-  const _StoreButton({
-    required this.title,
-    required this.icon,
-    required this.url,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: () async {
-        final uri = Uri.tryParse(url);
-
-        if (uri == null) return;
-
-        try {
-          await launchUrl(
-            uri,
-            mode: LaunchMode.externalApplication,
-          );
-        } catch (_) {}
+          ),
+        );
       },
-      icon: Icon(
-        icon,
-        color: const Color(0xFFFFD76A),
-        size: 18,
-      ),
-      label: Text(title),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: const BorderSide(
-          color: Color(0x44FFD76A),
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-      ),
     );
   }
 }
+
+class _PulsingAudioIcon
+    extends StatefulWidget {
+  final bool playing;
+
+  const _PulsingAudioIcon({
+    required this.playing,
+  });
+
+  @override
+  State<_PulsingAudioIcon>
+      createState() =>
+          _PulsingAudioIconState();
+}
+
+class _PulsingAudioIconState
+    extends State<
+        _PulsingAudioIcon>
+    with
+        SingleTickerProviderStateMixin {
+  late final AnimationController
+      controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    controller =
+        AnimationController(
+      vsync: this,
+      duration:
+          const Duration(
+        milliseconds: 900,
+      ),
+    );
+
+    _updateAnimation();
+  }
+
+  @override
+  void didUpdateWidget(
+    cov
