@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../services/rewarded_ad_service.dart';
 
-/// زر الحصول على Credits من إعلان مكافأة.
+/// زر مشاهدة إعلان Rewarded والحصول على Credits.
 ///
-/// ملاحظة:
-/// الزر هنا مسؤول عن الواجهة والحالة فقط.
-/// عرض إعلان AdMob الفعلي سيتم ربطه لاحقًا داخل
-/// RewardedAdService بدون تغيير الواجهة.
+/// الإعلان الحقيقي يتم تشغيله من RewardedAdService.
+/// الـCredits لا تضاف إلا إذا أكدت AdMob حصول المستخدم
+/// على المكافأة فعلًا.
 class RewardedAdButton extends StatefulWidget {
   const RewardedAdButton({
     super.key,
@@ -32,6 +31,7 @@ class _RewardedAdButtonState
 
   bool _loading = false;
   int _remainingAds = 0;
+  bool _adReady = false;
 
   @override
   void initState() {
@@ -40,20 +40,53 @@ class _RewardedAdButtonState
   }
 
   Future<void> _initialize() async {
-    await _rewarded.initialize();
+    try {
+      await _rewarded.initialize();
 
-    if (!mounted) {
-      return;
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _remainingAds =
+            _rewarded.remainingToday;
+      });
+
+      // تجهيز الإعلان مسبقًا بدون عرضه.
+      final ready =
+          await _rewarded.preloadRewardedAd();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _adReady = ready;
+        _remainingAds =
+            _rewarded.remainingToday;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _adReady = false;
+        _remainingAds =
+            _rewarded.remainingToday;
+      });
     }
-
-    setState(() {
-      _remainingAds =
-          _rewarded.remainingToday;
-    });
   }
 
   Future<void> _handlePressed() async {
     if (_loading) {
+      return;
+    }
+
+    if (_remainingAds <= 0) {
+      _showMessage(
+        'وصلت للحد اليومي للإعلانات المكافِئة.',
+      );
       return;
     }
 
@@ -62,44 +95,53 @@ class _RewardedAdButtonState
     });
 
     try {
-      final started =
-          await _rewarded.beginRewardedAd();
+      final result =
+          await _rewarded.showRewardedAd();
 
-      if (!started) {
-        if (mounted) {
-          _showMessage(
-            'الإعلان المكافأة غير متاح حاليًا أو وصلت للحد اليومي.',
-          );
-        }
+      if (!mounted) {
         return;
       }
 
-      // --------------------------------------------------------
-      // هنا سيتم عرض Rewarded Ad الحقيقي.
-      //
-      // مهم جدًا:
-      // لا نستدعي completeReward() هنا الآن تلقائيًا.
-      //
-      // عند ربط google_mobile_ads لاحقًا:
-      // يتم استدعاء completeReward() فقط داخل callback
-      // الذي يؤكد أن المستخدم حصل فعليًا على المكافأة.
-      // --------------------------------------------------------
-
-      await _rewarded.cancelRewardedAd();
-
-      if (mounted) {
+      if (result.success) {
         _showMessage(
-          'إعلان المكافأة سيتم تفعيله عند ربط شبكة الإعلانات.',
+          '+${result.rewardCredits} Credits 🎁',
+        );
+
+        widget.onRewarded?.call();
+      } else {
+        _showMessage(
+          result.error ??
+              'لم تكتمل مشاهدة الإعلان.',
         );
       }
+
+      // تجهيز الإعلان التالي مسبقًا.
+      final ready =
+          await _rewarded.preloadRewardedAd();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _adReady = ready;
+        _remainingAds =
+            _rewarded.remainingToday;
+      });
     } catch (_) {
-      await _rewarded.cancelRewardedAd();
-
-      if (mounted) {
-        _showMessage(
-          'حصل خطأ. حاول مرة أخرى.',
-        );
+      if (!mounted) {
+        return;
       }
+
+      _showMessage(
+        'حصل خطأ أثناء تشغيل الإعلان. حاول مرة أخرى.',
+      );
+
+      setState(() {
+        _adReady = false;
+        _remainingAds =
+            _rewarded.remainingToday;
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -112,6 +154,10 @@ class _RewardedAdButtonState
   }
 
   void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -134,49 +180,61 @@ class _RewardedAdButtonState
     return _buildFull();
   }
 
+  // ============================================================
+  // Compact
+  // ============================================================
+
   Widget _buildCompact() {
+    final enabled =
+        !_loading &&
+        _remainingAds > 0 &&
+        _adReady;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: _loading ||
-                _remainingAds <= 0
-            ? null
-            : _handlePressed,
-        borderRadius: BorderRadius.circular(16),
+        onTap: enabled
+            ? _handlePressed
+            : null,
+        borderRadius:
+            BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(
+          padding:
+              const EdgeInsets.symmetric(
             horizontal: 14,
             vertical: 11,
           ),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: const Color(0xFFFFD76A)
-                .withOpacity(
-              _remainingAds > 0
-                  ? 0.12
-                  : 0.04,
+            borderRadius:
+                BorderRadius.circular(16),
+            color:
+                const Color(0xFFFFD76A)
+                    .withOpacity(
+              enabled ? 0.12 : 0.04,
             ),
             border: Border.all(
-              color: const Color(0xFFFFD76A)
-                  .withOpacity(
-                _remainingAds > 0
-                    ? 0.35
-                    : 0.10,
+              color:
+                  const Color(0xFFFFD76A)
+                      .withOpacity(
+                enabled ? 0.35 : 0.10,
               ),
             ),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize:
+                MainAxisSize.min,
             children: [
-              _buildIcon(),
+              _buildIcon(
+                enabled: enabled,
+              ),
               const SizedBox(width: 8),
               Text(
-                _loading
-                    ? 'جارٍ التحضير...'
-                    : '+${_rewarded.rewardCredits} Credits',
-                style: const TextStyle(
+                _buttonText(),
+                style:
+                    const TextStyle(
                   color: Colors.white,
-                  fontWeight: FontWeight.w800,
+                  fontWeight:
+                      FontWeight.w800,
                 ),
               ),
             ],
@@ -186,9 +244,15 @@ class _RewardedAdButtonState
     );
   }
 
+  // ============================================================
+  // Full
+  // ============================================================
+
   Widget _buildFull() {
     final enabled =
-        _remainingAds > 0 && !_loading;
+        !_loading &&
+        _remainingAds > 0 &&
+        _adReady;
 
     return SizedBox(
       width: double.infinity,
@@ -203,27 +267,41 @@ class _RewardedAdButtonState
           child: Container(
             padding:
                 const EdgeInsets.all(16),
-            decoration: BoxDecoration(
+            decoration:
+                BoxDecoration(
               borderRadius:
                   BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+              gradient:
+                  LinearGradient(
+                begin:
+                    Alignment.topLeft,
+                end:
+                    Alignment.bottomRight,
                 colors: [
-                  const Color(0xFFFFD76A)
-                      .withOpacity(
-                    enabled ? 0.16 : 0.05,
+                  const Color(
+                    0xFFFFD76A,
+                  ).withOpacity(
+                    enabled
+                        ? 0.16
+                        : 0.05,
                   ),
-                  const Color(0xFF7C4DFF)
-                      .withOpacity(
-                    enabled ? 0.10 : 0.03,
+                  const Color(
+                    0xFF7C4DFF,
+                  ).withOpacity(
+                    enabled
+                        ? 0.10
+                        : 0.03,
                   ),
                 ],
               ),
               border: Border.all(
-                color: const Color(0xFFFFD76A)
-                    .withOpacity(
-                  enabled ? 0.32 : 0.10,
+                color:
+                    const Color(
+                  0xFFFFD76A,
+                ).withOpacity(
+                  enabled
+                      ? 0.32
+                      : 0.10,
                 ),
               ),
             ),
@@ -232,41 +310,55 @@ class _RewardedAdButtonState
                 Container(
                   width: 46,
                   height: 46,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(
+                  decoration:
+                      BoxDecoration(
+                    shape:
+                        BoxShape.circle,
+                    color:
+                        const Color(
                       0xFFFFD76A,
                     ).withOpacity(
-                      enabled ? 0.13 : 0.04,
+                      enabled
+                          ? 0.13
+                          : 0.04,
                     ),
                   ),
-                  child: _buildIcon(),
+                  child: _buildIcon(
+                    enabled: enabled,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(
+                  width: 12,
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                        CrossAxisAlignment
+                            .start,
                     children: [
                       Text(
                         widget.label,
                         textDirection:
-                            TextDirection.rtl,
+                            TextDirection
+                                .rtl,
                         style:
                             const TextStyle(
-                          color: Colors.white,
+                          color:
+                              Colors.white,
                           fontWeight:
-                              FontWeight.w800,
+                              FontWeight
+                                  .w800,
                           fontSize: 14,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(
+                        height: 4,
+                      ),
                       Text(
-                        _loading
-                            ? 'جارٍ التحضير...'
-                            : 'مكافأة: +${_rewarded.rewardCredits} Credits • متبقي اليوم: $_remainingAds',
+                        _statusText(),
                         textDirection:
-                            TextDirection.rtl,
+                            TextDirection
+                                .rtl,
                         style:
                             const TextStyle(
                           color:
@@ -277,10 +369,14 @@ class _RewardedAdButtonState
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 8,
+                ),
                 const Icon(
-                  Icons.chevron_left_rounded,
-                  color: Color(0xFFFFD76A),
+                  Icons
+                      .chevron_left_rounded,
+                  color:
+                      Color(0xFFFFD76A),
                 ),
               ],
             ),
@@ -290,21 +386,69 @@ class _RewardedAdButtonState
     );
   }
 
-  Widget _buildIcon() {
+  // ============================================================
+  // Text
+  // ============================================================
+
+  String _buttonText() {
+    if (_loading) {
+      return 'جارٍ التحضير...';
+    }
+
+    if (_remainingAds <= 0) {
+      return 'انتهى الحد اليومي';
+    }
+
+    if (!_adReady) {
+      return 'جارٍ تجهيز الإعلان...';
+    }
+
+    return '+${_rewarded.rewardCredits} Credits';
+  }
+
+  String _statusText() {
+    if (_loading) {
+      return 'جارٍ تشغيل الإعلان...';
+    }
+
+    if (_remainingAds <= 0) {
+      return 'وصلت للحد اليومي';
+    }
+
+    if (!_adReady) {
+      return 'جارٍ تجهيز الإعلان';
+    }
+
+    return 'مكافأة: +${_rewarded.rewardCredits} Credits • متبقي اليوم: $_remainingAds';
+  }
+
+  // ============================================================
+  // Icon
+  // ============================================================
+
+  Widget _buildIcon({
+    required bool enabled,
+  }) {
     if (_loading) {
       return const SizedBox(
         width: 18,
         height: 18,
-        child: CircularProgressIndicator(
+        child:
+            CircularProgressIndicator(
           strokeWidth: 2,
-          color: Color(0xFFFFD76A),
+          color:
+              Color(0xFFFFD76A),
         ),
       );
     }
 
-    return const Icon(
+    return Icon(
       Icons.play_circle_fill_rounded,
-      color: Color(0xFFFFD76A),
+      color: enabled
+          ? const Color(
+              0xFFFFD76A,
+            )
+          : Colors.white30,
       size: 25,
     );
   }
