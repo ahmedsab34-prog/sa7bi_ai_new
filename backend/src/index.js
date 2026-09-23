@@ -5,7 +5,7 @@ const CORS_HEADERS = {
   "Cache-Control": "no-store"
 };
 
-const BACKEND_VERSION = "4.2.1";
+const BACKEND_VERSION = "4.3.0";
 
 const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
@@ -37,7 +37,8 @@ function json(data, status = 200, extra = {}) {
     {
       status,
       headers: headers({
-        "Content-Type": "application/json; charset=utf-8",
+        "Content-Type":
+          "application/json; charset=utf-8",
         ...extra
       })
     }
@@ -50,7 +51,8 @@ function text(data, status = 200, extra = {}) {
     {
       status,
       headers: headers({
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type":
+          "text/plain; charset=utf-8",
         ...extra
       })
     }
@@ -67,8 +69,14 @@ function normalizeArabic(value) {
 
 function stripHtml(value) {
   return String(value || "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(
+      /<script[\s\S]*?<\/script>/gi,
+      ""
+    )
+    .replace(
+      /<style[\s\S]*?<\/style>/gi,
+      ""
+    )
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -84,26 +92,48 @@ function decodeXml(value) {
     .replace(/&#x27;/g, "'")
     .replace(/&#(\d+);/g, (_, n) => {
       try {
-        return String.fromCodePoint(Number(n));
+        return String.fromCodePoint(
+          Number(n)
+        );
       } catch {
         return "";
       }
     });
 }
 
-function extractNewsImage(description) {
-  const value = String(description || "");
+/* ============================================================
+   REQUEST BODY
+============================================================ */
 
-  const match =
-    value.match(
-      /<img[^>]+src=["']([^"']+)["']/i
-    ) ||
-    value.match(
-      /<img[^>]+url=["']([^"']+)["']/i
-    );
+async function readJsonBody(request) {
+  const contentLength = Number(
+    request.headers.get("content-length") || "0"
+  );
 
-  return match ? decodeXml(match[1]) : "";
+  if (contentLength > MAX_BODY_BYTES) {
+    throw new Error("BODY_TOO_LARGE");
+  }
+
+  const raw = await request.text();
+
+  if (raw.length > MAX_BODY_BYTES) {
+    throw new Error("BODY_TOO_LARGE");
+  }
+
+  if (!raw.trim()) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error("INVALID_JSON");
+  }
 }
+
+/* ============================================================
+   CHAT HELPERS
+============================================================ */
 
 function cleanMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -113,7 +143,9 @@ function cleanMessages(messages) {
   const result = [];
   let total = 0;
 
-  for (const item of messages.slice(-MAX_MESSAGES)) {
+  for (
+    const item of messages.slice(-MAX_MESSAGES)
+  ) {
     if (!item || typeof item !== "object") {
       continue;
     }
@@ -123,19 +155,22 @@ function cleanMessages(messages) {
         ? "assistant"
         : "user";
 
-    let content = String(
-      item.content || ""
-    ).trim();
+    let content =
+      String(item.content || "").trim();
 
     if (!content) {
       continue;
     }
 
-    if (content.length > MAX_MESSAGE_CHARS) {
-      content = content.substring(
-        0,
-        MAX_MESSAGE_CHARS
-      );
+    if (
+      content.length >
+      MAX_MESSAGE_CHARS
+    ) {
+      content =
+        content.substring(
+          0,
+          MAX_MESSAGE_CHARS
+        );
     }
 
     if (
@@ -165,38 +200,41 @@ function isValidImageDataUrl(value) {
     return false;
   }
 
-  return value.length <= MAX_IMAGE_CHARS;
+  return (
+    value.length <= MAX_IMAGE_CHARS
+  );
 }
 
 function extractImageDataUrls(body) {
   const result = [];
 
   if (Array.isArray(body.imageDataUrls)) {
-    for (const item of body.imageDataUrls) {
-      if (typeof item !== "string") {
+    for (
+      const item of body.imageDataUrls
+    ) {
+      if (
+        typeof item !== "string"
+      ) {
         continue;
       }
 
-      if (!isValidImageDataUrl(item)) {
+      if (
+        !isValidImageDataUrl(item)
+      ) {
         continue;
       }
 
       result.push(item);
 
-      if (result.length >= MAX_IMAGE_COUNT) {
+      if (
+        result.length >=
+        MAX_IMAGE_COUNT
+      ) {
         break;
       }
     }
   }
 
-  /*
-   * دعم الإصدار القديم:
-   * imageDataUrl
-   *
-   * مهم:
-   * لا نستخدم .isNotEmpty هنا لأنها Dart.
-   * JavaScript يستخدم .length > 0.
-   */
   if (
     result.length === 0 &&
     typeof body.imageDataUrl === "string" &&
@@ -216,92 +254,94 @@ function extractImageDataUrls(body) {
   return result;
 }
 
-async function readJsonBody(request) {
-  const contentLength = Number(
-    request.headers.get("content-length") || "0"
-  );
-
-  if (contentLength > MAX_BODY_BYTES) {
-    throw new Error("BODY_TOO_LARGE");
-  }
-
-  const raw = await request.text();
-
-  if (raw.length > MAX_BODY_BYTES) {
-    throw new Error("BODY_TOO_LARGE");
-  }
-
-  if (!raw.trim()) {
-    return {};
-  }
-
-  return JSON.parse(raw);
-}
+/* ============================================================
+   OPENAI
+============================================================ */
 
 function extractOutputText(data) {
   if (!data) {
     return "";
   }
 
-  if (typeof data.output_text === "string") {
+  if (
+    typeof data.output_text === "string"
+  ) {
     return data.output_text.trim();
   }
 
-  if (Array.isArray(data.output)) {
+  if (
+    Array.isArray(data.output)
+  ) {
     const parts = [];
 
-    for (const item of data.output) {
+    for (
+      const item of data.output
+    ) {
       if (!item) {
         continue;
       }
 
-      if (Array.isArray(item.content)) {
-        for (const content of item.content) {
+      if (
+        Array.isArray(item.content)
+      ) {
+        for (
+          const content of item.content
+        ) {
           if (
             content &&
-            typeof content.text === "string"
+            typeof content.text ===
+              "string"
           ) {
-            parts.push(content.text);
+            parts.push(
+              content.text
+            );
           }
         }
       }
     }
 
-    if (parts.length) {
-      return parts.join("\n").trim();
-    }
+    return parts
+      .join("\n")
+      .trim();
   }
 
   return "";
 }
 
-async function callOpenAI(env, body) {
+async function callOpenAI(
+  env,
+  body
+) {
   if (!env.OPENAI_API_KEY) {
     throw new Error(
       "OPENAI_API_KEY_MISSING"
     );
   }
 
-  const response = await fetch(
-    "https://api.openai.com/v1/responses",
-    {
-      method: "POST",
-      headers: {
-        "Authorization":
-          `Bearer ${env.OPENAI_API_KEY}`,
-        "Content-Type":
-          "application/json"
-      },
-      body: JSON.stringify(body)
-    }
-  );
+  const response =
+    await fetch(
+      "https://api.openai.com/v1/responses",
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            `Bearer ${env.OPENAI_API_KEY}`,
+          "Content-Type":
+            "application/json"
+        },
+        body:
+          JSON.stringify(body)
+      }
+    );
 
-  const raw = await response.text();
+  const raw =
+    await response.text();
 
   let data;
 
   try {
-    data = JSON.parse(raw);
+    data =
+      JSON.parse(raw);
   } catch {
     data = {
       raw
@@ -309,34 +349,38 @@ async function callOpenAI(env, body) {
   }
 
   if (!response.ok) {
-    const message =
+    throw new Error(
       data?.error?.message ||
       data?.message ||
-      "OpenAI request failed";
-
-    throw new Error(message);
+      "OPENAI_REQUEST_FAILED"
+    );
   }
 
   return data;
 }
 
-// ============================================================
-// CHAT + IMAGE VISION + VIDEO FRAMES
-// ============================================================
+/* ============================================================
+   CHAT / VISION / VIDEO FRAMES
+============================================================ */
 
-async function handleChat(request, env) {
-  const body = await readJsonBody(request);
+async function handleChat(
+  request,
+  env
+) {
+  const body =
+    await readJsonBody(request);
 
-  const messages = cleanMessages(
-    body.messages
-  );
+  const messages =
+    cleanMessages(
+      body.messages
+    );
 
-  const imageDataUrls =
+  const images =
     extractImageDataUrls(body);
 
   if (
-    !messages.length &&
-    !imageDataUrls.length
+    messages.length === 0 &&
+    images.length === 0
   ) {
     return json(
       {
@@ -348,9 +392,11 @@ async function handleChat(request, env) {
   }
 
   if (
-    Array.isArray(body.imageDataUrls) &&
+    Array.isArray(
+      body.imageDataUrls
+    ) &&
     body.imageDataUrls.length > 0 &&
-    imageDataUrls.length === 0
+    images.length === 0
   ) {
     return json(
       {
@@ -362,18 +408,24 @@ async function handleChat(request, env) {
   }
 
   const serviceTitle =
-    typeof body.serviceTitle === "string"
-      ? body.serviceTitle.substring(0, 200)
+    typeof body.serviceTitle ===
+    "string"
+      ? body.serviceTitle
+          .substring(0, 200)
       : "صاحبي AI";
 
   const serviceContext =
-    typeof body.serviceContext === "string"
-      ? body.serviceContext.substring(0, 1000)
+    typeof body.serviceContext ===
+    "string"
+      ? body.serviceContext
+          .substring(0, 1000)
       : "";
 
   const input = [];
 
-  for (const message of messages) {
+  for (
+    const message of messages
+  ) {
     input.push({
       role: message.role,
       content: [
@@ -385,21 +437,23 @@ async function handleChat(request, env) {
     });
   }
 
-  if (imageDataUrls.length) {
+  if (images.length > 0) {
     const content = [
       {
         type: "input_text",
         text:
-          imageDataUrls.length === 1
+          images.length === 1
             ? "حلل الصورة المرفقة فعليًا بدقة. صف ما يظهر فيها، واقرأ النصوص إن وجدت، وقدم إجابة عربية عملية ومفيدة. لا تخمن الأشياء غير الواضحة."
-            : "الصور المرفقة عبارة عن لقطات من نفس المحتوى أو الفيديو. حللها معًا، اربط الأحداث بين اللقطات، واشرح الأشياء أو الأشخاص أو النصوص المهمة. لا تدّعي أنك شاهدت كل ثانية من الفيديو ولا تخمن ما لا يظهر بوضوح."
+            : "الصور المرفقة عبارة عن لقطات من نفس المحتوى أو الفيديو. حللها معًا واربط المعلومات الظاهرة بين اللقطات. اذكر الأشخاص والأشياء والنصوص والأحداث المهمة فقط عندما تكون ظاهرة بوضوح."
       }
     ];
 
-    for (const imageDataUrl of imageDataUrls) {
+    for (
+      const image of images
+    ) {
       content.push({
         type: "input_image",
-        image_url: imageDataUrl
+        image_url: image
       });
     }
 
@@ -409,7 +463,7 @@ async function handleChat(request, env) {
     });
   }
 
-  const systemInstruction = `
+  const instructions = `
 أنت "صاحبي AI"، مساعد عربي ودود وعملي.
 
 الخدمة الحالية:
@@ -418,38 +472,38 @@ ${serviceTitle}
 سياق الخدمة:
 ${serviceContext}
 
-قواعد مهمة:
-- أجب باللغة العربية ما لم يطلب المستخدم لغة أخرى.
-- استخدم اللهجة المصرية عندما تكون مناسبة.
+القواعد:
+- أجب بالعربية ما لم يطلب المستخدم لغة أخرى.
+- استخدم المصرية عندما تكون مناسبة.
 - كن واضحًا ومباشرًا.
 - لا تكرر كلام المستخدم بلا فائدة.
-- لا تدّعي أنك نفذت شيئًا لم تنفذه.
-- إذا كانت المعلومة غير مؤكدة، وضّح ذلك.
-- في الخدمات المتخصصة، تصرف كمساعد متخصص في المجال.
-- إذا أرسل المستخدم صورة، حلل محتواها الفعلي.
-- إذا أرسل المستخدم عدة صور تمثل لقطات من فيديو، تعامل معها كسلسلة لقطات من نفس الفيديو.
-- لا تقل إنك شاهدت كل ثانية من الفيديو؛ أنت تحلل اللقطات التي تم استخراجها وإرسالها لك.
-- إذا كانت هناك تفاصيل غير واضحة، قل إنها غير واضحة بدل التخمين.
-- حافظ على سياق المحادثة السابقة.
+- لا تدّعي تنفيذ شيء لم تنفذه.
+- إذا كانت المعلومة غير مؤكدة فاذكر ذلك.
+- في الخدمات المتخصصة تصرف كمساعد متخصص.
+- حلل الصور الفعلية المرسلة.
+- إذا كانت الصور لقطات من فيديو، تعامل معها كلقطات متتابعة.
+- لا تدّعي أنك شاهدت كل ثانية من الفيديو.
+- لا تخمن التفاصيل غير الواضحة.
+- حافظ على سياق المحادثة.
 `;
 
   const model =
     env.OPENAI_MODEL ||
     DEFAULT_TEXT_MODEL;
 
-  const data = await callOpenAI(
-    env,
-    {
-      model,
-      instructions:
-        systemInstruction,
-      input,
-      reasoning: {
-        effort: "none"
-      },
-      max_output_tokens: 1200
-    }
-  );
+  const data =
+    await callOpenAI(
+      env,
+      {
+        model,
+        instructions,
+        input,
+        reasoning: {
+          effort: "none"
+        },
+        max_output_tokens: 1200
+      }
+    );
 
   const answer =
     extractOutputText(data);
@@ -458,7 +512,8 @@ ${serviceContext}
     return json(
       {
         ok: false,
-        error: "EMPTY_AI_RESPONSE"
+        error:
+          "EMPTY_AI_RESPONSE"
       },
       502
     );
@@ -473,9 +528,9 @@ ${serviceContext}
   });
 }
 
-// ============================================================
-// IMAGE GENERATION
-// ============================================================
+/* ============================================================
+   IMAGE GENERATION
+============================================================ */
 
 async function handleImageGeneration(
   request,
@@ -510,32 +565,38 @@ async function handleImageGeneration(
     );
   }
 
-  const safePrompt =
-    prompt.substring(0, 6000);
-
   const model =
     env.OPENAI_IMAGE_MODEL ||
     DEFAULT_IMAGE_MODEL;
 
-  const response = await fetch(
-    "https://api.openai.com/v1/images/generations",
-    {
-      method: "POST",
-      headers: {
-        "Authorization":
-          `Bearer ${env.OPENAI_API_KEY}`,
-        "Content-Type":
-          "application/json"
-      },
-      body: JSON.stringify({
-        model,
-        prompt: safePrompt,
-        size: "1024x1024",
-        quality: "low",
-        output_format: "png"
-      })
-    }
-  );
+  const response =
+    await fetch(
+      "https://api.openai.com/v1/images/generations",
+      {
+        method: "POST",
+        headers: {
+          Authorization:
+            `Bearer ${env.OPENAI_API_KEY}`,
+          "Content-Type":
+            "application/json"
+        },
+        body:
+          JSON.stringify({
+            model,
+            prompt:
+              prompt.substring(
+                0,
+                6000
+              ),
+            size:
+              "1024x1024",
+            quality:
+              "low",
+            output_format:
+              "png"
+          })
+      }
+    );
 
   const raw =
     await response.text();
@@ -543,20 +604,19 @@ async function handleImageGeneration(
   let data;
 
   try {
-    data = JSON.parse(raw);
+    data =
+      JSON.parse(raw);
   } catch {
     data = {};
   }
 
   if (!response.ok) {
-    const message =
-      data?.error?.message ||
-      "Image generation failed";
-
     return json(
       {
         ok: false,
-        error: message
+        error:
+          data?.error?.message ||
+          "IMAGE_GENERATION_FAILED"
       },
       response.status
     );
@@ -564,7 +624,7 @@ async function handleImageGeneration(
 
   const item =
     Array.isArray(data.data) &&
-    data.data.length
+    data.data.length > 0
       ? data.data[0]
       : null;
 
@@ -572,7 +632,8 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
-        error: "NO_IMAGE_RESULT"
+        error:
+          "NO_IMAGE_RESULT"
       },
       502
     );
@@ -589,10 +650,15 @@ async function handleImageGeneration(
     });
   }
 
-  if (item.url) {
+  if (
+    typeof item.url ===
+      "string" &&
+    item.url.trim()
+  ) {
     return json({
       ok: true,
-      imageUrl: item.url,
+      imageUrl:
+        item.url.trim(),
       model,
       backendVersion:
         BACKEND_VERSION
@@ -609,26 +675,28 @@ async function handleImageGeneration(
   );
 }
 
-// ============================================================
-// EXTERNAL JSON
-// ============================================================
+/* ============================================================
+   EXTERNAL JSON
+============================================================ */
 
 async function fetchJson(
   url,
   options = {}
 ) {
-  const response = await fetch(
-    url,
-    {
-      ...options,
-      headers: {
-        "User-Agent":
-          "Sa7bi-AI/4.2.1",
-        ...(options.headers || {})
-      },
-      cache: "no-store"
-    }
-  );
+  const response =
+    await fetch(
+      url,
+      {
+        ...options,
+        headers: {
+          "User-Agent":
+            "Sa7bi-AI/4.3.0",
+          ...(options.headers || {})
+        },
+        cache:
+          "no-store"
+      }
+    );
 
   if (!response.ok) {
     throw new Error(
@@ -636,52 +704,54 @@ async function fetchJson(
     );
   }
 
-  return await response.json();
+  return response.json();
 }
 
-// ============================================================
-// AUDIO
-// ============================================================
+/* ============================================================
+   AUDIO SEARCH
+============================================================ */
 
 async function handleAudioSearch(
-  request,
-  env
+  request
 ) {
   const url =
     new URL(request.url);
 
   const query =
     normalizeArabic(
-      url.searchParams.get("q") || ""
+      url.searchParams.get("q") ||
+        ""
     );
 
   const type =
     (
-      url.searchParams.get("type") ||
+      url.searchParams.get(
+        "type"
+      ) ||
       "quran"
     ).toLowerCase();
 
   if (type === "quran") {
-    return await handleQuranSearch(
+    return handleQuranSearch(
       query
     );
   }
 
   if (type === "adhkar") {
-    return await handleAdhkarSearch(
+    return handleAdhkarSearch(
       query
     );
   }
 
   if (type === "music") {
-    return await handleAppleSearch(
+    return handleAppleSearch(
       query,
       "music"
     );
   }
 
   if (type === "podcast") {
-    return await handleAppleSearch(
+    return handleAppleSearch(
       query,
       "podcast"
     );
@@ -698,54 +768,55 @@ async function handleQuranSearch(
   query
 ) {
   try {
-    const suwar =
+    const data =
       await fetchJson(
         `${MP3QURAN_BASE}/suwar?language=ar`
       );
 
     let items =
-      Array.isArray(suwar)
-        ? suwar
+      Array.isArray(data)
+        ? data
         : [];
 
     if (query) {
-      const normalizedQuery =
+      const q =
         normalizeArabic(query);
 
-      items = items.filter(
-        (item) => {
-          const name =
+      items =
+        items.filter(
+          item =>
             normalizeArabic(
               item.name ||
               item.sura_name ||
               ""
-            );
-
-          return name.includes(
-            normalizedQuery
-          );
-        }
-      );
+            ).includes(q)
+        );
     }
 
     return json({
       ok: true,
       type: "quran",
-      items: items
-        .slice(0, 100)
-        .map(
-          (item) => ({
-            id:
-              item.id ||
-              item.sura_id ||
-              item.number,
-            name:
-              item.name ||
-              item.sura_name ||
-              "سورة",
-            type: "quran"
-          })
-        ),
+      items:
+        items
+          .slice(0, 100)
+          .map(
+            item => ({
+              id:
+                item.id ||
+                item.sura_id ||
+                item.number,
+              title:
+                item.name ||
+                item.sura_name ||
+                "سورة",
+              name:
+                item.name ||
+                item.sura_name ||
+                "سورة",
+              type:
+                "quran"
+            })
+          ),
       backendVersion:
         BACKEND_VERSION
     });
@@ -773,8 +844,10 @@ async function handleAdhkarSearch(
         {
           headers: {
             "User-Agent":
-              "Sa7bi-AI/4.2.1"
-          }
+              "Sa7bi-AI/4.3.0"
+          },
+          cache:
+            "no-store"
         }
       );
 
@@ -793,11 +866,13 @@ async function handleAdhkarSearch(
         : [];
 
     const result = [];
+    const q =
+      normalizeArabic(query);
 
-    for (const group of groups) {
-      if (!group) {
-        continue;
-      }
+    for (
+      const group of groups
+    ) {
+      if (!group) continue;
 
       const category =
         group.category ||
@@ -807,35 +882,33 @@ async function handleAdhkarSearch(
       const array =
         Array.isArray(group.array)
           ? group.array
-          : Array.isArray(group.content)
+          : Array.isArray(
+              group.content
+            )
             ? group.content
             : [];
 
-      for (const item of array) {
-        if (!item) {
-          continue;
-        }
+      for (
+        const item of array
+      ) {
+        if (!item) continue;
 
-        const textValue =
+        const value =
           item.content ||
           item.text ||
           item.zekr ||
           "";
 
-        if (!textValue) {
-          continue;
-        }
+        if (!value) continue;
 
         const haystack =
           normalizeArabic(
-            `${category} ${textValue}`
+            `${category} ${value}`
           );
 
         if (
-          query &&
-          !haystack.includes(
-            normalizeArabic(query)
-          )
+          q &&
+          !haystack.includes(q)
         ) {
           continue;
         }
@@ -843,22 +916,29 @@ async function handleAdhkarSearch(
         result.push({
           id:
             item.id ||
-            `${category}-${result.length + 1}`,
-          title: category,
-          text: textValue,
+            `adhkar-${result.length + 1}`,
+          title:
+            category,
+          text:
+            value,
           repeat:
             item.count ||
             item.repeat ||
             1,
-          type: "adhkar"
+          type:
+            "adhkar"
         });
 
-        if (result.length >= 80) {
+        if (
+          result.length >= 80
+        ) {
           break;
         }
       }
 
-      if (result.length >= 80) {
+      if (
+        result.length >= 80
+      ) {
         break;
       }
     }
@@ -895,16 +975,27 @@ async function handleAppleSearch(
     params.set(
       "term",
       query ||
-      (
-        media === "podcast"
-          ? "Arabic podcast"
-          : "Arabic music"
-      )
+        (
+          media === "podcast"
+            ? "Arabic podcast"
+            : "Arabic music"
+        )
     );
 
-    params.set("country", "eg");
-    params.set("media", media);
-    params.set("limit", "30");
+    params.set(
+      "country",
+      "eg"
+    );
+
+    params.set(
+      "media",
+      media
+    );
+
+    params.set(
+      "limit",
+      "30"
+    );
 
     const data =
       await fetchJson(
@@ -912,35 +1003,48 @@ async function handleAppleSearch(
       );
 
     const results =
-      Array.isArray(data.results)
+      Array.isArray(
+        data.results
+      )
         ? data.results
         : [];
 
     const items =
       results.map(
-        (item) => ({
+        item => ({
           id:
             item.trackId ||
             item.collectionId ||
-            `${media}-${Math.random()}`,
+            `${media}-${Date.now()}-${Math.random()}`,
           title:
             item.trackName ||
             item.collectionName ||
-            item.trackCensoredName ||
             "بدون عنوان",
           artist:
-            item.artistName || "",
+            item.artistName ||
+            "",
           artwork:
             item.artworkUrl600 ||
             item.artworkUrl100 ||
             "",
           previewUrl:
-            item.previewUrl || "",
+            item.previewUrl ||
+            "",
+          url:
+            item.previewUrl ||
+            "",
           feedUrl:
-            item.feedUrl || "",
+            item.feedUrl ||
+            "",
           collection:
-            item.collectionName || "",
-          type: media
+            item.collectionName ||
+            "",
+          storeUrl:
+            item.trackViewUrl ||
+            item.collectionViewUrl ||
+            "",
+          type:
+            media
         })
       );
 
@@ -965,87 +1069,109 @@ async function handleAppleSearch(
   }
 }
 
+/* ============================================================
+   QURAN CATALOG
+============================================================ */
+
 async function handleQuranCatalog() {
   try {
     const [
       recitersData,
       suwarData
-    ] = await Promise.all([
-      fetchJson(
-        `${MP3QURAN_BASE}/reciters?language=ar`
-      ),
-      fetchJson(
-        `${MP3QURAN_BASE}/suwar?language=ar`
-      )
-    ]);
+    ] =
+      await Promise.all([
+        fetchJson(
+          `${MP3QURAN_BASE}/reciters?language=ar`
+        ),
+        fetchJson(
+          `${MP3QURAN_BASE}/suwar?language=ar`
+        )
+      ]);
 
     const reciters =
-      Array.isArray(recitersData)
+      Array.isArray(
+        recitersData
+      )
         ? recitersData
         : [];
 
     const suwar =
-      Array.isArray(suwarData)
+      Array.isArray(
+        suwarData
+      )
         ? suwarData
         : [];
 
-    const output =
-      reciters.map(
-        (reciter) => {
-          const moshaf =
-            Array.isArray(
-              reciter.moshaf
-            )
-              ? reciter.moshaf
-              : [];
-
-          return {
-            id:
-              reciter.id ||
-              reciter.reciter_id ||
-              reciter.name,
-            name:
-              reciter.name ||
-              "قارئ",
-            letter:
-              reciter.letter || "",
-            moshaf:
-              moshaf.map(
-                (m) => ({
-                  id:
-                    m.id ||
-                    moshaf.indexOf(m) + 1,
-                  name:
-                    m.name || "رواية",
-                  server:
-                    m.server || "",
-                  surahTotal:
-                    m.surah_total ||
-                    m.surahTotal ||
-                    114,
-                  suras:
-                    m.suras || ""
-                })
-              )
-          };
-        }
-      );
-
     return json({
       ok: true,
-      reciters: output,
+
+      reciters:
+        reciters.map(
+          reciter => {
+            const moshaf =
+              Array.isArray(
+                reciter.moshaf
+              )
+                ? reciter.moshaf
+                : [];
+
+            return {
+              id:
+                reciter.id ||
+                reciter.reciter_id ||
+                reciter.name,
+
+              name:
+                reciter.name ||
+                "قارئ",
+
+              letter:
+                reciter.letter ||
+                "",
+
+              moshaf:
+                moshaf.map(
+                  (m, index) => ({
+                    id:
+                      m.id ||
+                      index + 1,
+
+                    name:
+                      m.name ||
+                      "رواية",
+
+                    server:
+                      m.server ||
+                      "",
+
+                    surahTotal:
+                      m.surah_total ||
+                      m.surahTotal ||
+                      114,
+
+                    suras:
+                      m.suras ||
+                      ""
+                  })
+                )
+            };
+          }
+        ),
+
       suras:
         suwar.map(
-          (sura) => ({
+          sura => ({
             id:
               sura.id ||
               sura.sura_id,
+
             name:
               sura.name ||
               sura.sura_name ||
               "سورة"
           })
         ),
+
       backendVersion:
         BACKEND_VERSION
     });
@@ -1064,6 +1190,10 @@ async function handleQuranCatalog() {
   }
 }
 
+/* ============================================================
+   RADIO
+============================================================ */
+
 async function handleRadioCountries() {
   try {
     const data =
@@ -1078,29 +1208,36 @@ async function handleRadioCountries() {
 
     return json({
       ok: true,
+
       countries:
         countries
-          .filter(
-            (item) => item
-          )
+          .filter(Boolean)
           .map(
-            (item) => ({
-              name:
-                item.name || "",
-              iso:
+            item => {
+              const code =
                 item.iso_3166_1 ||
                 item.iso_3166_2 ||
-                "",
-              stationCount:
-                Number(
-                  item.stationcount || 0
-                )
-            })
+                "";
+
+              return {
+                name:
+                  item.name ||
+                  "",
+                code,
+                iso:
+                  code,
+                stationCount:
+                  Number(
+                    item.stationcount ||
+                    0
+                  )
+              };
+            }
           )
           .filter(
-            (item) =>
+            item =>
               item.name &&
-              item.iso
+              item.code
           )
           .sort(
             (a, b) =>
@@ -1109,6 +1246,7 @@ async function handleRadioCountries() {
                 "ar"
               )
           ),
+
       backendVersion:
         BACKEND_VERSION
     });
@@ -1133,15 +1271,18 @@ async function handleRadioStations(
     new URL(request.url);
 
   const country =
-    url.searchParams.get(
-      "country"
-    ) || "";
+    (
+      url.searchParams.get(
+        "country"
+      ) || ""
+    ).trim();
 
   if (!country) {
     return json(
       {
         ok: false,
-        error: "COUNTRY_REQUIRED",
+        error:
+          "COUNTRY_REQUIRED",
         stations: []
       },
       400
@@ -1151,11 +1292,15 @@ async function handleRadioStations(
   try {
     const endpoint =
       "https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/" +
-      encodeURIComponent(country) +
+      encodeURIComponent(
+        country
+      ) +
       "?hidebroken=true&order=clickcount&reverse=true&limit=100";
 
     const data =
-      await fetchJson(endpoint);
+      await fetchJson(
+        endpoint
+      );
 
     const stations =
       Array.isArray(data)
@@ -1165,10 +1310,11 @@ async function handleRadioStations(
     return json({
       ok: true,
       country,
+
       stations:
         stations
           .filter(
-            (station) =>
+            station =>
               station &&
               (
                 station.url_resolved ||
@@ -1176,32 +1322,50 @@ async function handleRadioStations(
               )
           )
           .map(
-            (station) => ({
+            station => ({
               id:
                 station.stationuuid ||
                 station.stationId ||
                 station.name,
+
               name:
                 station.name ||
                 "محطة إذاعية",
+
               streamUrl:
                 station.url_resolved ||
                 station.url ||
                 "",
+
+              url:
+                station.url_resolved ||
+                station.url ||
+                "",
+
               homepage:
-                station.homepage || "",
+                station.homepage ||
+                "",
+
               favicon:
-                station.favicon || "",
+                station.favicon ||
+                "",
+
               tags:
-                station.tags || "",
+                station.tags ||
+                "",
+
               codec:
-                station.codec || "",
+                station.codec ||
+                "",
+
               bitrate:
                 Number(
-                  station.bitrate || 0
+                  station.bitrate ||
+                  0
                 )
             })
           ),
+
       backendVersion:
         BACKEND_VERSION
     });
@@ -1219,11 +1383,17 @@ async function handleRadioStations(
   }
 }
 
-// ============================================================
-// SHORTS
-// ============================================================
+/* ============================================================
+   SHORTS
+============================================================ */
 
 async function handleShorts() {
+  /*
+   * نحاول المصدر الأساسي أولًا.
+   * لو لم يرجع فيديوهات، نرجع قائمة فارغة بدل
+   * كسر الصفحة الرئيسية.
+   */
+
   try {
     const data =
       await fetchJson(
@@ -1233,7 +1403,9 @@ async function handleShorts() {
     const raw =
       Array.isArray(data)
         ? data
-        : Array.isArray(data?.videos)
+        : Array.isArray(
+            data?.videos
+          )
           ? data.videos
           : [];
 
@@ -1244,26 +1416,34 @@ async function handleShorts() {
             item.id ||
             item.video_id ||
             `short-${index}`,
+
           title:
             item.title ||
             item.name ||
             "فيديو",
+
           description:
-            item.description || "",
+            item.description ||
+            "",
+
           thumbnail:
             item.thumbnail ||
             item.image ||
             item.cover ||
             "",
+
           videoUrl:
             item.video_url ||
             item.url ||
             item.video ||
             "",
+
           source:
             item.source ||
             "MP3Quran",
-          type: "short"
+
+          type:
+            "short"
         })
       );
 
@@ -1274,22 +1454,42 @@ async function handleShorts() {
         BACKEND_VERSION
     });
   } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "SHORTS_FAILED",
-        items: []
-      },
-      502
-    );
+    return json({
+      ok: false,
+      error:
+        error?.message ||
+        "SHORTS_FAILED",
+      items: [],
+      backendVersion:
+        BACKEND_VERSION
+    });
   }
 }
 
-// ============================================================
-// NEWS
-// ============================================================
+/* ============================================================
+   NEWS
+============================================================ */
+
+function extractNewsImage(
+  description
+) {
+  const value =
+    String(
+      description || ""
+    );
+
+  const match =
+    value.match(
+      /<img[^>]+src=["']([^"']+)["']/i
+    ) ||
+    value.match(
+      /<img[^>]+url=["']([^"']+)["']/i
+    );
+
+  return match
+    ? decodeXml(match[1])
+    : "";
+}
 
 function parseRssItems(xml) {
   const items = [];
@@ -1300,28 +1500,33 @@ function parseRssItems(xml) {
         /<item\b[\s\S]*?<\/item>/gi
       ) || [];
 
-  for (const block of matches) {
-    const getTag = (tag) => {
-      const regex =
-        new RegExp(
-          `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
-          "i"
+  for (
+    const block of matches
+  ) {
+    const getTag =
+      tag => {
+        const regex =
+          new RegExp(
+            `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
+            "i"
+          );
+
+        const match =
+          block.match(regex);
+
+        if (!match) {
+          return "";
+        }
+
+        return decodeXml(
+          match[1]
+            .replace(
+              /<!\[CDATA\[([\s\S]*?)\]\]>/g,
+              "$1"
+            )
+            .trim()
         );
-
-      const match =
-        block.match(regex);
-
-      return match
-        ? decodeXml(
-            match[1]
-              .replace(
-                /<!CDATA\[([\s\S]*?)\]>/g,
-                "$1"
-              )
-              .trim()
-          )
-        : "";
-    };
+      };
 
     const title =
       stripHtml(
@@ -1335,10 +1540,14 @@ function parseRssItems(xml) {
       getTag("pubDate");
 
     const description =
-      getTag("description");
+      getTag(
+        "description"
+      );
 
     const encoded =
-      getTag("content:encoded");
+      getTag(
+        "content:encoded"
+      );
 
     const mediaImageMatch =
       block.match(
@@ -1349,8 +1558,12 @@ function parseRssItems(xml) {
       );
 
     let image =
-      extractNewsImage(description) ||
-      extractNewsImage(encoded) ||
+      extractNewsImage(
+        description
+      ) ||
+      extractNewsImage(
+        encoded
+      ) ||
       (
         mediaImageMatch
           ? decodeXml(
@@ -1359,21 +1572,27 @@ function parseRssItems(xml) {
           : ""
       );
 
-    if (!image && link) {
+    if (
+      !image &&
+      link
+    ) {
       try {
         const hostname =
-          new URL(link).hostname;
+          new URL(
+            link
+          ).hostname;
 
         if (hostname) {
           image =
             `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=256`;
         }
-      } catch {
-        // تجاهل fallback.
-      }
+      } catch {}
     }
 
-    if (!title || !link) {
+    if (
+      !title ||
+      !link
+    ) {
       continue;
     }
 
@@ -1384,10 +1603,14 @@ function parseRssItems(xml) {
       pubDate,
       description:
         stripHtml(
-          description || encoded
+          description ||
+          encoded
         ),
       image,
-      source: "Google News"
+      imageUrl:
+        image,
+      source:
+        "Google News"
     });
   }
 
@@ -1400,7 +1623,9 @@ async function fetchGoogleNews() {
     "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
   ];
 
-  for (const feed of feeds) {
+  for (
+    const feed of feeds
+  ) {
     try {
       const separator =
         feed.includes("?")
@@ -1416,11 +1641,12 @@ async function fetchGoogleNews() {
           {
             headers: {
               "User-Agent":
-                "Mozilla/5.0 Sa7bi-AI/4.2.1",
+                "Mozilla/5.0 Sa7bi-AI/4.3.0",
               "Cache-Control":
                 "no-cache"
             },
-            cache: "no-store"
+            cache:
+              "no-store"
           }
         );
 
@@ -1434,12 +1660,12 @@ async function fetchGoogleNews() {
       const items =
         parseRssItems(xml);
 
-      if (items.length) {
+      if (
+        items.length > 0
+      ) {
         return items;
       }
-    } catch {
-      // نجرب المصدر التالي.
-    }
+    } catch {}
   }
 
   return [];
@@ -1453,7 +1679,10 @@ async function handleNews() {
     return json({
       ok: true,
       items:
-        items.slice(0, 40),
+        items.slice(
+          0,
+          40
+        ),
       backendVersion:
         BACKEND_VERSION,
       refreshedAt:
@@ -1473,74 +1702,109 @@ async function handleNews() {
   }
 }
 
-// ============================================================
-// ROOT
-// ============================================================
+/* ============================================================
+   ROOT / HEALTH
+============================================================ */
 
 async function handleRoot() {
   return json({
     ok: true,
-    app: "Sa7bi AI",
+    app:
+      "Sa7bi AI",
     backendVersion:
       BACKEND_VERSION,
-    status: "online",
+    status:
+      "online",
+
     features: {
       chat: true,
       imageAnalysis: true,
       multiImageVision: true,
       videoFrameAnalysis: true,
       imageGeneration: true,
-      news: true
+      news: true,
+      audio: true,
+      radio: true,
+      shorts: true
     },
+
     endpoints: {
-      chat: "/v1/chat",
-      image: "/v1/image",
-      news: "/v1/news",
-      audio: "/v1/audio/search-v4",
-      quran: "/v1/audio/quran",
+      chat:
+        "/v1/chat",
+
+      image:
+        "/v1/image",
+
+      news:
+        "/v1/news",
+
+      audio:
+        "/v1/audio/search-v4",
+
+      quran:
+        "/v1/audio/quran",
+
       radioCountries:
         "/v1/radio/countries",
+
       radioStations:
         "/v1/radio/stations?country=EG",
-      shorts: "/v1/shorts",
-      download: "/download",
-      health: "/health"
+
+      shorts:
+        "/v1/shorts",
+
+      download:
+        "/download",
+
+      health:
+        "/health"
     }
   });
 }
 
-async function handleDownload() {
+function handleDownload() {
   return Response.redirect(
     DOWNLOAD_URL,
     302
   );
 }
 
-// ============================================================
-// WORKER
-// ============================================================
+/* ============================================================
+   WORKER
+============================================================ */
 
 export default {
-  async fetch(request, env) {
+  async fetch(
+    request,
+    env
+  ) {
     try {
-      if (request.method === "OPTIONS") {
+      if (
+        request.method ===
+        "OPTIONS"
+      ) {
         return new Response(
           null,
           {
             status: 204,
-            headers: headers()
+            headers:
+              headers()
           }
         );
       }
 
       const url =
-        new URL(request.url);
+        new URL(
+          request.url
+        );
 
       const path =
         url.pathname.replace(
           /\/+$/,
           ""
         ) || "/";
+
+      /* ROOT */
 
       if (
         request.method === "GET" &&
@@ -1549,27 +1813,35 @@ export default {
         return handleRoot();
       }
 
+      /* HEALTH */
+
       if (
         request.method === "GET" &&
         path === "/health"
       ) {
         return json({
           ok: true,
-          status: "online",
+          status:
+            "online",
           backendVersion:
             BACKEND_VERSION,
+
           openaiConfigured:
             Boolean(
               env.OPENAI_API_KEY
             ),
+
           textModel:
             env.OPENAI_MODEL ||
             DEFAULT_TEXT_MODEL,
+
           imageModel:
             env.OPENAI_IMAGE_MODEL ||
             DEFAULT_IMAGE_MODEL
         });
       }
+
+      /* DOWNLOAD */
 
       if (
         request.method === "GET" &&
@@ -1577,6 +1849,8 @@ export default {
       ) {
         return handleDownload();
       }
+
+      /* NEWS */
 
       if (
         request.method === "GET" &&
@@ -1588,45 +1862,61 @@ export default {
         return handleNews();
       }
 
-      if (
-        request.method === "GET" &&
-        (
-          path === "/v1/audio/search" ||
-          path === "/v1/audio/search-v4" ||
-          path === "/audio/search"
-        )
-      ) {
-        return handleAudioSearch(
-          request,
-          env
-        );
-      }
+      /* AUDIO SEARCH */
 
       if (
         request.method === "GET" &&
         (
-          path === "/v1/audio/quran" ||
-          path === "/audio/quran"
+          path ===
+            "/v1/audio/search" ||
+          path ===
+            "/v1/audio/search-v4" ||
+          path ===
+            "/audio/search"
+        )
+      ) {
+        return handleAudioSearch(
+          request
+        );
+      }
+
+      /* QURAN */
+
+      if (
+        request.method === "GET" &&
+        (
+          path ===
+            "/v1/audio/quran" ||
+          path ===
+            "/audio/quran"
         )
       ) {
         return handleQuranCatalog();
       }
 
+      /* RADIO COUNTRIES */
+
       if (
         request.method === "GET" &&
         (
-          path === "/v1/radio/countries" ||
-          path === "/radio/countries"
+          path ===
+            "/v1/radio/countries" ||
+          path ===
+            "/radio/countries"
         )
       ) {
         return handleRadioCountries();
       }
 
+      /* RADIO STATIONS */
+
       if (
         request.method === "GET" &&
         (
-          path === "/v1/radio/stations" ||
-          path === "/radio/stations"
+          path ===
+            "/v1/radio/stations" ||
+          path ===
+            "/radio/stations"
         )
       ) {
         return handleRadioStations(
@@ -1634,38 +1924,120 @@ export default {
         );
       }
 
+      /* SHORTS */
+
       if (
         request.method === "GET" &&
         (
-          path === "/v1/shorts" ||
-          path === "/shorts"
+          path ===
+            "/v1/shorts" ||
+          path ===
+            "/shorts"
         )
       ) {
         return handleShorts();
       }
 
+      /* CHAT */
+
       if (
         request.method === "POST" &&
         (
-          path === "/v1/chat" ||
-          path === "/chat"
+          path ===
+            "/v1/chat" ||
+          path ===
+            "/chat"
         )
       ) {
-        return await handleChat(
+        return handleChat(
           request,
           env
         );
       }
 
+      /* IMAGE */
+
       if (
         request.method === "POST" &&
         (
-          path === "/v1/image" ||
-          path === "/image"
+          path ===
+            "/v1/image" ||
+          path ===
+            "/image"
         )
       ) {
-        return await handleImageGeneration(
+        return handleImageGeneration(
           request,
           env
         );
       }
+
+      /* NOT FOUND */
+
+      return json(
+        {
+          ok: false,
+          error:
+            "NOT_FOUND",
+          path
+        },
+        404
+      );
+    } catch (error) {
+      const message =
+        error?.message ||
+        "INTERNAL_SERVER_ERROR";
+
+      if (
+        message ===
+        "BODY_TOO_LARGE"
+      ) {
+        return json(
+          {
+            ok: false,
+            error:
+              "BODY_TOO_LARGE"
+          },
+          413
+        );
+      }
+
+      if (
+        message ===
+        "INVALID_JSON"
+      ) {
+        return json(
+          {
+            ok: false,
+            error:
+              "INVALID_JSON"
+          },
+          400
+        );
+      }
+
+      if (
+        message ===
+        "OPENAI_API_KEY_MISSING"
+      ) {
+        return json(
+          {
+            ok: false,
+            error:
+              "OPENAI_API_KEY_MISSING"
+          },
+          500
+        );
+      }
+
+      return json(
+        {
+          ok: false,
+          error:
+            message
+        },
+        500
+      );
+    }
+  }
+};
