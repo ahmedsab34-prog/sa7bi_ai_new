@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -10,12 +11,10 @@ import '../services/profile_service.dart';
 /// الترتيب ثابت ولا يتم تغييره:
 /// الشعار → الترحيب → الصوت → البروفايل
 ///
-/// التعديلات المضافة:
-/// - زر الصوت ينبض أثناء تشغيل الصوت.
-/// - صورة المستخدم المحفوظة تظهر في البروفايل.
-/// - حلقة Reel تظهر إذا كان لدى المستخدم Reel.
-/// - اسم المستخدم يظهر أسفل الصورة.
-/// - بيانات البروفايل تأتي من ProfileService.
+/// زر الصوت:
+/// - الدائرة الخارجية ثابتة.
+/// - الحركة تكون داخل الدائرة فقط أثناء تشغيل الصوت.
+/// - البروفايل واللوجو والترحيب لا يتأثرون.
 class AppHeader extends StatelessWidget {
   final VoidCallback? onProfileTap;
   final VoidCallback? onAudioTap;
@@ -164,32 +163,38 @@ class _HeaderWelcomeState
             ],
           ),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment:
+                MainAxisAlignment.center,
+            crossAxisAlignment:
+                CrossAxisAlignment.end,
             children: [
               AnimatedSwitcher(
-                duration: const Duration(
-                  milliseconds: 350,
-                ),
+                duration:
+                    const Duration(milliseconds: 350),
                 child: Text(
                   messages[index],
                   key: ValueKey(index),
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textDirection: TextDirection.rtl,
+                  overflow:
+                      TextOverflow.ellipsis,
+                  textDirection:
+                      TextDirection.rtl,
                   textAlign: TextAlign.right,
                   style: const TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w900,
+                    fontWeight:
+                        FontWeight.w900,
                   ),
                 ),
               ),
               const SizedBox(height: 2),
               const Text(
                 'صاحبي AI معاك كل يوم',
-                textDirection: TextDirection.rtl,
+                textDirection:
+                    TextDirection.rtl,
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                overflow:
+                    TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Colors.white54,
                   fontSize: 9,
@@ -207,7 +212,8 @@ class _HeaderWelcomeState
 // AUDIO BUTTON
 // ============================================================
 
-class _HeaderAudioButton extends StatelessWidget {
+class _HeaderAudioButton
+    extends StatelessWidget {
   final VoidCallback? onTap;
 
   const _HeaderAudioButton({
@@ -233,7 +239,12 @@ class _HeaderAudioButton extends StatelessWidget {
   }
 }
 
-class _PulsingAudioButton extends StatefulWidget {
+// ============================================================
+// AUDIO BUTTON - FIXED OUTER CIRCLE
+// ============================================================
+
+class _PulsingAudioButton
+    extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback? onTap;
 
@@ -259,10 +270,8 @@ class _PulsingAudioButtonState
     controller = AnimationController(
       vsync: this,
       duration: const Duration(
-        milliseconds: 900,
+        milliseconds: 850,
       ),
-      lowerBound: 0.0,
-      upperBound: 1.0,
     );
 
     _syncAnimation();
@@ -282,7 +291,7 @@ class _PulsingAudioButtonState
 
   void _syncAnimation() {
     if (widget.isPlaying) {
-      controller.repeat(reverse: true);
+      controller.repeat();
     } else {
       controller.stop();
       controller.value = 0;
@@ -297,74 +306,153 @@ class _PulsingAudioButtonState
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (_, __) {
-        final pulse = widget.isPlaying
-            ? controller.value
-            : 0.0;
+    return GestureDetector(
+      onTap: widget.onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: AnimatedBuilder(
+          animation: controller,
+          builder: (_, __) {
+            final t = widget.isPlaying
+                ? controller.value
+                : 0.0;
 
-        final scale =
-            1.0 + (pulse * 0.08);
-
-        final glow =
-            widget.isPlaying
-                ? 0.22 + pulse * 0.25
-                : 0.15;
-
-        return GestureDetector(
-          onTap: widget.onTap,
-          child: Transform.scale(
-            scale: scale,
-            child: Container(
-              width: 43,
-              height: 43,
+            return Container(
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: const Color(0xFF10131C),
                 border: Border.all(
-                  color: const Color(0xFF63E6FF)
-                      .withOpacity(
+                  color: const Color(
+                    0xFF63E6FF,
+                  ).withOpacity(
                     widget.isPlaying
                         ? 0.95
                         : 0.75,
                   ),
-                  width: widget.isPlaying
-                      ? 1.7
-                      : 1.3,
+                  width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(
                       0xFF63E6FF,
-                    ).withOpacity(glow),
+                    ).withOpacity(
+                      widget.isPlaying
+                          ? 0.28
+                          : 0.13,
+                    ),
                     blurRadius:
                         widget.isPlaying
-                            ? 20
-                            : 13,
-                    spreadRadius:
-                        widget.isPlaying
-                            ? 1.5
-                            : 0,
+                            ? 18
+                            : 11,
+                    spreadRadius: 0,
                   ),
                 ],
               ),
-              child: Icon(
-                widget.isPlaying
-                    ? Icons.graphic_eq_rounded
-                    : Icons.graphic_eq_rounded,
-                color: const Color(
-                  0xFF63E6FF,
+              child: Center(
+                child: SizedBox(
+                  width: 30,
+                  height: 25,
+                  child: CustomPaint(
+                    painter:
+                        _AudioWavePainter(
+                      progress: t,
+                      isPlaying:
+                          widget.isPlaying,
+                    ),
+                  ),
                 ),
-                size: widget.isPlaying
-                    ? 24
-                    : 22,
               ),
-            ),
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
+  }
+}
+
+// ============================================================
+// INNER AUDIO WAVE
+// ============================================================
+
+class _AudioWavePainter
+    extends CustomPainter {
+  final double progress;
+  final bool isPlaying;
+
+  const _AudioWavePainter({
+    required this.progress,
+    required this.isPlaying,
+  });
+
+  @override
+  void paint(
+    Canvas canvas,
+    Size size,
+  ) {
+    final centerY = size.height / 2;
+
+    final paint = Paint()
+      ..color = const Color(0xFF63E6FF)
+      ..strokeWidth = 2.4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    const barCount = 7;
+
+    for (int i = 0; i < barCount; i++) {
+      final x =
+          2.0 +
+          (i * (size.width - 4) /
+              (barCount - 1));
+
+      double height;
+
+      if (!isPlaying) {
+        height = i == 3 ? 9 : 5;
+      } else {
+        final wave =
+            math.sin(
+              (progress * math.pi * 2) +
+                  (i * 0.85),
+            );
+
+        final wave2 =
+            math.sin(
+              (progress * math.pi * 4) +
+                  (i * 0.45),
+            );
+
+        height =
+            5.0 +
+            ((wave + 1) / 2) * 11.0 +
+            ((wave2 + 1) / 2) * 3.0;
+      }
+
+      final top =
+          centerY - height / 2;
+      final bottom =
+          centerY + height / 2;
+
+      canvas.drawLine(
+        Offset(x, top),
+        Offset(x, bottom),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(
+    covariant _AudioWavePainter oldDelegate,
+  ) {
+    return oldDelegate.progress !=
+            progress ||
+        oldDelegate.isPlaying !=
+            isPlaying;
   }
 }
 
@@ -432,7 +520,8 @@ class _HeaderProfileButton
 // PROFILE AVATAR
 // ============================================================
 
-class _ProfileAvatar extends StatelessWidget {
+class _ProfileAvatar
+    extends StatelessWidget {
   final ProfileService profile;
 
   const _ProfileAvatar({
@@ -475,14 +564,16 @@ class _ProfileAvatar extends StatelessWidget {
                 : const Color(
                     0xFFFFD76A,
                   ).withOpacity(0.18),
-            blurRadius: hasReel ? 15 : 11,
+            blurRadius:
+                hasReel ? 15 : 11,
             spreadRadius:
                 hasReel ? 1 : 0,
           ),
         ],
       ),
       child: Container(
-        decoration: const BoxDecoration(
+        decoration:
+            const BoxDecoration(
           shape: BoxShape.circle,
           color: Color(0xFF10131C),
         ),
@@ -504,7 +595,8 @@ class _ProfileAvatar extends StatelessWidget {
                 )
               : const Icon(
                   Icons.person_rounded,
-                  color: Color(0xFFFFD76A),
+                  color:
+                      Color(0xFFFFD76A),
                   size: 22,
                 ),
         ),
@@ -519,20 +611,20 @@ class _ProfileAvatar extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         avatar,
-
         Positioned(
           right: -1,
           top: -1,
           child: Container(
             width: 12,
             height: 12,
-            decoration: BoxDecoration(
+            decoration:
+                BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(
-                0xFF10131C,
-              ),
+              color:
+                  const Color(0xFF10131C),
               border: Border.all(
-                color: const Color(
+                color:
+                    const Color(
                   0xFFFFD76A,
                 ),
                 width: 1.1,
@@ -540,7 +632,8 @@ class _ProfileAvatar extends StatelessWidget {
             ),
             child: const Icon(
               Icons.play_arrow_rounded,
-              color: Color(0xFFFF4D8D),
+              color:
+                  Color(0xFFFF4D8D),
               size: 7,
             ),
           ),
@@ -554,7 +647,8 @@ class _ProfileAvatar extends StatelessWidget {
 // SA7BI LOGO
 // ============================================================
 
-class Sa7biLogo extends StatefulWidget {
+class Sa7biLogo
+    extends StatefulWidget {
   const Sa7biLogo({
     super.key,
   });
@@ -601,25 +695,31 @@ class _Sa7biLogoState
           width: 62,
           height: 62,
           child: Stack(
-            alignment: Alignment.center,
+            alignment:
+                Alignment.center,
             children: [
               Container(
                 width: 59,
                 height: 59,
                 decoration:
                     const BoxDecoration(
-                  shape: BoxShape.circle,
+                  shape:
+                      BoxShape.circle,
                 ),
-                child: DecoratedBox(
+                child:
+                    DecoratedBox(
                   decoration:
                       BoxDecoration(
-                    shape: BoxShape.circle,
+                    shape:
+                        BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
                         color:
                             const Color(
                           0xFF132A55,
-                        ).withOpacity(0.18),
+                        ).withOpacity(
+                          0.18,
+                        ),
                         blurRadius: 18,
                         spreadRadius: 2,
                       ),
@@ -627,7 +727,9 @@ class _Sa7biLogoState
                         color:
                             const Color(
                           0xFF651B32,
-                        ).withOpacity(0.16),
+                        ).withOpacity(
+                          0.16,
+                        ),
                         blurRadius: 20,
                         spreadRadius: 1,
                       ),
@@ -636,9 +738,6 @@ class _Sa7biLogoState
                 ),
               ),
 
-              // الحلقة الخارجية المتحركة.
-              //
-              // محتوى app_icon.png لا يتم تغييره.
               Transform.rotate(
                 angle: rotation,
                 child: Container(
@@ -646,7 +745,8 @@ class _Sa7biLogoState
                   height: 58,
                   decoration:
                       const BoxDecoration(
-                    shape: BoxShape.circle,
+                    shape:
+                        BoxShape.circle,
                     gradient:
                         SweepGradient(
                       colors: [
@@ -666,12 +766,14 @@ class _Sa7biLogoState
                 height: 51,
                 decoration:
                     BoxDecoration(
-                  shape: BoxShape.circle,
+                  shape:
+                      BoxShape.circle,
                   color:
                       const Color(
                     0xFF070A12,
                   ),
-                  border: Border.all(
+                  border:
+                      Border.all(
                     color:
                         const Color(
                       0xFF315277,
@@ -679,10 +781,13 @@ class _Sa7biLogoState
                     width: 2.2,
                   ),
                 ),
-                child: ClipOval(
-                  child: Image.asset(
+                child:
+                    ClipOval(
+                  child:
+                      Image.asset(
                     'app_icon.png',
-                    fit: BoxFit.cover,
+                    fit:
+                        BoxFit.cover,
                     errorBuilder:
                         (_, __, ___) {
                       return const Icon(
