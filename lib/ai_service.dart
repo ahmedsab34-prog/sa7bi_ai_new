@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -211,8 +212,7 @@ class AiService {
         );
       }
 
-      final direct =
-          data['imageDataUrl'];
+      final direct = data['imageDataUrl'];
 
       if (direct is String &&
           direct.trim().isNotEmpty) {
@@ -250,8 +250,7 @@ class AiService {
         }
       }
 
-      final imageUrl =
-          data['imageUrl'];
+      final imageUrl = data['imageUrl'];
 
       if (imageUrl is String &&
           imageUrl.trim().isNotEmpty) {
