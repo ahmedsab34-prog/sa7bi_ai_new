@@ -653,59 +653,87 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     );
   }
 
-  Widget _buildCategoryBar() {
-    return SizedBox(
-      height: 58,
-      child: ListView.separated(
-        padding:
-            const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 7,
-        ),
-        scrollDirection: Axis.horizontal,
-        itemCount: _categories.length,
-        separatorBuilder: (_, __) =>
-            const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final selected =
-              index == _categoryIndex;
+  // ============================================================
+  // CATEGORY BAR - NO HORIZONTAL SCROLL
+  // ============================================================
 
-          return GestureDetector(
-            onTap: () =>
-                _changeCategory(index),
-            child: AnimatedContainer(
-              duration:
-                  const Duration(milliseconds: 220),
-              padding:
-                  const EdgeInsets.symmetric(
-                horizontal: 18,
-              ),
-              decoration: BoxDecoration(
-                borderRadius:
-                    BorderRadius.circular(18),
-                color: selected
-                    ? const Color(0xFFB9913E)
-                    : const Color(0xFF132238),
-                border: Border.all(
-                  color: selected
-                      ? const Color(0xFFE6C875)
-                      : Colors.white10,
+  Widget _buildCategoryBar() {
+    return Container(
+      width: double.infinity,
+      height: 64,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 7,
+        vertical: 7,
+      ),
+      child: Row(
+        children: List.generate(
+          _categories.length,
+          (index) {
+            final selected =
+                index == _categoryIndex;
+
+            return Expanded(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(
+                  horizontal: 3,
                 ),
-              ),
-              child: Center(
-                child: Text(
-                  _categories[index],
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: selected
-                        ? FontWeight.w800
-                        : FontWeight.w600,
+                child: GestureDetector(
+                  onTap: () =>
+                      _changeCategory(index),
+                  child: AnimatedContainer(
+                    duration:
+                        const Duration(
+                      milliseconds: 220,
+                    ),
+                    curve: Curves.easeOut,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      color: selected
+                          ? const Color(0xFFB9913E)
+                          : const Color(0xFF132238),
+                      border: Border.all(
+                        color: selected
+                            ? const Color(0xFFE6C875)
+                            : Colors.white10,
+                        width: selected ? 1.2 : 1,
+                      ),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFFE6C875,
+                                ).withOpacity(.16),
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _categories[index],
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: selected
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -1417,7 +1445,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         children: [
           Icon(
             icon,
-            color: const Color(0xFFE6C875),
+            color:
+                const Color(0xFFE6C875),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1432,7 +1461,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
             value,
             style: const TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.w800,
+              fontWeight:
+                  FontWeight.w800,
             ),
           ),
         ],
