@@ -1,17 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
-/// طبقة الاتصال الوحيدة المستخدمة في المحادثة مع Worker.
+/// طبقة الاتصال الرئيسية بالذكاء الاصطناعي.
 ///
-/// مهم جدًا:
-/// - لا يوجد OpenAI API Key داخل التطبيق.
-/// - التطبيق يتصل فقط بـ Cloudflare Worker.
-/// - الـWorker هو المسؤول عن الاتصال بـ OpenAI.
-/// - يوجد Retry تلقائي للأخطاء المؤقتة.
-/// - يوجد دعم للنص وتحليل الصور.
+/// التطبيق لا يحتوي على OpenAI API Key.
+/// كل الطلبات تذهب إلى Cloudflare Worker.
+///
+/// المسارات المدعومة:
+/// - نص
+/// - صورة واحدة
+/// - عدة صور / Frames من فيديو
 class AiRequestService {
   AiRequestService._();
 
@@ -32,10 +34,15 @@ class AiRequestService {
   static const int maxImageBytes =
       5 * 1024 * 1024;
 
+  static const int maxVideoFrames = 4;
+
+  static const int maxVideoTotalBytes =
+      6 * 1024 * 1024;
+
   static const int maxAttempts = 3;
 
   // ============================================================
-  // CHAT
+  // TEXT CHAT
   // ============================================================
 
   static Future<String> getResponse({
@@ -87,7 +94,6 @@ class AiRequestService {
       });
     }
 
-    // الرسالة الحالية تأتي دائمًا في النهاية.
     messages.add({
       'role': 'user',
       'content': text,
@@ -116,7 +122,8 @@ class AiRequestService {
           cleanContext;
     }
 
-    final response = await _postWithRetry(
+    final response =
+        await _postWithRetry(
       chatEndpoint,
       body: body,
       timeout: chatTimeout,
@@ -197,6 +204,115 @@ class AiRequestService {
       );
     }
 
+    return analyzeImageBytes(
+      bytes,
+      prompt: prompt,
+      serviceContext: serviceContext,
+      serviceTitle: serviceTitle,
+    );
+  }
+
+  static Future<String> analyzeImageBytes(
+    Uint8List bytes, {
+    String prompt =
+        'حلل الصورة المرسلة بدقة وباختصار.',
+    String? serviceContext,
+    String? serviceTitle,
+  }) async {
+    if (bytes.isEmpty) {
+      throw const AiRequestException(
+        'الصورة فارغة.',
+      );
+    }
+
+    if (bytes.length >
+        maxImageBytes) {
+      throw const AiRequestException(
+        'الصورة كبيرة جدًا.',
+      );
+    }
+
+    return analyzeImages(
+      [bytes],
+      prompt: prompt,
+      serviceContext: serviceContext,
+      serviceTitle: serviceTitle,
+    );
+  }
+
+  // ============================================================
+  // MULTI IMAGE / VIDEO FRAMES
+  // ============================================================
+
+  /// تحليل عدة صور معًا.
+  ///
+  /// يستخدمه تحليل الفيديو:
+  ///
+  /// فيديو
+  /// ↓
+  /// Frames
+  /// ↓
+  /// عدة input_image
+  /// ↓
+  /// OpenAI Vision
+  /// ↓
+  /// تحليل واحد متكامل
+  static Future<String> analyzeImages(
+    List<Uint8List> images, {
+    String prompt =
+        'حلل الصور المرفقة معًا باعتبارها لقطات من نفس الفيديو. '
+        'اشرح ما يظهر فيها، وما الذي يحدث عبر اللقطات، '
+        'واذكر أي نصوص أو أدوات أو أشخاص أو أشياء مهمة. '
+        'لا تخمن ما لا يظهر بوضوح.',
+    String? serviceContext,
+    String? serviceTitle,
+  }) async {
+    if (images.isEmpty) {
+      throw const AiRequestException(
+        'لم يتم استخراج أي صورة للتحليل.',
+      );
+    }
+
+    final selected =
+        images.take(maxVideoFrames).toList();
+
+    int totalBytes = 0;
+
+    for (final image in selected) {
+      if (image.isEmpty) {
+        continue;
+      }
+
+      totalBytes += image.length;
+    }
+
+    if (totalBytes >
+        maxVideoTotalBytes) {
+      throw const AiRequestException(
+        'حجم لقطات الفيديو كبير جدًا. حاول إرسال فيديو أقصر أو بجودة أقل.',
+      );
+    }
+
+    final imageDataUrls =
+        <String>[];
+
+    for (final image in selected) {
+      if (image.isEmpty) {
+        continue;
+      }
+
+      imageDataUrls.add(
+        'data:image/jpeg;base64,'
+        '${base64Encode(image)}',
+      );
+    }
+
+    if (imageDataUrls.isEmpty) {
+      throw const AiRequestException(
+        'لم نستطع تجهيز لقطات الفيديو للتحليل.',
+      );
+    }
+
     var finalPrompt =
         prompt.trim();
 
@@ -205,17 +321,9 @@ class AiRequestService {
       finalPrompt =
           'سياق الخدمة:\n'
           '${serviceContext.trim()}\n\n'
-          'طلب المستخدم:\n'
+          'تعليمات التحليل:\n'
           '$finalPrompt';
     }
-
-    if (finalPrompt.isEmpty) {
-      finalPrompt =
-          'حلل الصورة المرسلة بدقة وباختصار.';
-    }
-
-    final mime =
-        _mime(file.name);
 
     final body =
         <String, dynamic>{
@@ -225,9 +333,8 @@ class AiRequestService {
           'content': finalPrompt,
         },
       ],
-      'imageDataUrl':
-          'data:$mime;base64,'
-          '${base64Encode(bytes)}',
+      'imageDataUrls':
+          imageDataUrls,
     };
 
     final cleanTitle =
@@ -239,7 +346,8 @@ class AiRequestService {
           cleanTitle;
     }
 
-    final response = await _postWithRetry(
+    final response =
+        await _postWithRetry(
       chatEndpoint,
       body: body,
       timeout: imageTimeout,
@@ -262,7 +370,7 @@ class AiRequestService {
 
     if (data == null) {
       throw const AiRequestException(
-        'رد تحليل الصورة غير مفهوم.',
+        'رد تحليل الوسائط غير مفهوم.',
       );
     }
 
@@ -271,7 +379,7 @@ class AiRequestService {
         _errorFromData(
           data,
           fallback:
-              'الصورة وصلت، لكن التحليل لم يكتمل.',
+              'تعذر تحليل الوسائط.',
         ),
         statusCode:
             response.statusCode,
@@ -286,7 +394,7 @@ class AiRequestService {
     if (answer == null ||
         answer.isEmpty) {
       throw const AiRequestException(
-        'الخادم لم يرجع نتيجة لتحليل الصورة.',
+        'الذكاء الاصطناعي لم يرجع نتيجة للتحليل.',
       );
     }
 
@@ -294,10 +402,11 @@ class AiRequestService {
   }
 
   // ============================================================
-  // HTTP WITH RETRY
+  // HTTP RETRY
   // ============================================================
 
-  static Future<http.Response> _postWithRetry(
+  static Future<http.Response>
+      _postWithRetry(
     String endpoint, {
     required Map<String, dynamic> body,
     required Duration timeout,
@@ -365,7 +474,7 @@ class AiRequestService {
   }
 
   // ============================================================
-  // HTTP POST
+  // HTTP
   // ============================================================
 
   static Future<http.Response> _post(
@@ -435,7 +544,7 @@ class AiRequestService {
   }
 
   // ============================================================
-  // SERVER ERRORS
+  // ERROR HANDLING
   // ============================================================
 
   static String _errorFromData(
@@ -505,10 +614,6 @@ class AiRequestService {
     }
   }
 
-  // ============================================================
-  // FRIENDLY ERRORS
-  // ============================================================
-
   static String _friendlyError(
     String value,
   ) {
@@ -527,6 +632,9 @@ class AiRequestService {
 
       case 'INVALID_IMAGE':
         return 'الصورة المرسلة غير صالحة أو كبيرة جدًا.';
+
+      case 'INVALID_IMAGES':
+        return 'الصور المرسلة غير صالحة أو حجمها كبير جدًا.';
 
       case 'BODY_TOO_LARGE':
         return 'البيانات المرسلة كبيرة جدًا.';
@@ -549,10 +657,6 @@ class AiRequestService {
     }
   }
 
-  // ============================================================
-  // CONNECTION ERROR
-  // ============================================================
-
   static String _connectionError(
     Object error,
   ) {
@@ -571,40 +675,6 @@ class AiRequestService {
     }
 
     return 'تعذر الاتصال بخدمة صاحبي حاليًا.';
-  }
-
-  // ============================================================
-  // MIME
-  // ============================================================
-
-  static String _mime(
-    String name,
-  ) {
-    final lower =
-        name.toLowerCase();
-
-    if (lower.endsWith('.png')) {
-      return 'image/png';
-    }
-
-    if (lower.endsWith('.webp')) {
-      return 'image/webp';
-    }
-
-    if (lower.endsWith('.gif')) {
-      return 'image/gif';
-    }
-
-    if (lower.endsWith('.bmp')) {
-      return 'image/bmp';
-    }
-
-    if (lower.endsWith('.heic') ||
-        lower.endsWith('.heif')) {
-      return 'image/heic';
-    }
-
-    return 'image/jpeg';
   }
 }
 
