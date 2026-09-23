@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'ai_service.dart';
 import 'monetization_config.dart';
 import 'news_webview_screen.dart';
 import 'services/ads_service.dart';
 import 'shorts_feed_screen.dart';
+import 'widgets/affiliate_carousel.dart';
 import 'widgets/app_header.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -214,9 +214,6 @@ class _HomeScreenState extends State<HomeScreen>
         children: [
           // ====================================================
           // HEADER
-          //
-          // الترتيب ثابت:
-          // الشعار → الترحيب → الصوت → البروفايل
           // ====================================================
 
           AppHeader(
@@ -229,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen>
           const SizedBox(height: 10),
 
           // ====================================================
-          // ADMOB BANNER
+          // ADMOB
           // ====================================================
 
           const _HomeAdBanner(),
@@ -279,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen>
           const SizedBox(height: 4),
 
           // ====================================================
-          // NEWS CONTENT
+          // NEWS
           // ====================================================
 
           if (loadingNews)
@@ -308,62 +305,16 @@ class _HomeScreenState extends State<HomeScreen>
           else
             ..._buildNewsList(),
 
-          const SizedBox(height: 15),
+          const SizedBox(height: 20),
 
           // ====================================================
-          // SHOPPING
+          // AFFILIATE SHOPPING
+          // منفصل تمامًا عن AdMob
           // ====================================================
 
-          const Text(
-            'تسوق بسرعة',
-            textDirection:
-                TextDirection.rtl,
-            textAlign:
-                TextAlign.right,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight:
-                  FontWeight.w900,
-            ),
-          ),
+          const AffiliateCarousel(),
 
-          const SizedBox(height: 9),
-
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: [
-              _StoreButton(
-                title: 'Amazon',
-                icon:
-                    Icons.shopping_cart_rounded,
-                url:
-                    MonetizationConfig.amazonUrl,
-              ),
-              _StoreButton(
-                title: 'Jumia',
-                icon:
-                    Icons.shopping_bag_rounded,
-                url:
-                    MonetizationConfig.jumiaUrl,
-              ),
-              _StoreButton(
-                title: 'Noon',
-                icon:
-                    Icons.store_rounded,
-                url:
-                    MonetizationConfig.noonUrl,
-              ),
-              _StoreButton(
-                title: 'Facebook',
-                icon:
-                    Icons.facebook_rounded,
-                url:
-                    MonetizationConfig
-                        .facebookShopUrl,
-              ),
-            ],
-          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -868,74 +819,6 @@ class _ShortsEntryCard
               width: 10,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// STORE BUTTON
-// ============================================================
-
-class _StoreButton
-    extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final String url;
-
-  const _StoreButton({
-    required this.title,
-    required this.icon,
-    required this.url,
-  });
-
-  Future<void> _openStore() async {
-    final cleanUrl = url.trim();
-
-    if (cleanUrl.isEmpty) {
-      return;
-    }
-
-    final uri =
-        Uri.tryParse(cleanUrl);
-
-    if (uri == null) {
-      return;
-    }
-
-    try {
-      await launchUrl(
-        uri,
-        mode:
-            LaunchMode.externalApplication,
-      );
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton.icon(
-      onPressed: _openStore,
-      icon: Icon(
-        icon,
-        color:
-            const Color(0xFFFFD76A),
-        size: 18,
-      ),
-      label: Text(title),
-      style:
-          OutlinedButton.styleFrom(
-        foregroundColor:
-            Colors.white,
-        side: const BorderSide(
-          color:
-              Color(0x44FFD76A),
-        ),
-        shape:
-            RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(14),
         ),
       ),
     );
