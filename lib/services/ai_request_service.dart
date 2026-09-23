@@ -8,19 +8,23 @@ import 'package:image_picker/image_picker.dart';
 class AiRequestService {
   AiRequestService._();
 
+  // ============================================================
+  // BACKEND
+  // ============================================================
+
   static const String base =
       'https://sa7bi-ai-new.ahmedsab34.workers.dev';
 
   static const String chatEndpoint =
       '$base/v1/chat';
 
+  // ============================================================
+  // LIMITS
+  // ============================================================
+
   static const int maxHistory = 8;
 
-  static const Duration chatTimeout =
-      Duration(seconds: 90);
-
-  static const Duration imageTimeout =
-      Duration(seconds: 120);
+  static const int maxAttempts = 3;
 
   static const int maxImageBytes =
       5 * 1024 * 1024;
@@ -30,10 +34,14 @@ class AiRequestService {
   static const int maxVideoTotalBytes =
       5 * 1024 * 1024;
 
-  static const int maxAttempts = 3;
+  static const Duration chatTimeout =
+      Duration(seconds: 90);
+
+  static const Duration imageTimeout =
+      Duration(seconds: 120);
 
   // ============================================================
-  // TEXT
+  // TEXT CHAT
   // ============================================================
 
   static Future<String> getResponse({
@@ -69,7 +77,9 @@ class AiRequestService {
 
     for (final item
         in validHistory.sublist(start)) {
-      final role = item['role'];
+      final role =
+          item['role'];
+
       final content =
           item['content']?.trim();
 
@@ -95,23 +105,11 @@ class AiRequestService {
       'messages': messages,
     };
 
-    final cleanTitle =
-        serviceTitle?.trim();
-
-    final cleanContext =
-        serviceContext?.trim();
-
-    if (cleanTitle != null &&
-        cleanTitle.isNotEmpty) {
-      body['serviceTitle'] =
-          cleanTitle;
-    }
-
-    if (cleanContext != null &&
-        cleanContext.isNotEmpty) {
-      body['serviceContext'] =
-          cleanContext;
-    }
+    _addServiceData(
+      body,
+      serviceTitle: serviceTitle,
+      serviceContext: serviceContext,
+    );
 
     final response =
         await _postWithRetry(
@@ -124,7 +122,7 @@ class AiRequestService {
   }
 
   // ============================================================
-  // IMAGE
+  // SINGLE IMAGE - XFILE
   // ============================================================
 
   static Future<String> analyzeImage({
@@ -160,6 +158,10 @@ class AiRequestService {
     );
   }
 
+  // ============================================================
+  // SINGLE IMAGE - BYTES
+  // ============================================================
+
   static Future<String> analyzeImageBytes(
     Uint8List bytes, {
     String prompt =
@@ -181,7 +183,7 @@ class AiRequestService {
     }
 
     return analyzeImages(
-      [bytes],
+      <Uint8List>[bytes],
       prompt: prompt,
       serviceContext:
           serviceContext,
@@ -211,33 +213,36 @@ class AiRequestService {
     }
 
     final selected =
-        images.take(maxVideoFrames).toList();
+        images
+            .where(
+              (image) => image.isNotEmpty,
+            )
+            .take(maxVideoFrames)
+            .toList();
+
+    if (selected.isEmpty) {
+      throw const AiRequestException(
+        'لم نستطع تجهيز الصور للتحليل.',
+      );
+    }
 
     int totalBytes = 0;
 
     for (final image in selected) {
-      if (image.isEmpty) {
-        continue;
-      }
-
       totalBytes += image.length;
-    }
 
-    if (totalBytes >
-        maxVideoTotalBytes) {
-      throw const AiRequestException(
-        'حجم لقطات الفيديو كبير جدًا. حاول إرسال فيديو أقصر أو بجودة أقل.',
-      );
+      if (totalBytes >
+          maxVideoTotalBytes) {
+        throw const AiRequestException(
+          'حجم لقطات الفيديو كبير جدًا. حاول إرسال فيديو أقصر أو بجودة أقل.',
+        );
+      }
     }
 
     final imageDataUrls =
         <String>[];
 
     for (final image in selected) {
-      if (image.isEmpty) {
-        continue;
-      }
-
       imageDataUrls.add(
         'data:image/jpeg;base64,'
         '${base64Encode(image)}',
@@ -246,12 +251,17 @@ class AiRequestService {
 
     if (imageDataUrls.isEmpty) {
       throw const AiRequestException(
-        'لم نستطع تجهيز لقطات الفيديو للتحليل.',
+        'لم نستطع تجهيز الصور للتحليل.',
       );
     }
 
     var finalPrompt =
         prompt.trim();
+
+    if (finalPrompt.isEmpty) {
+      finalPrompt =
+          'حلل الصور المرفقة بدقة.';
+    }
 
     if (serviceContext != null &&
         serviceContext.trim().isNotEmpty) {
@@ -274,14 +284,11 @@ class AiRequestService {
           imageDataUrls,
     };
 
-    final cleanTitle =
-        serviceTitle?.trim();
-
-    if (cleanTitle != null &&
-        cleanTitle.isNotEmpty) {
-      body['serviceTitle'] =
-          cleanTitle;
-    }
+    _addServiceData(
+      body,
+      serviceTitle: serviceTitle,
+      serviceContext: null,
+    );
 
     final response =
         await _postWithRetry(
@@ -291,6 +298,34 @@ class AiRequestService {
     );
 
     return _readAnswer(response);
+  }
+
+  // ============================================================
+  // SERVICE CONTEXT
+  // ============================================================
+
+  static void _addServiceData(
+    Map<String, dynamic> body, {
+    String? serviceTitle,
+    String? serviceContext,
+  }) {
+    final cleanTitle =
+        serviceTitle?.trim();
+
+    final cleanContext =
+        serviceContext?.trim();
+
+    if (cleanTitle != null &&
+        cleanTitle.isNotEmpty) {
+      body['serviceTitle'] =
+          cleanTitle;
+    }
+
+    if (cleanContext != null &&
+        cleanContext.isNotEmpty) {
+      body['serviceContext'] =
+          cleanContext;
+    }
   }
 
   // ============================================================
@@ -379,7 +414,8 @@ class AiRequestService {
           return response;
         }
 
-        if (attempt >= maxAttempts) {
+        if (attempt >=
+            maxAttempts) {
           return response;
         }
 
@@ -391,7 +427,8 @@ class AiRequestService {
       } catch (error) {
         lastError = error;
 
-        if (attempt >= maxAttempts) {
+        if (attempt >=
+            maxAttempts) {
           rethrow;
         }
 
@@ -405,7 +442,8 @@ class AiRequestService {
 
     throw AiRequestException(
       _connectionError(
-        lastError ?? 'Unknown error',
+        lastError ??
+            'Unknown error',
       ),
     );
   }
@@ -507,7 +545,9 @@ class AiRequestService {
 
     if (error != null &&
         error.isNotEmpty) {
-      return _friendlyError(error);
+      return _friendlyError(
+        error,
+      );
     }
 
     return fallback;
@@ -625,9 +665,14 @@ class AiRequestService {
   }
 }
 
+// ============================================================
+// EXCEPTION
+// ============================================================
+
 class AiRequestException
     implements Exception {
   final String message;
+
   final int? statusCode;
 
   const AiRequestException(
