@@ -53,13 +53,17 @@ class ReminderItem {
     };
   }
 
-  factory ReminderItem.fromJson(Map<String, dynamic> json) {
+  factory ReminderItem.fromJson(
+    Map<String, dynamic> json,
+  ) {
     final dynamic rawDate = json['dateTime'];
 
     DateTime parsedDate;
 
     if (rawDate is String) {
-      parsedDate = DateTime.tryParse(rawDate) ?? DateTime.now();
+      parsedDate =
+          DateTime.tryParse(rawDate) ??
+          DateTime.now();
     } else {
       parsedDate = DateTime.now();
     }
@@ -67,10 +71,13 @@ class ReminderItem {
     return ReminderItem(
       id: _readInt(json['id']),
       title: (json['title'] ?? '').toString(),
-      category: (json['category'] ?? 'شخصي').toString(),
+      category:
+          (json['category'] ?? 'شخصي').toString(),
       dateTime: parsedDate,
-      repeatDaily: json['repeatDaily'] == true,
-      enabled: json['enabled'] != false,
+      repeatDaily:
+          json['repeatDaily'] == true,
+      enabled:
+          json['enabled'] != false,
     );
   }
 
@@ -83,8 +90,11 @@ class ReminderItem {
       return value.toInt();
     }
 
-    return int.tryParse(value?.toString() ?? '') ??
-        DateTime.now().millisecondsSinceEpoch;
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        DateTime.now()
+            .millisecondsSinceEpoch;
   }
 }
 
@@ -102,19 +112,29 @@ class ReminderItem {
 class ReminderService {
   ReminderService._();
 
-  static final ReminderService instance = ReminderService._();
+  static final ReminderService instance =
+      ReminderService._();
 
-  static const String _storageKey = 'sa7bi_saved_reminders';
+  static const String _storageKey =
+      'sa7bi_saved_reminders';
 
-  static const String _channelId = 'sa7bi_reminders';
-  static const String _channelName = 'تذكيرات صاحبي AI';
+  static const String _channelId =
+      'sa7bi_reminders';
+
+  static const String _channelName =
+      'تذكيرات صاحبي AI';
+
   static const String _channelDescription =
       'إشعارات التذكيرات الشخصية في تطبيق صاحبي AI';
 
-  final ValueNotifier<List<ReminderItem>> reminders =
-      ValueNotifier<List<ReminderItem>>(<ReminderItem>[]);
+  final ValueNotifier<List<ReminderItem>>
+      reminders =
+      ValueNotifier<List<ReminderItem>>(
+    <ReminderItem>[],
+  );
 
-  final FlutterLocalNotificationsPlugin _notifications =
+  final FlutterLocalNotificationsPlugin
+      _notifications =
       FlutterLocalNotificationsPlugin();
 
   SharedPreferences? _prefs;
@@ -122,36 +142,61 @@ class ReminderService {
   bool _initialized = false;
   bool _notificationsInitialized = false;
 
-  bool get isInitialized => _initialized;
+  bool get isInitialized =>
+      _initialized;
 
-  bool get isNotificationsInitialized => _notificationsInitialized;
+  bool get isNotificationsInitialized =>
+      _notificationsInitialized;
 
   List<ReminderItem> get items =>
-      List<ReminderItem>.unmodifiable(reminders.value);
+      List<ReminderItem>.unmodifiable(
+        reminders.value,
+      );
 
-  List<ReminderItem> get enabledItems => reminders.value
-      .where((ReminderItem reminder) => reminder.enabled)
-      .toList(growable: false);
+  List<ReminderItem> get enabledItems =>
+      reminders.value
+          .where(
+            (ReminderItem reminder) =>
+                reminder.enabled,
+          )
+          .toList(
+            growable: false,
+          );
 
-  List<ReminderItem> get disabledItems => reminders.value
-      .where((ReminderItem reminder) => !reminder.enabled)
-      .toList(growable: false);
+  List<ReminderItem> get disabledItems =>
+      reminders.value
+          .where(
+            (ReminderItem reminder) =>
+                !reminder.enabled,
+          )
+          .toList(
+            growable: false,
+          );
 
-  List<ReminderItem> byCategory(String category) {
+  List<ReminderItem> byCategory(
+    String category,
+  ) {
     return reminders.value
         .where(
-          (ReminderItem reminder) => reminder.category == category,
+          (ReminderItem reminder) =>
+              reminder.category == category,
         )
-        .toList(growable: false);
+        .toList(
+          growable: false,
+        );
   }
 
-  /// Initializes local storage and notification scheduling.
+  // ============================================================
+  // INITIALIZATION
+  // ============================================================
+
   Future<void> initialize() async {
     if (_initialized) {
       return;
     }
 
-    _prefs = await SharedPreferences.getInstance();
+    _prefs =
+        await SharedPreferences.getInstance();
 
     _initializeTimeZone();
 
@@ -161,28 +206,19 @@ class ReminderService {
 
     _initialized = true;
 
-    // Restore all active schedules after app startup.
     await rescheduleAll();
   }
 
-  /// Initializes the timezone database.
-  ///
-  /// The reminder dates themselves are stored as local DateTime values.
-  /// We use the timezone database for zonedSchedule().
   void _initializeTimeZone() {
     try {
       tz.initializeTimeZones();
 
-      // Egypt is the primary timezone for the current application.
-      //
-      // This keeps reminder times correct for the current target market
-      // while still using the timezone-aware scheduler.
       tz.setLocalLocation(
         tz.getLocation('Africa/Cairo'),
       );
     } catch (_) {
-      // The timezone database should normally initialize successfully.
-      // If it doesn't, the plugin can still remain initialized.
+      // Keep the plugin usable if timezone
+      // initialization fails.
     }
   }
 
@@ -191,46 +227,65 @@ class ReminderService {
       return;
     }
 
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@drawable/app_icon');
+    const AndroidInitializationSettings
+        androidSettings =
+        AndroidInitializationSettings(
+      'app_icon',
+    );
 
-    const InitializationSettings settings = InitializationSettings(
+    const InitializationSettings
+        settings =
+        InitializationSettings(
       android: androidSettings,
     );
 
+    // flutter_local_notifications 22.x:
+    // settings is a named parameter.
     await _notifications.initialize(
-      settings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
+      settings: settings,
+      onDidReceiveNotificationResponse:
+          _onNotificationTapped,
     );
 
-    final AndroidFlutterLocalNotificationsPlugin? android =
-        _notifications.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+    final AndroidFlutterLocalNotificationsPlugin?
+        android =
+        _notifications
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
 
     if (android != null) {
       try {
-        await android.requestNotificationsPermission();
+        await android
+            .requestNotificationsPermission();
       } catch (_) {
-        // Permission can be requested again later from the UI.
+        // Permission can be requested later.
       }
 
       try {
-        await android.requestExactAlarmsPermission();
+        await android
+            .requestExactAlarmsPermission();
       } catch (_) {
-        // Exact alarms may already be granted or unavailable.
+        // Exact alarms may already be granted
+        // or unavailable.
       }
 
-      const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      const AndroidNotificationChannel
+          channel =
+          AndroidNotificationChannel(
         _channelId,
         _channelName,
-        description: _channelDescription,
+        description:
+            _channelDescription,
         importance: Importance.max,
         playSound: true,
         enableVibration: true,
       );
 
       try {
-        await android.createNotificationChannel(channel);
+        await android
+            .createNotificationChannel(
+          channel,
+        );
       } catch (_) {
         // Channel may already exist.
       }
@@ -239,39 +294,56 @@ class ReminderService {
     _notificationsInitialized = true;
   }
 
-  void _onNotificationTapped(NotificationResponse response) {
+  void _onNotificationTapped(
+    NotificationResponse response,
+  ) {
     // The payload contains the reminder ID.
     //
-    // The app can later use this callback to open the profile/reminder
-    // screen directly when the user taps the notification.
+    // Navigation can be connected later if needed.
   }
 
-  Future<void> _loadSavedReminders() async {
-    final String? raw = _prefs!.getString(_storageKey);
+  // ============================================================
+  // STORAGE
+  // ============================================================
 
-    if (raw == null || raw.trim().isEmpty) {
-      reminders.value = <ReminderItem>[];
+  Future<void> _loadSavedReminders() async {
+    final String? raw =
+        _prefs!.getString(_storageKey);
+
+    if (raw == null ||
+        raw.trim().isEmpty) {
+      reminders.value =
+          <ReminderItem>[];
       return;
     }
 
     try {
-      final dynamic decoded = jsonDecode(raw);
+      final dynamic decoded =
+          jsonDecode(raw);
 
       if (decoded is! List) {
-        reminders.value = <ReminderItem>[];
+        reminders.value =
+            <ReminderItem>[];
         return;
       }
 
-      final List<ReminderItem> loaded = <ReminderItem>[];
+      final List<ReminderItem> loaded =
+          <ReminderItem>[];
 
-      for (final dynamic item in decoded) {
+      for (final dynamic item
+          in decoded) {
         if (item is Map) {
           try {
-            final ReminderItem reminder = ReminderItem.fromJson(
-              Map<String, dynamic>.from(item),
+            final ReminderItem reminder =
+                ReminderItem.fromJson(
+              Map<String, dynamic>.from(
+                item,
+              ),
             );
 
-            if (reminder.title.trim().isNotEmpty) {
+            if (reminder.title
+                .trim()
+                .isNotEmpty) {
               loaded.add(reminder);
             }
           } catch (_) {
@@ -282,14 +354,19 @@ class ReminderService {
 
       reminders.value = loaded;
     } catch (_) {
-      reminders.value = <ReminderItem>[];
+      reminders.value =
+          <ReminderItem>[];
     }
   }
 
   Future<void> _save() async {
-    final String encoded = jsonEncode(
+    final String encoded =
+        jsonEncode(
       reminders.value
-          .map((ReminderItem reminder) => reminder.toJson())
+          .map(
+            (ReminderItem reminder) =>
+                reminder.toJson(),
+          )
           .toList(),
     );
 
@@ -305,7 +382,10 @@ class ReminderService {
     }
   }
 
-  /// Creates a new reminder and schedules its notification.
+  // ============================================================
+  // ADD
+  // ============================================================
+
   Future<ReminderItem> addReminder({
     required String title,
     required String category,
@@ -315,7 +395,8 @@ class ReminderService {
   }) async {
     await _ensureInitialized();
 
-    final String cleanTitle = title.trim();
+    final String cleanTitle =
+        title.trim();
 
     if (cleanTitle.isEmpty) {
       throw ArgumentError(
@@ -323,21 +404,26 @@ class ReminderService {
       );
     }
 
-    final DateTime localDateTime = dateTime.toLocal();
+    final DateTime localDateTime =
+        dateTime.toLocal();
 
-    final ReminderItem reminder = ReminderItem(
+    final ReminderItem reminder =
+        ReminderItem(
       id: _createId(),
       title: cleanTitle,
-      category: category.trim().isEmpty
-          ? 'شخصي'
-          : category.trim(),
+      category:
+          category.trim().isEmpty
+              ? 'شخصي'
+              : category.trim(),
       dateTime: localDateTime,
       repeatDaily: repeatDaily,
       enabled: enabled,
     );
 
     final List<ReminderItem> updated =
-        List<ReminderItem>.from(reminders.value);
+        List<ReminderItem>.from(
+      reminders.value,
+    );
 
     updated.add(reminder);
 
@@ -346,33 +432,47 @@ class ReminderService {
     await _save();
 
     if (reminder.enabled) {
-      await scheduleReminder(reminder);
+      await scheduleReminder(
+        reminder,
+      );
     }
 
     return reminder;
   }
 
-  /// Updates an existing reminder.
+  // ============================================================
+  // UPDATE
+  // ============================================================
+
   Future<bool> updateReminder(
     ReminderItem updatedReminder,
   ) async {
     await _ensureInitialized();
 
     final List<ReminderItem> updated =
-        List<ReminderItem>.from(reminders.value);
+        List<ReminderItem>.from(
+      reminders.value,
+    );
 
-    final int index = updated.indexWhere(
-      (ReminderItem item) => item.id == updatedReminder.id,
+    final int index =
+        updated.indexWhere(
+      (ReminderItem item) =>
+          item.id ==
+          updatedReminder.id,
     );
 
     if (index == -1) {
       return false;
     }
 
-    await cancelNotification(updatedReminder.id);
+    await cancelNotification(
+      updatedReminder.id,
+    );
 
-    updated[index] = updatedReminder.copyWith(
-      dateTime: updatedReminder.dateTime.toLocal(),
+    updated[index] =
+        updatedReminder.copyWith(
+      dateTime:
+          updatedReminder.dateTime.toLocal(),
     );
 
     reminders.value = updated;
@@ -380,20 +480,26 @@ class ReminderService {
     await _save();
 
     if (updated[index].enabled) {
-      await scheduleReminder(updated[index]);
+      await scheduleReminder(
+        updated[index],
+      );
     }
 
     return true;
   }
 
-  /// Enables or disables a reminder.
+  // ============================================================
+  // ENABLE / DISABLE
+  // ============================================================
+
   Future<bool> setEnabled(
     int id,
     bool enabled,
   ) async {
     await _ensureInitialized();
 
-    final ReminderItem? current = findById(id);
+    final ReminderItem? current =
+        findById(id);
 
     if (current == null) {
       return false;
@@ -406,11 +512,13 @@ class ReminderService {
     );
   }
 
-  /// Toggles an existing reminder.
-  Future<bool> toggle(int id) async {
+  Future<bool> toggle(
+    int id,
+  ) async {
     await _ensureInitialized();
 
-    final ReminderItem? current = findById(id);
+    final ReminderItem? current =
+        findById(id);
 
     if (current == null) {
       return false;
@@ -423,22 +531,32 @@ class ReminderService {
     );
   }
 
-  /// Deletes a reminder and its scheduled notification.
-  Future<bool> deleteReminder(int id) async {
+  // ============================================================
+  // DELETE
+  // ============================================================
+
+  Future<bool> deleteReminder(
+    int id,
+  ) async {
     await _ensureInitialized();
 
-    final int oldLength = reminders.value.length;
+    final int oldLength =
+        reminders.value.length;
 
     await cancelNotification(id);
 
     final List<ReminderItem> updated =
-        List<ReminderItem>.from(reminders.value);
-
-    updated.removeWhere(
-      (ReminderItem item) => item.id == id,
+        List<ReminderItem>.from(
+      reminders.value,
     );
 
-    if (updated.length == oldLength) {
+    updated.removeWhere(
+      (ReminderItem item) =>
+          item.id == id,
+    );
+
+    if (updated.length ==
+        oldLength) {
       return false;
     }
 
@@ -449,35 +567,39 @@ class ReminderService {
     return true;
   }
 
-  /// Deletes every reminder and every scheduled notification.
   Future<void> clearAll() async {
     await _ensureInitialized();
 
-    reminders.value = <ReminderItem>[];
+    reminders.value =
+        <ReminderItem>[];
 
     await _save();
 
     await _notifications.cancelAll();
   }
 
-  /// Schedules one reminder.
-  ///
-  /// For daily reminders, the notification repeats every day at the
-  /// selected time.
+  // ============================================================
+  // SCHEDULING
+  // ============================================================
+
   Future<void> scheduleReminder(
     ReminderItem reminder,
   ) async {
     await _ensureInitialized();
 
-    await cancelNotification(reminder.id);
+    await cancelNotification(
+      reminder.id,
+    );
 
     if (!reminder.enabled) {
       return;
     }
 
-    final DateTime now = DateTime.now();
+    final DateTime now =
+        DateTime.now();
 
-    DateTime scheduledDate = reminder.dateTime.toLocal();
+    DateTime scheduledDate =
+        reminder.dateTime.toLocal();
 
     if (reminder.repeatDaily) {
       scheduledDate = DateTime(
@@ -488,36 +610,44 @@ class ReminderService {
         reminder.dateTime.minute,
       );
 
-      if (!scheduledDate.isAfter(now)) {
-        scheduledDate = scheduledDate.add(
+      if (!scheduledDate
+          .isAfter(now)) {
+        scheduledDate =
+            scheduledDate.add(
           const Duration(days: 1),
         );
       }
     } else {
-      if (!scheduledDate.isAfter(now)) {
+      if (!scheduledDate
+          .isAfter(now)) {
         return;
       }
     }
 
-    final tz.TZDateTime tzDate = tz.TZDateTime.from(
+    final tz.TZDateTime tzDate =
+        tz.TZDateTime.from(
       scheduledDate,
       tz.local,
     );
 
-    final AndroidNotificationDetails androidDetails =
+    const AndroidNotificationDetails
+        androidDetails =
         AndroidNotificationDetails(
       _channelId,
       _channelName,
-      channelDescription: _channelDescription,
+      channelDescription:
+          _channelDescription,
       importance: Importance.max,
       priority: Priority.high,
       playSound: true,
       enableVibration: true,
-      icon: '@drawable/app_icon',
-      category: AndroidNotificationCategory.reminder,
+      icon: 'app_icon',
+      category:
+          AndroidNotificationCategory.reminder,
     );
 
-    final NotificationDetails details = NotificationDetails(
+    const NotificationDetails details =
+        NotificationDetails(
       android: androidDetails,
     );
 
@@ -528,102 +658,126 @@ class ReminderService {
       scheduledDate: tzDate,
       notificationDetails: details,
       androidScheduleMode:
-          AndroidScheduleMode.exactAllowWhileIdle,
-      payload: reminder.id.toString(),
-      matchDateTimeComponents: reminder.repeatDaily
-          ? DateTimeComponents.time
-          : null,
+          AndroidScheduleMode
+              .exactAllowWhileIdle,
+      payload:
+          null,
+      matchDateTimeComponents:
+          reminder.repeatDaily
+              ? DateTimeComponents.time
+              : null,
     );
   }
 
-  /// Re-schedules every enabled reminder.
-  ///
-  /// This is called on startup and can also be called after the device
-  /// or application has restored its state.
   Future<void> rescheduleAll() async {
     await _ensureInitialized();
 
-    for (final ReminderItem reminder in reminders.value) {
+    for (final ReminderItem reminder
+        in reminders.value) {
       if (!reminder.enabled) {
-        await cancelNotification(reminder.id);
+        await cancelNotification(
+          reminder.id,
+        );
         continue;
       }
 
       try {
-        await scheduleReminder(reminder);
+        await scheduleReminder(
+          reminder,
+        );
       } catch (_) {
-        // One invalid reminder should not prevent all other reminders
-        // from being restored.
+        // Do not let one invalid reminder
+        // prevent all others from loading.
       }
     }
   }
 
-  /// Cancels one notification without deleting its saved reminder.
-  Future<void> cancelNotification(int id) async {
+  Future<void> cancelNotification(
+    int id,
+  ) async {
     if (!_notificationsInitialized) {
       return;
     }
 
     try {
-      await _notifications.cancel(id: id);
+      await _notifications.cancel(
+        id: id,
+      );
     } catch (_) {
       // Ignore cancellation errors.
     }
   }
 
-  /// Shows an immediate test notification.
-  ///
-  /// Useful while testing the feature before waiting for the actual
-  /// reminder time.
+  // ============================================================
+  // TEST NOTIFICATION
+  // ============================================================
+
   Future<void> showTestNotification() async {
     await _ensureInitialized();
 
-    const AndroidNotificationDetails androidDetails =
+    const AndroidNotificationDetails
+        androidDetails =
         AndroidNotificationDetails(
       _channelId,
       _channelName,
-      channelDescription: _channelDescription,
+      channelDescription:
+          _channelDescription,
       importance: Importance.max,
       priority: Priority.high,
       playSound: true,
       enableVibration: true,
-      icon: '@drawable/app_icon',
+      icon: 'app_icon',
     );
 
-    const NotificationDetails details = NotificationDetails(
+    const NotificationDetails details =
+        NotificationDetails(
       android: androidDetails,
     );
 
     await _notifications.show(
       id: 999999,
       title: 'صاحبي AI',
-      body: 'نظام التذكيرات يعمل بنجاح.',
+      body:
+          'نظام التذكيرات يعمل بنجاح.',
       notificationDetails: details,
       payload: 'test',
     );
   }
 
-  /// Returns whether Android notifications are enabled.
-  Future<bool> areNotificationsEnabled() async {
+  // ============================================================
+  // PERMISSIONS
+  // ============================================================
+
+  Future<bool>
+      areNotificationsEnabled() async {
     await _ensureInitialized();
 
-    final AndroidFlutterLocalNotificationsPlugin? android =
-        _notifications.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+    final AndroidFlutterLocalNotificationsPlugin?
+        android =
+        _notifications
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
 
     if (android == null) {
       return true;
     }
 
     try {
-      return await android.areNotificationsEnabled() ?? false;
+      return await android
+              .areNotificationsEnabled() ??
+          false;
     } catch (_) {
       return false;
     }
   }
 
+  // ============================================================
+  // FIND / FILTER
+  // ============================================================
+
   ReminderItem? findById(int id) {
-    for (final ReminderItem reminder in reminders.value) {
+    for (final ReminderItem reminder
+        in reminders.value) {
       if (reminder.id == id) {
         return reminder;
       }
@@ -633,35 +787,49 @@ class ReminderService {
   }
 
   List<ReminderItem> upcoming({
-    Duration window = const Duration(days: 30),
+    Duration window =
+        const Duration(days: 30),
   }) {
-    final DateTime now = DateTime.now();
-    final DateTime end = now.add(window);
+    final DateTime now =
+        DateTime.now();
 
-    final List<ReminderItem> result = reminders.value
-        .where(
-          (ReminderItem reminder) =>
-              reminder.enabled &&
-              reminder.dateTime.isAfter(now) &&
-              reminder.dateTime.isBefore(end),
-        )
-        .toList();
+    final DateTime end =
+        now.add(window);
+
+    final List<ReminderItem> result =
+        reminders.value
+            .where(
+              (ReminderItem reminder) =>
+                  reminder.enabled &&
+                  reminder.dateTime
+                      .isAfter(now) &&
+                  reminder.dateTime
+                      .isBefore(end),
+            )
+            .toList();
 
     result.sort(
       (ReminderItem a, ReminderItem b) =>
-          a.dateTime.compareTo(b.dateTime),
+          a.dateTime.compareTo(
+        b.dateTime,
+      ),
     );
 
-    return List<ReminderItem>.unmodifiable(result);
+    return List<ReminderItem>
+        .unmodifiable(result);
   }
 
   ReminderItem? get nextReminder {
-    final DateTime now = DateTime.now();
+    final DateTime now =
+        DateTime.now();
 
     final List<ReminderItem> active =
-        reminders.value.where(
-      (ReminderItem reminder) => reminder.enabled,
-    ).toList();
+        reminders.value
+            .where(
+              (ReminderItem reminder) =>
+                  reminder.enabled,
+            )
+            .toList();
 
     if (active.isEmpty) {
       return null;
@@ -669,10 +837,21 @@ class ReminderService {
 
     active.sort(
       (ReminderItem a, ReminderItem b) {
-        final DateTime aNext = _nextOccurrence(a, now);
-        final DateTime bNext = _nextOccurrence(b, now);
+        final DateTime aNext =
+            _nextOccurrence(
+          a,
+          now,
+        );
 
-        return aNext.compareTo(bNext);
+        final DateTime bNext =
+            _nextOccurrence(
+          b,
+          now,
+        );
+
+        return aNext.compareTo(
+          bNext,
+        );
       },
     );
 
@@ -705,10 +884,13 @@ class ReminderService {
   }
 
   int _createId() {
-    int id = DateTime.now().millisecondsSinceEpoch;
+    int id =
+        DateTime.now()
+            .millisecondsSinceEpoch;
 
     while (reminders.value.any(
-      (ReminderItem reminder) => reminder.id == id,
+      (ReminderItem reminder) =>
+          reminder.id == id,
     )) {
       id++;
     }
