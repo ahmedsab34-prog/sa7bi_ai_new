@@ -5,13 +5,15 @@ import 'package:video_thumbnail/video_thumbnail.dart';
 
 /// استخراج لقطات فعلية من الفيديو لتحليلها بالذكاء الاصطناعي.
 ///
-/// مهم:
-/// OpenAI في المسار الحالي يتعامل مع الصور داخل Responses API.
-/// لذلك نحول الفيديو إلى مجموعة Frames موزعة زمنيًا، ثم نرسلها
-/// معًا إلى نموذج الرؤية.
+/// المسار:
 ///
-/// هذا ليس تحليلًا شكليًا للفيديو:
-/// الفيديو -> Frames -> AI Vision -> نتيجة واحدة للمحادثة.
+/// فيديو
+/// ↓
+/// Frames حقيقية
+/// ↓
+/// OpenAI Vision
+/// ↓
+/// تحليل واحد داخل المحادثة
 class VideoAnalysisService {
   VideoAnalysisService._();
 
@@ -19,15 +21,13 @@ class VideoAnalysisService {
   static const int maxWidth = 720;
   static const int quality = 62;
 
-  /// استخراج مجموعة Frames من الفيديو.
-  ///
-  /// نأخذ 4 نقاط زمنية:
-  /// 0 ثانية
-  /// 5 ثوانٍ
-  /// 10 ثوانٍ
-  /// 15 ثانية
-  ///
-  /// video_thumbnail يختار أقرب Frame متاح.
+  static const List<int> _timesMs = [
+    0,
+    5000,
+    10000,
+    15000,
+  ];
+
   static Future<List<Uint8List>> extractFrames(
     XFile video,
   ) async {
@@ -37,16 +37,10 @@ class VideoAnalysisService {
       return [];
     }
 
-    const timesMs = <int>[
-      0,
-      5000,
-      10000,
-      15000,
-    ];
+    final frames =
+        <Uint8List>[];
 
-    final frames = <Uint8List>[];
-
-    for (final timeMs in timesMs) {
+    for (final timeMs in _timesMs) {
       try {
         final bytes =
             await VideoThumbnail.thumbnailData(
@@ -57,7 +51,8 @@ class VideoAnalysisService {
           timeMs: timeMs,
         );
 
-        if (bytes == null || bytes.isEmpty) {
+        if (bytes == null ||
+            bytes.isEmpty) {
           continue;
         }
 
@@ -74,7 +69,7 @@ class VideoAnalysisService {
           break;
         }
       } catch (_) {
-        // لو Frame واحدة فشلت، نحاول باقي اللقطات.
+        // نحاول باقي اللقطات.
       }
     }
 
