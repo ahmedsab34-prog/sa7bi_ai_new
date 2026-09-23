@@ -7,73 +7,211 @@ import 'package:just_audio/just_audio.dart';
 
 /// خدمة الصوت الأساسية لتطبيق صاحبي AI.
 ///
-/// مسؤولة عن:
-/// - تشغيل الصوت من الإنترنت.
-/// - تشغيل الملفات المحلية.
-/// - التشغيل في الخلفية.
-/// - إشعار Android.
-/// - أزرار التشغيل والإيقاف.
-/// - التحكم من شاشة القفل.
-/// - استمرار الصوت أثناء التنقل داخل التطبيق.
-/// - الحفاظ على سلوك التشغيل الحالي عند الانتقال لتطبيق آخر.
+/// تحافظ على:
+/// - Background playback
+/// - Lock-screen controls
+/// - استمرار الصوت عند الخروج من التطبيق
+/// - Mini player
+/// - استئناف التشغيل
 ///
-/// ملاحظة مهمة:
-/// AudioController لا يتم تهيئته عند تشغيل التطبيق.
-/// تتم التهيئة عند أول استخدام للصوت، حتى لا يتسبب AudioService
-/// في تأخير ظهور أول شاشة للتطبيق.
+/// وتضيف:
+/// - Audio Focus
+/// - إيقاف الصوت تلقائيًا عند المكالمات/استخدام الميكروفون
+/// - استئناف الصوت تلقائيًا بعد انتهاء المقاطعة
+/// - إيقاف الصوت عند فصل السماعة
 class Sa7biAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
-  final AudioPlayer _player = AudioPlayer();
+  Sa7biAudioHandler()
+      : _player = AudioPlayer(
+          // نحن ندير المقاطعات بأنفسنا.
+          handleInterruptions: false,
+        ) {
+    _initialize();
+  }
+
+  final AudioPlayer _player;
+
+  AudioSession? _audioSession;
 
   StreamSubscription<PlayerState>? _playerStateSubscription;
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<Duration?>? _durationSubscription;
 
-  Sa7biAudioHandler() {
-    _initialize();
-  }
+  StreamSubscription<AudioInterruptionEvent>?
+      _interruptionSubscription;
+
+  StreamSubscription<void>?
+      _becomingNoisySubscription;
+
+  bool _pausedByInterruption = false;
+  bool _disposed = false;
+
+  // ============================================================
+  // INITIALIZATION
+  // ============================================================
 
   Future<void> _initialize() async {
     try {
       final session = await AudioSession.instance;
 
+      if (_disposed) {
+        return;
+      }
+
+      _audioSession = session;
+
       await session.configure(
         const AudioSessionConfiguration.music(),
       );
 
+      // --------------------------------------------------------
+      // Audio interruptions
+      //
+      // مثال:
+      // WhatsApp call
+      // Phone call
+      // Voice recording
+      // Google Assistant
+      // أي تطبيق آخر يحصل على Audio Focus
+      // --------------------------------------------------------
+
+      _interruptionSubscription =
+          session.interruptionEventStream.listen(
+        _handleAudioInterruption,
+      );
+
+      // --------------------------------------------------------
+      // Headphones / Bluetooth disconnected
+      // --------------------------------------------------------
+
+      _becomingNoisySubscription =
+          session.becomingNoisyEventStream.listen(
+        (_) async {
+          if (_disposed) {
+            return;
+          }
+
+          if (_player.playing) {
+            await _player.pause();
+            _broadcastState();
+          }
+        },
+      );
+
+      // --------------------------------------------------------
+      // Player streams
+      // --------------------------------------------------------
+
       _playerStateSubscription =
-          _player.playerStateStream.listen((_) {
-        _broadcastState();
-      });
+          _player.playerStateStream.listen(
+        (_) {
+          _broadcastState();
+        },
+      );
 
       _positionSubscription =
-          _player.positionStream.listen((_) {
-        _broadcastState();
-      });
+          _player.positionStream.listen(
+        (_) {
+          _broadcastState();
+        },
+      );
 
       _durationSubscription =
-          _player.durationStream.listen((_) {
-        _broadcastState();
-      });
+          _player.durationStream.listen(
+        (_) {
+          _broadcastState();
+        },
+      );
 
       _broadcastState();
-    } catch (_) {
-      // لا نوقف التطبيق إذا فشل إعداد جلسة الصوت.
+    } catch (error) {
+      debugPrint(
+        'Sa7biAudioHandler initialization error: $error',
+      );
     }
   }
 
+  // ============================================================
+  // AUDIO INTERRUPTION
+  // ============================================================
+
+  Future<void> _handleAudioInterruption(
+    AudioInterruptionEvent event,
+  ) async {
+    if (_disposed) {
+      return;
+    }
+
+    try {
+      if (event.begin) {
+        // ------------------------------------------------------
+        // أي مقاطعة تبدأ:
+        //
+        // نوقف صوت صاحبي إذا كان يعمل.
+        //
+        // نحتفظ بعلامة خاصة حتى نعرف هل نعيده أم لا.
+        // ------------------------------------------------------
+
+        if (_player.playing) {
+          _pausedByInterruption = true;
+
+          await _player.pause();
+
+          _broadcastState();
+        }
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // المقاطعة انتهت.
+      //
+      // نعيد الصوت فقط إذا كان التطبيق هو الذي أوقفه
+      // بسبب المقاطعة.
+      // --------------------------------------------------------
+
+      if (_pausedByInterruption) {
+        _pausedByInterruption = false;
+
+        if (!_disposed) {
+          await _player.play();
+          _broadcastState();
+        }
+      }
+    } catch (error) {
+      debugPrint(
+        'Audio interruption handling error: $error',
+      );
+    }
+  }
+
+  // ============================================================
+  // PLAYBACK STATE
+  // ============================================================
+
   void _broadcastState() {
+    if (_disposed) {
+      return;
+    }
+
     final playing = _player.playing;
 
-    // تحديث حالة التشغيل التي تستخدمها واجهة التطبيق.
-    AudioController._updatePlayingState(playing);
+    AudioController._updatePlayingState(
+      playing,
+    );
 
-    final processingState = switch (_player.processingState) {
-      ProcessingState.idle => AudioProcessingState.idle,
-      ProcessingState.loading => AudioProcessingState.loading,
-      ProcessingState.buffering => AudioProcessingState.buffering,
-      ProcessingState.ready => AudioProcessingState.ready,
-      ProcessingState.completed => AudioProcessingState.completed,
+    final processingState =
+        switch (_player.processingState) {
+      ProcessingState.idle =>
+        AudioProcessingState.idle,
+      ProcessingState.loading =>
+        AudioProcessingState.loading,
+      ProcessingState.buffering =>
+        AudioProcessingState.buffering,
+      ProcessingState.ready =>
+        AudioProcessingState.ready,
+      ProcessingState.completed =>
+        AudioProcessingState.completed,
     };
 
     playbackState.add(
@@ -100,91 +238,191 @@ class Sa7biAudioHandler extends BaseAudioHandler
         processingState: processingState,
         playing: playing,
         updatePosition: _player.position,
-        bufferedPosition: _player.bufferedPosition,
+        bufferedPosition:
+            _player.bufferedPosition,
         speed: _player.speed,
       ),
     );
   }
 
+  // ============================================================
+  // AUDIO SERVICE CONTROLS
+  // ============================================================
+
   @override
   Future<void> play() async {
-    await _player.play();
-    _broadcastState();
+    if (_disposed) {
+      return;
+    }
+
+    try {
+      await _player.play();
+      _broadcastState();
+    } catch (error) {
+      debugPrint(
+        'Audio play error: $error',
+      );
+    }
   }
 
   @override
   Future<void> pause() async {
-    await _player.pause();
-    _broadcastState();
+    if (_disposed) {
+      return;
+    }
+
+    try {
+      await _player.pause();
+
+      _pausedByInterruption = false;
+
+      _broadcastState();
+    } catch (error) {
+      debugPrint(
+        'Audio pause error: $error',
+      );
+    }
   }
 
   @override
   Future<void> stop() async {
-    await _player.stop();
+    if (_disposed) {
+      return;
+    }
 
-    AudioController._updatePlayingState(false);
+    try {
+      _pausedByInterruption = false;
 
-    await super.stop();
+      await _player.stop();
+
+      AudioController._updatePlayingState(
+        false,
+      );
+
+      await super.stop();
+    } catch (error) {
+      debugPrint(
+        'Audio stop error: $error',
+      );
+    }
   }
 
   @override
-  Future<void> seek(Duration position) async {
-    await _player.seek(position);
-    _broadcastState();
+  Future<void> seek(
+    Duration position,
+  ) async {
+    if (_disposed) {
+      return;
+    }
+
+    try {
+      await _player.seek(position);
+      _broadcastState();
+    } catch (error) {
+      debugPrint(
+        'Audio seek error: $error',
+      );
+    }
   }
 
   @override
   Future<void> skipToNext() async {
-    if (_player.hasNext) {
-      await _player.seekToNext();
-      _broadcastState();
+    if (_disposed) {
+      return;
+    }
+
+    try {
+      if (_player.hasNext) {
+        await _player.seekToNext();
+        _broadcastState();
+      }
+    } catch (error) {
+      debugPrint(
+        'Audio next error: $error',
+      );
     }
   }
 
   @override
   Future<void> skipToPrevious() async {
-    if (_player.hasPrevious) {
-      await _player.seekToPrevious();
-      _broadcastState();
+    if (_disposed) {
+      return;
+    }
+
+    try {
+      if (_player.hasPrevious) {
+        await _player.seekToPrevious();
+        _broadcastState();
+      }
+    } catch (error) {
+      debugPrint(
+        'Audio previous error: $error',
+      );
     }
   }
 
   @override
   Future<void> fastForward() async {
-    final current = _player.position;
-    final duration = _player.duration ?? Duration.zero;
-
-    var target =
-        current + const Duration(seconds: 10);
-
-    if (duration > Duration.zero &&
-        target > duration) {
-      target = duration;
+    if (_disposed) {
+      return;
     }
 
-    await _player.seek(target);
-    _broadcastState();
+    try {
+      final current = _player.position;
+      final duration =
+          _player.duration ?? Duration.zero;
+
+      var target =
+          current + const Duration(seconds: 10);
+
+      if (duration > Duration.zero &&
+          target > duration) {
+        target = duration;
+      }
+
+      await _player.seek(target);
+      _broadcastState();
+    } catch (error) {
+      debugPrint(
+        'Audio fast-forward error: $error',
+      );
+    }
   }
 
   @override
   Future<void> rewind() async {
-    var target =
-        _player.position -
-        const Duration(seconds: 10);
-
-    if (target < Duration.zero) {
-      target = Duration.zero;
+    if (_disposed) {
+      return;
     }
 
-    await _player.seek(target);
-    _broadcastState();
+    try {
+      var target =
+          _player.position -
+          const Duration(seconds: 10);
+
+      if (target < Duration.zero) {
+        target = Duration.zero;
+      }
+
+      await _player.seek(target);
+      _broadcastState();
+    } catch (error) {
+      debugPrint(
+        'Audio rewind error: $error',
+      );
+    }
   }
+
+  // ============================================================
+  // MEDIA ITEM
+  // ============================================================
 
   @override
   Future<void> playMediaItem(
     MediaItem mediaItem,
   ) async {
-    final cleanUrl = mediaItem.id.trim();
+    final cleanUrl =
+        mediaItem.id.trim();
 
     if (cleanUrl.isEmpty) {
       throw ArgumentError(
@@ -192,7 +430,13 @@ class Sa7biAudioHandler extends BaseAudioHandler
       );
     }
 
-    this.mediaItem.add(mediaItem);
+    if (_disposed) {
+      throw StateError(
+        'Audio handler is disposed',
+      );
+    }
+
+    mediaItem.add(mediaItem);
     queue.add([mediaItem]);
 
     await _player.setUrl(cleanUrl);
@@ -201,7 +445,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
     _broadcastState();
   }
 
-  /// تشغيل رابط صوت مباشر.
+  // ============================================================
+  // PLAY URL
+  // ============================================================
+
   Future<void> playUrl({
     required String url,
     String title = 'صاحبي AI',
@@ -215,6 +462,12 @@ class Sa7biAudioHandler extends BaseAudioHandler
     if (cleanUrl.isEmpty) {
       throw ArgumentError(
         'Audio URL is empty',
+      );
+    }
+
+    if (_disposed) {
+      throw StateError(
+        'Audio handler is disposed',
       );
     }
 
@@ -236,7 +489,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
     _broadcastState();
   }
 
-  /// تشغيل ملف صوت موجود على الهاتف.
+  // ============================================================
+  // LOCAL FILE
+  // ============================================================
+
   Future<void> playLocalFile({
     required String path,
     String title = 'صاحبي AI',
@@ -248,6 +504,12 @@ class Sa7biAudioHandler extends BaseAudioHandler
     if (cleanPath.isEmpty) {
       throw ArgumentError(
         'Audio file path is empty',
+      );
+    }
+
+    if (_disposed) {
+      throw StateError(
+        'Audio handler is disposed',
       );
     }
 
@@ -267,41 +529,70 @@ class Sa7biAudioHandler extends BaseAudioHandler
     _broadcastState();
   }
 
-  bool get isPlaying => _player.playing;
+  // ============================================================
+  // GETTERS
+  // ============================================================
 
-  Duration get position => _player.position;
+  bool get isPlaying =>
+      _player.playing;
 
-  Duration? get duration => _player.duration;
+  Duration get position =>
+      _player.position;
+
+  Duration? get duration =>
+      _player.duration;
+
+  // ============================================================
+  // BACKGROUND
+  // ============================================================
 
   @override
   Future<void> onTaskRemoved() async {
-    // مهم:
-    // لا نوقف الصوت عند إزالة التطبيق من شاشة التطبيقات الأخيرة.
+    // مهم جدًا:
     //
-    // هذا يحافظ على السلوك الذي تم اختباره بالفعل:
-    // الصوت يستمر في الخلفية عند مغادرة التطبيق.
+    // لا نوقف الصوت عندما يزيل المستخدم التطبيق
+    // من قائمة التطبيقات الأخيرة.
+    //
+    // وبالتالي يستمر التشغيل في الخلفية.
   }
 
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   Future<void> disposePlayer() async {
+    if (_disposed) {
+      return;
+    }
+
+    _disposed = true;
+
     await _playerStateSubscription?.cancel();
     await _positionSubscription?.cancel();
     await _durationSubscription?.cancel();
+    await _interruptionSubscription?.cancel();
+    await _becomingNoisySubscription?.cancel();
 
     _playerStateSubscription = null;
     _positionSubscription = null;
     _durationSubscription = null;
+    _interruptionSubscription = null;
+    _becomingNoisySubscription = null;
 
-    AudioController._updatePlayingState(false);
+    _pausedByInterruption = false;
+
+    AudioController._updatePlayingState(
+      false,
+    );
 
     await _player.dispose();
   }
 }
 
-/// مدير الصوت الرئيسي للتطبيق.
-///
-/// التهيئة Lazy:
-/// لا يتم إنشاء AudioService عند فتح التطبيق.
-/// يتم إنشاؤه عند أول عملية صوت فعلية.
+// ============================================================
+// AUDIO CONTROLLER
+// ============================================================
+
 class AudioController {
   AudioController._();
 
@@ -309,40 +600,31 @@ class AudioController {
 
   static bool _initialized = false;
 
-  static Future<Sa7biAudioHandler>? _initializing;
+  static Future<Sa7biAudioHandler>?
+      _initializing;
 
-  /// يتغير عندما يتم إنشاء AudioHandler.
-  ///
-  /// تستخدمه الواجهات التي تحتاج معرفة أن نظام الصوت
-  /// أصبح جاهزًا بعد الـLazy Initialization.
-  static final ValueNotifier<Sa7biAudioHandler?>
+  static final ValueNotifier<
+      Sa7biAudioHandler?>
       handlerNotifier =
-      ValueNotifier<Sa7biAudioHandler?>(null);
+      ValueNotifier<Sa7biAudioHandler?>(
+    null,
+  );
 
-  /// حالة تشغيل الصوت.
-  ///
-  /// true:
-  /// الصوت يعمل.
-  ///
-  /// false:
-  /// الصوت متوقف/متوقف مؤقتًا.
-  ///
-  /// يستخدمها الهيدر لعمل Pulse أثناء التشغيل.
   static final ValueNotifier<bool>
       isPlayingNotifier =
       ValueNotifier<bool>(false);
 
-  /// الـAudioHandler الحالي.
+  // ============================================================
+  // GETTERS
+  // ============================================================
+
   static Sa7biAudioHandler? get handler =>
       _handler;
 
-  /// هل تم تهيئة نظام الصوت؟
   static bool get isInitialized =>
-      _initialized && _handler != null;
+      _initialized &&
+      _handler != null;
 
-  /// Stream حالة التشغيل.
-  ///
-  /// إذا لم تتم تهيئة الصوت بعد، يتم إرجاع Stream فارغ.
   static Stream<PlaybackState>
       get playbackStateStream {
     final currentHandler = _handler;
@@ -355,21 +637,24 @@ class AudioController {
     return currentHandler.playbackState;
   }
 
-  /// تحديث حالة التشغيل من الـAudioHandler.
+  // ============================================================
+  // STATE
+  // ============================================================
+
   static void _updatePlayingState(
     bool playing,
   ) {
     if (isPlayingNotifier.value !=
         playing) {
-      isPlayingNotifier.value = playing;
+      isPlayingNotifier.value =
+          playing;
     }
   }
 
-  /// تهيئة نظام الصوت مرة واحدة فقط.
-  ///
-  /// إذا بدأ أكثر من طلب في نفس اللحظة،
-  /// كل الطلبات تنتظر نفس عملية التهيئة بدل إنشاء
-  /// أكثر من AudioHandler.
+  // ============================================================
+  // INITIALIZE
+  // ============================================================
+
   static Future<Sa7biAudioHandler>
       initialize() async {
     if (_initialized &&
@@ -384,7 +669,8 @@ class AudioController {
       return currentInitializing;
     }
 
-    final future = _createHandler();
+    final future =
+        _createHandler();
 
     _initializing = future;
 
@@ -407,7 +693,8 @@ class AudioController {
           await AudioService.init(
         builder: () =>
             Sa7biAudioHandler(),
-        config: const AudioServiceConfig(
+        config:
+            const AudioServiceConfig(
           androidNotificationChannelId:
               'com.sa7bi.ai.audio',
           androidNotificationChannelName:
@@ -418,7 +705,8 @@ class AudioController {
               false,
           androidNotificationIcon:
               'drawable/app_icon',
-          androidResumeOnClick: true,
+          androidResumeOnClick:
+              true,
         ),
       );
 
@@ -447,10 +735,10 @@ class AudioController {
     }
   }
 
-  /// تشغيل رابط صوت.
-  ///
-  /// هذه أول نقطة ستؤدي إلى تهيئة AudioService
-  /// إذا لم يكن قد تم تهيئته بعد.
+  // ============================================================
+  // PLAY URL
+  // ============================================================
+
   static Future<void> playUrl({
     required String url,
     String title = 'صاحبي AI',
@@ -472,7 +760,10 @@ class AudioController {
     );
   }
 
-  /// تشغيل ملف صوت محلي.
+  // ============================================================
+  // LOCAL FILE
+  // ============================================================
+
   static Future<void> playLocalFile({
     required String path,
     String title = 'صاحبي AI',
@@ -490,13 +781,20 @@ class AudioController {
     );
   }
 
-  /// إيقاف مؤقت.
+  // ============================================================
+  // PAUSE
+  // ============================================================
+
   static Future<void> pause() async {
     await _handler?.pause();
+
     _updatePlayingState(false);
   }
 
-  /// استكمال التشغيل.
+  // ============================================================
+  // PLAY
+  // ============================================================
+
   static Future<void> play() async {
     await _handler?.play();
 
@@ -507,13 +805,20 @@ class AudioController {
     }
   }
 
-  /// إيقاف كامل.
+  // ============================================================
+  // STOP
+  // ============================================================
+
   static Future<void> stop() async {
     await _handler?.stop();
+
     _updatePlayingState(false);
   }
 
-  /// الانتقال إلى موضع محدد.
+  // ============================================================
+  // SEEK
+  // ============================================================
+
   static Future<void> seek(
     Duration position,
   ) async {
@@ -521,7 +826,10 @@ class AudioController {
   }
 }
 
-/// توافق مع أي كود قديم يستخدم Sa7biAudioService.
+// ============================================================
+// BACKWARD COMPATIBILITY
+// ============================================================
+
 class Sa7biAudioService {
   Sa7biAudioService._();
 
