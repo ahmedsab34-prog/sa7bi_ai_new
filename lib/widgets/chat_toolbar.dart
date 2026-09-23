@@ -1,18 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// شريط الأدوات السفلي للمحادثة.
+/// شريط أدوات المحادثة.
 ///
-/// الأدوات:
-/// - الكاميرا
-/// - المعرض / الصور
-/// - الفيديو
-/// - الصوت
-/// - الكتابة
-/// - تحويل الكلام إلى نص
-/// - توليد الصور
-///
-/// هذا الملف مسؤول عن شكل الأدوات واستدعاء الأحداث فقط.
-/// منطق الوسائط والذكاء الاصطناعي يظل داخل ChatScreen والخدمات.
+/// كل الأدوات تظهر في نفس الشاشة بدون تمرير أفقي.
+/// المنطق الحقيقي للأدوات موجود داخل ChatScreen والخدمات.
 class ChatToolbar extends StatelessWidget {
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
@@ -46,14 +37,14 @@ class ChatToolbar extends StatelessWidget {
       top: false,
       child: Container(
         margin: const EdgeInsets.fromLTRB(
-          10,
-          4,
-          10,
           8,
+          4,
+          8,
+          6,
         ),
         padding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 7,
+          horizontal: 5,
+          vertical: 6,
         ),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.075),
@@ -70,33 +61,37 @@ class ChatToolbar extends StatelessWidget {
             ),
           ],
         ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: [
-              _ToolButton(
+        child: Row(
+          children: [
+            Expanded(
+              child: _ToolButton(
                 icon: Icons.camera_alt_rounded,
                 tooltip: 'الكاميرا',
                 onPressed:
                     enabled ? onCamera : null,
               ),
+            ),
 
-              _ToolButton(
+            Expanded(
+              child: _ToolButton(
                 icon: Icons.photo_library_rounded,
                 tooltip: 'الصور والمعرض',
                 onPressed:
                     enabled ? onGallery : null,
               ),
+            ),
 
-              _ToolButton(
+            Expanded(
+              child: _ToolButton(
                 icon: Icons.videocam_rounded,
                 tooltip: 'فيديو',
                 onPressed:
                     enabled ? onVideo : null,
               ),
+            ),
 
-              _ToolButton(
+            Expanded(
+              child: _ToolButton(
                 icon: Icons.mic_rounded,
                 tooltip: isListening
                     ? 'إيقاف التسجيل'
@@ -105,15 +100,19 @@ class ChatToolbar extends StatelessWidget {
                 onPressed:
                     enabled ? onVoice : null,
               ),
+            ),
 
-              _ToolButton(
+            Expanded(
+              child: _ToolButton(
                 icon: Icons.keyboard_rounded,
                 tooltip: 'كتابة',
                 onPressed:
                     enabled ? onText : null,
               ),
+            ),
 
-              _ToolButton(
+            Expanded(
+              child: _ToolButton(
                 icon: isListening
                     ? Icons.stop_circle_rounded
                     : Icons.graphic_eq_rounded,
@@ -124,23 +123,25 @@ class ChatToolbar extends StatelessWidget {
                 onPressed:
                     enabled ? onSpeechToText : null,
               ),
+            ),
 
-              const SizedBox(width: 4),
-
-              _ToolButton(
+            Expanded(
+              child: _ToolButton(
                 icon: isGeneratingImage
                     ? Icons.hourglass_top_rounded
                     : Icons.auto_awesome_rounded,
-                tooltip: 'توليد صورة',
+                tooltip: isGeneratingImage
+                    ? 'جاري توليد الصورة'
+                    : 'توليد صورة',
                 active: isGeneratingImage,
+                emphasized: true,
                 onPressed:
                     enabled && !isGeneratingImage
                         ? onImageGeneration
                         : null,
-                emphasized: true,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -167,23 +168,20 @@ class _ToolButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final disabled = onPressed == null;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 1,
-      ),
-      child: Tooltip(
-        message: tooltip,
+    return Tooltip(
+      message: tooltip,
+      child: Center(
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
             borderRadius:
-                BorderRadius.circular(18),
+                BorderRadius.circular(20),
             child: AnimatedContainer(
               duration:
                   const Duration(milliseconds: 180),
-              width: 42,
-              height: 42,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: active
                     ? Colors.white.withOpacity(0.18)
@@ -195,20 +193,41 @@ class _ToolButton extends StatelessWidget {
                   color: active
                       ? Colors.white.withOpacity(0.32)
                       : emphasized
-                          ? Colors.amber.withOpacity(0.28)
+                          ? Colors.amber.withOpacity(0.30)
                           : Colors.white.withOpacity(0.08),
+                  width: 1,
                 ),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: Colors.white
+                              .withOpacity(0.12),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : emphasized &&
+                            !disabled
+                        ? [
+                            BoxShadow(
+                              color: Colors.amber
+                                  .withOpacity(0.12),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
               ),
               child: Icon(
                 icon,
-                size: 20,
+                size: 19,
                 color: disabled
                     ? Colors.white.withOpacity(0.25)
                     : active
                         ? Colors.white
                         : emphasized
                             ? Colors.amber.shade200
-                            : Colors.white.withOpacity(0.82),
+                            : Colors.white.withOpacity(0.84),
               ),
             ),
           ),
