@@ -3,7 +3,6 @@ package com.example.sa7bi_ai_new
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.provider.OpenableColumns
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.ryanheise.audioservice.AudioServiceActivity
@@ -43,28 +42,17 @@ class MainActivity : AudioServiceActivity() {
                     }
 
                     val timesMs =
-                        call.argument<List<Any>>(
-                            "timesMs"
-                        )
+                        call.argument<List<Any>>("timesMs")
 
                     val requestedTimes =
                         timesMs
-                            ?.mapNotNull {
-                                when (it) {
-                                    is Int ->
-                                        it.toLong()
-
-                                    is Long ->
-                                        it
-
-                                    is Double ->
-                                        it.toLong()
-
-                                    is Float ->
-                                        it.toLong()
-
-                                    else ->
-                                        null
+                            ?.mapNotNull { value ->
+                                when (value) {
+                                    is Int -> value.toLong()
+                                    is Long -> value
+                                    is Double -> value.toLong()
+                                    is Float -> value.toLong()
+                                    else -> null
                                 }
                             }
                             ?: listOf(
@@ -127,9 +115,7 @@ class MainActivity : AudioServiceActivity() {
                     )
                 }
 
-            if (
-                uri.scheme == "content"
-            ) {
+            if (uri.scheme == "content") {
 
                 retriever.setDataSource(
                     this,
@@ -139,11 +125,8 @@ class MainActivity : AudioServiceActivity() {
             } else {
 
                 val realPath =
-                    if (
-                        uri.scheme == "file"
-                    ) {
-                        uri.path
-                            ?: path
+                    if (uri.scheme == "file") {
+                        uri.path ?: path
                     } else {
                         path
                     }
@@ -167,15 +150,18 @@ class MainActivity : AudioServiceActivity() {
                     15000L
                 }
 
+            val maxTime =
+                maxOf(
+                    0L,
+                    safeDuration - 100L
+                )
+
             val uniqueTimes =
                 timesMs
-                    .map {
-                        it.coerceIn(
+                    .map { time ->
+                        time.coerceIn(
                             0L,
-                            maxOf(
-                                0L,
-                                safeDuration - 100L
-                            )
+                            maxTime
                         )
                     }
                     .distinct()
@@ -190,41 +176,49 @@ class MainActivity : AudioServiceActivity() {
                     )
                         ?: continue
 
-                val scaled =
-                    scaleBitmap(
-                        bitmap,
-                        720
+                var scaledBitmap: Bitmap? = null
+
+                try {
+
+                    val scaled =
+                        scaleBitmap(
+                            bitmap,
+                            720
+                        )
+
+                    scaledBitmap = scaled
+
+                    val output =
+                        ByteArrayOutputStream()
+
+                    scaled.compress(
+                        Bitmap.CompressFormat.JPEG,
+                        62,
+                        output
                     )
 
-                val output =
-                    ByteArrayOutputStream()
+                    val bytes =
+                        output.toByteArray()
 
-                scaled.compress(
-                    Bitmap.CompressFormat.JPEG,
-                    62,
-                    output
-                )
+                    if (bytes.isNotEmpty()) {
+                        result.add(bytes)
+                    }
 
-                val bytes =
-                    output.toByteArray()
+                    if (result.size >= 4) {
+                        break
+                    }
 
-                if (bytes.isNotEmpty()) {
-                    result.add(bytes)
+                } finally {
+
+                    if (
+                        scaledBitmap != null &&
+                        scaledBitmap !== bitmap
+                    ) {
+                        scaledBitmap.recycle()
+                    }
+
+                    bitmap.recycle()
                 }
-
-                if (
-                    result.size >= 4
-                ) {
-                    break
-                }
-
-                if (
-                    scaled !== bitmap
-                ) {
-                    scaled.recycle()
-                }
-
-                bitmap.recycle()
             }
 
             return result
@@ -233,7 +227,8 @@ class MainActivity : AudioServiceActivity() {
 
             try {
                 retriever.release()
-            } catch (_) {
+            } catch (_: Exception) {
+                // Ignore release errors.
             }
         }
     }
@@ -249,9 +244,7 @@ class MainActivity : AudioServiceActivity() {
         val height =
             bitmap.height
 
-        if (
-            width <= maxWidth
-        ) {
+        if (width <= maxWidth) {
             return bitmap
         }
 
@@ -261,6 +254,7 @@ class MainActivity : AudioServiceActivity() {
                     maxWidth.toFloat() /
                     width.toFloat()
             ).toInt()
+                .coerceAtLeast(1)
 
         return Bitmap.createScaledBitmap(
             bitmap,
