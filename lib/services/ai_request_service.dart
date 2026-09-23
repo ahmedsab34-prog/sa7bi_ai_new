@@ -5,15 +5,6 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
-/// طبقة الاتصال الرئيسية بالذكاء الاصطناعي.
-///
-/// التطبيق لا يحتوي على OpenAI API Key.
-/// كل الطلبات تذهب إلى Cloudflare Worker.
-///
-/// المسارات المدعومة:
-/// - نص
-/// - صورة واحدة
-/// - عدة صور / Frames من فيديو
 class AiRequestService {
   AiRequestService._();
 
@@ -37,12 +28,12 @@ class AiRequestService {
   static const int maxVideoFrames = 4;
 
   static const int maxVideoTotalBytes =
-      6 * 1024 * 1024;
+      5 * 1024 * 1024;
 
   static const int maxAttempts = 3;
 
   // ============================================================
-  // TEXT CHAT
+  // TEXT
   // ============================================================
 
   static Future<String> getResponse({
@@ -129,56 +120,11 @@ class AiRequestService {
       timeout: chatTimeout,
     );
 
-    final data =
-        _decodeMap(response.body);
-
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      throw AiRequestException(
-        _serverError(
-          response.statusCode,
-          data,
-        ),
-        statusCode:
-            response.statusCode,
-      );
-    }
-
-    if (data == null) {
-      throw const AiRequestException(
-        'رد الخادم غير مفهوم.',
-      );
-    }
-
-    if (data['ok'] != true) {
-      throw AiRequestException(
-        _errorFromData(
-          data,
-          fallback:
-              'صاحبي مش قادر يرد دلوقتي. جرّب تاني.',
-        ),
-        statusCode:
-            response.statusCode,
-      );
-    }
-
-    final answer =
-        data['answer']
-            ?.toString()
-            .trim();
-
-    if (answer == null ||
-        answer.isEmpty) {
-      throw const AiRequestException(
-        'الخادم لم يرجع ردًا من الذكاء الاصطناعي.',
-      );
-    }
-
-    return answer;
+    return _readAnswer(response);
   }
 
   // ============================================================
-  // IMAGE ANALYSIS
+  // IMAGE
   // ============================================================
 
   static Future<String> analyzeImage({
@@ -207,8 +153,10 @@ class AiRequestService {
     return analyzeImageBytes(
       bytes,
       prompt: prompt,
-      serviceContext: serviceContext,
-      serviceTitle: serviceTitle,
+      serviceContext:
+          serviceContext,
+      serviceTitle:
+          serviceTitle,
     );
   }
 
@@ -235,8 +183,10 @@ class AiRequestService {
     return analyzeImages(
       [bytes],
       prompt: prompt,
-      serviceContext: serviceContext,
-      serviceTitle: serviceTitle,
+      serviceContext:
+          serviceContext,
+      serviceTitle:
+          serviceTitle,
     );
   }
 
@@ -244,19 +194,6 @@ class AiRequestService {
   // MULTI IMAGE / VIDEO FRAMES
   // ============================================================
 
-  /// تحليل عدة صور معًا.
-  ///
-  /// يستخدمه تحليل الفيديو:
-  ///
-  /// فيديو
-  /// ↓
-  /// Frames
-  /// ↓
-  /// عدة input_image
-  /// ↓
-  /// OpenAI Vision
-  /// ↓
-  /// تحليل واحد متكامل
   static Future<String> analyzeImages(
     List<Uint8List> images, {
     String prompt =
@@ -353,6 +290,16 @@ class AiRequestService {
       timeout: imageTimeout,
     );
 
+    return _readAnswer(response);
+  }
+
+  // ============================================================
+  // RESPONSE
+  // ============================================================
+
+  static String _readAnswer(
+    http.Response response,
+  ) {
     final data =
         _decodeMap(response.body);
 
@@ -370,7 +317,7 @@ class AiRequestService {
 
     if (data == null) {
       throw const AiRequestException(
-        'رد تحليل الوسائط غير مفهوم.',
+        'رد الخادم غير مفهوم.',
       );
     }
 
@@ -379,7 +326,7 @@ class AiRequestService {
         _errorFromData(
           data,
           fallback:
-              'تعذر تحليل الوسائط.',
+              'صاحبي مش قادر يرد دلوقتي. جرّب تاني.',
         ),
         statusCode:
             response.statusCode,
@@ -394,7 +341,7 @@ class AiRequestService {
     if (answer == null ||
         answer.isEmpty) {
       throw const AiRequestException(
-        'الذكاء الاصطناعي لم يرجع نتيجة للتحليل.',
+        'الذكاء الاصطناعي لم يرجع نتيجة.',
       );
     }
 
@@ -413,9 +360,11 @@ class AiRequestService {
   }) async {
     Object? lastError;
 
-    for (int attempt = 1;
-        attempt <= maxAttempts;
-        attempt++) {
+    for (
+      int attempt = 1;
+      attempt <= maxAttempts;
+      attempt++
+    ) {
       try {
         final response =
             await _post(
@@ -474,7 +423,7 @@ class AiRequestService {
   }
 
   // ============================================================
-  // HTTP
+  // POST
   // ============================================================
 
   static Future<http.Response> _post(
@@ -544,7 +493,7 @@ class AiRequestService {
   }
 
   // ============================================================
-  // ERROR HANDLING
+  // ERRORS
   // ============================================================
 
   static String _errorFromData(
@@ -631,10 +580,8 @@ class AiRequestService {
         return 'لم يتم إرسال رسالة.';
 
       case 'INVALID_IMAGE':
-        return 'الصورة المرسلة غير صالحة أو كبيرة جدًا.';
-
       case 'INVALID_IMAGES':
-        return 'الصور المرسلة غير صالحة أو حجمها كبير جدًا.';
+        return 'الصورة أو الصور المرسلة غير صالحة أو كبيرة جدًا.';
 
       case 'BODY_TOO_LARGE':
         return 'البيانات المرسلة كبيرة جدًا.';
@@ -678,7 +625,6 @@ class AiRequestService {
   }
 }
 
-/// خطأ خاص بطلبات الذكاء الاصطناعي.
 class AiRequestException
     implements Exception {
   final String message;
