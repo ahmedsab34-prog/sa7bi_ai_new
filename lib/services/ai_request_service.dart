@@ -3,18 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
-/// طبقة طلبات AI التي تُرجع أخطاء حقيقية بدل تحويلها إلى
-/// رسالة نصية ناجحة.
-///
-/// الهدف منها أن يعرف ChatScreen هل الطلب:
-/// - نجح فعلًا.
-/// - فشل بسبب الخادم.
-/// - فشل بسبب الاتصال.
-/// - فشل بسبب الطلب نفسه.
-///
-/// وده مهم جدًا مع نظام الـCredits:
-/// النجاح = نحتفظ بالـCredit.
-/// الفشل = ChatScreen يستطيع عمل Refund.
+/// طبقة الاتصال الوحيدة المستخدمة في المحادثة مع Worker.
 class AiRequestService {
   AiRequestService._();
 
@@ -33,6 +22,7 @@ class AiRequestService {
   static Future<String> getResponse({
     required String prompt,
     String? serviceContext,
+    String? serviceTitle,
     List<Map<String, String>> history = const [],
   }) async {
     final text = prompt.trim();
@@ -46,19 +36,25 @@ class AiRequestService {
           (item) =>
               (item['role'] == 'user' ||
                   item['role'] == 'assistant') &&
-              (item['content'] ?? '').trim().isNotEmpty,
+              (item['content'] ?? '')
+                  .trim()
+                  .isNotEmpty,
         )
         .toList();
 
-    final start = validHistory.length > maxHistory
-        ? validHistory.length - maxHistory
-        : 0;
+    final start =
+        validHistory.length > maxHistory
+            ? validHistory.length - maxHistory
+            : 0;
 
-    final messages = <Map<String, String>>[];
+    final messages =
+        <Map<String, String>>[];
 
-    for (final item in validHistory.sublist(start)) {
+    for (final item
+        in validHistory.sublist(start)) {
       final role = item['role'];
-      final content = item['content']?.trim();
+      final content =
+          item['content']?.trim();
 
       if (role == null ||
           content == null ||
@@ -72,31 +68,43 @@ class AiRequestService {
       });
     }
 
-    String current = text;
-
-    if (serviceContext != null &&
-        serviceContext.trim().isNotEmpty) {
-      current =
-          'سياق الخدمة:\n'
-          '${serviceContext.trim()}\n\n'
-          'رسالة المستخدم:\n'
-          '$text';
-    }
-
     messages.add({
       'role': 'user',
-      'content': current,
+      'content': text,
     });
+
+    final body =
+        <String, dynamic>{
+      'messages': messages,
+    };
+
+    final cleanTitle =
+        serviceTitle?.trim();
+
+    final cleanContext =
+        serviceContext?.trim();
+
+    if (cleanTitle != null &&
+        cleanTitle.isNotEmpty) {
+      body['serviceTitle'] =
+          cleanTitle;
+    }
+
+    if (cleanContext != null &&
+        cleanContext.isNotEmpty) {
+      body['serviceContext'] =
+          cleanContext;
+    }
 
     final response = await _post(
       chatEndpoint,
-      body: {
-        'messages': messages,
-      },
-      timeout: const Duration(seconds: 60),
+      body: body,
+      timeout:
+          const Duration(seconds: 90),
     );
 
-    final data = _decodeMap(response.body);
+    final data =
+        _decodeMap(response.body);
 
     if (response.statusCode < 200 ||
         response.statusCode >= 300) {
@@ -105,7 +113,8 @@ class AiRequestService {
           response.statusCode,
           data,
         ),
-        statusCode: response.statusCode,
+        statusCode:
+            response.statusCode,
       );
     }
 
@@ -119,15 +128,21 @@ class AiRequestService {
       throw AiRequestException(
         _errorFromData(
           data,
-          fallback: 'صاحبي مش قادر يرد دلوقتي. جرّب تاني.',
+          fallback:
+              'صاحبي مش قادر يرد دلوقتي. جرّب تاني.',
         ),
-        statusCode: response.statusCode,
+        statusCode:
+            response.statusCode,
       );
     }
 
-    final answer = data['answer']?.toString().trim();
+    final answer =
+        data['answer']
+            ?.toString()
+            .trim();
 
-    if (answer == null || answer.isEmpty) {
+    if (answer == null ||
+        answer.isEmpty) {
       throw const AiRequestException(
         'الخادم لم يرجع ردًا من الذكاء الاصطناعي.',
       );
@@ -145,8 +160,10 @@ class AiRequestService {
     String prompt =
         'حلل الصورة المرسلة بدقة وباختصار، واذكر الأشياء المهمة الظاهرة فيها.',
     String? serviceContext,
+    String? serviceTitle,
   }) async {
-    final bytes = await file.readAsBytes();
+    final bytes =
+        await file.readAsBytes();
 
     if (bytes.isEmpty) {
       throw const AiRequestException(
@@ -154,13 +171,15 @@ class AiRequestService {
       );
     }
 
-    if (bytes.length > 5 * 1024 * 1024) {
+    if (bytes.length >
+        5 * 1024 * 1024) {
       throw const AiRequestException(
         'الصورة كبيرة جدًا. ابعت صورة أصغر من 5 ميجابايت.',
       );
     }
 
-    String finalPrompt = prompt.trim();
+    var finalPrompt =
+        prompt.trim();
 
     if (serviceContext != null &&
         serviceContext.trim().isNotEmpty) {
@@ -171,24 +190,37 @@ class AiRequestService {
           '$finalPrompt';
     }
 
-    final mime = _mime(file.name);
+    final mime =
+        _mime(file.name);
+
+    final body =
+        <String, dynamic>{
+      'messages': [
+        {
+          'role': 'user',
+          'content': finalPrompt,
+        },
+      ],
+      'imageDataUrl':
+          'data:$mime;base64,'
+          '${base64Encode(bytes)}',
+    };
+
+    if (serviceTitle != null &&
+        serviceTitle.trim().isNotEmpty) {
+      body['serviceTitle'] =
+          serviceTitle.trim();
+    }
 
     final response = await _post(
       chatEndpoint,
-      body: {
-        'messages': [
-          {
-            'role': 'user',
-            'content': finalPrompt,
-          },
-        ],
-        'imageDataUrl':
-            'data:$mime;base64,${base64Encode(bytes)}',
-      },
-      timeout: const Duration(seconds: 90),
+      body: body,
+      timeout:
+          const Duration(seconds: 120),
     );
 
-    final data = _decodeMap(response.body);
+    final data =
+        _decodeMap(response.body);
 
     if (response.statusCode < 200 ||
         response.statusCode >= 300) {
@@ -197,7 +229,8 @@ class AiRequestService {
           response.statusCode,
           data,
         ),
-        statusCode: response.statusCode,
+        statusCode:
+            response.statusCode,
       );
     }
 
@@ -211,15 +244,21 @@ class AiRequestService {
       throw AiRequestException(
         _errorFromData(
           data,
-          fallback: 'الصورة وصلت، لكن التحليل لم يكتمل.',
+          fallback:
+              'الصورة وصلت، لكن التحليل لم يكتمل.',
         ),
-        statusCode: response.statusCode,
+        statusCode:
+            response.statusCode,
       );
     }
 
-    final answer = data['answer']?.toString().trim();
+    final answer =
+        data['answer']
+            ?.toString()
+            .trim();
 
-    if (answer == null || answer.isEmpty) {
+    if (answer == null ||
+        answer.isEmpty) {
       throw const AiRequestException(
         'الخادم لم يرجع نتيجة لتحليل الصورة.',
       );
@@ -242,15 +281,22 @@ class AiRequestService {
           .post(
             Uri.parse(endpoint),
             headers: const {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache',
+              'Content-Type':
+                  'application/json',
+              'Cache-Control':
+                  'no-cache',
+              'Pragma':
+                  'no-cache',
             },
-            body: jsonEncode(body),
+            body:
+                jsonEncode(body),
           )
           .timeout(timeout);
-    } on http.ClientException catch (error) {
+    } on http.ClientException catch (
+        error) {
       throw AiRequestException(
-        'تعذر الاتصال بالخادم: ${error.message}',
+        'تعذر الاتصال بالخادم: '
+        '${error.message}',
       );
     } on FormatException {
       throw const AiRequestException(
@@ -264,17 +310,19 @@ class AiRequestService {
   }
 
   // ============================================================
-  // RESPONSE HELPERS
+  // JSON
   // ============================================================
 
-  static Map<String, dynamic>? _decodeMap(
-    String body,
-  ) {
+  static Map<String, dynamic>?
+      _decodeMap(String body) {
     try {
-      final decoded = jsonDecode(body);
+      final decoded =
+          jsonDecode(body);
 
       if (decoded is Map) {
-        return Map<String, dynamic>.from(decoded);
+        return Map<String, dynamic>.from(
+          decoded,
+        );
       }
 
       return null;
@@ -283,13 +331,21 @@ class AiRequestService {
     }
   }
 
+  // ============================================================
+  // ERRORS
+  // ============================================================
+
   static String _errorFromData(
     Map<String, dynamic> data, {
     required String fallback,
   }) {
-    final error = data['error']?.toString().trim();
+    final error =
+        data['error']
+            ?.toString()
+            .trim();
 
-    if (error != null && error.isNotEmpty) {
+    if (error != null &&
+        error.isNotEmpty) {
       return _friendlyError(error);
     }
 
@@ -301,11 +357,15 @@ class AiRequestService {
     Map<String, dynamic>? data,
   ) {
     final serverMessage =
-        data?['error']?.toString().trim();
+        data?['error']
+            ?.toString()
+            .trim();
 
     if (serverMessage != null &&
         serverMessage.isNotEmpty) {
-      return _friendlyError(serverMessage);
+      return _friendlyError(
+        serverMessage,
+      );
     }
 
     switch (statusCode) {
@@ -339,7 +399,8 @@ class AiRequestService {
   static String _friendlyError(
     String value,
   ) {
-    final error = value.trim();
+    final error =
+        value.trim();
 
     switch (error) {
       case 'OPENAI_API_KEY_MISSING':
@@ -364,7 +425,8 @@ class AiRequestService {
   static String _connectionError(
     Object error,
   ) {
-    final value = error.toString().toLowerCase();
+    final value =
+        error.toString().toLowerCase();
 
     if (value.contains('timeout')) {
       return 'الاتصال بخدمة الذكاء الاصطناعي استغرق وقتًا طويلًا.';
@@ -386,7 +448,8 @@ class AiRequestService {
   static String _mime(
     String name,
   ) {
-    final value = name.toLowerCase();
+    final value =
+        name.toLowerCase();
 
     if (value.endsWith('.png')) {
       return 'image/png';
@@ -410,10 +473,8 @@ class AiRequestService {
 }
 
 /// خطأ معروف في طلبات AI.
-///
-/// ChatScreen يستطيع الإمساك به والتعامل معه
-/// بدون اعتبار رسالة الخطأ ردًا ناجحًا من AI.
-class AiRequestException implements Exception {
+class AiRequestException
+    implements Exception {
   final String message;
   final int? statusCode;
 
@@ -423,5 +484,6 @@ class AiRequestException implements Exception {
   });
 
   @override
-  String toString() => message;
+  String toString() =>
+      message;
 }
