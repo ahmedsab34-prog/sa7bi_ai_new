@@ -7,26 +7,27 @@ import '../config/credits_config.dart';
 
 /// خدمة الإعلانات المركزية في صاحبي AI.
 ///
-/// مسؤوليتها:
+/// المسؤوليات:
 /// - تهيئة AdMob.
 /// - Banner Ads.
 /// - Interstitial Ads.
 /// - Rewarded Ads.
 /// - عداد الـInterstitial.
-/// - حالة Banner من الإعدادات.
+/// - حفظ حالة الـBanner.
 ///
-/// ملاحظات مهمة:
-/// - لا يتم عرض أي إعلان تلقائيًا عند تشغيل التطبيق.
-/// - فشل الإعلان لا يجب أن يغلق التطبيق.
-/// - Rewarded لا تعتبر مكتملة إلا بعد onUserEarnedReward.
-/// - الـAd IDs الحالية هي IDs الإنتاج الخاصة بالتطبيق.
+/// ملاحظات:
+/// - لا يتم عرض إعلان تلقائيًا عند تشغيل التطبيق.
+/// - فشل الإعلان لا يمنع التطبيق من العمل.
+/// - Rewarded لا تُعتبر مكتملة إلا بعد onUserEarnedReward.
+/// - الـBanner لا يتم اعتباره جاهزًا إلا بعد onAdLoaded.
 class AdsService {
   AdsService._();
 
-  static final AdsService instance = AdsService._();
+  static final AdsService instance =
+      AdsService._();
 
   // ============================================================
-  // AdMob Production IDs
+  // ADMOB PRODUCTION IDS
   // ============================================================
 
   static const String appId =
@@ -42,7 +43,7 @@ class AdsService {
       'ca-app-pub-9077658292229374/4621745555';
 
   // ============================================================
-  // Storage
+  // STORAGE KEYS
   // ============================================================
 
   static const String _interstitialCounterKey =
@@ -52,7 +53,7 @@ class AdsService {
       'sa7bi_banner_enabled';
 
   // ============================================================
-  // State
+  // STATE
   // ============================================================
 
   SharedPreferences? _preferences;
@@ -71,29 +72,39 @@ class AdsService {
 
   RewardedAd? _rewardedAd;
 
+  bool _isLoadingBanner = false;
+
   bool _isLoadingInterstitial = false;
 
   bool _isLoadingRewarded = false;
 
   // ============================================================
-  // Getters
+  // GETTERS
   // ============================================================
 
-  bool get isInitialized => _initialized;
+  bool get isInitialized =>
+      _initialized;
 
-  bool get isAdMobInitialized => _adMobInitialized;
+  bool get isAdMobInitialized =>
+      _adMobInitialized;
 
-  bool get bannerEnabled => _bannerEnabled;
+  bool get bannerEnabled =>
+      _bannerEnabled;
 
-  int get interstitialCounter => _interstitialCounter;
+  int get interstitialCounter =>
+      _interstitialCounter;
 
-  BannerAd? get bannerAd => _bannerAd;
+  BannerAd? get bannerAd =>
+      _bannerAd;
 
-  bool get isBannerLoaded => _bannerAd != null;
+  bool get isBannerLoaded =>
+      _bannerAd != null;
 
-  bool get isInterstitialLoaded => _interstitialAd != null;
+  bool get isInterstitialLoaded =>
+      _interstitialAd != null;
 
-  bool get isRewardedLoaded => _rewardedAd != null;
+  bool get isRewardedLoaded =>
+      _rewardedAd != null;
 
   int get rewardedCredits =>
       CreditsConfig.rewardedAdCredits;
@@ -102,12 +113,9 @@ class AdsService {
       CreditsConfig.rewardedAdDailyLimit;
 
   // ============================================================
-  // Initialization
+  // INITIALIZATION
   // ============================================================
 
-  /// تهيئة التخزين وAdMob.
-  ///
-  /// لا يتم عرض أي إعلان هنا.
   Future<void> initialize() async {
     if (_initialized) {
       return;
@@ -115,7 +123,8 @@ class AdsService {
 
     try {
       _preferences =
-          await SharedPreferences.getInstance();
+          await SharedPreferences
+              .getInstance();
 
       _interstitialCounter =
           _preferences!.getInt(
@@ -130,17 +139,16 @@ class AdsService {
               true;
 
       try {
-        await MobileAds.instance.initialize();
+        await MobileAds.instance
+            .initialize();
+
         _adMobInitialized = true;
       } catch (_) {
-        // فشل AdMob لا يمنع تشغيل التطبيق.
         _adMobInitialized = false;
       }
 
       _initialized = true;
     } catch (_) {
-      // حتى لو حدث خطأ في SharedPreferences،
-      // لا نسمح لخدمة الإعلانات بإيقاف التطبيق.
       _initialized = true;
       _adMobInitialized = false;
     }
@@ -153,17 +161,16 @@ class AdsService {
   }
 
   // ============================================================
-  // Banner
+  // BANNER
   // ============================================================
 
-  /// هل الـBanner مسموح بالظهور؟
   Future<bool> shouldShowBanner() async {
     await _ensureInitialized();
 
-    return _bannerEnabled && _adMobInitialized;
+    return _bannerEnabled &&
+        _adMobInitialized;
   }
 
-  /// تشغيل/إيقاف الـBanner من إعدادات التطبيق.
   Future<void> setBannerEnabled(
     bool enabled,
   ) async {
@@ -176,18 +183,18 @@ class AdsService {
         _bannerEnabledKey,
         enabled,
       );
-    } catch (_) {
-      // لا نوقف التطبيق بسبب خطأ تخزين إعداد الإعلان.
-    }
+    } catch (_) {}
 
     if (!enabled) {
       disposeBanner();
     }
   }
 
-  /// تحميل Banner Ad.
+  /// تحميل Banner.
   ///
-  /// يتم استدعاؤها من الشاشة التي تريد عرض الـBanner فيها.
+  /// مهم:
+  /// لا نرجع Banner إلا بعد وصول
+  /// onAdLoaded فعليًا.
   Future<BannerAd?> loadBanner({
     AdSize adSize = AdSize.banner,
   }) async {
@@ -198,7 +205,15 @@ class AdsService {
       return null;
     }
 
-    disposeBanner();
+    if (_isLoadingBanner) {
+      return _bannerAd;
+    }
+
+    if (_bannerAd != null) {
+      return _bannerAd;
+    }
+
+    _isLoadingBanner = true;
 
     final completer =
         Completer<BannerAd?>();
@@ -211,47 +226,95 @@ class AdsService {
       request: const AdRequest(),
       listener: BannerAdListener(
         onAdLoaded: (ad) {
+          if (ad is! BannerAd) {
+            try {
+              ad.dispose();
+            } catch (_) {}
+
+            if (!completer.isCompleted) {
+              completer.complete(null);
+            }
+
+            return;
+          }
+
+          _bannerAd = ad;
+
           if (!completer.isCompleted) {
-            completer.complete(
-              ad as BannerAd,
-            );
+            completer.complete(ad);
           }
         },
-        onAdFailedToLoad: (ad, error) {
-          ad.dispose();
+
+        onAdFailedToLoad: (
+          ad,
+          error,
+        ) {
+          try {
+            ad.dispose();
+          } catch (_) {}
+
+          _bannerAd = null;
 
           if (!completer.isCompleted) {
             completer.complete(null);
           }
         },
+
+        onAdOpened: (ad) {},
+
+        onAdClosed: (ad) {},
+
+        onAdImpression: (ad) {},
       ),
     );
 
     try {
       await banner.load();
 
-      if (!completer.isCompleted) {
-        completer.complete(banner);
-      }
+      // بعض إصدارات SDK قد لا تستدعي
+      // callback فورًا؛ لذلك لا نعتبر
+      // الإعلان جاهزًا هنا.
     } catch (_) {
-      banner.dispose();
+      try {
+        banner.dispose();
+      } catch (_) {}
 
       if (!completer.isCompleted) {
         completer.complete(null);
       }
     }
 
-    final loadedBanner =
-        await completer.future;
+    BannerAd? result;
 
-    if (loadedBanner != null) {
-      _bannerAd = loadedBanner;
+    try {
+      result = await completer.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          return null;
+        },
+      );
+    } catch (_) {
+      result = null;
     }
 
-    return loadedBanner;
+    if (result == null) {
+      try {
+        banner.dispose();
+      } catch (_) {}
+
+      if (identical(
+        _bannerAd,
+        banner,
+      )) {
+        _bannerAd = null;
+      }
+    }
+
+    _isLoadingBanner = false;
+
+    return result;
   }
 
-  /// تنظيف Banner فقط.
   void disposeBanner() {
     try {
       _bannerAd?.dispose();
@@ -261,17 +324,11 @@ class AdsService {
   }
 
   // ============================================================
-  // Interstitial
+  // INTERSTITIAL
   // ============================================================
 
-  /// تسجيل فرصة لعرض Interstitial.
-  ///
-  /// لا يعرض الإعلان بنفسه.
-  ///
-  /// مثال:
-  /// بعد كل 5 عمليات مناسبة:
-  /// true → أصبح مسموحًا بمحاولة عرض الإعلان.
-  Future<bool> registerInterstitialOpportunity({
+  Future<bool>
+      registerInterstitialOpportunity({
     int every = 5,
   }) async {
     await _ensureInitialized();
@@ -305,8 +362,8 @@ class AdsService {
     return true;
   }
 
-  /// إعادة عداد Interstitial.
-  Future<void> resetInterstitialCounter() async {
+  Future<void>
+      resetInterstitialCounter() async {
     await _ensureInitialized();
 
     _interstitialCounter = 0;
@@ -319,7 +376,6 @@ class AdsService {
     } catch (_) {}
   }
 
-  /// تحميل Interstitial.
   Future<bool> loadInterstitial() async {
     await _ensureInitialized();
 
@@ -339,8 +395,10 @@ class AdsService {
 
     try {
       await InterstitialAd.load(
-        adUnitId: interstitialAdUnitId,
-        request: const AdRequest(),
+        adUnitId:
+            interstitialAdUnitId,
+        request:
+            const AdRequest(),
         adLoadCallback:
             InterstitialAdLoadCallback(
           onAdLoaded: (ad) {
@@ -351,9 +409,10 @@ class AdsService {
               onAdDismissedFullScreenContent:
                   (ad) {
                 ad.dispose();
-                _interstitialAd = null;
 
-                // تحميل الإعلان التالي مسبقًا.
+                _interstitialAd =
+                    null;
+
                 unawaited(
                   loadInterstitial(),
                 );
@@ -361,7 +420,9 @@ class AdsService {
               onAdFailedToShowFullScreenContent:
                   (ad, error) {
                 ad.dispose();
-                _interstitialAd = null;
+
+                _interstitialAd =
+                    null;
 
                 unawaited(
                   loadInterstitial(),
@@ -370,14 +431,19 @@ class AdsService {
             );
 
             if (!completer.isCompleted) {
-              completer.complete(true);
+              completer.complete(
+                true,
+              );
             }
           },
           onAdFailedToLoad: (error) {
-            _interstitialAd = null;
+            _interstitialAd =
+                null;
 
             if (!completer.isCompleted) {
-              completer.complete(false);
+              completer.complete(
+                false,
+              );
             }
           },
         ),
@@ -387,15 +453,13 @@ class AdsService {
         completer.complete(false);
       }
     } finally {
-      _isLoadingInterstitial = false;
+      _isLoadingInterstitial =
+          false;
     }
 
     return completer.future;
   }
 
-  /// عرض Interstitial إذا كان محمّلًا.
-  ///
-  /// ترجع true إذا تم بدء محاولة العرض.
   Future<bool> showInterstitial() async {
     await _ensureInitialized();
 
@@ -403,7 +467,8 @@ class AdsService {
       return false;
     }
 
-    final ad = _interstitialAd;
+    final ad =
+        _interstitialAd;
 
     if (ad == null) {
       await loadInterstitial();
@@ -429,26 +494,24 @@ class AdsService {
   }
 
   // ============================================================
-  // Rewarded Ads
+  // REWARDED
   // ============================================================
 
-  /// هل يمكن منطقيًا استخدام Rewarded Credits؟
-  ///
-  /// هذه لا تعني أن إعلان AdMob محمّل.
-  Future<bool> canGiveRewardedCredits() async {
+  Future<bool>
+      canGiveRewardedCredits() async {
     await _ensureInitialized();
 
-    return CreditsServiceAvailability.canReward;
+    return CreditsServiceAvailability
+        .canReward;
   }
 
-  /// عدد الـCredits الخاصة بالإعلان.
   Future<int> getRewardAmount() async {
     await _ensureInitialized();
 
-    return CreditsConfig.rewardedAdCredits;
+    return CreditsConfig
+        .rewardedAdCredits;
   }
 
-  /// تحميل Rewarded Ad.
   Future<bool> loadRewarded() async {
     await _ensureInitialized();
 
@@ -468,22 +531,28 @@ class AdsService {
 
     try {
       await RewardedAd.load(
-        adUnitId: rewardedAdUnitId,
-        request: const AdRequest(),
+        adUnitId:
+            rewardedAdUnitId,
+        request:
+            const AdRequest(),
         rewardedAdLoadCallback:
             RewardedAdLoadCallback(
           onAdLoaded: (ad) {
             _rewardedAd = ad;
 
             if (!completer.isCompleted) {
-              completer.complete(true);
+              completer.complete(
+                true,
+              );
             }
           },
           onAdFailedToLoad: (error) {
             _rewardedAd = null;
 
             if (!completer.isCompleted) {
-              completer.complete(false);
+              completer.complete(
+                false,
+              );
             }
           },
         ),
@@ -499,26 +568,20 @@ class AdsService {
     return completer.future;
   }
 
-  /// عرض Rewarded Ad.
-  ///
-  /// النتيجة:
-  /// - true = المستخدم حصل فعلًا على Reward.
-  /// - false = الإعلان لم يُعرض أو لم تكتمل المكافأة.
-  ///
-  /// مهم:
-  /// لا يتم إعطاء Credits إلا داخل
-  /// onUserEarnedReward.
   Future<bool> showRewarded({
-    void Function(int amount)? onRewardEarned,
+    void Function(int amount)?
+        onRewardEarned,
   }) async {
     await _ensureInitialized();
 
     if (!_adMobInitialized ||
-        !CreditsServiceAvailability.canReward) {
+        !CreditsServiceAvailability
+            .canReward) {
       return false;
     }
 
-    RewardedAd? ad = _rewardedAd;
+    RewardedAd? ad =
+        _rewardedAd;
 
     if (ad == null) {
       final loaded =
@@ -544,7 +607,8 @@ class AdsService {
 
     ad.fullScreenContentCallback =
         FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (ad) {
+      onAdDismissedFullScreenContent:
+          (ad) {
         ad.dispose();
 
         if (!completer.isCompleted) {
@@ -608,7 +672,7 @@ class AdsService {
   }
 
   // ============================================================
-  // General cleanup
+  // CLEANUP
   // ============================================================
 
   Future<void> dispose() async {
@@ -627,8 +691,8 @@ class AdsService {
   }
 }
 
-/// حالة مستقلة تسمح لباقي النظام بمعرفة هل يمكن إعطاء
-/// Rewarded Credits بدون ربط كل الملفات مباشرة بـAdMob.
+/// حالة مستقلة لمعرفة هل يمكن إعطاء
+/// Rewarded Credits.
 class CreditsServiceAvailability {
   CreditsServiceAvailability._();
 
