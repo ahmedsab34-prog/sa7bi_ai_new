@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'ai_service.dart';
+import 'services/profile_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -14,8 +15,32 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState
     extends State<SettingsScreen> {
+  final ProfileService _profileService =
+      ProfileService.instance;
+
   bool _isChecking = false;
   bool? _isConnected;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedConnection();
+  }
+
+  Future<void> _loadSavedConnection() async {
+    try {
+      await _profileService.initialize();
+
+      if (!mounted) return;
+
+      setState(() {
+        _isConnected =
+            _profileService.aiConnected;
+      });
+    } catch (_) {
+      // لو التخزين لم يُقرأ، نترك الحالة غير مختبرة.
+    }
+  }
 
   Future<void> _checkConnection() async {
     if (_isChecking) return;
@@ -27,6 +52,11 @@ class _SettingsScreenState
 
     final connected =
         await AiService.checkConnection();
+
+    // حفظ النتيجة بشكل دائم.
+    await _profileService.saveAiConnection(
+      connected,
+    );
 
     if (!mounted) return;
 
@@ -43,9 +73,11 @@ class _SettingsScreenState
             connected
                 ? 'صاحبي AI متصل ويعمل بشكل صحيح ✅'
                 : 'تعذر التأكد من جاهزية الذكاء الاصطناعي. تأكد من الإنترنت وإعداد الخادم.',
-            textDirection: TextDirection.rtl,
+            textDirection:
+                TextDirection.rtl,
           ),
-          behavior: SnackBarBehavior.floating,
+          behavior:
+              SnackBarBehavior.floating,
         ),
       );
   }
@@ -69,34 +101,41 @@ class _SettingsScreenState
         elevation: 0,
       ),
       body: ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
         padding:
-            const EdgeInsets.all(18),
+            const EdgeInsets.all(16),
         children: [
           _buildAiConnectionCard(),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 12),
+
           _buildSettingTile(
-            icon: Icons.person_outline,
+            icon:
+                Icons.person_outline_rounded,
             title: 'الحساب',
             subtitle:
                 'إعدادات الملف الشخصي',
             onTap: () {
               _showMessage(
-                'إعدادات الحساب سيتم تطويرها في المرحلة القادمة.',
+                'إعدادات الحساب موجودة في صفحة الملف الشخصي.',
               );
             },
           ),
+
           _buildSettingTile(
             icon:
-                Icons.notifications_none,
+                Icons.notifications_none_rounded,
             title: 'الإشعارات',
             subtitle:
                 'إدارة التنبيهات والتذكيرات',
             onTap: () {
               _showMessage(
-                'نظام الإشعارات سيتم تفعيله في المرحلة القادمة.',
+                'نظام الإشعارات والتذكيرات يعمل من صفحة الملف الشخصي.',
               );
             },
           ),
+
           _buildSettingTile(
             icon:
                 Icons.security_outlined,
@@ -105,18 +144,18 @@ class _SettingsScreenState
                 'إعدادات الخصوصية وحماية البيانات',
             onTap: () {
               _showMessage(
-                'إعدادات الخصوصية والأمان المتقدمة سيتم إضافتها لاحقًا.',
+                'إعدادات الخصوصية والأمان المتقدمة سيتم تطويرها لاحقًا.',
               );
             },
           ),
+
           _buildSettingTile(
-            icon: Icons.info_outline,
+            icon:
+                Icons.info_outline_rounded,
             title: 'عن صاحبي AI',
             subtitle:
                 'معلومات عن التطبيق',
-            onTap: () {
-              _showAboutDialog();
-            },
+            onTap: _showAboutDialog,
           ),
         ],
       ),
@@ -139,25 +178,25 @@ class _SettingsScreenState
 
     final IconData statusIcon =
         connected
-            ? Icons.check_circle
+            ? Icons.check_circle_rounded
             : failed
-                ? Icons.error_outline
+                ? Icons.error_outline_rounded
                 : Icons.cloud_outlined;
 
     final String statusText =
         connected
-            ? 'الذكاء الاصطناعي جاهز'
+            ? 'الذكاء الاصطناعي جاهز ومتصل'
             : failed
-                ? 'تعذر التأكد من جاهزية AI'
-                : 'حالة الاتصال غير مختبرة';
+                ? 'تعذر الاتصال بخدمة الذكاء الاصطناعي'
+                : 'لم يتم اختبار الاتصال بعد';
 
     return Container(
       width: double.infinity,
       padding:
-          const EdgeInsets.all(20),
+          const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius:
-            BorderRadius.circular(26),
+            BorderRadius.circular(24),
         gradient:
             LinearGradient(
           begin:
@@ -166,7 +205,7 @@ class _SettingsScreenState
               Alignment.bottomLeft,
           colors: [
             const Color(0xFFFFD54F)
-                .withOpacity(0.18),
+                .withOpacity(0.16),
             const Color(0xFF161923),
             const Color(0xFF10121A),
           ],
@@ -175,114 +214,115 @@ class _SettingsScreenState
           color:
               const Color(0x55FFD54F),
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
             color:
-                Color(0x22000000),
+                Colors.black.withOpacity(0.25),
             blurRadius: 18,
             offset:
-                Offset(0, 8),
+                const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         children: [
-          Container(
-            width: 76,
-            height: 76,
-            decoration:
-                BoxDecoration(
-              shape:
-                  BoxShape.circle,
-              gradient:
-                  const LinearGradient(
-                colors: [
-                  Color(0xFFFFD54F),
-                  Color(0xFFFFA726),
-                  Color(0xFFB45CFF),
-                ],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color:
-                      const Color(
-                    0xFFFFD54F,
-                  ).withOpacity(0.25),
-                  blurRadius: 22,
-                  spreadRadius: 3,
+          Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration:
+                    BoxDecoration(
+                  shape:
+                      BoxShape.circle,
+                  gradient:
+                      const LinearGradient(
+                    colors: [
+                      Color(0xFFFFD54F),
+                      Color(0xFFFFA726),
+                      Color(0xFFB45CFF),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          const Color(
+                        0xFFFFD54F,
+                      ).withOpacity(0.20),
+                      blurRadius: 18,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: const Icon(
-              Icons.auto_awesome,
-              color: Colors.black,
-              size: 38,
-            ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: Colors.black,
+                  size: 30,
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'صاحبي AI',
+                      textDirection:
+                          TextDirection.rtl,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight:
+                            FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'الاتصال يتم من خلال خادم صاحبي الآمن',
+                      textDirection:
+                          TextDirection.rtl,
+                      textAlign:
+                          TextAlign.right,
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 15),
-          const Text(
-            'صاحبي AI',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight:
-                  FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'الذكاء الاصطناعي يعمل من خلال خادم صَحبي الآمن.',
-            textDirection:
-                TextDirection.rtl,
-            textAlign:
-                TextAlign.center,
-            style: TextStyle(
-              color:
-                  Colors.white70,
-              fontSize: 14,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 14),
+
           Container(
             width: double.infinity,
             padding:
                 const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
+              horizontal: 12,
+              vertical: 11,
             ),
             decoration:
                 BoxDecoration(
               color:
                   connected
-                      ? const Color(
-                          0x2234C759,
-                        )
+                      ? const Color(0x2234C759)
                       : failed
-                          ? const Color(
-                              0x22FF5252,
-                            )
-                          : const Color(
-                              0x221E88E5,
-                            ),
+                          ? const Color(0x22FF5252)
+                          : const Color(0x221E88E5),
               borderRadius:
-                  BorderRadius.circular(
-                16,
-              ),
+                  BorderRadius.circular(15),
               border:
                   Border.all(
                 color:
                     connected
-                        ? const Color(
-                            0x5534C759,
-                          )
+                        ? const Color(0x5534C759)
                         : failed
-                            ? const Color(
-                                0x55FF5252,
-                              )
-                            : const Color(
-                                0x335E6B85,
-                              ),
+                            ? const Color(0x55FF5252)
+                            : const Color(0x335E6B85),
               ),
             ),
             child: Row(
@@ -291,11 +331,10 @@ class _SettingsScreenState
               children: [
                 Icon(
                   statusIcon,
-                  color:
-                      statusColor,
-                  size: 21,
+                  color: statusColor,
+                  size: 20,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 7),
                 Flexible(
                   child: Text(
                     statusText,
@@ -304,8 +343,8 @@ class _SettingsScreenState
                     textAlign:
                         TextAlign.center,
                     style: TextStyle(
-                      color:
-                          statusColor,
+                      color: statusColor,
+                      fontSize: 12,
                       fontWeight:
                           FontWeight.bold,
                     ),
@@ -314,10 +353,12 @@ class _SettingsScreenState
               ],
             ),
           ),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 12),
+
           SizedBox(
             width: double.infinity,
-            height: 52,
+            height: 50,
             child:
                 ElevatedButton.icon(
               onPressed:
@@ -327,20 +368,17 @@ class _SettingsScreenState
               icon:
                   _isChecking
                       ? const SizedBox(
-                          width: 19,
-                          height: 19,
+                          width: 18,
+                          height: 18,
                           child:
                               CircularProgressIndicator(
                             strokeWidth: 2,
-                            color:
-                                Colors.black,
+                            color: Colors.black,
                           ),
                         )
                       : const Icon(
-                          Icons
-                              .wifi_tethering,
-                          color:
-                              Colors.black,
+                          Icons.wifi_tethering_rounded,
+                          color: Colors.black,
                         ),
               label: Text(
                 _isChecking
@@ -350,29 +388,22 @@ class _SettingsScreenState
                     TextDirection.rtl,
                 style:
                     const TextStyle(
-                  color:
-                      Colors.black,
+                  color: Colors.black,
                   fontWeight:
                       FontWeight.w900,
-                  fontSize: 15,
+                  fontSize: 14,
                 ),
               ),
               style:
                   ElevatedButton.styleFrom(
                 backgroundColor:
-                    const Color(
-                  0xFFFFD54F,
-                ),
+                    const Color(0xFFFFD54F),
                 disabledBackgroundColor:
-                    const Color(
-                  0x99FFD54F,
-                ),
+                    const Color(0x99FFD54F),
                 shape:
                     RoundedRectangleBorder(
                   borderRadius:
-                      BorderRadius.circular(
-                    18,
-                  ),
+                      BorderRadius.circular(17),
                 ),
               ),
             ),
@@ -391,16 +422,14 @@ class _SettingsScreenState
     return Container(
       margin:
           const EdgeInsets.only(
-        bottom: 12,
+        bottom: 9,
       ),
       decoration:
           BoxDecoration(
         color:
             const Color(0xFF12151E),
         borderRadius:
-            BorderRadius.circular(
-          22,
-        ),
+            BorderRadius.circular(18),
         border:
             Border.all(
           color:
@@ -410,13 +439,13 @@ class _SettingsScreenState
       child: ListTile(
         contentPadding:
             const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 6,
+          horizontal: 14,
+          vertical: 3,
         ),
         onTap: onTap,
         leading: Container(
-          width: 52,
-          height: 52,
+          width: 45,
+          height: 45,
           decoration:
               const BoxDecoration(
             shape:
@@ -431,9 +460,8 @@ class _SettingsScreenState
           ),
           child: Icon(
             icon,
-            color:
-                Colors.black,
-            size: 27,
+            color: Colors.black,
+            size: 23,
           ),
         ),
         title: Text(
@@ -442,9 +470,8 @@ class _SettingsScreenState
               TextDirection.rtl,
           style:
               const TextStyle(
-            color:
-                Colors.white,
-            fontSize: 18,
+            color: Colors.white,
+            fontSize: 15,
             fontWeight:
                 FontWeight.w900,
           ),
@@ -455,16 +482,14 @@ class _SettingsScreenState
               TextDirection.rtl,
           style:
               const TextStyle(
-            color:
-                Colors.white54,
-            fontSize: 13,
+            color: Colors.white54,
+            fontSize: 10,
           ),
         ),
         trailing:
             const Icon(
           Icons.chevron_left_rounded,
-          color:
-              Colors.white54,
+          color: Colors.white54,
         ),
       ),
     );
@@ -473,6 +498,8 @@ class _SettingsScreenState
   void _showMessage(
     String message,
   ) {
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
