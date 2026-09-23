@@ -18,22 +18,20 @@ import 'widgets/chat_screen_body.dart';
 
 /// شاشة المحادثة الرئيسية.
 ///
-/// هذه الشاشة Orchestrator فقط:
-/// - ChatController: الرسائل + التاريخ + الثيم.
-/// - ProfileService: اسم وصورة المستخدم.
-/// - ChatMediaService: الكاميرا والصور والفيديو.
-/// - ChatVoiceService: الكلام وتحويل النص لصوت.
-/// - ChatImageService: توليد الصور + Credits.
-/// - AiRequestService: طلبات النص وتحليل الصور.
-/// - ChatScreenBody: واجهة الشات.
+/// هذه الشاشة مسؤولة عن الربط بين:
+/// - ChatController
+/// - ProfileService
+/// - ChatMediaService
+/// - ChatVoiceService
+/// - ChatImageService
+/// - AiRequestService
+/// - ChatScreenBody
+///
+/// كل خدمة تظل مستقلة، والمحادثة الخاصة بكل قسم
+/// يتم حفظها بشكل منفصل.
 class ChatScreen extends StatefulWidget {
   final String? serviceTitle;
   final String? serviceContext;
-
-  /// المفتاح الصريح للخدمة.
-  ///
-  /// استخدامه أفضل من محاولة معرفة الخدمة من العنوان
-  /// أو من نص الـ context.
   final String? serviceKey;
 
   const ChatScreen({
@@ -44,25 +42,31 @@ class ChatScreen extends StatefulWidget {
   });
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  State<ChatScreen> createState() =>
+      _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
   late final ChatController _chatController;
   late final ProfileService _profileService;
 
-  final ChatMediaService _mediaService = ChatMediaService();
+  final ChatMediaService _mediaService =
+      ChatMediaService();
 
-  final ChatVoiceService _voiceService = ChatVoiceService();
+  final ChatVoiceService _voiceService =
+      ChatVoiceService();
 
-  final ChatImageService _imageService = ChatImageService();
+  final ChatImageService _imageService =
+      ChatImageService();
 
-  final CreditsService _creditsService = CreditsService.instance;
+  final CreditsService _creditsService =
+      CreditsService.instance;
 
   final TextEditingController _textController =
       TextEditingController();
 
-  final FocusNode _focusNode = FocusNode();
+  final FocusNode _focusNode =
+      FocusNode();
 
   final ScrollController _scrollController =
       ScrollController();
@@ -72,16 +76,16 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _generatingImage = false;
 
   // ============================================================
-  // SERVICE KEY
+  // SERVICE
   // ============================================================
 
   String get _serviceKey {
-    final explicitKey =
+    final explicit =
         (widget.serviceKey ?? '').trim();
 
-    if (explicitKey.isNotEmpty &&
-        ServiceKeys.isValid(explicitKey)) {
-      return explicitKey;
+    if (explicit.isNotEmpty &&
+        ServiceKeys.isValid(explicit)) {
+      return explicit;
     }
 
     return _inferServiceKey();
@@ -170,24 +174,25 @@ class _ChatScreenState extends State<ChatScreen> {
     final value =
         (widget.serviceTitle ?? '').trim();
 
-    if (value.isEmpty) {
-      return _chatController.isKhalasana
-          ? 'خلصانة AI'
-          : 'صاحبي AI';
+    if (value.isNotEmpty) {
+      return value;
     }
 
-    return value;
+    return _chatController.isKhalasana
+        ? 'خلصانة AI'
+        : 'صاحبي AI';
   }
 
   // ============================================================
-  // INIT
+  // INITIALIZATION
   // ============================================================
 
   @override
   void initState() {
     super.initState();
 
-    _chatController = ChatController(
+    _chatController =
+        ChatController(
       serviceKey: _serviceKey,
     );
 
@@ -203,11 +208,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
       await _creditsService.initialize();
 
+      await _creditsService.refresh();
+
       await _chatController.initialize();
 
       await _voiceService.initializeTts();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _initialized = true;
@@ -215,17 +224,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
       _scrollToBottom();
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _initialized = true;
       });
     }
   }
-
-  // ============================================================
-  // DISPOSE
-  // ============================================================
 
   @override
   void dispose() {
@@ -256,7 +263,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _textController.clear();
 
-    // طلب إنشاء صورة من الرسالة.
+    // لو الرسالة طلب إنشاء صورة،
+    // يتم تحويلها مباشرة إلى مولد الصور.
     if (_looksLikeImageRequest(text)) {
       await _generateImage(text);
       return;
@@ -265,19 +273,19 @@ class _ChatScreenState extends State<ChatScreen> {
     final history =
         _buildAiHistory();
 
-    final textCost =
+    final cost =
         CreditsConfig.textMessageCost;
 
     await _creditsService.initialize();
 
-    // ----------------------------------------------------------
-    // CHECK CREDIT
-    // ----------------------------------------------------------
+    // ==========================================================
+    // CREDITS
+    // ==========================================================
 
-    if (textCost > 0) {
+    if (cost > 0) {
       final canAfford =
           await _creditsService.canAfford(
-        textCost,
+        cost,
       );
 
       if (!canAfford) {
@@ -289,7 +297,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final spent =
           await _creditsService.spend(
-        textCost,
+        cost,
       );
 
       if (!spent) {
@@ -300,9 +308,9 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    // ----------------------------------------------------------
-    // SAVE USER MESSAGE
-    // ----------------------------------------------------------
+    // ==========================================================
+    // USER MESSAGE
+    // ==========================================================
 
     await _chatController.addTextMessage(
       text: text,
@@ -313,9 +321,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _chatController.setLoading(true);
 
-    // ----------------------------------------------------------
-    // AI REQUEST
-    // ----------------------------------------------------------
+    // ==========================================================
+    // AI
+    // ==========================================================
 
     try {
       final reply =
@@ -326,33 +334,35 @@ class _ChatScreenState extends State<ChatScreen> {
         history: history,
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _chatController.addTextMessage(
         text: reply,
         isUser: false,
       );
     } on AiRequestException catch (error) {
-      if (textCost > 0) {
-        await _creditsService.add(
-          textCost,
-        );
+      if (cost > 0) {
+        await _creditsService.add(cost);
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _chatController.addTextMessage(
         text: error.message,
         isUser: false,
       );
     } catch (_) {
-      if (textCost > 0) {
-        await _creditsService.add(
-          textCost,
-        );
+      if (cost > 0) {
+        await _creditsService.add(cost);
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _chatController.addTextMessage(
         text:
@@ -362,12 +372,14 @@ class _ChatScreenState extends State<ChatScreen> {
     } finally {
       _chatController.setLoading(false);
 
+      await _creditsService.refresh();
+
       _scrollToBottom();
     }
   }
 
   // ============================================================
-  // AI HISTORY
+  // HISTORY
   // ============================================================
 
   List<Map<String, String>>
@@ -422,13 +434,11 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    await _analyzeImageBytes(
-      bytes,
-    );
+    await _analyzeImageBytes(bytes);
   }
 
   // ============================================================
-  // PICK IMAGE / GALLERY
+  // GALLERY
   // ============================================================
 
   Future<void> _pickImage() async {
@@ -444,9 +454,7 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    await _analyzeImageBytes(
-      bytes,
-    );
+    await _analyzeImageBytes(bytes);
   }
 
   // ============================================================
@@ -505,11 +513,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final reply =
-          await _analyzeBytesWithAi(
-        bytes,
-      );
+          await _analyzeBytesWithAi(bytes);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _chatController.addTextMessage(
         text: reply,
@@ -517,12 +525,12 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     } on AiRequestException catch (error) {
       if (cost > 0) {
-        await _creditsService.add(
-          cost,
-        );
+        await _creditsService.add(cost);
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _chatController.addTextMessage(
         text: error.message,
@@ -530,12 +538,12 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     } catch (_) {
       if (cost > 0) {
-        await _creditsService.add(
-          cost,
-        );
+        await _creditsService.add(cost);
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       await _chatController.addTextMessage(
         text:
@@ -544,6 +552,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     } finally {
       _chatController.setLoading(false);
+
+      await _creditsService.refresh();
 
       _scrollToBottom();
     }
@@ -622,7 +632,9 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_listening) {
       await _voiceService.stopListening();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _listening = false;
@@ -643,11 +655,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final started =
         await _voiceService.startListening(
+      localeId: 'ar-EG',
       onResult: (
         String text,
         bool isFinal,
       ) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         if (text.trim().isNotEmpty) {
           _textController.text =
@@ -662,26 +677,22 @@ class _ChatScreenState extends State<ChatScreen> {
           );
         }
 
-        if (isFinal) {
-          setState(() {
-            _listening = false;
-          });
+        setState(() {
+          _listening = !isFinal;
+        });
 
-          if (_textController.text
-              .trim()
-              .isNotEmpty) {
-            _send();
-          }
-        } else {
-          setState(() {
-            _listening = true;
-          });
+        if (isFinal &&
+            _textController.text
+                .trim()
+                .isNotEmpty) {
+          _send();
         }
       },
-      localeId: 'ar-EG',
     );
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     if (!started) {
       setState(() {
@@ -705,6 +716,16 @@ class _ChatScreenState extends State<ChatScreen> {
   // ============================================================
 
   Future<void> _voiceAction() async {
+    if (_voiceService.isSpeaking) {
+      await _voiceService.stopSpeaking();
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      return;
+    }
+
     ChatMessage? latestAi;
 
     for (final message
@@ -723,23 +744,25 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    if (_voiceService.isSpeaking) {
-      await _voiceService.stopSpeaking();
-      return;
-    }
-
     final cleaned =
         _cleanSpeech(
       latestAi.text,
     );
 
-    await _voiceService.speak(
+    final success =
+        await _voiceService.speak(
       cleaned,
       language: 'ar-EG',
       rate: 0.48,
       pitch: 1.0,
       volume: 1.0,
     );
+
+    if (!success) {
+      _showMessage(
+        'تعذر تشغيل الصوت حاليًا.',
+      );
+    }
 
     if (mounted) {
       setState(() {});
@@ -772,61 +795,72 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _chatController.setLoading(true);
 
-    final result =
-        await _imageService.generate(
-      prompt,
-    );
-
-    if (!mounted) return;
-
-    if (!result.isSuccess) {
-      await _chatController.addTextMessage(
-        text:
-            result.error ??
-                'تعذر إنشاء الصورة حاليًا.',
-        isUser: false,
+    try {
+      final result =
+          await _imageService.generate(
+        prompt,
       );
 
+      if (!mounted) {
+        return;
+      }
+
+      if (!result.isSuccess) {
+        await _chatController.addTextMessage(
+          text:
+              result.error ??
+                  'تعذر إنشاء الصورة حاليًا.',
+          isUser: false,
+        );
+
+        return;
+      }
+
+      if (result.bytes != null &&
+          result.bytes!.isNotEmpty) {
+        await _chatController.addImageMessage(
+          text:
+              'تم إنشاء الصورة.',
+          isUser: false,
+          image: result.bytes!,
+        );
+      } else if (result.imageUrl != null &&
+          result.imageUrl!.trim().isNotEmpty) {
+        await _chatController.addTextMessage(
+          text:
+              'تم إنشاء الصورة:\n${result.imageUrl}',
+          isUser: false,
+        );
+      } else {
+        await _chatController.addTextMessage(
+          text:
+              'تم إنشاء الصورة.',
+          isUser: false,
+        );
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      await _chatController.addTextMessage(
+        text:
+            'حصل خطأ أثناء إنشاء الصورة. حاول مرة أخرى.',
+        isUser: false,
+      );
+    } finally {
       _chatController.setLoading(false);
 
-      setState(() {
-        _generatingImage = false;
-      });
+      await _creditsService.refresh();
+
+      if (mounted) {
+        setState(() {
+          _generatingImage = false;
+        });
+      }
 
       _scrollToBottom();
-      return;
     }
-
-    if (result.bytes != null &&
-        result.bytes!.isNotEmpty) {
-      await _chatController.addImageMessage(
-        text:
-            'تم إنشاء الصورة.',
-        isUser: false,
-        image: result.bytes!,
-      );
-    } else if (result.imageUrl != null &&
-        result.imageUrl!.trim().isNotEmpty) {
-      await _chatController.addTextMessage(
-        text:
-            'تم إنشاء الصورة:\n${result.imageUrl}',
-        isUser: false,
-      );
-    } else {
-      await _chatController.addTextMessage(
-        text:
-            'تم إنشاء الصورة.',
-        isUser: false,
-      );
-    }
-
-    _chatController.setLoading(false);
-
-    setState(() {
-      _generatingImage = false;
-    });
-
-    _scrollToBottom();
   }
 
   // ============================================================
@@ -885,9 +919,7 @@ class _ChatScreenState extends State<ChatScreen> {
               border:
                   OutlineInputBorder(
                 borderRadius:
-                    BorderRadius.circular(
-                  16,
-                ),
+                    BorderRadius.circular(16),
                 borderSide:
                     BorderSide.none,
               ),
@@ -992,7 +1024,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
     await _chatController.clearChat();
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     _showMessage(
       'تم مسح محادثة $_title فقط.',
@@ -1115,7 +1149,9 @@ class _ChatScreenState extends State<ChatScreen> {
   void _showMessage(
     String text,
   ) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -1191,8 +1227,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 IconButton(
                   tooltip:
                       'إيقاف الصوت',
-                  onPressed:
-                      () async {
+                  onPressed: () async {
                     await _voiceService
                         .stopSpeaking();
 
@@ -1205,9 +1240,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     Icons
                         .volume_off_rounded,
                     color:
-                        Color(
-                      0xFFFFD76A,
-                    ),
+                        Color(0xFFFFD76A),
                   ),
                 ),
             ],
