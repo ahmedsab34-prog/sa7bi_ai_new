@@ -6,6 +6,7 @@ import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
 import 'widgets/app_header.dart';
 import 'widgets/profile_actions.dart';
+import 'widgets/profile_bio_status.dart';
 import 'widgets/profile_header.dart';
 import 'widgets/profile_reminders.dart';
 
@@ -18,16 +19,28 @@ class ProfileScreen extends StatefulWidget {
   });
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() =>
+      _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
-  final ProfileService profileService = ProfileService.instance;
-  final ReminderService reminderService = ReminderService.instance;
+class _ProfileScreenState
+    extends State<ProfileScreen> {
+  final ProfileService profileService =
+      ProfileService.instance;
+
+  final ReminderService reminderService =
+      ReminderService.instance;
 
   Uint8List? _photo;
-  String _displayName = ProfileService.defaultProfileName;
+
+  String _displayName =
+      ProfileService.defaultProfileName;
+
   String? _reelName;
+
+  String _bio = '';
+
+  String _status = '';
 
   bool _loading = true;
 
@@ -35,16 +48,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
 
-    profileService.changes.addListener(_onProfileChanged);
-    reminderService.reminders.addListener(_onRemindersChanged);
+    profileService.changes
+        .addListener(
+      _onProfileChanged,
+    );
+
+    reminderService.reminders
+        .addListener(
+      _onRemindersChanged,
+    );
 
     _initialize();
   }
 
   @override
   void dispose() {
-    profileService.changes.removeListener(_onProfileChanged);
-    reminderService.reminders.removeListener(_onRemindersChanged);
+    profileService.changes
+        .removeListener(
+      _onProfileChanged,
+    );
+
+    reminderService.reminders
+        .removeListener(
+      _onRemindersChanged,
+    );
+
     super.dispose();
   }
 
@@ -57,13 +85,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       _syncProfile();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _loading = false;
@@ -72,15 +104,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _syncProfile() {
-    _displayName = profileService.displayName;
-    _photo = profileService.photoBytes;
-    _reelName = profileService.hasReel
-        ? profileService.reelName
-        : null;
+    _displayName =
+        profileService.displayName;
+
+    _photo =
+        profileService.photoBytes;
+
+    _reelName =
+        profileService.hasReel
+            ? profileService.reelName
+            : null;
+
+    _bio =
+        profileService.bio;
+
+    _status =
+        profileService.status;
   }
 
   void _onProfileChanged() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       _syncProfile();
@@ -88,13 +133,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _onRemindersChanged() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {});
   }
 
-  void _showMessage(String message) {
-    if (!mounted) return;
+  void _showMessage(
+    String message,
+  ) {
+    if (!mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -102,74 +153,138 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SnackBar(
           content: Text(
             message,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.right,
           ),
-          behavior: SnackBarBehavior.floating,
+          behavior:
+              SnackBarBehavior.floating,
         ),
       );
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: const Color(0xFF080A10),
+      backgroundColor:
+          const Color(0xFF080A10),
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+                  const EdgeInsets.fromLTRB(
                 12,
                 10,
                 12,
                 4,
               ),
               child: AppHeader(
-                onAudioTap: widget.onAudio,
+                onAudioTap:
+                    widget.onAudio,
               ),
             ),
+
             Expanded(
               child: _loading
                   ? const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFFFFD76A),
+                      child:
+                          CircularProgressIndicator(
+                        color:
+                            Color(0xFFFFD76A),
                       ),
                     )
                   : RefreshIndicator(
-                      color: const Color(0xFFFFD76A),
-                      backgroundColor: const Color(0xFF131620),
-                      onRefresh: () async {
-                        await profileService.refresh();
-                        await reminderService.rescheduleAll();
+                      color:
+                          const Color(
+                        0xFFFFD76A,
+                      ),
+                      backgroundColor:
+                          const Color(
+                        0xFF131620,
+                      ),
+                      onRefresh:
+                          () async {
+                        await profileService
+                            .refresh();
+
+                        await reminderService
+                            .rescheduleAll();
                       },
                       child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(
+                        physics:
+                            const AlwaysScrollableScrollPhysics(),
+                        padding:
+                            const EdgeInsets.fromLTRB(
                           14,
                           10,
                           14,
                           28,
                         ),
                         children: [
+                          // ======================================
+                          // PROFILE HEADER
+                          // ======================================
+
                           ProfileHeader(
-                            displayName: _displayName,
-                            photo: _photo,
-                            reelName: _reelName,
-                            onChanged: _syncProfileAndRefresh,
-                            onMessage: _showMessage,
+                            displayName:
+                                _displayName,
+                            photo:
+                                _photo,
+                            reelName:
+                                _reelName,
+                            onChanged:
+                                _syncProfileAndRefresh,
+                            onMessage:
+                                _showMessage,
                           ),
 
-                          const SizedBox(height: 18),
+                          const SizedBox(
+                            height: 12,
+                          ),
+
+                          // ======================================
+                          // BIO + STATUS
+                          // ======================================
+
+                          ProfileBioStatus(
+                            bio: _bio,
+                            status: _status,
+                            onChanged:
+                                _syncProfileAndRefresh,
+                            onMessage:
+                                _showMessage,
+                          ),
+
+                          const SizedBox(
+                            height: 18,
+                          ),
+
+                          // ======================================
+                          // REMINDERS
+                          // ======================================
 
                           ProfileReminders(
-                            reminders: reminderService.items,
-                            onMessage: _showMessage,
+                            reminders:
+                                reminderService.items,
+                            onMessage:
+                                _showMessage,
                           ),
 
-                          const SizedBox(height: 8),
+                          const SizedBox(
+                            height: 8,
+                          ),
+
+                          // ======================================
+                          // EXISTING ACTIONS
+                          // ======================================
 
                           ProfileActions(
-                            onMessage: _showMessage,
+                            onMessage:
+                                _showMessage,
                           ),
                         ],
                       ),
@@ -182,7 +297,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _syncProfileAndRefresh() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       _syncProfile();
