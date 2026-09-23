@@ -51,7 +51,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
         const AudioSessionConfiguration.music(),
       );
 
-      // التعامل مع المكالمات والمقاطعات الصوتية.
       _interruptionSubscription =
           session.interruptionEventStream.listen(
         (event) async {
@@ -87,8 +86,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
         _broadcastState();
       });
 
-      // عند انتهاء الملف:
-      // لو يوجد أكثر من عنصر في القائمة، انتقل للعنصر التالي.
       _player.processingStateStream.listen(
         (state) async {
           if (state != ProcessingState.completed) {
@@ -117,16 +114,12 @@ class Sa7biAudioHandler extends BaseAudioHandler
         },
       );
 
-      // لا نستخدم becomingNoisyEventStream هنا،
+      // لا نستخدم becomingNoisyEventStream
       // لأنه غير موجود في إصدار just_audio المستخدم حاليًا.
-      //
-      // AudioSession يتولى المقاطعات الأساسية،
-      // وjust_audio يتعامل مع دورة التشغيل نفسها.
 
       _broadcastState();
     } catch (_) {
-      // الصوت يظل قابلاً للاستخدام حتى لو تعذر
-      // إعداد AudioSession.
+      // الصوت يظل قابلاً للاستخدام حتى لو تعذر إعداد AudioSession.
     }
   }
 
@@ -505,16 +498,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
   // =========================================================================
   // PLAY URL
   // =========================================================================
-  //
-  // مهم:
-  // audio_center_screen.dart يستخدم:
-  //
-  // AudioController.playUrl(
-  //   url: ...,
-  // )
-  //
-  // لذلك يجب أن يكون url named parameter.
-  // =========================================================================
 
   Future<void> playUrl({
     required String url,
@@ -686,8 +669,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
 /// ===========================================================================
 /// AudioController
 /// ===========================================================================
-/// واجهة موحدة تستخدمها شاشات التطبيق.
-/// ===========================================================================
 
 class AudioController {
   AudioController._();
@@ -701,12 +682,10 @@ class AudioController {
   // PUBLIC NOTIFIERS
   // =========================================================================
 
-  /// متوافق مع AppHeader القديم والحالي.
   static final ValueNotifier<bool>
       isPlayingNotifier =
       ValueNotifier<bool>(false);
 
-  /// الاسم الحالي المستخدم داخليًا.
   static ValueNotifier<bool>
       get isPlaying =>
           isPlayingNotifier;
@@ -727,7 +706,6 @@ class AudioController {
   // PUBLIC PLAYBACK STREAM
   // =========================================================================
 
-  /// متوافق مع AudioCenterScreen.
   static Stream<PlaybackState>
       get playbackStateStream {
     final handler = _handler;
@@ -770,8 +748,6 @@ class AudioController {
             false,
         androidNotificationIcon:
             'mipmap/ic_launcher',
-        notificationClickStartsActivity:
-            true,
       ),
     );
 
@@ -886,16 +862,14 @@ class AudioController {
     );
   }
 
-  static Future<void> fastForward()
-      async {
+  static Future<void> fastForward() async {
     final handler =
         await initialize();
 
     await handler.fastForward();
   }
 
-  static Future<void> rewind()
-      async {
+  static Future<void> rewind() async {
     final handler =
         await initialize();
 
@@ -909,8 +883,7 @@ class AudioController {
     await handler.skipToNext();
   }
 
-  static Future<void> previous()
-      async {
+  static Future<void> previous() async {
     final handler =
         await initialize();
 
