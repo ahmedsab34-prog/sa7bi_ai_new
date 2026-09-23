@@ -11,12 +11,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - الهيدر.
 /// - الشات.
 /// - خلصانة AI.
-/// - صورة المستخدم بجانب رسائله.
-/// - اسم المستخدم.
-/// - مؤشر وجود Reel.
-///
-/// أي تغيير في البيانات يرسل إشعارًا عبر [changes] حتى تستطيع
-/// الواجهات الموجودة بالفعل تحديث نفسها بدون إعادة تشغيل التطبيق.
+/// - صورة المستخدم.
+/// - الاسم.
+/// - الـReel.
+/// - الـBio.
+/// - الـStatus.
 class ProfileService {
   ProfileService._();
 
@@ -24,7 +23,7 @@ class ProfileService {
       ProfileService._();
 
   // ============================================================
-  // Storage keys
+  // STORAGE KEYS
   // ============================================================
 
   static const String profileNameKey =
@@ -36,24 +35,29 @@ class ProfileService {
   static const String profileReelNameKey =
       'profile_reel_name';
 
+  static const String profileBioKey =
+      'profile_bio';
+
+  static const String profileStatusKey =
+      'profile_status';
+
   // ============================================================
-  // Default values
+  // DEFAULT VALUES
   // ============================================================
 
   static const String defaultProfileName =
       'صاحبي';
 
+  static const String defaultProfileBio =
+      '';
+
+  static const String defaultProfileStatus =
+      '';
+
   // ============================================================
-  // Reactive state
+  // REACTIVE STATE
   // ============================================================
 
-  /// يتغير رقمه عند حدوث أي تغيير في بيانات البروفايل.
-  ///
-  /// الواجهات التي تستمع إليه تعيد بناء نفسها تلقائيًا:
-  /// - AppHeader
-  /// - ChatUserAvatar
-  /// - ProfileScreen
-  /// - أي شاشة أخرى تستخدم بيانات المستخدم.
   final ValueNotifier<int> changes =
       ValueNotifier<int>(0);
 
@@ -62,34 +66,52 @@ class ProfileService {
   }
 
   // ============================================================
-  // Internal state
+  // INTERNAL STATE
   // ============================================================
 
   SharedPreferences? _preferences;
 
   bool _initialized = false;
 
-  String _name = defaultProfileName;
+  String _name =
+      defaultProfileName;
 
   String _photoBase64 = '';
 
   String _reelName = '';
 
+  String _bio =
+      defaultProfileBio;
+
+  String _status =
+      defaultProfileStatus;
+
   // ============================================================
-  // Getters
+  // GETTERS
   // ============================================================
 
-  bool get isInitialized => _initialized;
+  bool get isInitialized =>
+      _initialized;
 
-  String get name => _name;
+  String get name =>
+      _name;
 
-  String get photoBase64 => _photoBase64;
+  String get photoBase64 =>
+      _photoBase64;
 
-  String get reelName => _reelName;
+  String get reelName =>
+      _reelName;
+
+  String get bio =>
+      _bio;
+
+  String get status =>
+      _status;
 
   bool get hasName =>
       _name.trim().isNotEmpty &&
-      _name.trim() != defaultProfileName;
+      _name.trim() !=
+          defaultProfileName;
 
   bool get hasPhoto =>
       _photoBase64.trim().isNotEmpty;
@@ -97,9 +119,15 @@ class ProfileService {
   bool get hasReel =>
       _reelName.trim().isNotEmpty;
 
-  /// اسم آمن للعرض في التطبيق.
+  bool get hasBio =>
+      _bio.trim().isNotEmpty;
+
+  bool get hasStatus =>
+      _status.trim().isNotEmpty;
+
   String get displayName {
-    final value = _name.trim();
+    final value =
+        _name.trim();
 
     if (value.isEmpty) {
       return defaultProfileName;
@@ -108,37 +136,37 @@ class ProfileService {
     return value;
   }
 
-  /// الصورة المحفوظة كـBytes.
   Uint8List? get photoBytes {
     if (_photoBase64.trim().isEmpty) {
       return null;
     }
 
     try {
-      return base64Decode(_photoBase64);
+      return base64Decode(
+        _photoBase64,
+      );
     } catch (_) {
       return null;
     }
   }
 
   // ============================================================
-  // Initialization
+  // INITIALIZATION
   // ============================================================
 
-  /// قراءة بيانات البروفايل من الجهاز.
   Future<void> initialize() async {
     if (_initialized) {
       return;
     }
 
     _preferences =
-        await SharedPreferences.getInstance();
+        await SharedPreferences
+            .getInstance();
 
     await _load();
 
     _initialized = true;
 
-    // إبلاغ أي واجهة بدأت الاستماع قبل اكتمال التحميل.
     _notifyChanged();
   }
 
@@ -149,42 +177,57 @@ class ProfileService {
   }
 
   Future<void> _load() async {
-    final prefs = _preferences;
+    final prefs =
+        _preferences;
 
     if (prefs == null) {
       return;
     }
 
     final savedName =
-        prefs.getString(profileNameKey);
+        prefs.getString(
+      profileNameKey,
+    );
 
     final savedPhoto =
-        prefs.getString(profilePhotoKey);
+        prefs.getString(
+      profilePhotoKey,
+    );
 
     final savedReel =
-        prefs.getString(profileReelNameKey);
+        prefs.getString(
+      profileReelNameKey,
+    );
 
-    if (savedName != null &&
-        savedName.trim().isNotEmpty) {
-      _name = savedName.trim();
-    } else {
-      _name = defaultProfileName;
-    }
+    final savedBio =
+        prefs.getString(
+      profileBioKey,
+    );
 
-    if (savedPhoto != null) {
-      _photoBase64 = savedPhoto;
-    } else {
-      _photoBase64 = '';
-    }
+    final savedStatus =
+        prefs.getString(
+      profileStatusKey,
+    );
 
-    if (savedReel != null) {
-      _reelName = savedReel.trim();
-    } else {
-      _reelName = '';
-    }
+    _name =
+        savedName != null &&
+                savedName.trim().isNotEmpty
+            ? savedName.trim()
+            : defaultProfileName;
+
+    _photoBase64 =
+        savedPhoto ?? '';
+
+    _reelName =
+        savedReel?.trim() ?? '';
+
+    _bio =
+        savedBio?.trim() ?? '';
+
+    _status =
+        savedStatus?.trim() ?? '';
   }
 
-  /// إعادة قراءة البيانات من SharedPreferences.
   Future<void> refresh() async {
     await _ensureInitialized();
 
@@ -194,26 +237,30 @@ class ProfileService {
   }
 
   // ============================================================
-  // Name
+  // NAME
   // ============================================================
 
-  /// حفظ اسم المستخدم.
-  Future<bool> saveName(String value) async {
+  Future<bool> saveName(
+    String value,
+  ) async {
     await _ensureInitialized();
 
-    final cleaned = value.trim();
+    final cleaned =
+        value.trim();
 
     if (cleaned.isEmpty) {
       return false;
     }
 
-    final prefs = _preferences;
+    final prefs =
+        _preferences;
 
     if (prefs == null) {
       return false;
     }
 
-    final success = await prefs.setString(
+    final success =
+        await prefs.setString(
       profileNameKey,
       cleaned,
     );
@@ -229,41 +276,123 @@ class ProfileService {
     return true;
   }
 
-  /// تغيير الاسم.
-  Future<bool> updateName(String value) {
+  Future<bool> updateName(
+    String value,
+  ) {
     return saveName(value);
   }
 
   // ============================================================
-  // Photo
+  // BIO
   // ============================================================
 
-  /// حفظ صورة المستخدم كـBase64.
+  Future<bool> saveBio(
+    String value,
+  ) async {
+    await _ensureInitialized();
+
+    final cleaned =
+        value.trim();
+
+    if (cleaned.length > 160) {
+      return false;
+    }
+
+    final prefs =
+        _preferences;
+
+    if (prefs == null) {
+      return false;
+    }
+
+    final success =
+        await prefs.setString(
+      profileBioKey,
+      cleaned,
+    );
+
+    if (!success) {
+      return false;
+    }
+
+    _bio = cleaned;
+
+    _notifyChanged();
+
+    return true;
+  }
+
+  // ============================================================
+  // STATUS
+  // ============================================================
+
+  Future<bool> saveStatus(
+    String value,
+  ) async {
+    await _ensureInitialized();
+
+    final cleaned =
+        value.trim();
+
+    if (cleaned.length > 120) {
+      return false;
+    }
+
+    final prefs =
+        _preferences;
+
+    if (prefs == null) {
+      return false;
+    }
+
+    final success =
+        await prefs.setString(
+      profileStatusKey,
+      cleaned,
+    );
+
+    if (!success) {
+      return false;
+    }
+
+    _status = cleaned;
+
+    _notifyChanged();
+
+    return true;
+  }
+
+  // ============================================================
+  // PHOTO
+  // ============================================================
+
   Future<bool> savePhotoBase64(
     String base64Value,
   ) async {
     await _ensureInitialized();
 
-    final cleaned = base64Value.trim();
+    final cleaned =
+        base64Value.trim();
 
     if (cleaned.isEmpty) {
       return false;
     }
 
-    // التأكد أن القيمة Base64 صحيحة.
     try {
       base64Decode(cleaned);
     } catch (_) {
       return false;
     }
 
-    final prefs = _preferences;
+    final prefs =
+        _preferences;
 
     if (prefs == null) {
       return false;
     }
 
-    final success = await prefs.setString(
+    final success =
+        await prefs.setString(
       profilePhotoKey,
       cleaned,
     );
@@ -272,14 +401,14 @@ class ProfileService {
       return false;
     }
 
-    _photoBase64 = cleaned;
+    _photoBase64 =
+        cleaned;
 
     _notifyChanged();
 
     return true;
   }
 
-  /// حفظ الصورة مباشرة من Bytes.
   Future<bool> savePhotoBytes(
     Uint8List bytes,
   ) async {
@@ -287,23 +416,25 @@ class ProfileService {
       return false;
     }
 
-    final encoded = base64Encode(bytes);
-
-    return savePhotoBase64(encoded);
+    return savePhotoBase64(
+      base64Encode(bytes),
+    );
   }
 
-  /// حذف صورة المستخدم.
   Future<bool> clearPhoto() async {
     await _ensureInitialized();
 
-    final prefs = _preferences;
+    final prefs =
+        _preferences;
 
     if (prefs == null) {
       return false;
     }
 
     final success =
-        await prefs.remove(profilePhotoKey);
+        await prefs.remove(
+      profilePhotoKey,
+    );
 
     if (!success) {
       return false;
@@ -317,21 +448,19 @@ class ProfileService {
   }
 
   // ============================================================
-  // Reel
+  // REEL
   // ============================================================
 
-  /// حفظ اسم/معرّف الـReel الخاص بالمستخدم.
-  ///
-  /// في المرحلة الحالية يتم حفظ اسم الملف/المعرّف.
-  /// تخزين الفيديو نفسه منفصل عن بيانات البروفايل.
   Future<bool> saveReelName(
     String value,
   ) async {
     await _ensureInitialized();
 
-    final cleaned = value.trim();
+    final cleaned =
+        value.trim();
 
-    final prefs = _preferences;
+    final prefs =
+        _preferences;
 
     if (prefs == null) {
       return false;
@@ -339,7 +468,9 @@ class ProfileService {
 
     if (cleaned.isEmpty) {
       final success =
-          await prefs.remove(profileReelNameKey);
+          await prefs.remove(
+        profileReelNameKey,
+      );
 
       if (!success) {
         return false;
@@ -352,7 +483,8 @@ class ProfileService {
       return true;
     }
 
-    final success = await prefs.setString(
+    final success =
+        await prefs.setString(
       profileReelNameKey,
       cleaned,
     );
@@ -361,7 +493,8 @@ class ProfileService {
       return false;
     }
 
-    _reelName = cleaned;
+    _reelName =
+        cleaned;
 
     _notifyChanged();
 
@@ -373,57 +506,83 @@ class ProfileService {
   }
 
   // ============================================================
-  // Clear profile
+  // PROFILE MAP
   // ============================================================
 
-  /// حذف بيانات البروفايل بالكامل.
-  Future<void> clearProfile() async {
-    await _ensureInitialized();
-
-    final prefs = _preferences;
-
-    _name = defaultProfileName;
-    _photoBase64 = '';
-    _reelName = '';
-
-    if (prefs != null) {
-      await prefs.remove(profileNameKey);
-      await prefs.remove(profilePhotoKey);
-      await prefs.remove(profileReelNameKey);
-    }
-
-    _notifyChanged();
-  }
-
-  // ============================================================
-  // Convenience methods
-  // ============================================================
-
-  /// إرجاع صورة المستخدم إذا كانت موجودة.
-  Uint8List? getUserPhoto() {
-    return photoBytes;
-  }
-
-  /// إرجاع الاسم الذي سيظهر في الشات.
-  String getChatDisplayName() {
-    return displayName;
-  }
-
-  /// بيانات مختصرة للاستخدام في واجهات أخرى.
   Map<String, dynamic> toMap() {
     return <String, dynamic>{
       'name': displayName,
       'photoBase64': _photoBase64,
       'reelName': _reelName,
+      'bio': _bio,
+      'status': _status,
       'hasPhoto': hasPhoto,
       'hasReel': hasReel,
+      'hasBio': hasBio,
+      'hasStatus': hasStatus,
     };
   }
 
-  /// تنظيف الـNotifier عند عدم الحاجة للخدمة.
-  ///
-  /// لا يتم استدعاؤها من التطبيق أثناء التشغيل الطبيعي،
-  /// لأن ProfileService عبارة عن Singleton طوال عمر التطبيق.
+  // ============================================================
+  // CONVENIENCE
+  // ============================================================
+
+  Uint8List? getUserPhoto() {
+    return photoBytes;
+  }
+
+  String getChatDisplayName() {
+    return displayName;
+  }
+
+  // ============================================================
+  // CLEAR PROFILE
+  // ============================================================
+
+  Future<void> clearProfile() async {
+    await _ensureInitialized();
+
+    final prefs =
+        _preferences;
+
+    _name =
+        defaultProfileName;
+
+    _photoBase64 = '';
+
+    _reelName = '';
+
+    _bio =
+        defaultProfileBio;
+
+    _status =
+        defaultProfileStatus;
+
+    if (prefs != null) {
+      await prefs.remove(
+        profileNameKey,
+      );
+
+      await prefs.remove(
+        profilePhotoKey,
+      );
+
+      await prefs.remove(
+        profileReelNameKey,
+      );
+
+      await prefs.remove(
+        profileBioKey,
+      );
+
+      await prefs.remove(
+        profileStatusKey,
+      );
+    }
+
+    _notifyChanged();
+  }
+
   void dispose() {
     changes.dispose();
   }
