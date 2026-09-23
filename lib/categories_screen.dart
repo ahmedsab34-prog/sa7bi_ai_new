@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'chat_screen.dart';
 import 'service_config.dart';
-import 'service_detail_screen.dart';
 
 class CategoriesScreen extends StatelessWidget {
   final VoidCallback onAudio;
@@ -16,13 +16,18 @@ class CategoriesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF070910),
+      backgroundColor:
+          const Color(0xFF070910),
       body: SafeArea(
         child: Column(
           children: [
-            // شريط علوي صغير بدون عنوان كبير.
+            // ==================================================
+            // TOP BAR
+            // ==================================================
+
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+                  const EdgeInsets.fromLTRB(
                 12,
                 8,
                 12,
@@ -36,66 +41,102 @@ class CategoriesScreen extends StatelessWidget {
                   const Spacer(),
                   const Text(
                     'خدمات صاحبي',
-                    textDirection: TextDirection.rtl,
+                    textDirection:
+                        TextDirection.rtl,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 17,
-                      fontWeight: FontWeight.w900,
+                      fontWeight:
+                          FontWeight.w900,
                     ),
                   ),
                 ],
               ),
             ),
 
-            // الـ10 خدمات كلها داخل الشاشة.
+            // ==================================================
+            // TEN SERVICES
+            // ==================================================
+
             Expanded(
               child: LayoutBuilder(
-                builder: (context, constraints) {
+                builder:
+                    (
+                  context,
+                  constraints,
+                ) {
                   final availableHeight =
                       constraints.maxHeight;
 
-                  // 5 صفوف × 2 خدمة.
-                  // نحسب الحجم تلقائيًا حسب حجم الشاشة.
                   final rowHeight =
                       ((availableHeight - 18) / 5)
-                          .clamp(82.0, 118.0);
+                          .clamp(
+                            82.0,
+                            118.0,
+                          );
 
                   final cardHeight =
                       rowHeight - 4;
 
                   return Padding(
-                    padding: const EdgeInsets.fromLTRB(
+                    padding:
+                        const EdgeInsets.fromLTRB(
                       10,
                       2,
                       10,
                       10,
                     ),
-                    child: GridView.builder(
+                    child:
+                        GridView.builder(
                       physics:
                           const NeverScrollableScrollPhysics(),
-                      padding: EdgeInsets.zero,
-                      itemCount: sa7biServices.length,
+                      padding:
+                          EdgeInsets.zero,
+                      itemCount:
+                          sa7biServices.length,
                       gridDelegate:
                           SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         crossAxisSpacing: 8,
                         mainAxisSpacing: 7,
-                        mainAxisExtent: cardHeight,
+                        mainAxisExtent:
+                            cardHeight,
                       ),
-                      itemBuilder: (context, index) {
+                      itemBuilder:
+                          (
+                        context,
+                        index,
+                      ) {
                         final service =
-                            sa7biServices[index];
+                            sa7biServices[
+                                index];
 
                         return _CompactServiceCard(
                           service: service,
                           index: index,
                           onTap: () {
+                            // ==================================
+                            // DIRECT CHAT
+                            // ==================================
+                            //
+                            // لا نفتح ServiceDetailScreen.
+                            // الخدمة تدخل مباشرة إلى الشات
+                            // مع الحفاظ على:
+                            // - serviceKey
+                            // - serviceTitle
+                            // - serviceContext
+                            //
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) =>
-                                    ServiceDetailScreen(
-                                  service: service,
+                                    ChatScreen(
+                                  serviceKey:
+                                      service.serviceKey,
+                                  serviceTitle:
+                                      service.title,
+                                  serviceContext:
+                                      service.aiRole,
                                 ),
                               ),
                             );
@@ -118,7 +159,8 @@ class CategoriesScreen extends StatelessWidget {
 // AUDIO BUTTON
 // ============================================================
 
-class _AudioButton extends StatelessWidget {
+class _AudioButton
+    extends StatelessWidget {
   final VoidCallback onTap;
 
   const _AudioButton({
@@ -131,26 +173,33 @@ class _AudioButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius:
+            BorderRadius.circular(16),
         child: Container(
           width: 43,
           height: 43,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+            borderRadius:
+                BorderRadius.circular(16),
+            gradient:
+                const LinearGradient(
+              begin:
+                  Alignment.topLeft,
+              end:
+                  Alignment.bottomRight,
               colors: [
                 Color(0xFF1C2533),
                 Color(0xFF0E131D),
               ],
             ),
             border: Border.all(
-              color: const Color(0x4463E6FF),
+              color:
+                  const Color(0x4463E6FF),
             ),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x1663E6FF),
+                color:
+                    Color(0x1663E6FF),
                 blurRadius: 16,
                 spreadRadius: 1,
               ),
@@ -158,7 +207,8 @@ class _AudioButton extends StatelessWidget {
           ),
           child: const Icon(
             Icons.graphic_eq_rounded,
-            color: Color(0xFF63E6FF),
+            color:
+                Color(0xFF63E6FF),
             size: 22,
           ),
         ),
@@ -171,7 +221,8 @@ class _AudioButton extends StatelessWidget {
 // COMPACT GLASS SERVICE CARD
 // ============================================================
 
-class _CompactServiceCard extends StatefulWidget {
+class _CompactServiceCard
+    extends StatefulWidget {
   final Sa7biService service;
   final int index;
   final VoidCallback onTap;
@@ -183,23 +234,27 @@ class _CompactServiceCard extends StatefulWidget {
   });
 
   @override
-  State<_CompactServiceCard> createState() =>
-      _CompactServiceCardState();
+  State<_CompactServiceCard>
+      createState() =>
+          _CompactServiceCardState();
 }
 
 class _CompactServiceCardState
     extends State<_CompactServiceCard>
     with SingleTickerProviderStateMixin {
-  late final AnimationController controller;
+  late final AnimationController
+      controller;
 
   @override
   void initState() {
     super.initState();
 
-    controller = AnimationController(
+    controller =
+        AnimationController(
       vsync: this,
       duration: Duration(
-        seconds: 4 + (widget.index % 3),
+        seconds:
+            4 + (widget.index % 3),
       ),
     )..repeat();
   }
@@ -211,12 +266,19 @@ class _CompactServiceCardState
   }
 
   @override
-  Widget build(BuildContext context) {
-    final service = widget.service;
+  Widget build(
+    BuildContext context,
+  ) {
+    final service =
+        widget.service;
 
     return AnimatedBuilder(
       animation: controller,
-      builder: (context, child) {
+      builder:
+          (
+        context,
+        child,
+      ) {
         final pulse =
             (math.sin(
                       controller.value *
@@ -230,65 +292,98 @@ class _CompactServiceCardState
           color: Colors.transparent,
           child: InkWell(
             onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(19),
+            borderRadius:
+                BorderRadius.circular(19),
             child: Ink(
-              decoration: BoxDecoration(
+              decoration:
+                  BoxDecoration(
                 borderRadius:
-                    BorderRadius.circular(19),
-                gradient: LinearGradient(
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
+                    BorderRadius.circular(
+                  19,
+                ),
+                gradient:
+                    LinearGradient(
+                  begin:
+                      Alignment.topRight,
+                  end:
+                      Alignment.bottomLeft,
                   colors: [
-                    service.color.withOpacity(
-                      0.18 + pulse * 0.045,
+                    service.color
+                        .withOpacity(
+                      0.18 +
+                          pulse * 0.045,
                     ),
-                    const Color(0xFF151923),
-                    const Color(0xFF0C0F16),
+                    const Color(
+                      0xFF151923,
+                    ),
+                    const Color(
+                      0xFF0C0F16,
+                    ),
                   ],
                 ),
                 border: Border.all(
-                  color: service.color.withOpacity(
-                    0.25 + pulse * 0.08,
+                  color: service.color
+                      .withOpacity(
+                    0.25 +
+                        pulse * 0.08,
                   ),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: service.color.withOpacity(
-                      0.045 + pulse * 0.035,
+                    color: service.color
+                        .withOpacity(
+                      0.045 +
+                          pulse * 0.035,
                     ),
-                    blurRadius: 16 + pulse * 5,
+                    blurRadius:
+                        16 + pulse * 5,
                     spreadRadius: 1,
                   ),
                 ],
               ),
               child: ClipRRect(
                 borderRadius:
-                    BorderRadius.circular(19),
+                    BorderRadius.circular(
+                  19,
+                ),
                 child: Stack(
                   children: [
-                    // انعكاس زجاجي متحرك.
+                    // ==========================================
+                    // GLASS REFLECTION
+                    // ==========================================
+
                     Positioned(
-                      left: -35 +
-                          controller.value * 150,
+                      left:
+                          -35 +
+                              controller
+                                      .value *
+                                  150,
                       top: -20,
-                      child: Transform.rotate(
+                      child:
+                          Transform.rotate(
                         angle: -0.35,
-                        child: Container(
+                        child:
+                            Container(
                           width: 42,
                           height: 150,
-                          decoration: BoxDecoration(
+                          decoration:
+                              BoxDecoration(
                             gradient:
                                 LinearGradient(
                               colors: [
                                 Colors.white
-                                    .withOpacity(0),
+                                    .withOpacity(
+                                  0,
+                                ),
                                 Colors.white
                                     .withOpacity(
                                   0.035,
                                 ),
                                 Colors.white
-                                    .withOpacity(0),
+                                    .withOpacity(
+                                  0,
+                                ),
                               ],
                             ),
                           ),
@@ -296,9 +391,14 @@ class _CompactServiceCardState
                       ),
                     ),
 
+                    // ==========================================
+                    // SERVICE CONTENT
+                    // ==========================================
+
                     Padding(
                       padding:
-                          const EdgeInsets.symmetric(
+                          const EdgeInsets
+                              .symmetric(
                         horizontal: 8,
                         vertical: 6,
                       ),
@@ -306,49 +406,66 @@ class _CompactServiceCardState
                         textDirection:
                             TextDirection.rtl,
                         children: [
-                          // الاسم والوصف.
                           Expanded(
-                            child: Column(
+                            child:
+                                Column(
                               mainAxisAlignment:
-                                  MainAxisAlignment.center,
+                                  MainAxisAlignment
+                                      .center,
                               crossAxisAlignment:
-                                  CrossAxisAlignment.end,
+                                  CrossAxisAlignment
+                                      .end,
                               children: [
                                 Text(
-                                  service.title,
+                                  service
+                                      .title,
                                   textDirection:
-                                      TextDirection.rtl,
+                                      TextDirection
+                                          .rtl,
                                   textAlign:
-                                      TextAlign.right,
+                                      TextAlign
+                                          .right,
                                   maxLines: 1,
                                   overflow:
-                                      TextOverflow.ellipsis,
+                                      TextOverflow
+                                          .ellipsis,
                                   style:
                                       const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
+                                    color:
+                                        Colors
+                                            .white,
+                                    fontSize:
+                                        13,
                                     fontWeight:
-                                        FontWeight.w900,
+                                        FontWeight
+                                            .w900,
                                   ),
                                 ),
                                 const SizedBox(
                                   height: 3,
                                 ),
                                 Text(
-                                  service.description,
+                                  service
+                                      .description,
                                   textDirection:
-                                      TextDirection.rtl,
+                                      TextDirection
+                                          .rtl,
                                   textAlign:
-                                      TextAlign.right,
+                                      TextAlign
+                                          .right,
                                   maxLines: 2,
                                   overflow:
-                                      TextOverflow.ellipsis,
+                                      TextOverflow
+                                          .ellipsis,
                                   style:
                                       const TextStyle(
                                     color:
-                                        Colors.white54,
-                                    fontSize: 8.5,
-                                    height: 1.15,
+                                        Colors
+                                            .white54,
+                                    fontSize:
+                                        8.5,
+                                    height:
+                                        1.15,
                                   ),
                                 ),
                               ],
@@ -359,20 +476,26 @@ class _CompactServiceCardState
                             width: 7,
                           ),
 
-                          // أيقونة الخدمة.
+                          // ====================================
+                          // SERVICE ICON
+                          // ====================================
+
                           Container(
                             width: 51,
                             height: 51,
                             decoration:
                                 BoxDecoration(
                               shape:
-                                  BoxShape.circle,
+                                  BoxShape
+                                      .circle,
                               gradient:
                                   LinearGradient(
                                 begin:
-                                    Alignment.topLeft,
+                                    Alignment
+                                        .topLeft,
                                 end:
-                                    Alignment.bottomRight,
+                                    Alignment
+                                        .bottomRight,
                                 colors: [
                                   service.color
                                       .withOpacity(
@@ -387,28 +510,34 @@ class _CompactServiceCardState
                                   ),
                                 ],
                               ),
-                              border: Border.all(
-                                color: service.color
+                              border:
+                                  Border.all(
+                                color: service
+                                    .color
                                     .withOpacity(
                                   0.35 +
-                                      pulse * 0.08,
+                                      pulse *
+                                          0.08,
                                 ),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: service.color
+                                  color: service
+                                      .color
                                       .withOpacity(
                                     0.10 +
                                         pulse *
                                             0.05,
                                   ),
-                                  blurRadius: 14,
+                                  blurRadius:
+                                      14,
                                 ),
                               ],
                             ),
                             child: Stack(
                               alignment:
-                                  Alignment.center,
+                                  Alignment
+                                      .center,
                               children: [
                                 Container(
                                   width: 40,
@@ -416,7 +545,8 @@ class _CompactServiceCardState
                                   decoration:
                                       BoxDecoration(
                                     shape:
-                                        BoxShape.circle,
+                                        BoxShape
+                                            .circle,
                                     border:
                                         Border.all(
                                       color: Colors
@@ -430,7 +560,8 @@ class _CompactServiceCardState
                                 Icon(
                                   service.icon,
                                   color:
-                                      service.color,
+                                      service
+                                          .color,
                                   size: 25,
                                 ),
                               ],
@@ -440,7 +571,10 @@ class _CompactServiceCardState
                       ),
                     ),
 
-                    // رقم الخدمة الصغير.
+                    // ==========================================
+                    // SERVICE NUMBER
+                    // ==========================================
+
                     Positioned(
                       top: 5,
                       left: 6,
@@ -451,13 +585,17 @@ class _CompactServiceCardState
                             Alignment.center,
                         decoration:
                             BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: service.color
+                          shape:
+                              BoxShape.circle,
+                          color: service
+                              .color
                               .withOpacity(
                             0.10,
                           ),
-                          border: Border.all(
-                            color: service.color
+                          border:
+                              Border.all(
+                            color: service
+                                .color
                                 .withOpacity(
                               0.20,
                             ),
@@ -465,19 +603,24 @@ class _CompactServiceCardState
                         ),
                         child: Text(
                           '${widget.index + 1}',
-                          style: TextStyle(
-                            color:
-                                service.color,
+                          style:
+                              TextStyle(
+                            color: service
+                                .color,
                             fontSize: 8,
                             fontWeight:
-                                FontWeight.w900,
+                                FontWeight
+                                    .w900,
                           ),
                         ),
                       ),
                     ),
 
-                    // سهم صغير.
-                    Positioned(
+                    // ==========================================
+                    // ARROW
+                    // ==========================================
+
+                    const Positioned(
                       bottom: 6,
                       left: 8,
                       child: Icon(
