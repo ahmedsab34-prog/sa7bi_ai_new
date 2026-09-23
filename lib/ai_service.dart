@@ -4,7 +4,11 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import 'services/ai_request_service.dart';
+
 class AiService {
+  AiService._();
+
   static const String base =
       'https://sa7bi-ai-new.ahmedsab34.workers.dev';
 
@@ -77,94 +81,18 @@ class AiService {
   static Future<String> getResponse(
     String prompt, {
     String? serviceContext,
+    String? serviceTitle,
     List<Map<String, String>> history = const [],
   }) async {
-    final text = prompt.trim();
-
-    if (text.isEmpty) {
-      return 'قول لي يا صاحبي 😊';
-    }
-
     try {
-      final validHistory = history
-          .where(
-            (item) =>
-                (item['role'] == 'user' ||
-                    item['role'] == 'assistant') &&
-                (item['content'] ?? '')
-                    .trim()
-                    .isNotEmpty,
-          )
-          .toList();
-
-      final start =
-          validHistory.length > maxHistory
-              ? validHistory.length - maxHistory
-              : 0;
-
-      final messages =
-          <Map<String, String>>[];
-
-      for (final item
-          in validHistory.sublist(start)) {
-        messages.add({
-          'role': item['role']!,
-          'content': item['content']!.trim(),
-        });
-      }
-
-      String current = text;
-
-      if (serviceContext != null &&
-          serviceContext.trim().isNotEmpty) {
-        current =
-            'سياق الخدمة:\n'
-            '${serviceContext.trim()}\n\n'
-            'رسالة المستخدم:\n'
-            '$text';
-      }
-
-      messages.add({
-        'role': 'user',
-        'content': current,
-      });
-
-      final response = await http
-          .post(
-            Uri.parse(chatEndpoint),
-            headers: const {
-              'Content-Type':
-                  'application/json',
-              'Cache-Control':
-                  'no-cache',
-            },
-            body: jsonEncode({
-              'messages': messages,
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 60),
-          );
-
-      if (response.statusCode != 200) {
-        return _serverError(response);
-      }
-
-      final data =
-          _decodeMap(response.body);
-
-      final answer =
-          data?['answer']?.toString().trim();
-
-      if (data != null &&
-          data['ok'] == true &&
-          answer != null &&
-          answer.isNotEmpty) {
-        return answer;
-      }
-
-      return data?['error']?.toString() ??
-          'صاحبي مش قادر يرد دلوقتي. جرّب تاني.';
+      return await AiRequestService.getResponse(
+        prompt: prompt,
+        serviceContext: serviceContext,
+        serviceTitle: serviceTitle,
+        history: history,
+      );
+    } on AiRequestException catch (error) {
+      return error.message;
     } catch (_) {
       return 'حصل تأخير في الاتصال بصاحبي. جرّب تاني.';
     }
@@ -179,77 +107,47 @@ class AiService {
     String prompt =
         'حلل الصورة المرسلة بدقة وباختصار، واذكر الأشياء المهمة الظاهرة فيها.',
     String? serviceContext,
+    String? serviceTitle,
   }) async {
     try {
-      final bytes =
-          await file.readAsBytes();
-
-      if (bytes.isEmpty) {
-        return 'الصورة لم يتم قراءتها.';
-      }
-
-      if (bytes.length > 5 * 1024 * 1024) {
-        return 'الصورة كبيرة جدًا. ابعت صورة أصغر من 5 ميجابايت.';
-      }
-
-      String finalPrompt =
-          prompt.trim();
-
-      if (serviceContext != null &&
-          serviceContext.trim().isNotEmpty) {
-        finalPrompt =
-            'سياق الخدمة:\n'
-            '${serviceContext.trim()}\n\n'
-            'طلب المستخدم:\n'
-            '$finalPrompt';
-      }
-
-      final mime =
-          _mime(file.name);
-
-      final response = await http
-          .post(
-            Uri.parse(chatEndpoint),
-            headers: const {
-              'Content-Type':
-                  'application/json',
-            },
-            body: jsonEncode({
-              'messages': [
-                {
-                  'role': 'user',
-                  'content': finalPrompt,
-                },
-              ],
-              'imageDataUrl':
-                  'data:$mime;base64,${base64Encode(bytes)}',
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 90),
-          );
-
-      if (response.statusCode != 200) {
-        return _serverError(response);
-      }
-
-      final data =
-          _decodeMap(response.body);
-
-      final answer =
-          data?['answer']?.toString().trim();
-
-      if (data != null &&
-          data['ok'] == true &&
-          answer != null &&
-          answer.isNotEmpty) {
-        return answer;
-      }
-
-      return data?['error']?.toString() ??
-          'الصورة وصلت، لكن التحليل لم يكتمل.';
+      return await AiRequestService.analyzeImage(
+        file: file,
+        prompt: prompt,
+        serviceContext: serviceContext,
+        serviceTitle: serviceTitle,
+      );
+    } on AiRequestException catch (error) {
+      return error.message;
     } catch (_) {
       return 'حصل تأخير أثناء تحليل الصورة. جرّب مرة تانية.';
+    }
+  }
+
+  // ============================================================
+  // MULTI IMAGE / VIDEO FRAME ANALYSIS
+  // ============================================================
+
+  static Future<String> analyzeImages(
+    List<Uint8List> images, {
+    String prompt =
+        'حلل الصور المرفقة معًا باعتبارها لقطات من نفس الفيديو. '
+        'اشرح ما يظهر فيها، وما الذي يحدث عبر اللقطات، '
+        'واذكر أي نصوص أو أدوات أو أشخاص أو أشياء مهمة. '
+        'لا تخمن ما لا يظهر بوضوح.',
+    String? serviceContext,
+    String? serviceTitle,
+  }) async {
+    try {
+      return await AiRequestService.analyzeImages(
+        images,
+        prompt: prompt,
+        serviceContext: serviceContext,
+        serviceTitle: serviceTitle,
+      );
+    } on AiRequestException catch (error) {
+      return error.message;
+    } catch (_) {
+      return 'حصل تأخير أثناء تحليل الصور. جرّب مرة تانية.';
     }
   }
 
@@ -257,34 +155,31 @@ class AiService {
   // IMAGE GENERATION
   // ============================================================
 
-  static Future<ImageGenerationResult>
-      generateImage(
+  static Future<ImageGenerationResult> generateImage(
     String prompt,
   ) async {
-    final cleanPrompt =
-        prompt.trim();
-
-    if (cleanPrompt.isEmpty) {
-      return const ImageGenerationResult.failure(
-        'اكتب وصف الصورة الأول.',
-      );
-    }
-
-    if (cleanPrompt.length > 8000) {
-      return const ImageGenerationResult.failure(
-        'وصف الصورة طويل جدًا.',
-      );
-    }
-
     try {
+      final cleanPrompt = prompt.trim();
+
+      if (cleanPrompt.isEmpty) {
+        return const ImageGenerationResult.failure(
+          'اكتب وصف الصورة الأول.',
+        );
+      }
+
+      if (cleanPrompt.length > 8000) {
+        return const ImageGenerationResult.failure(
+          'وصف الصورة طويل جدًا.',
+        );
+      }
+
       final response = await http
           .post(
             Uri.parse(imageEndpoint),
             headers: const {
-              'Content-Type':
-                  'application/json',
-              'Cache-Control':
-                  'no-cache',
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
             },
             body: jsonEncode({
               'prompt': cleanPrompt,
@@ -294,14 +189,14 @@ class AiService {
             const Duration(seconds: 180),
           );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
         return ImageGenerationResult.failure(
           _serverError(response),
         );
       }
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (data == null) {
         return const ImageGenerationResult.failure(
@@ -316,75 +211,65 @@ class AiService {
         );
       }
 
-      String? imageDataUrl;
-
       final direct =
           data['imageDataUrl'];
 
       if (direct is String &&
           direct.trim().isNotEmpty) {
-        imageDataUrl =
-            direct.trim();
-      }
+        try {
+          var cleanBase64 = direct.trim();
 
-      // احتياطًا لو رجع الخادم رابط صورة.
-      if (imageDataUrl == null) {
-        final imageUrl =
-            data['imageUrl'];
+          if (cleanBase64.startsWith('data:image/')) {
+            final comma =
+                cleanBase64.indexOf(',');
 
-        if (imageUrl is String &&
-            imageUrl.trim().isNotEmpty) {
-          return ImageGenerationResult
-              .successUrl(
-            imageUrl.trim(),
-          );
-        }
-      }
+            if (comma != -1) {
+              cleanBase64 =
+                  cleanBase64.substring(
+                comma + 1,
+              );
+            }
+          }
 
-      if (imageDataUrl == null ||
-          imageDataUrl.isEmpty) {
-        return const ImageGenerationResult.failure(
-          'خدمة الصور لم ترجع صورة.',
-        );
-      }
+          final bytes =
+              base64Decode(cleanBase64);
 
-      try {
-        String cleanBase64 =
-            imageDataUrl;
-
-        if (cleanBase64
-            .startsWith('data:image/')) {
-          final comma =
-              cleanBase64.indexOf(',');
-
-          if (comma != -1) {
-            cleanBase64 =
-                cleanBase64.substring(
-              comma + 1,
+          if (bytes.isEmpty) {
+            return const ImageGenerationResult.failure(
+              'خدمة الصور رجعت بيانات فارغة.',
             );
           }
-        }
 
-        final bytes =
-            base64Decode(cleanBase64);
-
-        if (bytes.isEmpty) {
+          return ImageGenerationResult.success(
+            bytes,
+          );
+        } catch (_) {
           return const ImageGenerationResult.failure(
-            'خدمة الصور رجعت بيانات فارغة.',
+            'تعذر قراءة الصورة التي رجعتها الخدمة.',
           );
         }
+      }
 
-        return ImageGenerationResult.success(
-          bytes,
-        );
-      } catch (_) {
-        return const ImageGenerationResult.failure(
-          'تعذر قراءة الصورة التي رجعتها الخدمة.',
+      final imageUrl =
+          data['imageUrl'];
+
+      if (imageUrl is String &&
+          imageUrl.trim().isNotEmpty) {
+        return ImageGenerationResult.successUrl(
+          imageUrl.trim(),
         );
       }
+
+      return const ImageGenerationResult.failure(
+        'خدمة الصور لم ترجع صورة.',
+      );
+    } on TimeoutException {
+      return const ImageGenerationResult.failure(
+        'الاتصال بخدمة الصور استغرق وقتًا أطول من اللازم.',
+      );
     } catch (_) {
       return const ImageGenerationResult.failure(
-        'الاتصال بخدمة الصور انتهى قبل وصول النتيجة.',
+        'تعذر الاتصال بخدمة الصور حاليًا.',
       );
     }
   }
@@ -413,10 +298,11 @@ class AiService {
             },
           )
           .timeout(
-            const Duration(seconds: 20),
+            const Duration(seconds: 25),
           );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
         return [];
       }
 
@@ -472,13 +358,16 @@ class AiService {
   // AUDIO SEARCH
   // ============================================================
 
-  static Future<List<AudioSearchItem>>
-      searchAudio(
+  static Future<List<AudioSearchItem>> searchAudio(
     String query, {
     String type = 'quran',
   }) async {
     final clean =
         query.trim();
+
+    if (clean.isEmpty) {
+      return [];
+    }
 
     try {
       final uri =
@@ -491,12 +380,18 @@ class AiService {
       );
 
       final response = await http
-          .get(uri)
+          .get(
+            uri,
+            headers: const {
+              'Cache-Control': 'no-cache',
+            },
+          )
           .timeout(
             const Duration(seconds: 25),
           );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
         return [];
       }
 
@@ -570,18 +465,21 @@ class AiService {
   // QURAN CATALOG
   // ============================================================
 
-  static Future<QuranCatalog?>
-      getQuranCatalog() async {
+  static Future<QuranCatalog?> getQuranCatalog() async {
     try {
       final response = await http
           .get(
             Uri.parse(quranEndpoint),
+            headers: const {
+              'Cache-Control': 'no-cache',
+            },
           )
           .timeout(
             const Duration(seconds: 25),
           );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
         return null;
       }
 
@@ -604,8 +502,7 @@ class AiService {
           <QuranReciter>[];
 
       if (reciterList is List) {
-        for (final item
-            in reciterList) {
+        for (final item in reciterList) {
           if (item is! Map) {
             continue;
           }
@@ -617,8 +514,7 @@ class AiService {
               <QuranMoshaf>[];
 
           if (moshafRaw is List) {
-            for (final m
-                in moshafRaw) {
+            for (final m in moshafRaw) {
               if (m is! Map) {
                 continue;
               }
@@ -673,8 +569,7 @@ class AiService {
           <QuranSura>[];
 
       if (suraList is List) {
-        for (final item
-            in suraList) {
+        for (final item in suraList) {
           if (item is! Map) {
             continue;
           }
@@ -730,12 +625,16 @@ class AiService {
             Uri.parse(
               radioCountriesEndpoint,
             ),
+            headers: const {
+              'Cache-Control': 'no-cache',
+            },
           )
           .timeout(
             const Duration(seconds: 20),
           );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
         return [];
       }
 
@@ -807,12 +706,18 @@ class AiService {
       );
 
       final response = await http
-          .get(uri)
+          .get(
+            uri,
+            headers: const {
+              'Cache-Control': 'no-cache',
+            },
+          )
           .timeout(
             const Duration(seconds: 25),
           );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
         return [];
       }
 
@@ -892,7 +797,8 @@ class AiService {
             const Duration(seconds: 25),
           );
 
-      if (response.statusCode != 200) {
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
         return [];
       }
 
@@ -972,45 +878,21 @@ class AiService {
     }
   }
 
-  static String _mime(String name) {
-    final value =
-        name.toLowerCase();
-
-    if (value.endsWith('.png')) {
-      return 'image/png';
-    }
-
-    if (value.endsWith('.webp')) {
-      return 'image/webp';
-    }
-
-    if (value.endsWith('.gif')) {
-      return 'image/gif';
-    }
-
-    return 'image/jpeg';
-  }
-
   static String _serverError(
     http.Response response,
   ) {
-    try {
-      final data =
-          _decodeMap(response.body);
+    final data =
+        _decodeMap(response.body);
 
-      if (data != null) {
-        final error =
-            data['error'];
+    final error =
+        data?['error']
+            ?.toString()
+            .trim();
 
-        if (error != null &&
-            error
-                .toString()
-                .trim()
-                .isNotEmpty) {
-          return error.toString();
-        }
-      }
-    } catch (_) {}
+    if (error != null &&
+        error.isNotEmpty) {
+      return error;
+    }
 
     switch (response.statusCode) {
       case 400:
@@ -1020,13 +902,22 @@ class AiService {
       case 403:
         return 'خدمة الذكاء الاصطناعي تحتاج إعداد صلاحية صحيح.';
 
+      case 408:
+        return 'الطلب استغرق وقتًا أطول من اللازم.';
+
+      case 413:
+        return 'البيانات المرسلة كبيرة جدًا.';
+
       case 429:
         return 'الخدمة مشغولة حاليًا. جرّب بعد لحظات.';
 
       case 500:
+        return 'حصل خطأ داخل الخادم.';
+
       case 502:
       case 503:
-        return 'الخادم مشغول أو الخدمة غير متاحة حاليًا.';
+      case 504:
+        return 'الخدمة غير متاحة مؤقتًا.';
 
       default:
         return 'حصل خطأ في الاتصال بالخادم.';
