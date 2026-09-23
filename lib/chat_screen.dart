@@ -16,19 +16,6 @@ import 'services/credits_service.dart';
 import 'services/profile_service.dart';
 import 'widgets/chat_screen_body.dart';
 
-/// شاشة المحادثة الرئيسية.
-///
-/// هذه الشاشة مسؤولة عن الربط بين:
-/// - ChatController
-/// - ProfileService
-/// - ChatMediaService
-/// - ChatVoiceService
-/// - ChatImageService
-/// - AiRequestService
-/// - ChatScreenBody
-///
-/// كل خدمة تظل مستقلة، والمحادثة الخاصة بكل قسم
-/// يتم حفظها بشكل منفصل.
 class ChatScreen extends StatefulWidget {
   final String? serviceTitle;
   final String? serviceContext;
@@ -204,15 +191,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initialize() async {
     try {
-      await _profileService.initialize();
+      // نجهز الخدمات الأساسية بالتوازي.
+      //
+      // TTS متعمدين لا نهيئه هنا.
+      // هيتم تهيئته عند أول استخدام للصوت.
+      await Future.wait([
+        _profileService.initialize(),
+        _creditsService.initialize(),
+        _chatController.initialize(),
+      ]);
 
-      await _creditsService.initialize();
-
+      // قراءة الرصيد ليست شرطًا لفتح الشات.
+      // نعملها بعد التهيئة الأساسية.
       await _creditsService.refresh();
-
-      await _chatController.initialize();
-
-      await _voiceService.initializeTts();
 
       if (!mounted) {
         return;
@@ -263,8 +254,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _textController.clear();
 
-    // لو الرسالة طلب إنشاء صورة،
-    // يتم تحويلها مباشرة إلى مولد الصور.
     if (_looksLikeImageRequest(text)) {
       await _generateImage(text);
       return;
@@ -277,10 +266,6 @@ class _ChatScreenState extends State<ChatScreen> {
         CreditsConfig.textMessageCost;
 
     await _creditsService.initialize();
-
-    // ==========================================================
-    // CREDITS
-    // ==========================================================
 
     if (cost > 0) {
       final canAfford =
@@ -308,10 +293,6 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    // ==========================================================
-    // USER MESSAGE
-    // ==========================================================
-
     await _chatController.addTextMessage(
       text: text,
       isUser: true,
@@ -320,10 +301,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     _chatController.setLoading(true);
-
-    // ==========================================================
-    // AI
-    // ==========================================================
 
     try {
       final reply =
@@ -745,9 +722,18 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     final cleaned =
-        _cleanSpeech(
-      latestAi.text,
-    );
+        _cleanSpeech(latestAi.text);
+
+    // TTS يتم تهيئته هنا فقط عند الحاجة.
+    final initialized =
+        await _voiceService.initializeTts();
+
+    if (!initialized) {
+      _showMessage(
+        'تعذر تهيئة الصوت على الهاتف حاليًا.',
+      );
+      return;
+    }
 
     final success =
         await _voiceService.speak(
