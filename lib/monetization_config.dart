@@ -28,25 +28,54 @@ class MonetizationConfig {
   // MONETIZATION SWITCHES
   // ============================================================
 
-  /// Affiliate links are enabled.
+  /// تشغيل روابط التسوق والـ Affiliate.
   static const bool affiliateEnabled = true;
 
-  /// AdMob is enabled.
-  ///
-  /// Actual AdMob initialization and loading are handled by
-  /// AdsService.
+  /// تشغيل AdMob.
   static const bool admobEnabled = true;
 
   // ============================================================
-  // GENERAL SETTINGS
+  // HOME ADS
   // ============================================================
 
-  /// Show the main banner on the Home screen.
+  /// إظهار بانر AdMob في الصفحة الرئيسية.
   static const bool homeBannerEnabled = true;
 
-  /// Allow interstitial ads where appropriate.
+  /// السماح بإعلانات Interstitial.
   static const bool interstitialEnabled = true;
 
-  /// Allow rewarded ads for earning credits.
+  /// السماح بالإعلانات المدفوعة Rewarded.
   static const bool rewardedAdsEnabled = true;
+
+  // ============================================================
+  // AFFILIATE CAROUSEL
+  // ============================================================
+
+  /// إظهار شريط التسوق الأفقي في الصفحة الرئيسية.
+  static const bool affiliateCarouselEnabled = true;
+
+  /// عنوان قسم التسوق.
+  static const String affiliateCarouselTitle =
+      'تسوق من صاحبي';
+
+  /// وصف قصير أسفل العنوان.
+  static const String affiliateCarouselSubtitle =
+      'اختار المتجر وافتحه مباشرة';
+
+  // ============================================================
+  // APP DOWNLOAD
+  // ============================================================
+
+  static const String downloadTitle =
+      'حمّل صاحبي AI';
+
+  static const String downloadSubtitle =
+      'نسخة التطبيق الرسمية';
+
+  // ============================================================
+  // CREDIT / MONETIZATION SETTINGS
+  // ============================================================
+
+  static const int rewardedCredits =
+      5;
 }
