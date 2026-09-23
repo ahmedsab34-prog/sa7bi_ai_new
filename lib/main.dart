@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'audio_center_screen.dart';
 import 'audio_player_service.dart';
 import 'categories_screen.dart';
+import 'chat_screen.dart';
+import 'config/service_keys.dart';
 import 'home_screen.dart';
-import 'khalasana_portal_screen.dart';
 import 'profile_screen.dart';
 import 'widgets/khalasana_portal.dart';
 
@@ -13,11 +14,10 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // مهم:
-  // التطبيق يظهر فورًا بدون انتظار AudioService أو AdMob أو أي
-  // خدمة ثقيلة قبل أول Frame.
+  // لا ننتظر AudioService أو AdMob أو أي خدمة خارجية
+  // قبل أول Frame.
   //
-  // AudioService سيتم تهيئته عند أول استخدام للصوت من خلال
-  // AudioController.initialize().
+  // AudioService يظل Lazy ويُهيأ عند استخدام الصوت.
   runApp(const Sa7biAiApp());
 }
 
@@ -31,7 +31,8 @@ class Sa7biAiApp extends StatelessWidget {
       title: 'صاحبي AI',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF070A12),
+        scaffoldBackgroundColor:
+            const Color(0xFF070A12),
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFFFD76A),
           brightness: Brightness.dark,
@@ -65,11 +66,35 @@ class _MainContainerScreenState
     });
   }
 
+  // ==========================================================
+  // KHALASANA
+  // ==========================================================
+  //
+  // خلصانة تفتح الشات مباشرة.
+  // لا توجد شاشة وسيطة ولا انتظار للبوابة.
+  //
+
   void openKhalasana() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => const KhalasanaPortalScreen(),
+        builder: (_) => const ChatScreen(
+          serviceKey: ServiceKeys.khalasana,
+          serviceTitle: 'خلصانة AI',
+          serviceContext: '''
+أنت خلصانة AI، المساعد الشامل داخل تطبيق صاحبي.
+
+ساعد المستخدم مباشرة في أي موضوع بدون إجباره على اختيار قسم.
+يمكنه الكتابة، إرسال صورة أو فيديو، استخدام الصوت، أو طلب إنشاء صورة.
+
+إذا أرسل المستخدم صورة، حللها بقدر ما تسمح به الصورة ولا تخمن الأشياء غير الواضحة.
+إذا طلب إنشاء صورة، استخدم مسار إنشاء الصور الموجود في التطبيق.
+إذا كان الموضوع مرتبطًا بخدمة أو مجال محدد، استخدم أفضل سياق مناسب تلقائيًا.
+كن واضحًا ومفيدًا ومباشرًا.
+لا تدّعي تنفيذ شيء لم يتم تنفيذه فعليًا.
+إذا فشلت خدمة فعلية، وضح ذلك وقدم بديلًا مفيدًا.
+''',
+        ),
       ),
     );
   }
@@ -107,8 +132,8 @@ class _MainContainerScreenState
               children: pages,
             ),
 
-            // مشغل الصوت المصغر يظل ظاهرًا
-            // أثناء التنقل داخل التطبيق.
+            // مشغل الصوت المصغر.
+            // لا نلمس نظام الصوت الحالي لأنه يعمل في الخلفية.
             const Positioned(
               left: 10,
               right: 10,
@@ -116,7 +141,8 @@ class _MainContainerScreenState
               child: MiniAudioPlayer(),
             ),
 
-            // بوابة خلصانة AI العائمة.
+            // بوابة خلصانة العائمة.
+            // الضغط عليها يفتح ChatScreen مباشرة.
             Positioned(
               right: 12,
               bottom: 92,
@@ -127,10 +153,11 @@ class _MainContainerScreenState
           ],
         ),
       ),
-
       bottomNavigationBar: NavigationBar(
-        backgroundColor: const Color(0xFF11141D),
-        indicatorColor: const Color(0x3348D8FF),
+        backgroundColor:
+            const Color(0xFF11141D),
+        indicatorColor:
+            const Color(0x3348D8FF),
         selectedIndex: index,
         onDestinationSelected: (value) {
           setState(() {
@@ -183,7 +210,8 @@ class MiniAudioPlayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<MediaItem?>(
-      stream: AudioController.handler?.mediaItem,
+      stream:
+          AudioController.handler?.mediaItem,
       builder: (
         context,
         mediaSnapshot,
@@ -194,7 +222,8 @@ class MiniAudioPlayer extends StatelessWidget {
           return const SizedBox.shrink();
         }
 
-        final handler = AudioController.handler;
+        final handler =
+            AudioController.handler;
 
         if (handler == null) {
           return const SizedBox.shrink();
@@ -204,12 +233,15 @@ class MiniAudioPlayer extends StatelessWidget {
           color: Colors.transparent,
           child: Container(
             height: 66,
-            padding: const EdgeInsets.symmetric(
+            padding:
+                const EdgeInsets.symmetric(
               horizontal: 8,
             ),
             decoration: BoxDecoration(
-              color: const Color(0xFF151923).withOpacity(0.98),
-              borderRadius: BorderRadius.circular(20),
+              color: const Color(0xFF151923)
+                  .withOpacity(0.98),
+              borderRadius:
+                  BorderRadius.circular(20),
               border: Border.all(
                 color: const Color(0x55FFD76A),
               ),
@@ -223,22 +255,24 @@ class MiniAudioPlayer extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // فتح مركز الصوت
                 GestureDetector(
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => const AudioCenterScreen(),
+                        builder: (_) =>
+                            const AudioCenterScreen(),
                       ),
                     );
                   },
                   child: Container(
                     width: 46,
                     height: 46,
-                    decoration: const BoxDecoration(
+                    decoration:
+                        const BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
+                      gradient:
+                          LinearGradient(
                         colors: [
                           Color(0xFFFFD76A),
                           Color(0xFF7164FF),
@@ -254,37 +288,47 @@ class MiniAudioPlayer extends StatelessWidget {
 
                 const SizedBox(width: 9),
 
-                // اسم المقطع / القارئ
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const AudioCenterScreen(),
+                          builder: (_) =>
+                              const AudioCenterScreen(),
                         ),
                       );
                     },
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.end,
                       children: [
                         Text(
                           item.title,
-                          textDirection: TextDirection.rtl,
+                          textDirection:
+                              TextDirection.rtl,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style:
+                              const TextStyle(
+                            fontWeight:
+                                FontWeight.w900,
                             fontSize: 12,
                           ),
                         ),
                         Text(
-                          item.artist ?? 'صاحبي AI',
-                          textDirection: TextDirection.rtl,
+                          item.artist ??
+                              'صاحبي AI',
+                          textDirection:
+                              TextDirection.rtl,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style:
+                              const TextStyle(
                             color: Colors.white54,
                             fontSize: 10,
                           ),
@@ -294,7 +338,6 @@ class MiniAudioPlayer extends StatelessWidget {
                   ),
                 ),
 
-                // تشغيل / إيقاف
                 StreamBuilder<PlaybackState>(
                   stream: handler.playbackState,
                   builder: (
@@ -302,7 +345,8 @@ class MiniAudioPlayer extends StatelessWidget {
                     snapshot,
                   ) {
                     final playing =
-                        snapshot.data?.playing ?? false;
+                        snapshot.data?.playing ??
+                            false;
 
                     return IconButton(
                       onPressed: () {
@@ -315,15 +359,18 @@ class MiniAudioPlayer extends StatelessWidget {
                       icon: Icon(
                         playing
                             ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: const Color(0xFFFFD76A),
+                            : Icons
+                                .play_arrow_rounded,
+                        color:
+                            const Color(
+                          0xFFFFD76A,
+                        ),
                         size: 28,
                       ),
                     );
                   },
                 ),
 
-                // إيقاف الصوت
                 IconButton(
                   onPressed: () {
                     handler.stop();
