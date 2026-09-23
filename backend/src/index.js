@@ -5,7 +5,7 @@ const CORS_HEADERS = {
   "Cache-Control": "no-store"
 };
 
-const BACKEND_VERSION = "4.0.0";
+const BACKEND_VERSION = "4.1.0";
 
 const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
@@ -494,9 +494,10 @@ async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
     headers: {
-      "User-Agent": "Sa7bi-AI/4.0",
+      "User-Agent": "Sa7bi-AI/4.1",
       ...(options.headers || {})
-    }
+    },
+    cache: "no-store"
   });
 
   if (!response.ok) {
@@ -1137,10 +1138,19 @@ function parseRssItems(xml) {
     const description =
       getTag("description");
 
-    const image =
-      extractNewsImage(
-        description
+    const mediaImageMatch =
+      block.match(
+        /<(?:media:content|media:thumbnail)[^>]+url=["']([^"']+)["']/i
+      ) ||
+      block.match(
+        /<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\//i
       );
+
+    const image =
+      extractNewsImage(description) ||
+      (mediaImageMatch
+        ? decodeXml(mediaImageMatch[1])
+        : "");
 
     if (!title || !link) {
       continue;
@@ -1170,12 +1180,17 @@ async function fetchGoogleNews() {
 
   for (const feed of feeds) {
     try {
+      const separator = feed.includes("?") ? "&" : "?";
+      const freshFeed = `${feed}${separator}_=${Date.now()}`;
+
       const response =
-        await fetch(feed, {
+        await fetch(freshFeed, {
           headers: {
             "User-Agent":
-              "Mozilla/5.0 Sa7bi-AI/4.0"
-          }
+              "Mozilla/5.0 Sa7bi-AI/4.1",
+            "Cache-Control": "no-cache"
+          },
+          cache: "no-store"
         });
 
       if (!response.ok) {
@@ -1240,7 +1255,8 @@ async function handleRoot() {
       radioStations:
         "/v1/radio/stations?country=EG",
       shorts: "/v1/shorts",
-      download: "/download"
+      download: "/download",
+      health: "/health"
     }
   });
 }
@@ -1283,6 +1299,19 @@ export default {
 
       if (
         request.method === "GET" &&
+        path === "/health"
+      ) {
+        return json({
+          ok: true,
+          status: "online",
+          backendVersion: BACKEND_VERSION,
+          openaiConfigured:
+            Boolean(env.OPENAI_API_KEY)
+        });
+      }
+
+      if (
+        request.method === "GET" &&
         path === "/download"
       ) {
         return handleDownload();
@@ -1290,7 +1319,10 @@ export default {
 
       if (
         request.method === "GET" &&
-        path === "/v1/news"
+        (
+          path === "/v1/news" ||
+          path === "/news"
+        )
       ) {
         return handleNews();
       }
@@ -1299,7 +1331,8 @@ export default {
         request.method === "GET" &&
         (
           path === "/v1/audio/search" ||
-          path === "/v1/audio/search-v4"
+          path === "/v1/audio/search-v4" ||
+          path === "/audio/search"
         )
       ) {
         return handleAudioSearch(
@@ -1310,21 +1343,30 @@ export default {
 
       if (
         request.method === "GET" &&
-        path === "/v1/audio/quran"
+        (
+          path === "/v1/audio/quran" ||
+          path === "/audio/quran"
+        )
       ) {
         return handleQuranCatalog();
       }
 
       if (
         request.method === "GET" &&
-        path === "/v1/radio/countries"
+        (
+          path === "/v1/radio/countries" ||
+          path === "/radio/countries"
+        )
       ) {
         return handleRadioCountries();
       }
 
       if (
         request.method === "GET" &&
-        path === "/v1/radio/stations"
+        (
+          path === "/v1/radio/stations" ||
+          path === "/radio/stations"
+        )
       ) {
         return handleRadioStations(
           request
@@ -1333,14 +1375,20 @@ export default {
 
       if (
         request.method === "GET" &&
-        path === "/v1/shorts"
+        (
+          path === "/v1/shorts" ||
+          path === "/shorts"
+        )
       ) {
         return handleShorts();
       }
 
       if (
         request.method === "POST" &&
-        path === "/v1/chat"
+        (
+          path === "/v1/chat" ||
+          path === "/chat"
+        )
       ) {
         return await handleChat(
           request,
@@ -1350,7 +1398,10 @@ export default {
 
       if (
         request.method === "POST" &&
-        path === "/v1/image"
+        (
+          path === "/v1/image" ||
+          path === "/image"
+        )
       ) {
         return await handleImageGeneration(
           request,
