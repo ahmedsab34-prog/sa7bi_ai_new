@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - الـReel.
 /// - الـBio.
 /// - الـStatus.
+/// - حالة اتصال الذكاء الاصطناعي.
 class ProfileService {
   ProfileService._();
 
@@ -41,6 +42,9 @@ class ProfileService {
   static const String profileStatusKey =
       'profile_status';
 
+  static const String aiConnectedKey =
+      'profile_ai_connected';
+
   // ============================================================
   // DEFAULT VALUES
   // ============================================================
@@ -53,6 +57,9 @@ class ProfileService {
 
   static const String defaultProfileStatus =
       '';
+
+  static const bool defaultAiConnected =
+      false;
 
   // ============================================================
   // REACTIVE STATE
@@ -86,6 +93,9 @@ class ProfileService {
   String _status =
       defaultProfileStatus;
 
+  bool _aiConnected =
+      defaultAiConnected;
+
   // ============================================================
   // GETTERS
   // ============================================================
@@ -107,6 +117,12 @@ class ProfileService {
 
   String get status =>
       _status;
+
+  bool get aiConnected =>
+      _aiConnected;
+
+  bool get isAiConnected =>
+      _aiConnected;
 
   bool get hasName =>
       _name.trim().isNotEmpty &&
@@ -226,6 +242,12 @@ class ProfileService {
 
     _status =
         savedStatus?.trim() ?? '';
+
+    _aiConnected =
+        prefs.getBool(
+              aiConnectedKey,
+            ) ??
+            defaultAiConnected;
   }
 
   Future<void> refresh() async {
@@ -234,6 +256,65 @@ class ProfileService {
     await _load();
 
     _notifyChanged();
+  }
+
+  // ============================================================
+  // AI CONNECTION
+  // ============================================================
+
+  /// يحفظ حالة اتصال الذكاء الاصطناعي على الجهاز.
+  ///
+  /// الحالة تظل محفوظة حتى بعد:
+  /// - الخروج من صفحة البروفايل.
+  /// - إغلاق التطبيق.
+  /// - فتح التطبيق مرة أخرى.
+  Future<bool> saveAiConnection(
+    bool connected,
+  ) async {
+    await _ensureInitialized();
+
+    final prefs =
+        _preferences;
+
+    if (prefs == null) {
+      return false;
+    }
+
+    final success =
+        await prefs.setBool(
+      aiConnectedKey,
+      connected,
+    );
+
+    if (!success) {
+      return false;
+    }
+
+    _aiConnected =
+        connected;
+
+    _notifyChanged();
+
+    return true;
+  }
+
+  /// اسم بديل واضح للاستخدام من باقي أجزاء التطبيق.
+  Future<bool> setAiConnected(
+    bool connected,
+  ) {
+    return saveAiConnection(
+      connected,
+    );
+  }
+
+  /// يعلّم أن الذكاء الاصطناعي متصل.
+  Future<bool> markAiConnected() {
+    return saveAiConnection(true);
+  }
+
+  /// يعلّم أن الذكاء الاصطناعي غير متصل.
+  Future<bool> markAiDisconnected() {
+    return saveAiConnection(false);
   }
 
   // ============================================================
@@ -269,7 +350,8 @@ class ProfileService {
       return false;
     }
 
-    _name = cleaned;
+    _name =
+        cleaned;
 
     _notifyChanged();
 
@@ -315,7 +397,8 @@ class ProfileService {
       return false;
     }
 
-    _bio = cleaned;
+    _bio =
+        cleaned;
 
     _notifyChanged();
 
@@ -355,7 +438,8 @@ class ProfileService {
       return false;
     }
 
-    _status = cleaned;
+    _status =
+        cleaned;
 
     _notifyChanged();
 
@@ -440,7 +524,8 @@ class ProfileService {
       return false;
     }
 
-    _photoBase64 = '';
+    _photoBase64 =
+        '';
 
     _notifyChanged();
 
@@ -476,7 +561,8 @@ class ProfileService {
         return false;
       }
 
-      _reelName = '';
+      _reelName =
+          '';
 
       _notifyChanged();
 
@@ -516,6 +602,8 @@ class ProfileService {
       'reelName': _reelName,
       'bio': _bio,
       'status': _status,
+      'aiConnected': _aiConnected,
+      'isAiConnected': _aiConnected,
       'hasPhoto': hasPhoto,
       'hasReel': hasReel,
       'hasBio': hasBio,
@@ -548,15 +636,20 @@ class ProfileService {
     _name =
         defaultProfileName;
 
-    _photoBase64 = '';
+    _photoBase64 =
+        '';
 
-    _reelName = '';
+    _reelName =
+        '';
 
     _bio =
         defaultProfileBio;
 
     _status =
         defaultProfileStatus;
+
+    _aiConnected =
+        defaultAiConnected;
 
     if (prefs != null) {
       await prefs.remove(
@@ -577,6 +670,10 @@ class ProfileService {
 
       await prefs.remove(
         profileStatusKey,
+      );
+
+      await prefs.remove(
+        aiConnectedKey,
       );
     }
 
