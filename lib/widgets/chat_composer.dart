@@ -100,13 +100,13 @@ class _ChatComposerState extends State<ChatComposer> {
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(
-          10,
           8,
-          10,
-          10,
+          6,
+          8,
+          8,
         ),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.22),
+          color: Colors.black.withOpacity(0.25),
           border: Border(
             top: BorderSide(
               color: Colors.white.withOpacity(0.10),
@@ -124,39 +124,30 @@ class _ChatComposerState extends State<ChatComposer> {
             ChatToolbar(
               onCamera:
                   disabled ? null : widget.onCamera,
-
               onGallery:
                   disabled ? null : widget.onGallery,
-
               onVideo:
                   disabled ? null : widget.onVideo,
-
               onVoice:
                   disabled ? null : widget.onVoice,
-
               onText:
                   disabled ? null : widget.onText,
-
               onSpeechToText:
                   disabled
                       ? null
                       : widget.onSpeechToText,
-
               onImageGeneration:
                   disabled
                       ? null
                       : widget.onImageGeneration,
-
               enabled: !disabled,
-
               isListening:
                   widget.isListening,
-
               isGeneratingImage:
                   widget.isGeneratingImage,
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 5),
 
             // =====================================================
             // مربع الكتابة + زر الإرسال
@@ -167,22 +158,45 @@ class _ChatComposerState extends State<ChatComposer> {
                   CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: Container(
+                  child: AnimatedContainer(
+                    duration:
+                        const Duration(
+                      milliseconds: 180,
+                    ),
                     constraints:
                         const BoxConstraints(
-                      minHeight: 48,
-                      maxHeight: 130,
+                      minHeight: 50,
+                      maxHeight: 135,
                     ),
-                    decoration:
-                        BoxDecoration(
-                      color: Colors.white
-                          .withOpacity(0.09),
-                      borderRadius:
-                          BorderRadius.circular(24),
-                      border: Border.all(
-                        color: Colors.white
-                            .withOpacity(0.14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(
+                        0.095,
                       ),
+                      borderRadius:
+                          BorderRadius.circular(25),
+                      border: Border.all(
+                        color: _hasText
+                            ? Colors.white.withOpacity(
+                                0.24,
+                              )
+                            : Colors.white.withOpacity(
+                                0.13,
+                              ),
+                        width: 1,
+                      ),
+                      boxShadow: _hasText
+                          ? [
+                              BoxShadow(
+                                color:
+                                    Colors.white
+                                        .withOpacity(
+                                  0.05,
+                                ),
+                                blurRadius: 12,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
                     ),
                     child: TextField(
                       controller:
@@ -219,7 +233,7 @@ class _ChatComposerState extends State<ChatComposer> {
                         hintStyle:
                             TextStyle(
                           color: Colors.white
-                              .withOpacity(0.50),
+                              .withOpacity(0.48),
                           fontSize: 15,
                         ),
                         border:
@@ -255,15 +269,15 @@ class _ChatComposerState extends State<ChatComposer> {
                             ? null
                             : _send,
                     borderRadius:
-                        BorderRadius.circular(24),
+                        BorderRadius.circular(25),
                     child:
                         AnimatedContainer(
                       duration:
                           const Duration(
                         milliseconds: 200,
                       ),
-                      width: 48,
-                      height: 48,
+                      width: 50,
+                      height: 50,
                       decoration:
                           BoxDecoration(
                         shape: BoxShape.circle,
@@ -278,10 +292,10 @@ class _ChatComposerState extends State<ChatComposer> {
                                             .bottomRight,
                                     colors: [
                                       Color(
-                                        0xFFFFD76A,
+                                        0xFFFFE08A,
                                       ),
                                       Color(
-                                        0xFFFF9F43,
+                                        0xFFFFB347,
                                       ),
                                     ],
                                   )
@@ -293,16 +307,26 @@ class _ChatComposerState extends State<ChatComposer> {
                                         Alignment
                                             .bottomRight,
                                     colors: [
-                                      Colors.white
-                                          .withOpacity(
-                                        0.10,
+                                      Color(
+                                        0x22FFFFFF,
                                       ),
-                                      Colors.white
-                                          .withOpacity(
-                                        0.06,
+                                      Color(
+                                        0x0FFFFFFF,
                                       ),
                                     ],
                                   ),
+                        border: Border.all(
+                          color:
+                              _hasText && !disabled
+                                  ? Colors.white
+                                      .withOpacity(
+                                      0.28,
+                                    )
+                                  : Colors.white
+                                      .withOpacity(
+                                      0.08,
+                                    ),
+                        ),
                         boxShadow:
                             _hasText && !disabled
                                 ? [
@@ -311,9 +335,9 @@ class _ChatComposerState extends State<ChatComposer> {
                                           const Color(
                                         0xFFFFD76A,
                                       ).withOpacity(
-                                        0.28,
+                                        0.30,
                                       ),
-                                      blurRadius: 12,
+                                      blurRadius: 14,
                                       spreadRadius: 1,
                                     ),
                                   ]
@@ -328,7 +352,7 @@ class _ChatComposerState extends State<ChatComposer> {
                                   ),
                                   child:
                                       CircularProgressIndicator(
-                                    strokeWidth: 2,
+                                    strokeWidth: 2.2,
                                     valueColor:
                                         AlwaysStoppedAnimation<
                                             Color>(
@@ -345,9 +369,9 @@ class _ChatComposerState extends State<ChatComposer> {
                                           ? Colors.black
                                           : Colors.white
                                               .withOpacity(
-                                            0.35,
+                                            0.30,
                                           ),
-                                  size: 25,
+                                  size: 26,
                                 ),
                     ),
                   ),
