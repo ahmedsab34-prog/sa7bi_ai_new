@@ -1,9 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 /// طبقة الاتصال الوحيدة المستخدمة في المحادثة مع Worker.
+///
+/// مهم جدًا:
+/// - لا يوجد OpenAI API Key داخل التطبيق.
+/// - التطبيق يتصل فقط بـ Cloudflare Worker.
+/// - الـWorker هو المسؤول عن الاتصال بـ OpenAI.
+/// - يوجد Retry تلقائي للأخطاء المؤقتة.
+/// - يوجد دعم للنص وتحليل الصور.
 class AiRequestService {
   AiRequestService._();
 
@@ -14,6 +22,17 @@ class AiRequestService {
       '$base/v1/chat';
 
   static const int maxHistory = 8;
+
+  static const Duration chatTimeout =
+      Duration(seconds: 90);
+
+  static const Duration imageTimeout =
+      Duration(seconds: 120);
+
+  static const int maxImageBytes =
+      5 * 1024 * 1024;
+
+  static const int maxAttempts = 3;
 
   // ============================================================
   // CHAT
@@ -68,6 +87,7 @@ class AiRequestService {
       });
     }
 
+    // الرسالة الحالية تأتي دائمًا في النهاية.
     messages.add({
       'role': 'user',
       'content': text,
@@ -96,11 +116,10 @@ class AiRequestService {
           cleanContext;
     }
 
-    final response = await _post(
+    final response = await _postWithRetry(
       chatEndpoint,
       body: body,
-      timeout:
-          const Duration(seconds: 90),
+      timeout: chatTimeout,
     );
 
     final data =
@@ -172,7 +191,7 @@ class AiRequestService {
     }
 
     if (bytes.length >
-        5 * 1024 * 1024) {
+        maxImageBytes) {
       throw const AiRequestException(
         'الصورة كبيرة جدًا. ابعت صورة أصغر من 5 ميجابايت.',
       );
@@ -188,6 +207,11 @@ class AiRequestService {
           '${serviceContext.trim()}\n\n'
           'طلب المستخدم:\n'
           '$finalPrompt';
+    }
+
+    if (finalPrompt.isEmpty) {
+      finalPrompt =
+          'حلل الصورة المرسلة بدقة وباختصار.';
     }
 
     final mime =
@@ -206,17 +230,19 @@ class AiRequestService {
           '${base64Encode(bytes)}',
     };
 
-    if (serviceTitle != null &&
-        serviceTitle.trim().isNotEmpty) {
+    final cleanTitle =
+        serviceTitle?.trim();
+
+    if (cleanTitle != null &&
+        cleanTitle.isNotEmpty) {
       body['serviceTitle'] =
-          serviceTitle.trim();
+          cleanTitle;
     }
 
-    final response = await _post(
+    final response = await _postWithRetry(
       chatEndpoint,
       body: body,
-      timeout:
-          const Duration(seconds: 120),
+      timeout: imageTimeout,
     );
 
     final data =
@@ -268,7 +294,78 @@ class AiRequestService {
   }
 
   // ============================================================
-  // HTTP
+  // HTTP WITH RETRY
+  // ============================================================
+
+  static Future<http.Response> _postWithRetry(
+    String endpoint, {
+    required Map<String, dynamic> body,
+    required Duration timeout,
+  }) async {
+    Object? lastError;
+
+    for (int attempt = 1;
+        attempt <= maxAttempts;
+        attempt++) {
+      try {
+        final response =
+            await _post(
+          endpoint,
+          body: body,
+          timeout: timeout,
+        );
+
+        if (!_shouldRetry(
+          response.statusCode,
+        )) {
+          return response;
+        }
+
+        if (attempt >= maxAttempts) {
+          return response;
+        }
+
+        await Future<void>.delayed(
+          Duration(
+            seconds: attempt * 2,
+          ),
+        );
+      } catch (error) {
+        lastError = error;
+
+        if (attempt >= maxAttempts) {
+          rethrow;
+        }
+
+        await Future<void>.delayed(
+          Duration(
+            seconds: attempt * 2,
+          ),
+        );
+      }
+    }
+
+    throw AiRequestException(
+      _connectionError(
+        lastError ?? 'Unknown error',
+      ),
+    );
+  }
+
+  static bool _shouldRetry(
+    int statusCode,
+  ) {
+    return statusCode == 408 ||
+        statusCode == 425 ||
+        statusCode == 429 ||
+        statusCode == 500 ||
+        statusCode == 502 ||
+        statusCode == 503 ||
+        statusCode == 504;
+  }
+
+  // ============================================================
+  // HTTP POST
   // ============================================================
 
   static Future<http.Response> _post(
@@ -292,6 +389,10 @@ class AiRequestService {
                 jsonEncode(body),
           )
           .timeout(timeout);
+    } on TimeoutException {
+      throw const AiRequestException(
+        'الاتصال بالخادم استغرق وقتًا أطول من اللازم.',
+      );
     } on http.ClientException catch (
         error) {
       throw AiRequestException(
@@ -302,6 +403,8 @@ class AiRequestService {
       throw const AiRequestException(
         'تعذر تجهيز طلب الذكاء الاصطناعي.',
       );
+    } on AiRequestException {
+      rethrow;
     } catch (error) {
       throw AiRequestException(
         _connectionError(error),
@@ -332,7 +435,7 @@ class AiRequestService {
   }
 
   // ============================================================
-  // ERRORS
+  // SERVER ERRORS
   // ============================================================
 
   static String _errorFromData(
@@ -383,18 +486,28 @@ class AiRequestService {
         return 'البيانات المرسلة كبيرة جدًا.';
 
       case 429:
-        return 'الخدمة مشغولة حاليًا. جرّب بعد لحظات.';
+        return 'الخدمة مشغولة حاليًا. حاول بعد لحظات.';
 
       case 500:
+        return 'حصل خطأ داخل الخادم.';
+
       case 502:
+        return 'خدمة الذكاء الاصطناعي لم ترجع ردًا صحيحًا.';
+
       case 503:
+        return 'الخدمة غير متاحة مؤقتًا.';
+
       case 504:
-        return 'الخادم مشغول أو الخدمة غير متاحة حاليًا.';
+        return 'الخدمة استغرقت وقتًا أطول من اللازم.';
 
       default:
         return 'حصل خطأ في الاتصال بالخادم.';
     }
   }
+
+  // ============================================================
+  // FRIENDLY ERRORS
+  // ============================================================
 
   static String _friendlyError(
     String value,
@@ -409,18 +522,36 @@ class AiRequestService {
       case 'EMPTY_AI_RESPONSE':
         return 'الذكاء الاصطناعي لم يرجع ردًا. جرّب تاني.';
 
+      case 'EMPTY_MESSAGE':
+        return 'لم يتم إرسال رسالة.';
+
+      case 'INVALID_IMAGE':
+        return 'الصورة المرسلة غير صالحة أو كبيرة جدًا.';
+
       case 'BODY_TOO_LARGE':
         return 'البيانات المرسلة كبيرة جدًا.';
 
       case 'NOT_FOUND':
         return 'خدمة الذكاء الاصطناعي غير موجودة حاليًا.';
 
+      case 'NO_IMAGE_RESULT':
+        return 'خدمة الصور لم ترجع نتيجة.';
+
+      case 'IMAGE_FORMAT_NOT_SUPPORTED':
+        return 'صيغة الصورة التي رجعتها الخدمة غير مدعومة.';
+
       default:
-        return error.isEmpty
-            ? 'حصل خطأ غير معروف.'
-            : error;
+        if (error.isEmpty) {
+          return 'حصل خطأ غير معروف.';
+        }
+
+        return error;
     }
   }
+
+  // ============================================================
+  // CONNECTION ERROR
+  // ============================================================
 
   static String _connectionError(
     Object error,
@@ -428,17 +559,18 @@ class AiRequestService {
     final value =
         error.toString().toLowerCase();
 
-    if (value.contains('timeout')) {
-      return 'الاتصال بخدمة الذكاء الاصطناعي استغرق وقتًا طويلًا.';
+    if (value.contains('timeout') ||
+        value.contains('timed out')) {
+      return 'الاتصال بالخادم استغرق وقتًا أطول من اللازم.';
     }
 
     if (value.contains('socket') ||
         value.contains('network') ||
         value.contains('connection')) {
-      return 'مفيش اتصال مستقر بخدمة الذكاء الاصطناعي.';
+      return 'تأكد من اتصال الإنترنت وحاول مرة أخرى.';
     }
 
-    return 'حصل تأخير في الاتصال بصاحبي. جرّب تاني.';
+    return 'تعذر الاتصال بخدمة صاحبي حاليًا.';
   }
 
   // ============================================================
@@ -448,23 +580,27 @@ class AiRequestService {
   static String _mime(
     String name,
   ) {
-    final value =
+    final lower =
         name.toLowerCase();
 
-    if (value.endsWith('.png')) {
+    if (lower.endsWith('.png')) {
       return 'image/png';
     }
 
-    if (value.endsWith('.webp')) {
+    if (lower.endsWith('.webp')) {
       return 'image/webp';
     }
 
-    if (value.endsWith('.gif')) {
+    if (lower.endsWith('.gif')) {
       return 'image/gif';
     }
 
-    if (value.endsWith('.heic') ||
-        value.endsWith('.heif')) {
+    if (lower.endsWith('.bmp')) {
+      return 'image/bmp';
+    }
+
+    if (lower.endsWith('.heic') ||
+        lower.endsWith('.heif')) {
       return 'image/heic';
     }
 
@@ -472,7 +608,7 @@ class AiRequestService {
   }
 }
 
-/// خطأ معروف في طلبات AI.
+/// خطأ خاص بطلبات الذكاء الاصطناعي.
 class AiRequestException
     implements Exception {
   final String message;
@@ -485,5 +621,5 @@ class AiRequestException
 
   @override
   String toString() =>
-      message;
+      'AiRequestException: $message';
 }
