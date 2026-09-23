@@ -30,6 +30,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
   StreamSubscription<Duration?>? _durationSubscription;
   StreamSubscription<AudioInterruptionEvent>?
       _interruptionSubscription;
+  StreamSubscription<ProcessingState>? _processingSubscription;
 
   bool _initialized = false;
 
@@ -56,8 +57,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
         (event) async {
           try {
             if (event.begin) {
-              if (event.type ==
-                  AudioInterruptionType.duck) {
+              if (event.type == AudioInterruptionType.duck) {
                 await _player.setVolume(0.35);
               } else {
                 await pause();
@@ -66,7 +66,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
               await _player.setVolume(1.0);
             }
           } catch (_) {
-            // لا نسمح بخطأ في المقاطعة بإغلاق التطبيق.
+            // لا نسمح لخطأ المقاطعة بإغلاق التطبيق.
           }
         },
       );
@@ -86,7 +86,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
         _broadcastState();
       });
 
-      _player.processingStateStream.listen(
+      _processingSubscription =
+          _player.processingStateStream.listen(
         (state) async {
           if (state != ProcessingState.completed) {
             return;
@@ -100,11 +101,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
             return;
           }
 
-          final currentIndex =
-              _player.currentIndex ?? 0;
+          final currentIndex = _player.currentIndex ?? 0;
 
-          if (currentIndex + 1 <
-              currentQueue.length) {
+          if (currentIndex + 1 < currentQueue.length) {
             try {
               await skipToQueueItem(
                 currentIndex + 1,
@@ -115,7 +114,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
       );
 
       // لا نستخدم becomingNoisyEventStream
-      // لأنه غير موجود في إصدار just_audio المستخدم حاليًا.
+      // لأنه غير موجود في إصدار just_audio الحالي.
 
       _broadcastState();
     } catch (_) {
@@ -124,35 +123,29 @@ class Sa7biAudioHandler extends BaseAudioHandler
   }
 
   PlaybackState _buildPlaybackState() {
-    final processingState =
-        _player.processingState;
+    final processingState = _player.processingState;
 
     AudioProcessingState audioProcessingState;
 
     switch (processingState) {
       case ProcessingState.idle:
-        audioProcessingState =
-            AudioProcessingState.idle;
+        audioProcessingState = AudioProcessingState.idle;
         break;
 
       case ProcessingState.loading:
-        audioProcessingState =
-            AudioProcessingState.loading;
+        audioProcessingState = AudioProcessingState.loading;
         break;
 
       case ProcessingState.buffering:
-        audioProcessingState =
-            AudioProcessingState.buffering;
+        audioProcessingState = AudioProcessingState.buffering;
         break;
 
       case ProcessingState.ready:
-        audioProcessingState =
-            AudioProcessingState.ready;
+        audioProcessingState = AudioProcessingState.ready;
         break;
 
       case ProcessingState.completed:
-        audioProcessingState =
-            AudioProcessingState.completed;
+        audioProcessingState = AudioProcessingState.completed;
         break;
     }
 
@@ -173,14 +166,11 @@ class Sa7biAudioHandler extends BaseAudioHandler
         MediaAction.seekForward,
         MediaAction.seekBackward,
       },
-      androidCompactActionIndices:
-          const <int>[0, 1, 2],
-      processingState:
-          audioProcessingState,
+      androidCompactActionIndices: const <int>[0, 1, 2],
+      processingState: audioProcessingState,
       playing: _player.playing,
       updatePosition: _player.position,
-      bufferedPosition:
-          _player.bufferedPosition,
+      bufferedPosition: _player.bufferedPosition,
       speed: _player.speed,
       queueIndex: _player.currentIndex,
     );
@@ -267,11 +257,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
         return;
       }
 
-      final currentIndex =
-          _player.currentIndex ?? 0;
+      final currentIndex = _player.currentIndex ?? 0;
 
-      if (currentIndex + 1 <
-          currentQueue.length) {
+      if (currentIndex + 1 < currentQueue.length) {
         await _player.seekToNext();
         await _player.play();
       }
@@ -295,8 +283,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
         return;
       }
 
-      final currentIndex =
-          _player.currentIndex ?? 0;
+      final currentIndex = _player.currentIndex ?? 0;
 
       if (currentIndex > 0) {
         await _player.seekToPrevious();
@@ -318,18 +305,12 @@ class Sa7biAudioHandler extends BaseAudioHandler
   @override
   Future<void> fastForward() async {
     try {
-      final current =
-          _player.position;
+      final current = _player.position;
+      final duration = _player.duration;
 
-      final duration =
-          _player.duration;
+      final target = current + const Duration(seconds: 15);
 
-      final target =
-          current +
-          const Duration(seconds: 15);
-
-      if (duration != null &&
-          target > duration) {
+      if (duration != null && target > duration) {
         await _player.seek(duration);
       } else {
         await _player.seek(target);
@@ -348,17 +329,12 @@ class Sa7biAudioHandler extends BaseAudioHandler
   @override
   Future<void> rewind() async {
     try {
-      final current =
-          _player.position;
+      final current = _player.position;
 
-      final target =
-          current -
-          const Duration(seconds: 15);
+      final target = current - const Duration(seconds: 15);
 
       await _player.seek(
-        target.isNegative
-            ? Duration.zero
-            : target,
+        target.isNegative ? Duration.zero : target,
       );
 
       _broadcastState();
@@ -384,8 +360,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
         <MediaItem>[item],
       );
 
-      final cleanUrl =
-          item.id.trim();
+      final cleanUrl = item.id.trim();
 
       if (cleanUrl.isEmpty) {
         throw Exception(
@@ -393,9 +368,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
         );
       }
 
-      await _player.setUrl(
-        cleanUrl,
-      );
+      await _player.setUrl(cleanUrl);
 
       await _player.play();
 
@@ -414,8 +387,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
   Future<void> addQueueItem(
     MediaItem item,
   ) async {
-    final updatedQueue =
-        List<MediaItem>.from(
+    final updatedQueue = List<MediaItem>.from(
       queue.value,
     );
 
@@ -426,13 +398,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
     if (_player.audioSource == null) {
       mediaItem.add(item);
 
-      final cleanUrl =
-          item.id.trim();
+      final cleanUrl = item.id.trim();
 
       if (cleanUrl.isNotEmpty) {
-        await _player.setUrl(
-          cleanUrl,
-        );
+        await _player.setUrl(cleanUrl);
       }
 
       _broadcastState();
@@ -447,8 +416,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
       return;
     }
 
-    final updatedQueue =
-        List<MediaItem>.from(
+    final updatedQueue = List<MediaItem>.from(
       queue.value,
     );
 
@@ -461,13 +429,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
       mediaItem.add(first);
 
-      final cleanUrl =
-          first.id.trim();
+      final cleanUrl = first.id.trim();
 
       if (cleanUrl.isNotEmpty) {
-        await _player.setUrl(
-          cleanUrl,
-        );
+        await _player.setUrl(cleanUrl);
       }
     }
 
@@ -478,13 +443,11 @@ class Sa7biAudioHandler extends BaseAudioHandler
   Future<void> removeQueueItemAt(
     int index,
   ) async {
-    final updatedQueue =
-        List<MediaItem>.from(
+    final updatedQueue = List<MediaItem>.from(
       queue.value,
     );
 
-    if (index < 0 ||
-        index >= updatedQueue.length) {
+    if (index < 0 || index >= updatedQueue.length) {
       return;
     }
 
@@ -506,8 +469,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
     String? album,
     Uri? artUri,
   }) async {
-    final cleanUrl =
-        url.trim();
+    final cleanUrl = url.trim();
 
     if (cleanUrl.isEmpty) {
       throw Exception(
@@ -535,8 +497,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
     String title = 'ملف صوتي',
     String? artist,
   }) async {
-    final cleanPath =
-        path.trim();
+    final cleanPath = path.trim();
 
     if (cleanPath.isEmpty) {
       throw Exception(
@@ -544,8 +505,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
       );
     }
 
-    final file =
-        File(cleanPath);
+    final file = File(cleanPath);
 
     if (!await file.exists()) {
       throw Exception(
@@ -567,9 +527,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
         <MediaItem>[item],
       );
 
-      await _player.setFilePath(
-        cleanPath,
-      );
+      await _player.setFilePath(cleanPath);
 
       await _player.play();
 
@@ -592,10 +550,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
     }
 
     try {
-      await _player.setSpeed(
-        speed,
-      );
-
+      await _player.setSpeed(speed);
       _broadcastState();
     } catch (_) {
       _broadcastState();
@@ -609,16 +564,13 @@ class Sa7biAudioHandler extends BaseAudioHandler
   Future<void> setVolume(
     double volume,
   ) async {
-    final safeVolume =
-        volume.clamp(
+    final safeVolume = volume.clamp(
       0.0,
       1.0,
     );
 
     try {
-      await _player.setVolume(
-        safeVolume,
-      );
+      await _player.setVolume(safeVolume);
     } catch (_) {}
   }
 
@@ -626,35 +578,25 @@ class Sa7biAudioHandler extends BaseAudioHandler
   // CURRENT INFORMATION
   // =========================================================================
 
-  Duration get position =>
-      _player.position;
+  Duration get position => _player.position;
 
-  Duration? get duration =>
-      _player.duration;
+  Duration? get duration => _player.duration;
 
-  bool get isPlaying =>
-      _player.playing;
+  bool get isPlaying => _player.playing;
 
-  ProcessingState
-      get processingState =>
-          _player.processingState;
+  ProcessingState get processingState =>
+      _player.processingState;
 
   // =========================================================================
   // DISPOSE
   // =========================================================================
 
   Future<void> disposeHandler() async {
-    await _playerStateSubscription
-        ?.cancel();
-
-    await _positionSubscription
-        ?.cancel();
-
-    await _durationSubscription
-        ?.cancel();
-
-    await _interruptionSubscription
-        ?.cancel();
+    await _playerStateSubscription?.cancel();
+    await _positionSubscription?.cancel();
+    await _durationSubscription?.cancel();
+    await _processingSubscription?.cancel();
+    await _interruptionSubscription?.cancel();
 
     await _player.dispose();
   }
@@ -675,29 +617,24 @@ class AudioController {
 
   static Sa7biAudioHandler? _handler;
 
-  static bool _initialized =
-      false;
+  static bool _initialized = false;
 
   // =========================================================================
   // PUBLIC NOTIFIERS
   // =========================================================================
 
-  static final ValueNotifier<bool>
-      isPlayingNotifier =
+  static final ValueNotifier<bool> isPlayingNotifier =
       ValueNotifier<bool>(false);
 
-  static ValueNotifier<bool>
-      get isPlaying =>
-          isPlayingNotifier;
+  static ValueNotifier<bool> get isPlaying =>
+      isPlayingNotifier;
 
-  static final ValueNotifier<
-      Duration> position =
+  static final ValueNotifier<Duration> position =
       ValueNotifier<Duration>(
     Duration.zero,
   );
 
-  static final ValueNotifier<
-      Duration?> duration =
+  static final ValueNotifier<Duration?> duration =
       ValueNotifier<Duration?>(
     null,
   );
@@ -706,46 +643,46 @@ class AudioController {
   // PUBLIC PLAYBACK STREAM
   // =========================================================================
 
-  static Stream<PlaybackState>
-      get playbackStateStream {
+  static Stream<PlaybackState> get playbackStateStream {
     final handler = _handler;
 
     if (handler != null) {
       return handler.playbackState;
     }
 
-    return const Stream<
-        PlaybackState>.empty();
+    return const Stream<PlaybackState>.empty();
   }
 
-  static StreamSubscription<
-      PlaybackState>? _playbackSubscription;
+  static StreamSubscription<PlaybackState>?
+      _playbackSubscription;
 
   // =========================================================================
   // INITIALIZE
   // =========================================================================
 
-  static Future<Sa7biAudioHandler>
-      initialize() async {
-    if (_handler != null &&
-        _initialized) {
+  static Future<Sa7biAudioHandler> initialize() async {
+    if (_handler != null && _initialized) {
       return _handler!;
     }
 
-    final handler =
-        await AudioService.init(
-      builder: () =>
-          Sa7biAudioHandler(),
-      config:
-          const AudioServiceConfig(
+    final handler = await AudioService.init(
+      builder: () => Sa7biAudioHandler(),
+      config: const AudioServiceConfig(
         androidNotificationChannelId:
             'com.example.sa7bi_ai_new.audio',
         androidNotificationChannelName:
             'صاحبي AI - الصوت',
-        androidNotificationOngoing:
-            true,
-        androidStopForegroundOnPause:
-            false,
+
+        // مهم:
+        // audio_service 0.18.19 لا يسمح بأن تكون
+        // androidNotificationOngoing = true
+        // مع androidStopForegroundOnPause = false.
+        //
+        // نترك الصوت يعمل في الخلفية عند الإيقاف المؤقت
+        // بدون إجبار الإشعار على أن يكون Ongoing.
+        androidNotificationOngoing: false,
+        androidStopForegroundOnPause: false,
+
         androidNotificationIcon:
             'mipmap/ic_launcher',
       ),
@@ -754,28 +691,20 @@ class AudioController {
     _handler = handler;
     _initialized = true;
 
-    await _playbackSubscription
-        ?.cancel();
+    await _playbackSubscription?.cancel();
 
     _playbackSubscription =
         handler.playbackState.listen(
       (state) {
-        isPlayingNotifier.value =
-            state.playing;
+        isPlayingNotifier.value = state.playing;
+        position.value = state.updatePosition;
 
-        position.value =
-            state.updatePosition;
+        final item = handler.mediaItem.value;
 
-        final item =
-            handler.mediaItem.value;
-
-        if (item != null &&
-            item.duration != null) {
-          duration.value =
-              item.duration;
+        if (item != null && item.duration != null) {
+          duration.value = item.duration;
         } else {
-          duration.value =
-              handler.duration;
+          duration.value = handler.duration;
         }
       },
     );
@@ -789,14 +718,12 @@ class AudioController {
 
   static Future<void> playUrl({
     required String url,
-    String title =
-        'صوت من صاحبي AI',
+    String title = 'صوت من صاحبي AI',
     String? artist,
     String? album,
     Uri? artUri,
   }) async {
-    final handler =
-        await initialize();
+    final handler = await initialize();
 
     await handler.playUrl(
       url: url,
@@ -816,8 +743,7 @@ class AudioController {
     String title = 'ملف صوتي',
     String? artist,
   }) async {
-    final handler =
-        await initialize();
+    final handler = await initialize();
 
     await handler.playLocalFile(
       path: path,
@@ -831,89 +757,62 @@ class AudioController {
   // =========================================================================
 
   static Future<void> play() async {
-    final handler =
-        await initialize();
-
+    final handler = await initialize();
     await handler.play();
   }
 
   static Future<void> pause() async {
-    final handler =
-        await initialize();
-
+    final handler = await initialize();
     await handler.pause();
   }
 
   static Future<void> stop() async {
-    final handler =
-        await initialize();
-
+    final handler = await initialize();
     await handler.stop();
   }
 
   static Future<void> seek(
     Duration position,
   ) async {
-    final handler =
-        await initialize();
-
-    await handler.seek(
-      position,
-    );
+    final handler = await initialize();
+    await handler.seek(position);
   }
 
   static Future<void> fastForward() async {
-    final handler =
-        await initialize();
-
+    final handler = await initialize();
     await handler.fastForward();
   }
 
   static Future<void> rewind() async {
-    final handler =
-        await initialize();
-
+    final handler = await initialize();
     await handler.rewind();
   }
 
   static Future<void> next() async {
-    final handler =
-        await initialize();
-
+    final handler = await initialize();
     await handler.skipToNext();
   }
 
   static Future<void> previous() async {
-    final handler =
-        await initialize();
-
+    final handler = await initialize();
     await handler.skipToPrevious();
   }
 
   static Future<void> setSpeed(
     double speed,
   ) async {
-    final handler =
-        await initialize();
-
-    await handler.setSpeed(
-      speed,
-    );
+    final handler = await initialize();
+    await handler.setSpeed(speed);
   }
 
   static Future<void> setVolume(
     double volume,
   ) async {
-    final handler =
-        await initialize();
-
-    await handler.setVolume(
-      volume,
-    );
+    final handler = await initialize();
+    await handler.setVolume(volume);
   }
 
-  static Sa7biAudioHandler?
-      get handler => _handler;
+  static Sa7biAudioHandler? get handler => _handler;
 }
 
 /// ===========================================================================
@@ -923,22 +822,18 @@ class AudioController {
 class Sa7biAudioService {
   Sa7biAudioService._();
 
-  static Future<Sa7biAudioHandler>
-      initialize() {
-    return AudioController
-        .initialize();
+  static Future<Sa7biAudioHandler> initialize() {
+    return AudioController.initialize();
   }
 
   static Future<void> playUrl({
     required String url,
-    String title =
-        'صوت من صاحبي AI',
+    String title = 'صوت من صاحبي AI',
     String? artist,
     String? album,
     Uri? artUri,
   }) {
-    return AudioController
-        .playUrl(
+    return AudioController.playUrl(
       url: url,
       title: title,
       artist: artist,
@@ -952,8 +847,7 @@ class Sa7biAudioService {
     String title = 'ملف صوتي',
     String? artist,
   }) {
-    return AudioController
-        .playLocalFile(
+    return AudioController.playLocalFile(
       path: path,
       title: title,
       artist: artist,
@@ -961,24 +855,20 @@ class Sa7biAudioService {
   }
 
   static Future<void> play() {
-    return AudioController
-        .play();
+    return AudioController.play();
   }
 
   static Future<void> pause() {
-    return AudioController
-        .pause();
+    return AudioController.pause();
   }
 
   static Future<void> stop() {
-    return AudioController
-        .stop();
+    return AudioController.stop();
   }
 
   static Future<void> seek(
     Duration position,
   ) {
-    return AudioController
-        .seek(position);
+    return AudioController.seek(position);
   }
 }
