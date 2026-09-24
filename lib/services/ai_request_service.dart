@@ -5,6 +5,18 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import '../config/app_config.dart';
+
+/// نقطة الاتصال الموحدة بالذكاء الاصطناعي.
+///
+/// المسار:
+/// Flutter App
+///      ↓
+/// Cloudflare Worker
+///      ↓
+/// OpenAI
+///
+/// لا يوجد أي API Key داخل التطبيق.
 class AiRequestService {
   AiRequestService._();
 
@@ -13,10 +25,10 @@ class AiRequestService {
   // ============================================================
 
   static const String base =
-      'https://sa7bi-ai-new.ahmedsab34.workers.dev';
+      AppConfig.backendBaseUrl;
 
   static const String chatEndpoint =
-      '$base/v1/chat';
+      AppConfig.aiChatEndpoint;
 
   // ============================================================
   // LIMITS
@@ -29,16 +41,87 @@ class AiRequestService {
   static const int maxImageBytes =
       5 * 1024 * 1024;
 
-  static const int maxVideoFrames = 4;
+  static const int maxVideoFrames =
+      AppConfig.maximumVideoFrames;
 
   static const int maxVideoTotalBytes =
       5 * 1024 * 1024;
+
+  static const Duration connectionTimeout =
+      Duration(seconds: 12);
 
   static const Duration chatTimeout =
       Duration(seconds: 90);
 
   static const Duration imageTimeout =
       Duration(seconds: 120);
+
+  // ============================================================
+  // BACKEND CONNECTION TEST
+  // ============================================================
+
+  /// يتأكد أن الـWorker نفسه قابل للوصول قبل إرسال طلب AI.
+  ///
+  /// هذا لا يرسل أي API Key من الهاتف.
+  static Future<BackendConnectionResult>
+      checkBackend() async {
+    try {
+      final response =
+          await http
+              .get(
+                Uri.parse(base),
+                headers: const {
+                  'Cache-Control': 'no-cache',
+                  'Pragma': 'no-cache',
+                },
+              )
+              .timeout(
+                connectionTimeout,
+              );
+
+      final data =
+          _decodeMap(response.body);
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        return BackendConnectionResult.failure(
+          'الخادم رجع حالة HTTP ${response.statusCode}.',
+        );
+      }
+
+      if (data == null) {
+        return const BackendConnectionResult.failure(
+          'الخادم رجع ردًا غير مفهوم.',
+        );
+      }
+
+      if (data['ok'] != true) {
+        return BackendConnectionResult.failure(
+          data['error']?.toString() ??
+              'الخادم غير جاهز حاليًا.',
+        );
+      }
+
+      return BackendConnectionResult.success(
+        version:
+            data['backendVersion']
+                ?.toString(),
+      );
+    } on TimeoutException {
+      return const BackendConnectionResult.failure(
+        'الاتصال بخادم صاحبي استغرق وقتًا أطول من اللازم.',
+      );
+    } on http.ClientException catch (
+        error) {
+      return BackendConnectionResult.failure(
+        'تعذر الاتصال بخادم صاحبي: ${error.message}',
+      );
+    } catch (error) {
+      return BackendConnectionResult.failure(
+        _connectionError(error),
+      );
+    }
+  }
 
   // ============================================================
   // TEXT CHAT
@@ -48,35 +131,70 @@ class AiRequestService {
     required String prompt,
     String? serviceContext,
     String? serviceTitle,
-    List<Map<String, String>> history = const [],
+    List<Map<String, String>> history =
+        const [],
   }) async {
-    final text = prompt.trim();
+    final text =
+        prompt.trim();
 
     if (text.isEmpty) {
       return 'قول لي يا صاحبي 😊';
     }
 
-    final validHistory = history
-        .where(
-          (item) =>
-              (item['role'] == 'user' ||
-                  item['role'] == 'assistant') &&
-              (item['content'] ?? '')
-                  .trim()
-                  .isNotEmpty,
-        )
-        .toList();
+    if (text.length >
+        AppConfig.maximumMessageCharacters) {
+      throw const AiRequestException(
+        'الرسالة طويلة جدًا. حاول تقسيمها إلى أكثر من رسالة.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // تأكيد أن الـWorker نفسه متاح.
+    // ----------------------------------------------------------
+
+    final backend =
+        await checkBackend();
+
+    if (!backend.isAvailable) {
+      throw AiRequestException(
+        backend.error ??
+            'خدمة صاحبي غير متاحة حاليًا.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // تجهيز History
+    // ----------------------------------------------------------
+
+    final validHistory =
+        history
+            .where(
+              (item) =>
+                  (item['role'] ==
+                          'user' ||
+                      item['role'] ==
+                          'assistant') &&
+                  (item['content'] ??
+                          '')
+                      .trim()
+                      .isNotEmpty,
+            )
+            .toList();
 
     final start =
-        validHistory.length > maxHistory
-            ? validHistory.length - maxHistory
+        validHistory.length >
+                maxHistory
+            ? validHistory.length -
+                maxHistory
             : 0;
 
     final messages =
         <Map<String, String>>[];
 
-    for (final item
-        in validHistory.sublist(start)) {
+    for (
+      final item
+      in validHistory.sublist(start)
+    ) {
       final role =
           item['role'];
 
@@ -107,8 +225,10 @@ class AiRequestService {
 
     _addServiceData(
       body,
-      serviceTitle: serviceTitle,
-      serviceContext: serviceContext,
+      serviceTitle:
+          serviceTitle,
+      serviceContext:
+          serviceContext,
     );
 
     final response =
@@ -215,7 +335,8 @@ class AiRequestService {
     final selected =
         images
             .where(
-              (image) => image.isNotEmpty,
+              (image) =>
+                  image.isNotEmpty,
             )
             .take(maxVideoFrames)
             .toList();
@@ -286,9 +407,23 @@ class AiRequestService {
 
     _addServiceData(
       body,
-      serviceTitle: serviceTitle,
-      serviceContext: null,
+      serviceTitle:
+          serviceTitle,
+      serviceContext:
+          null,
     );
+
+    // نتأكد أن الـWorker قابل للوصول قبل إرسال
+    // البيانات الكبيرة الخاصة بالصور.
+    final backend =
+        await checkBackend();
+
+    if (!backend.isAvailable) {
+      throw AiRequestException(
+        backend.error ??
+            'خدمة تحليل الصور غير متاحة حاليًا.',
+      );
+    }
 
     final response =
         await _postWithRetry(
@@ -352,7 +487,7 @@ class AiRequestService {
 
     if (data == null) {
       throw const AiRequestException(
-        'رد الخادم غير مفهوم.',
+        'رد خادم الذكاء الاصطناعي غير مفهوم.',
       );
     }
 
@@ -429,7 +564,16 @@ class AiRequestService {
 
         if (attempt >=
             maxAttempts) {
-          rethrow;
+          if (error
+              is AiRequestException) {
+            rethrow;
+          }
+
+          throw AiRequestException(
+            _connectionError(
+              error,
+            ),
+          );
         }
 
         await Future<void>.delayed(
@@ -613,6 +757,10 @@ class AiRequestService {
       case 'OPENAI_API_KEY_MISSING':
         return 'خدمة الذكاء الاصطناعي غير مُعدة حاليًا.';
 
+      case 'OPENAI_REQUEST_FAILED':
+        return 'خدمة الذكاء الاصطناعي لم تستطع تنفيذ الطلب حاليًا.';
+
+      case 'OPENAI_EMPTY_RESPONSE':
       case 'EMPTY_AI_RESPONSE':
         return 'الذكاء الاصطناعي لم يرجع ردًا. جرّب تاني.';
 
@@ -663,6 +811,36 @@ class AiRequestService {
 
     return 'تعذر الاتصال بخدمة صاحبي حاليًا.';
   }
+}
+
+// ============================================================
+// BACKEND CONNECTION RESULT
+// ============================================================
+
+class BackendConnectionResult {
+  final bool isAvailable;
+  final String? error;
+  final String? version;
+
+  const BackendConnectionResult._({
+    required this.isAvailable,
+    this.error,
+    this.version,
+  });
+
+  const BackendConnectionResult.success({
+    String? version,
+  }) : this._(
+          isAvailable: true,
+          version: version,
+        );
+
+  const BackendConnectionResult.failure(
+    String error,
+  ) : this._(
+          isAvailable: false,
+          error: error,
+        );
 }
 
 // ============================================================
