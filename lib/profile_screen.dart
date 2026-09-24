@@ -23,8 +23,11 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final ProfileService _profileService = ProfileService.instance;
-  final ReminderService _reminderService = ReminderService.instance;
+  final ProfileService _profileService =
+      ProfileService.instance;
+
+  final ReminderService _reminderService =
+      ReminderService.instance;
 
   Uint8List? _photo;
   String _displayName = '';
@@ -38,16 +41,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
 
-    _profileService.addListener(_syncProfile);
-    _reminderService.addListener(_onRemindersChanged);
+    // ProfileService exposes its reactive state
+    // through the ValueNotifier named "changes".
+    _profileService.changes.addListener(
+      _syncProfile,
+    );
+
+    // ReminderService exposes its reactive state
+    // through the ValueNotifier named "reminders".
+    _reminderService.reminders.addListener(
+      _onRemindersChanged,
+    );
 
     _initialize();
   }
 
   @override
   void dispose() {
-    _profileService.removeListener(_syncProfile);
-    _reminderService.removeListener(_onRemindersChanged);
+    _profileService.changes.removeListener(
+      _syncProfile,
+    );
+
+    _reminderService.reminders.removeListener(
+      _onRemindersChanged,
+    );
+
     super.dispose();
   }
 
@@ -78,7 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!mounted) return;
 
     setState(() {
-      _photo = _profileService.photo;
+      _photo = _profileService.photoBytes;
       _displayName = _profileService.displayName;
       _reelName = _profileService.reelName;
       _bio = _profileService.bio;
@@ -89,11 +107,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _onRemindersChanged() {
     if (!mounted) return;
+
     setState(() {});
   }
 
   Future<void> _refreshProfile() async {
-    await _profileService.initialize();
+    await _profileService.refresh();
+
     await _reminderService.initialize();
     await _reminderService.rescheduleAll();
 
@@ -103,7 +123,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showMessage(String message) {
-    if (!mounted || message.trim().isEmpty) return;
+    if (!mounted || message.trim().isEmpty) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -114,16 +136,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
             textDirection: TextDirection.rtl,
           ),
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(
+            seconds: 2,
+          ),
         ),
       );
   }
 
   Widget _buildAiStatusBar() {
-    final connected = _aiConnected;
+    final bool connected = _aiConnected;
+
+    final Color statusColor = connected
+        ? Colors.greenAccent
+        : Colors.orangeAccent;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+      margin: const EdgeInsets.fromLTRB(
+        8,
+        2,
+        8,
+        6,
+      ),
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 8,
@@ -135,12 +168,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: connected
-              ? Colors.greenAccent.withValues(alpha: 0.35)
-              : Theme.of(context)
-                  .colorScheme
-                  .outline
-                  .withValues(alpha: 0.18),
+          color: statusColor.withValues(
+            alpha: 0.30,
+          ),
         ),
       ),
       child: Row(
@@ -150,15 +180,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             height: 9,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: connected
-                  ? Colors.greenAccent
-                  : Colors.orangeAccent,
+              color: statusColor,
               boxShadow: [
                 BoxShadow(
-                  color: (connected
-                          ? Colors.greenAccent
-                          : Colors.orangeAccent)
-                      .withValues(alpha: 0.35),
+                  color: statusColor.withValues(
+                    alpha: 0.35,
+                  ),
                   blurRadius: 7,
                 ),
               ],
@@ -182,9 +209,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ? Icons.cloud_done_rounded
                 : Icons.cloud_off_rounded,
             size: 18,
-            color: connected
-                ? Colors.greenAccent
-                : Colors.orangeAccent,
+            color: statusColor,
           ),
         ],
       ),
@@ -197,8 +222,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           AppHeader(
-            onAudio: widget.onAudio,
+            onAudioTap: widget.onAudio,
           ),
+
           Expanded(
             child: _loading
                 ? const Center(
@@ -207,7 +233,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 : RefreshIndicator(
                     onRefresh: _refreshProfile,
                     child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
+                      physics:
+                          const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.only(
                         top: 2,
                         bottom: 14,
@@ -217,24 +244,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                         ProfileHeader(
                           photo: _photo,
-                          displayName: _displayName,
+                          displayName:
+                              _displayName,
                           reelName: _reelName,
-                          onChanged: _syncProfile,
-                          onMessage: _showMessage,
+                          onChanged:
+                              _syncProfile,
+                          onMessage:
+                              _showMessage,
                         ),
 
                         ProfileBioStatus(
                           bio: _bio,
                           status: _status,
-                          onProfileChanged: _syncProfile,
+                          onProfileChanged:
+                              _syncProfile,
                         ),
 
                         ProfileReminders(
-                          reminderService: _reminderService,
+                          reminders:
+                              _reminderService.items,
+                          onMessage:
+                              _showMessage,
                         ),
 
                         ProfileActions(
-                          profileService: _profileService,
+                          onMessage:
+                              _showMessage,
                         ),
                       ],
                     ),
