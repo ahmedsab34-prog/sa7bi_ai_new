@@ -1,25 +1,40 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
 import 'audio_center_screen.dart';
 import 'audio_player_service.dart';
 import 'categories_screen.dart';
-import 'chat_screen.dart';
-import 'config/service_keys.dart';
 import 'home_screen.dart';
+import 'khalasana_portal_screen.dart';
 import 'profile_screen.dart';
 import 'widgets/khalasana_portal.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // مهم:
-  // لا ننتظر AudioService أو AdMob أو أي خدمة خارجية
-  // قبل أول Frame.
-  //
-  // AudioService يظل Lazy ويُهيأ عند استخدام الصوت.
   runApp(const Sa7biAiApp());
+
+  // تشغيل خدمة الصوت بعد ظهور أول واجهة
+  // حتى لا تؤثر على سرعة فتح التطبيق.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(
+      Future<void>.delayed(
+        const Duration(milliseconds: 700),
+        () async {
+          try {
+            await AudioController.initialize();
+          } catch (_) {}
+        },
+      ),
+    );
+  });
 }
+
+// ============================================================
+// APP
+// ============================================================
 
 class Sa7biAiApp extends StatelessWidget {
   const Sa7biAiApp({super.key});
@@ -38,6 +53,7 @@ class Sa7biAiApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
+        fontFamily: 'sans',
       ),
       home: const MainContainerScreen(),
     );
@@ -60,57 +76,43 @@ class _MainContainerScreenState
     extends State<MainContainerScreen> {
   int index = 0;
 
+  // ==========================================================
+  // NAVIGATION
+  // ==========================================================
+
   void openProfile() {
+    if (!mounted) return;
+
     setState(() {
       index = 2;
     });
   }
 
-  // ==========================================================
-  // KHALASANA
-  // ==========================================================
-  //
-  // خلصانة تفتح الشات مباشرة.
-  // لا توجد شاشة وسيطة ولا انتظار للبوابة.
-  //
+  void openAudioCenter() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            const AudioCenterScreen(),
+      ),
+    );
+  }
 
   void openKhalasana() {
-    Navigator.push(
-      context,
+    Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const ChatScreen(
-          serviceKey: ServiceKeys.khalasana,
-          serviceTitle: 'خلصانة AI',
-          serviceContext: '''
-أنت خلصانة AI، المساعد الشامل داخل تطبيق صاحبي.
-
-ساعد المستخدم مباشرة في أي موضوع بدون إجباره على اختيار قسم.
-يمكنه الكتابة، إرسال صورة أو فيديو، استخدام الصوت، أو طلب إنشاء صورة.
-
-إذا أرسل المستخدم صورة، حللها بقدر ما تسمح به الصورة ولا تخمن الأشياء غير الواضحة.
-إذا طلب إنشاء صورة، استخدم مسار إنشاء الصور الموجود في التطبيق.
-إذا كان الموضوع مرتبطًا بخدمة أو مجال محدد، استخدم أفضل سياق مناسب تلقائيًا.
-كن واضحًا ومفيدًا ومباشرًا.
-لا تدّعي تنفيذ شيء لم يتم تنفيذه فعليًا.
-إذا فشلت خدمة فعلية، وضح ذلك وقدم بديلًا مفيدًا.
-''',
-        ),
+        builder: (_) =>
+            const KhalasanaPortalScreen(),
       ),
     );
   }
 
-  void openAudioCenter() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const AudioCenterScreen(),
-      ),
-    );
-  }
+  // ==========================================================
+  // BUILD
+  // ==========================================================
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
+    final pages = <Widget>[
       HomeScreen(
         onProfile: openProfile,
         onAudio: openAudioCenter,
@@ -124,16 +126,25 @@ class _MainContainerScreenState
     ];
 
     return Scaffold(
+      backgroundColor:
+          const Color(0xFF070A12),
+
       body: SafeArea(
         child: Stack(
           children: [
+            // --------------------------------------------------
+            // MAIN PAGES
+            // --------------------------------------------------
+
             IndexedStack(
               index: index,
               children: pages,
             ),
 
-            // مشغل الصوت المصغر.
-            // لا نلمس نظام الصوت الحالي لأنه يعمل في الخلفية.
+            // --------------------------------------------------
+            // MINI AUDIO PLAYER
+            // --------------------------------------------------
+
             const Positioned(
               left: 10,
               right: 10,
@@ -141,8 +152,10 @@ class _MainContainerScreenState
               child: MiniAudioPlayer(),
             ),
 
-            // بوابة خلصانة العائمة.
-            // الضغط عليها يفتح ChatScreen مباشرة.
+            // --------------------------------------------------
+            // KHALASANA FLOATING BUTTON
+            // --------------------------------------------------
+
             Positioned(
               right: 12,
               bottom: 92,
@@ -153,17 +166,30 @@ class _MainContainerScreenState
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
+
+      // --------------------------------------------------------
+      // BOTTOM NAVIGATION
+      // --------------------------------------------------------
+
+      bottomNavigationBar:
+          NavigationBar(
         backgroundColor:
             const Color(0xFF11141D),
+
         indicatorColor:
             const Color(0x3348D8FF),
+
         selectedIndex: index,
-        onDestinationSelected: (value) {
+
+        onDestinationSelected:
+            (value) {
+          if (!mounted) return;
+
           setState(() {
             index = value;
           });
         },
+
         destinations: const [
           NavigationDestination(
             icon: Icon(
@@ -174,6 +200,7 @@ class _MainContainerScreenState
             ),
             label: 'الرئيسية',
           ),
+
           NavigationDestination(
             icon: Icon(
               Icons.apps_outlined,
@@ -183,6 +210,7 @@ class _MainContainerScreenState
             ),
             label: 'الخدمات',
           ),
+
           NavigationDestination(
             icon: Icon(
               Icons.person_outline_rounded,
@@ -211,12 +239,16 @@ class MiniAudioPlayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<MediaItem?>(
       stream:
-          AudioController.handler?.mediaItem,
+          AudioController
+              .handler
+              ?.mediaItem,
+
       builder: (
         context,
         mediaSnapshot,
       ) {
-        final item = mediaSnapshot.data;
+        final item =
+            mediaSnapshot.data;
 
         if (item == null) {
           return const SizedBox.shrink();
@@ -231,106 +263,163 @@ class MiniAudioPlayer extends StatelessWidget {
 
         return Material(
           color: Colors.transparent,
+
           child: Container(
-            height: 66,
+            height: 62,
+
             padding:
                 const EdgeInsets.symmetric(
-              horizontal: 8,
+              horizontal: 7,
             ),
-            decoration: BoxDecoration(
-              color: const Color(0xFF151923)
-                  .withOpacity(0.98),
+
+            decoration:
+                BoxDecoration(
+              color:
+                  const Color(0xFF121720)
+                      .withOpacity(0.98),
+
               borderRadius:
-                  BorderRadius.circular(20),
+                  BorderRadius.circular(19),
+
               border: Border.all(
-                color: const Color(0x55FFD76A),
+                color:
+                    const Color(0x55FFD76A),
               ),
+
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x66000000),
-                  blurRadius: 20,
-                  offset: Offset(0, 7),
+                  color:
+                      Color(0x66000000),
+                  blurRadius: 19,
+                  offset:
+                      Offset(0, 6),
                 ),
               ],
             ),
+
             child: Row(
               children: [
+                // ----------------------------------------------
+                // OPEN AUDIO CENTER
+                // ----------------------------------------------
+
                 GestureDetector(
                   onTap: () {
-                    Navigator.push(
+                    Navigator.of(
                       context,
+                    ).push(
                       MaterialPageRoute(
                         builder: (_) =>
                             const AudioCenterScreen(),
                       ),
                     );
                   },
+
                   child: Container(
-                    width: 46,
-                    height: 46,
+                    width: 44,
+                    height: 44,
+
                     decoration:
                         const BoxDecoration(
-                      shape: BoxShape.circle,
+                      shape:
+                          BoxShape.circle,
+
                       gradient:
                           LinearGradient(
                         colors: [
-                          Color(0xFFFFD76A),
-                          Color(0xFF7164FF),
+                          Color(
+                            0xFFFFD76A,
+                          ),
+                          Color(
+                            0xFF7164FF,
+                          ),
                         ],
                       ),
                     ),
+
                     child: const Icon(
-                      Icons.graphic_eq_rounded,
-                      color: Colors.black,
+                      Icons
+                          .graphic_eq_rounded,
+                      color:
+                          Colors.black,
                     ),
                   ),
                 ),
 
-                const SizedBox(width: 9),
+                const SizedBox(
+                  width: 8,
+                ),
+
+                // ----------------------------------------------
+                // TITLE
+                // ----------------------------------------------
 
                 Expanded(
-                  child: GestureDetector(
+                  child:
+                      GestureDetector(
                     onTap: () {
-                      Navigator.push(
+                      Navigator.of(
                         context,
+                      ).push(
                         MaterialPageRoute(
                           builder: (_) =>
                               const AudioCenterScreen(),
                         ),
                       );
                     },
+
                     child: Column(
                       mainAxisAlignment:
-                          MainAxisAlignment.center,
+                          MainAxisAlignment
+                              .center,
+
                       crossAxisAlignment:
-                          CrossAxisAlignment.end,
+                          CrossAxisAlignment
+                              .end,
+
                       children: [
                         Text(
                           item.title,
+
                           textDirection:
-                              TextDirection.rtl,
+                              TextDirection
+                                  .rtl,
+
                           maxLines: 1,
+
                           overflow:
-                              TextOverflow.ellipsis,
+                              TextOverflow
+                                  .ellipsis,
+
                           style:
                               const TextStyle(
                             fontWeight:
-                                FontWeight.w900,
-                            fontSize: 12,
+                                FontWeight
+                                    .w900,
+                            fontSize: 11,
                           ),
                         ),
+
                         Text(
                           item.artist ??
                               'صاحبي AI',
+
                           textDirection:
-                              TextDirection.rtl,
+                              TextDirection
+                                  .rtl,
+
                           maxLines: 1,
+
                           overflow:
-                              TextOverflow.ellipsis,
+                              TextOverflow
+                                  .ellipsis,
+
                           style:
                               const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 10,
+                            color:
+                                Colors
+                                    .white54,
+                            fontSize: 9,
                           ),
                         ),
                       ],
@@ -338,17 +427,35 @@ class MiniAudioPlayer extends StatelessWidget {
                   ),
                 ),
 
-                StreamBuilder<PlaybackState>(
-                  stream: handler.playbackState,
+                // ----------------------------------------------
+                // PLAY / PAUSE
+                // ----------------------------------------------
+
+                StreamBuilder<
+                    PlaybackState>(
+                  stream:
+                      handler
+                          .playbackState,
+
                   builder: (
                     context,
                     snapshot,
                   ) {
                     final playing =
-                        snapshot.data?.playing ??
+                        snapshot.data
+                                ?.playing ??
                             false;
 
                     return IconButton(
+                      padding:
+                          EdgeInsets.zero,
+
+                      constraints:
+                          const BoxConstraints(
+                        minWidth: 40,
+                        minHeight: 40,
+                      ),
+
                       onPressed: () {
                         if (playing) {
                           handler.pause();
@@ -356,29 +463,48 @@ class MiniAudioPlayer extends StatelessWidget {
                           handler.play();
                         }
                       },
+
                       icon: Icon(
                         playing
-                            ? Icons.pause_rounded
+                            ? Icons
+                                .pause_rounded
                             : Icons
                                 .play_arrow_rounded,
+
                         color:
                             const Color(
                           0xFFFFD76A,
                         ),
-                        size: 28,
+
+                        size: 27,
                       ),
                     );
                   },
                 ),
 
+                // ----------------------------------------------
+                // CLOSE / STOP
+                // ----------------------------------------------
+
                 IconButton(
+                  padding:
+                      EdgeInsets.zero,
+
+                  constraints:
+                      const BoxConstraints(
+                    minWidth: 34,
+                    minHeight: 40,
+                  ),
+
                   onPressed: () {
                     handler.stop();
                   },
+
                   icon: const Icon(
                     Icons.close_rounded,
-                    color: Colors.white54,
-                    size: 20,
+                    color:
+                        Colors.white54,
+                    size: 19,
                   ),
                 ),
               ],
