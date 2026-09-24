@@ -50,17 +50,19 @@ class _ProfileHeaderState extends State<ProfileHeader> {
   void didUpdateWidget(covariant ProfileHeader oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (_savingName) return;
+
     final newName = widget.displayName;
 
-    if (!_savingName &&
-        newName != ProfileService.defaultProfileName &&
-        _nameController.text != newName) {
-      _nameController.text = newName;
+    if (newName == ProfileService.defaultProfileName) {
+      if (_nameController.text.isNotEmpty) {
+        _nameController.clear();
+      }
+      return;
     }
 
-    if (newName == ProfileService.defaultProfileName &&
-        _nameController.text.isEmpty) {
-      return;
+    if (_nameController.text != newName) {
+      _nameController.text = newName;
     }
   }
 
@@ -74,7 +76,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     if (_savingPhoto) return;
 
     try {
-      final XFile? file = await _picker.pickImage(
+      final file = await _picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 70,
         maxWidth: 900,
@@ -82,7 +84,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
 
       if (file == null) return;
 
-      final Uint8List bytes = await file.readAsBytes();
+      final bytes = await file.readAsBytes();
 
       if (bytes.isEmpty) {
         widget.onMessage('الصورة فارغة');
@@ -123,7 +125,7 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     if (_savingReel) return;
 
     try {
-      final XFile? file = await _picker.pickVideo(
+      final file = await _picker.pickVideo(
         source: ImageSource.gallery,
         maxDuration: const Duration(minutes: 2),
       );
@@ -217,313 +219,317 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     widget.onMessage('تم حفظ الاسم');
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final hasPhoto = widget.photo != null && widget.photo!.isNotEmpty;
-    final hasReel =
-        widget.reelName != null && widget.reelName!.trim().isNotEmpty;
-
-    return Column(
+  Widget _buildProfileImage(bool hasPhoto, bool hasReel) {
+    return Stack(
+      clipBehavior: Clip.none,
       children: [
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: const Color(0xFF131620),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: const Color(0x33FFD76A),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFFD76A).withOpacity(0.06),
-                blurRadius: 22,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  GestureDetector(
-                    onTap: _choosePhoto,
-                    child: Container(
-                      width: 112,
-                      height: 112,
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: hasReel
-                            ? const SweepGradient(
-                                colors: [
-                                  Color(0xFFFFD76A),
-                                  Color(0xFFFF4D8D),
-                                  Color(0xFFB45CFF),
-                                  Color(0xFF63E6FF),
-                                  Color(0xFFFFD76A),
-                                ],
-                              )
-                            : const LinearGradient(
-                                colors: [
-                                  Color(0xFFFFD76A),
-                                  Color(0xFF8B6A25),
-                                ],
-                              ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFFD76A)
-                                .withOpacity(0.16),
-                            blurRadius: 20,
-                          ),
-                        ],
-                      ),
-                      child: ClipOval(
-                        child: Container(
-                          color: const Color(0xFF0C0F17),
-                          child: hasPhoto
-                              ? Image.memory(
-                                  widget.photo!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) {
-                                    return const Icon(
-                                      Icons.person_rounded,
-                                      size: 52,
-                                      color: Color(0xFFFFD76A),
-                                    );
-                                  },
-                                )
-                              : const Icon(
-                                  Icons.person_rounded,
-                                  size: 52,
-                                  color: Color(0xFFFFD76A),
-                                ),
-                        ),
-                      ),
+        GestureDetector(
+          onTap: _choosePhoto,
+          child: Container(
+            width: 92,
+            height: 92,
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: hasReel
+                  ? const SweepGradient(
+                      colors: [
+                        Color(0xFFFFD76A),
+                        Color(0xFFFF4D8D),
+                        Color(0xFFB45CFF),
+                        Color(0xFF63E6FF),
+                        Color(0xFFFFD76A),
+                      ],
+                    )
+                  : const LinearGradient(
+                      colors: [
+                        Color(0xFFFFD76A),
+                        Color(0xFF8B6A25),
+                      ],
                     ),
-                  ),
-                  Positioned(
-                    bottom: -2,
-                    right: -2,
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF181C28),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFFFD76A),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: _savingPhoto
-                          ? const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Color(0xFFFFD76A),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.camera_alt_rounded,
-                              size: 17,
-                              color: Color(0xFFFFD76A),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 14),
-
-              const Text(
-                'حسابك الشخصي',
-                textDirection: TextDirection.rtl,
-                style: TextStyle(
-                  color: Color(0xFFFFD76A),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-
-              const SizedBox(height: 5),
-
-              Text(
-                widget.displayName,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              TextField(
-                controller: _nameController,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.right,
-                maxLength: 40,
-                decoration: InputDecoration(
-                  labelText: 'اسمك',
-                  hintText: 'اكتب اسمك',
-                  prefixIcon: const Icon(
-                    Icons.person_outline_rounded,
-                  ),
-                  filled: true,
-                  fillColor: const Color(0xFF0C0F17),
-                  counterText: '',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 9),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _savingName ? null : _saveName,
-                  icon: _savingName
-                      ? const SizedBox(
-                          width: 17,
-                          height: 17,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.black,
-                          ),
-                        )
-                      : const Icon(Icons.save_rounded),
-                  label: const Text(
-                    'حفظ الاسم',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFFD76A),
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 13,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _savingPhoto ? null : _choosePhoto,
-                      icon: const Icon(
-                        Icons.photo_camera_rounded,
-                      ),
-                      label: const Text(
-                        'الصورة',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF63E6FF),
-                        side: const BorderSide(
-                          color: Color(0x4463E6FF),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _savingReel ? null : _chooseReel,
-                      icon: const Icon(
-                        Icons.video_library_rounded,
-                      ),
-                      label: Text(
-                        hasReel ? 'تغيير Reel' : 'إضافة Reel',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFFF4D8D),
-                        side: const BorderSide(
-                          color: Color(0x44FF4D8D),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              if (hasReel) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0C0F17),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: _savingReel ? null : _clearReel,
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          color: Colors.redAccent,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          widget.reelName!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textDirection: TextDirection.rtl,
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Icon(
-                        Icons.play_circle_fill_rounded,
-                        color: Color(0xFFFF4D8D),
-                      ),
-                    ],
-                  ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFFD76A).withValues(alpha: 0.15),
+                  blurRadius: 18,
                 ),
               ],
-            ],
+            ),
+            child: ClipOval(
+              child: Container(
+                color: const Color(0xFF0C0F17),
+                child: hasPhoto
+                    ? Image.memory(
+                        widget.photo!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) {
+                          return const Icon(
+                            Icons.person_rounded,
+                            size: 44,
+                            color: Color(0xFFFFD76A),
+                          );
+                        },
+                      )
+                    : const Icon(
+                        Icons.person_rounded,
+                        size: 44,
+                        color: Color(0xFFFFD76A),
+                      ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -1,
+          right: -1,
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: const Color(0xFF181C28),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: const Color(0xFFFFD76A),
+                width: 1.4,
+              ),
+            ),
+            child: _savingPhoto
+                ? const Padding(
+                    padding: EdgeInsets.all(7),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFFFFD76A),
+                    ),
+                  )
+                : const Icon(
+                    Icons.camera_alt_rounded,
+                    size: 15,
+                    color: Color(0xFFFFD76A),
+                  ),
           ),
         ),
       ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhoto =
+        widget.photo != null && widget.photo!.isNotEmpty;
+
+    final hasReel =
+        widget.reelName != null &&
+        widget.reelName!.trim().isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 0, 8, 7),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131620),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0x33FFD76A),
+        ),
+      ),
+      child: Column(
+        children: [
+          _buildProfileImage(hasPhoto, hasReel),
+
+          const SizedBox(height: 9),
+
+          Text(
+            widget.displayName,
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          TextField(
+            controller: _nameController,
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.right,
+            maxLength: 40,
+            decoration: InputDecoration(
+              labelText: 'اسمك',
+              hintText: 'اكتب اسمك',
+              prefixIcon: const Icon(
+                Icons.person_outline_rounded,
+                size: 20,
+              ),
+              filled: true,
+              fillColor: const Color(0xFF0C0F17),
+              counterText: '',
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 7),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _savingName ? null : _saveName,
+              icon: _savingName
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.black,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.save_rounded,
+                      size: 18,
+                    ),
+              label: const Text(
+                'حفظ الاسم',
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFD76A),
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 11,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _savingPhoto ? null : _choosePhoto,
+                  icon: const Icon(
+                    Icons.photo_camera_rounded,
+                    size: 18,
+                  ),
+                  label: const Text(
+                    'الصورة',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF63E6FF),
+                    side: const BorderSide(
+                      color: Color(0x4463E6FF),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _savingReel ? null : _chooseReel,
+                  icon: const Icon(
+                    Icons.video_library_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    hasReel ? 'تغيير Reel' : 'إضافة Reel',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFFF4D8D),
+                    side: const BorderSide(
+                      color: Color(0x44FF4D8D),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (hasReel) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 5,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0C0F17),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: _savingReel ? null : _clearReel,
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.redAccent,
+                      size: 19,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 34,
+                      minHeight: 34,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      widget.reelName!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textDirection: TextDirection.rtl,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(
+                    Icons.play_circle_fill_rounded,
+                    color: Color(0xFFFF4D8D),
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
