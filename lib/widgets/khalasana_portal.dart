@@ -2,10 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// بوابة خلصانة AI العائمة.
+/// بوابة خلصانة AI.
 ///
 /// - أيقونة فقط بدون كلمة "صاحبي".
-/// - أصغر وأكثر هدوءًا من النسخة السابقة.
 /// - لا تستخدم رمز اللوجو الرئيسي.
 /// - لا توجد نقاط داخل الأيقونة.
 /// - AI أعلى كلمة خلصانة.
@@ -121,7 +120,6 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                         borderRadius: BorderRadius.circular(17),
                         gradient: SweepGradient(
                           colors: borderColors,
-                          transform: const GradientRotation(0),
                         ),
                       ),
                     ),
@@ -199,6 +197,32 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                               Colors.white.withOpacity(0.0),
                               Colors.white.withOpacity(0.17),
                               Colors.white.withOpacity(0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // =================================================
+                  // SECOND GLASS REFLECTION
+                  // =================================================
+
+                  Positioned(
+                    right: 8 + (1 - progress) * 20,
+                    bottom: 9 + math.cos(angle) * 2,
+                    child: Transform.rotate(
+                      angle: 0.35,
+                      child: Container(
+                        width: 13,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          gradient: LinearGradient(
+                            colors: [
+                              innerLight.withOpacity(0.0),
+                              innerLight.withOpacity(0.20),
+                              innerLight.withOpacity(0.0),
                             ],
                           ),
                         ),
@@ -289,54 +313,21 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                   ),
 
                   // =================================================
-                  // INTERNAL LIGHT POINT
-                  // =================================================
-
-                  Positioned(
-                    bottom: 8,
-                    child: Container(
-                      width: 4,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(
-                          0.65 + wave * 0.30,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: innerLight.withOpacity(0.75),
-                            blurRadius: 7 + wave * 4,
-                            spreadRadius: 1,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // =================================================
-                  // SMALL ROTATING HIGHLIGHT
+                  // SOFT LIGHT STREAK
                   // =================================================
 
                   Transform.rotate(
-                    angle: angle,
-                    child: Align(
-                      alignment: Alignment.topRight,
-                      child: Container(
-                        margin: const EdgeInsets.only(
-                          top: 5,
-                          right: 5,
-                        ),
-                        width: 4,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.9),
-                          boxShadow: [
-                            BoxShadow(
-                              color: innerLight,
-                              blurRadius: 7,
-                              spreadRadius: 1,
-                            ),
+                    angle: angle * 0.75,
+                    child: Container(
+                      width: 30,
+                      height: 1.5,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.transparent,
+                            innerLight.withOpacity(0.28 + wave * 0.18),
+                            Colors.transparent,
                           ],
                         ),
                       ),
