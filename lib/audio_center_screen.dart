@@ -1,24 +1,30 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'ai_service.dart';
 import 'audio_player_service.dart';
+import 'services/chat_voice_service.dart';
 
 class AudioCenterScreen extends StatefulWidget {
   const AudioCenterScreen({super.key});
 
   @override
-  State<AudioCenterScreen> createState() =>
-      _AudioCenterScreenState();
+  State<AudioCenterScreen> createState() => _AudioCenterScreenState();
 }
 
-class _AudioCenterScreenState extends State<AudioCenterScreen>
-    with TickerProviderStateMixin {
-  int _categoryIndex = 0;
+class _AudioCenterScreenState extends State<AudioCenterScreen> {
+  static const _gold = Color(0xFFE6C875);
+  static const _goldDark = Color(0xFFB9913E);
+  static const _bg = Color(0xFF07111F);
+  static const _card = Color(0xFF132238);
 
-  final List<String> _categories = const [
+  final _voice = ChatVoiceService();
+  final _searchController = TextEditingController();
+
+  final _categories = const [
     'القرآن',
     'الأذكار',
     'موسيقى',
@@ -26,90 +32,54 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     'الراديو',
   ];
 
-  final TextEditingController _searchController =
-      TextEditingController();
-
+  int _categoryIndex = 0;
   bool _loading = false;
+  bool _playing = false;
   String _error = '';
+  String _currentTitle = '';
+
+  StreamSubscription<PlaybackState>? _playbackSub;
 
   List<AudioSearchItem> _audioItems = [];
 
-  QuranCatalog? _quranCatalog;
-  QuranReciter? _selectedReciter;
-  QuranMoshaf? _selectedMoshaf;
-  QuranSura? _selectedSura;
+  QuranCatalog? _quran;
+  QuranReciter? _reciter;
+  QuranMoshaf? _moshaf;
+  QuranSura? _sura;
 
   List<RadioCountry> _countries = [];
-  RadioCountry? _selectedCountry;
+  RadioCountry? _country;
   List<RadioStation> _stations = [];
-
-  StreamSubscription? _playbackSubscription;
-
-  bool _isPlaying = false;
-  String _currentTitle = '';
-
-  late final AnimationController _pulseController;
 
   @override
   void initState() {
     super.initState();
-
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-      lowerBound: 0.88,
-      upperBound: 1.12,
-    );
-
     _initialize();
   }
 
   Future<void> _initialize() async {
     try {
-      await AudioController.initialize();
+      final handler = await AudioController.initialize();
 
-      _playbackSubscription =
-          AudioController.playbackStateStream.listen((state) {
+      _playbackSub = handler.playbackState.listen((state) {
         if (!mounted) return;
-
-        final playing = state.playing;
-
-        setState(() {
-          _isPlaying = playing;
-        });
-
-        if (playing) {
-          if (!_pulseController.isAnimating) {
-            _pulseController.repeat(reverse: true);
-          }
-        } else {
-          _pulseController.stop();
-          _pulseController.value = 1;
-        }
+        setState(() => _playing = state.playing);
       });
-    } catch (_) {
-      // فشل تهيئة الصوت لا يمنع فتح الشاشة.
-    }
+    } catch (_) {}
 
     await _loadCategory();
   }
 
   @override
   void dispose() {
-    _playbackSubscription?.cancel();
+    _playbackSub?.cancel();
     _searchController.dispose();
-    _pulseController.dispose();
+    _voice.dispose();
     super.dispose();
   }
 
-  // ============================================================
-  // CATEGORY
-  // ============================================================
-
   Future<void> _changeCategory(int index) async {
-    if (_categoryIndex == index && !_loading) {
-      return;
-    }
+    if (_categoryIndex == index && !_loading) return;
 
     setState(() {
       _categoryIndex = index;
@@ -135,36 +105,29 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         case 0:
           await _loadQuran();
           break;
-
         case 1:
           await _loadAdhkar();
           break;
-
         case 2:
           await _loadMusic();
           break;
-
         case 3:
           await _loadPodcast();
           break;
-
         case 4:
           await _loadRadio();
           break;
       }
     } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        _error =
-            'حصلت مشكلة أثناء تحميل المحتوى. جرّب التحديث مرة أخرى.';
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'حصلت مشكلة أثناء تحميل المحتوى. جرّب التحديث.';
+        });
+      }
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -173,129 +136,109 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
   // ============================================================
 
   Future<void> _loadQuran() async {
-    final catalog = await AiService.getQuranCatalog();
+    final data = await AiService.getQuranCatalog();
 
     if (!mounted) return;
 
-    if (catalog == null) {
+    if (data == null || data.reciters.isEmpty || data.suwar.isEmpty) {
       setState(() {
-        _quranCatalog = null;
-        _selectedReciter = null;
-        _selectedMoshaf = null;
-        _selectedSura = null;
-        _error = 'تعذر تحميل قائمة القراء حاليًا.';
+        _quran = null;
+        _error = 'تعذر تحميل قائمة القرآن حاليًا.';
       });
       return;
     }
 
+    final reciter = data.reciters.first;
+
     setState(() {
-      _quranCatalog = catalog;
-
-      if (catalog.reciters.isNotEmpty) {
-        _selectedReciter = catalog.reciters.first;
-
-        if (_selectedReciter!.moshaf.isNotEmpty) {
-          _selectedMoshaf =
-              _selectedReciter!.moshaf.first;
-        } else {
-          _selectedMoshaf = null;
-        }
-      } else {
-        _selectedReciter = null;
-        _selectedMoshaf = null;
-      }
-
-      if (catalog.suwar.isNotEmpty) {
-        _selectedSura = catalog.suwar.first;
-      } else {
-        _selectedSura = null;
-      }
+      _quran = data;
+      _reciter = reciter;
+      _moshaf =
+          reciter.moshaf.isNotEmpty ? reciter.moshaf.first : null;
+      _sura = data.suwar.first;
     });
   }
 
-  void _onReciterChanged(QuranReciter? reciter) {
-    if (reciter == null) return;
+  String? _quranUrl(QuranMoshaf moshaf, QuranSura sura) {
+    var server = moshaf.server.trim();
 
-    setState(() {
-      _selectedReciter = reciter;
+    if (server.isEmpty) return null;
 
-      if (reciter.moshaf.isNotEmpty) {
-        _selectedMoshaf = reciter.moshaf.first;
-      } else {
-        _selectedMoshaf = null;
-      }
-    });
-  }
-
-  void _onMoshafChanged(QuranMoshaf? moshaf) {
-    if (moshaf == null) return;
-
-    setState(() {
-      _selectedMoshaf = moshaf;
-    });
-  }
-
-  void _onSuraChanged(QuranSura? sura) {
-    if (sura == null) return;
-
-    setState(() {
-      _selectedSura = sura;
-    });
-  }
-
-  String? _buildQuranUrl(
-    QuranMoshaf moshaf,
-    QuranSura sura,
-  ) {
-    final server = moshaf.server.trim();
-
-    if (server.isEmpty) {
-      return null;
+    if (!server.endsWith('/')) {
+      server = '$server/';
     }
 
-    var base = server;
-
-    if (!base.endsWith('/')) {
-      base = '$base/';
-    }
-
-    final number =
-        sura.id.toString().padLeft(3, '0');
-
-    return '${base}${number}.mp3';
+    return '$server${sura.id.toString().padLeft(3, '0')}.mp3';
   }
 
-  Future<void> _playSelectedSura() async {
-    final moshaf = _selectedMoshaf;
-    final sura = _selectedSura;
+  Future<void> _playQuran() async {
+    final moshaf = _moshaf;
+    final sura = _sura;
 
     if (moshaf == null || sura == null) {
-      _showMessage(
-        'اختار القارئ والرواية والسورة أولًا.',
-      );
+      _message('اختار القارئ والرواية والسورة أولًا.');
       return;
     }
 
-    final url = _buildQuranUrl(
-      moshaf,
-      sura,
-    );
+    final url = _quranUrl(moshaf, sura);
 
     if (url == null) {
-      _showMessage(
-        'رابط الصوت الخاص بهذه الرواية غير متاح.',
-      );
+      _message('رابط الصوت غير متاح لهذه الرواية.');
       return;
     }
 
-    final title =
-        '${sura.name} - ${_selectedReciter?.name ?? 'القرآن'}';
-
-    await _playUrl(
-      url: url,
-      title: title,
-      artist: _selectedReciter?.name,
+    final first = MediaItem(
+      id: url,
+      title: sura.name,
+      artist: _reciter?.name ?? 'القرآن الكريم',
+      album: 'القرآن الكريم',
     );
+
+    try {
+      final handler = await AudioController.initialize();
+
+      await handler.playMediaItem(first);
+
+      // نضيف باقي السور في Queue ليكمل التشغيل تلقائيًا.
+      if (_quran != null) {
+        final remaining = <MediaItem>[];
+
+        final startIndex = _quran!.suwar.indexWhere(
+          (item) => item.id == sura.id,
+        );
+
+        final start = startIndex < 0 ? 0 : startIndex + 1;
+
+        for (var i = start; i < _quran!.suwar.length; i++) {
+          final nextSura = _quran!.suwar[i];
+          final nextUrl = _quranUrl(moshaf, nextSura);
+
+          if (nextUrl == null) continue;
+
+          remaining.add(
+            MediaItem(
+              id: nextUrl,
+              title: nextSura.name,
+              artist: _reciter?.name ?? 'القرآن الكريم',
+              album: 'القرآن الكريم',
+            ),
+          );
+        }
+
+        if (remaining.isNotEmpty) {
+          await handler.addQueueItems(remaining);
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _currentTitle = '${sura.name} - ${_reciter?.name ?? 'القرآن'}';
+        _playing = true;
+      });
+    } catch (_) {
+      _message('تعذر تشغيل القرآن حاليًا.');
+    }
   }
 
   // ============================================================
@@ -303,8 +246,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
   // ============================================================
 
   Future<void> _loadAdhkar() async {
-    final query =
-        _searchController.text.trim();
+    final query = _searchController.text.trim();
 
     final items = await AiService.searchAudio(
       query.isEmpty ? 'أذكار' : query,
@@ -315,23 +257,51 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
     setState(() {
       _audioItems = items;
+      if (items.isEmpty) {
+        _error = 'لم يتم العثور على أذكار حاليًا.';
+      }
     });
+  }
 
-    if (items.isEmpty) {
+  Future<void> _playAdhkar(AudioSearchItem item) async {
+    // لو الخدمة رجعت رابطًا صوتيًا، نستخدم المشغل الحقيقي.
+    if (item.url.trim().isNotEmpty) {
+      await _playUrl(
+        item.url,
+        item.title,
+        artist: item.artist,
+        artwork: item.artwork,
+      );
+      return;
+    }
+
+    // لو مفيش رابط، نستخدم صوت الهاتف لقراءة الذكر.
+    final text = item.text.trim().isNotEmpty
+        ? item.text
+        : item.title;
+
+    final ok = await _voice.speak(
+      text,
+      language: 'ar-EG',
+      rate: 0.45,
+    );
+
+    if (ok && mounted) {
       setState(() {
-        _error =
-            'لم يتم العثور على أذكار حاليًا. جرّب التحديث.';
+        _currentTitle = item.title;
+        _playing = true;
       });
+    } else {
+      _message('تعذر تشغيل صوت الذكر على الهاتف.');
     }
   }
 
   // ============================================================
-  // MUSIC
+  // MUSIC / PODCAST
   // ============================================================
 
   Future<void> _loadMusic() async {
-    final query =
-        _searchController.text.trim();
+    final query = _searchController.text.trim();
 
     final items = await AiService.searchAudio(
       query.isEmpty ? 'Arabic music' : query,
@@ -340,18 +310,11 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
     if (!mounted) return;
 
-    setState(() {
-      _audioItems = items;
-    });
+    setState(() => _audioItems = items);
   }
 
-  // ============================================================
-  // PODCAST
-  // ============================================================
-
   Future<void> _loadPodcast() async {
-    final query =
-        _searchController.text.trim();
+    final query = _searchController.text.trim();
 
     final items = await AiService.searchAudio(
       query.isEmpty ? 'Arabic podcast' : query,
@@ -360,9 +323,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
     if (!mounted) return;
 
-    setState(() {
-      _audioItems = items;
-    });
+    setState(() => _audioItems = items);
   }
 
   // ============================================================
@@ -370,31 +331,25 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
   // ============================================================
 
   Future<void> _loadRadio() async {
-    final countries =
-        await AiService.getRadioCountries();
+    final countries = await AiService.getRadioCountries();
 
     if (!mounted) return;
 
     if (countries.isEmpty) {
       setState(() {
         _countries = [];
-        _selectedCountry = null;
+        _country = null;
         _stations = [];
-        _error =
-            'تعذر تحميل قائمة الدول والإذاعات حاليًا.';
+        _error = 'تعذر تحميل الدول والإذاعات حاليًا.';
       });
       return;
     }
 
-    RadioCountry selected =
-        countries.first;
+    var selected = countries.first;
 
     for (final country in countries) {
-      final name =
-          country.name.toLowerCase();
-
-      final code =
-          country.code.toUpperCase();
+      final code = country.code.toUpperCase();
+      final name = country.name.toLowerCase();
 
       if (code == 'EG' ||
           name.contains('egypt') ||
@@ -406,121 +361,77 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
     setState(() {
       _countries = countries;
-      _selectedCountry = selected;
-      _stations = [];
+      _country = selected;
     });
 
     await _loadStations(selected);
   }
 
-  Future<void> _changeCountry(
-    RadioCountry? country,
-  ) async {
-    if (country == null) return;
-
-    setState(() {
-      _selectedCountry = country;
-      _stations = [];
-      _error = '';
-      _loading = true;
-    });
-
-    await _loadStations(country);
-
-    if (!mounted) return;
-
-    setState(() {
-      _loading = false;
-    });
-  }
-
-  Future<void> _loadStations(
-    RadioCountry country,
-  ) async {
+  Future<void> _loadStations(RadioCountry country) async {
     try {
-      final stations =
-          await AiService.getRadioStations(
-        country.code,
-      );
+      final stations = await AiService.getRadioStations(country.code);
 
       if (!mounted) return;
 
       setState(() {
         _stations = stations;
+        _error = stations.isEmpty
+            ? 'لا توجد محطات متاحة لهذه الدولة حاليًا.'
+            : '';
       });
     } catch (_) {
-      if (!mounted) return;
+      if (mounted) {
+        setState(() {
+          _stations = [];
+          _error = 'تعذر تحميل محطات هذه الدولة.';
+        });
+      }
+    }
+  }
 
-      setState(() {
-        _stations = [];
-        _error =
-            'تعذر تحميل محطات هذه الدولة.';
-      });
+  Future<void> _changeCountry(RadioCountry? country) async {
+    if (country == null) return;
+
+    setState(() {
+      _country = country;
+      _stations = [];
+      _loading = true;
+      _error = '';
+    });
+
+    await _loadStations(country);
+
+    if (mounted) {
+      setState(() => _loading = false);
     }
   }
 
   // ============================================================
-  // SEARCH
+  // PLAYER
   // ============================================================
 
-  Future<void> _search() async {
-    switch (_categoryIndex) {
-      case 0:
-        return;
-
-      case 1:
-        await _loadAdhkar();
-        return;
-
-      case 2:
-        await _loadMusic();
-        return;
-
-      case 3:
-        await _loadPodcast();
-        return;
-
-      case 4:
-        if (_selectedCountry != null) {
-          await _loadStations(
-            _selectedCountry!,
-          );
-        }
-        return;
-    }
-  }
-
-  // ============================================================
-  // AUDIO CONTROL
-  // ============================================================
-
-  Future<void> _playUrl({
-    required String url,
-    required String title,
+  Future<void> _playUrl(
+    String url,
+    String title, {
     String? artist,
     String? artwork,
   }) async {
-    final cleanUrl = url.trim();
+    final clean = url.trim();
 
-    if (cleanUrl.isEmpty) {
-      _showMessage(
-        'المصدر الصوتي غير متاح لهذا العنصر.',
-      );
+    if (clean.isEmpty) {
+      _message('المصدر الصوتي غير متاح.');
       return;
     }
 
     try {
       Uri? artUri;
 
-      if (artwork != null &&
-          artwork.trim().isNotEmpty) {
-        artUri = Uri.tryParse(
-          artwork.trim(),
-        );
+      if (artwork != null && artwork.trim().isNotEmpty) {
+        artUri = Uri.tryParse(artwork.trim());
       }
 
       await AudioController.playUrl(
-        url: cleanUrl,
+        url: clean,
         title: title,
         artist: artist,
         artUri: artUri,
@@ -530,52 +441,40 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
       setState(() {
         _currentTitle = title;
-        _isPlaying = true;
+        _playing = true;
       });
     } catch (_) {
-      if (!mounted) return;
-
-      _showMessage(
-        'تعذر تشغيل الصوت. جرّب عنصرًا آخر.',
-      );
+      _message('تعذر تشغيل الصوت.');
     }
   }
 
-  Future<void> _stopAudio() async {
+  Future<void> _stop() async {
     try {
       await AudioController.stop();
+      await _voice.stopSpeaking();
 
-      if (!mounted) return;
-
-      setState(() {
-        _isPlaying = false;
-        _currentTitle = '';
-      });
+      if (mounted) {
+        setState(() {
+          _playing = false;
+          _currentTitle = '';
+        });
+      }
     } catch (_) {}
   }
 
   Future<void> _pickLocalAudio() async {
     try {
-      final result =
-          await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         type: FileType.audio,
       );
 
-      if (result == null ||
-          result.files.isEmpty) {
-        return;
-      }
+      if (result == null || result.files.isEmpty) return;
 
-      final file =
-          result.files.single;
-
+      final file = result.files.single;
       final path = file.path;
 
-      if (path == null ||
-          path.trim().isEmpty) {
-        _showMessage(
-          'تعذر الوصول إلى الملف.',
-        );
+      if (path == null || path.trim().isEmpty) {
+        _message('تعذر الوصول إلى الملف.');
         return;
       }
 
@@ -588,15 +487,45 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
       setState(() {
         _currentTitle = file.name;
-        _isPlaying = true;
+        _playing = true;
       });
     } catch (_) {
-      if (!mounted) return;
-
-      _showMessage(
-        'تعذر تشغيل الملف الصوتي.',
-      );
+      _message('تعذر تشغيل الملف الصوتي.');
     }
+  }
+
+  // ============================================================
+  // SEARCH
+  // ============================================================
+
+  Future<void> _search() async {
+    switch (_categoryIndex) {
+      case 1:
+        await _loadAdhkar();
+        break;
+      case 2:
+        await _loadMusic();
+        break;
+      case 3:
+        await _loadPodcast();
+        break;
+      case 4:
+        if (_country != null) {
+          await _loadStations(_country!);
+        }
+        break;
+    }
+  }
+
+  void _message(String text) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   // ============================================================
@@ -608,11 +537,9 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor:
-            const Color(0xFF07111F),
+        backgroundColor: _bg,
         appBar: AppBar(
-          backgroundColor:
-              Colors.transparent,
+          backgroundColor: Colors.transparent,
           elevation: 0,
           centerTitle: true,
           title: const Text(
@@ -635,16 +562,14 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
         ),
         body: Column(
           children: [
-            _buildCategoryBar(),
-            if (_isPlaying)
-              _buildPlayingBar(),
+            _categoryBar(),
+            if (_playing) _playingBar(),
             Expanded(
               child: RefreshIndicator(
-                color: Colors.white,
-                backgroundColor:
-                    const Color(0xFF17283E),
+                color: _gold,
+                backgroundColor: _card,
                 onRefresh: _loadCategory,
-                child: _buildContent(),
+                child: _content(),
               ),
             ),
           ],
@@ -653,160 +578,86 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     );
   }
 
-  // ============================================================
-  // CATEGORY BAR - NO HORIZONTAL SCROLL
-  // ============================================================
+  Widget _categoryBar() {
+    return SizedBox(
+      height: 62,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 7,
+          vertical: 6,
+        ),
+        child: Row(
+          children: List.generate(
+            _categories.length,
+            (index) {
+              final selected = index == _categoryIndex;
 
-  Widget _buildCategoryBar() {
-    return Container(
-      width: double.infinity,
-      height: 64,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 7,
-        vertical: 7,
-      ),
-      child: Row(
-        children: List.generate(
-          _categories.length,
-          (index) {
-            final selected =
-                index == _categoryIndex;
-
-            return Expanded(
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(
-                  horizontal: 3,
-                ),
-                child: GestureDetector(
-                  onTap: () =>
-                      _changeCategory(index),
-                  child: AnimatedContainer(
-                    duration:
-                        const Duration(
-                      milliseconds: 220,
-                    ),
-                    curve: Curves.easeOut,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius:
-                          BorderRadius.circular(15),
-                      color: selected
-                          ? const Color(0xFFB9913E)
-                          : const Color(0xFF132238),
-                      border: Border.all(
-                        color: selected
-                            ? const Color(0xFFE6C875)
-                            : Colors.white10,
-                        width: selected ? 1.2 : 1,
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: GestureDetector(
+                    onTap: () => _changeCategory(index),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: selected ? _goldDark : _card,
+                        border: Border.all(
+                          color: selected ? _gold : Colors.white10,
+                        ),
                       ),
-                      boxShadow: selected
-                          ? [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFFE6C875,
-                                ).withOpacity(.16),
-                                blurRadius: 10,
-                                spreadRadius: 1,
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          _categories[index],
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: selected
-                                ? FontWeight.w800
-                                : FontWeight.w600,
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _categories[index],
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: selected
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPlayingBar() {
+  Widget _playingBar() {
     return Container(
-      margin:
-          const EdgeInsets.fromLTRB(
-        12,
-        4,
-        12,
-        8,
-      ),
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 10,
+      margin: const EdgeInsets.fromLTRB(12, 3, 12, 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 8,
       ),
       decoration: BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(18),
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF182D46),
-            Color(0xFF0D1A2C),
-          ],
-        ),
-        border: Border.all(
-          color: Colors.white12,
-        ),
+        color: _card,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: Colors.white12),
       ),
       child: Row(
         children: [
-          AnimatedBuilder(
-            animation: _pulseController,
-            builder: (_, child) {
-              return Transform.scale(
-                scale:
-                    _isPlaying
-                        ? _pulseController.value
-                        : 1,
-                child: child,
-              );
-            },
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color:
-                    const Color(0xFFB9913E)
-                        .withOpacity(.18),
-                border: Border.all(
-                  color:
-                      const Color(0xFFE6C875)
-                          .withOpacity(.45),
-                ),
-              ),
-              child: const Icon(
-                Icons.graphic_eq_rounded,
-                color: Color(0xFFE6C875),
-              ),
-            ),
+          const Icon(
+            Icons.graphic_eq_rounded,
+            color: _gold,
+            size: 32,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _currentTitle.isEmpty
-                  ? 'يتم تشغيل الصوت'
-                  : _currentTitle,
+              _currentTitle.isEmpty ? 'يتم تشغيل الصوت' : _currentTitle,
               maxLines: 1,
-              overflow:
-                  TextOverflow.ellipsis,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -814,7 +665,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
             ),
           ),
           IconButton(
-            onPressed: _stopAudio,
+            onPressed: _stop,
             icon: const Icon(
               Icons.stop_circle_outlined,
               color: Colors.white,
@@ -825,34 +676,34 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     );
   }
 
-  Widget _buildContent() {
+  Widget _content() {
     if (_loading) {
       return ListView(
-        physics:
-            const AlwaysScrollableScrollPhysics(),
+        physics: const AlwaysScrollableScrollPhysics(),
         children: const [
-          SizedBox(height: 90),
+          SizedBox(height: 100),
           Center(
             child: CircularProgressIndicator(
-              color: Color(0xFFE6C875),
+              color: _gold,
             ),
           ),
         ],
       );
     }
 
-    if (_error.isNotEmpty) {
+    if (_error.isNotEmpty &&
+        _categoryIndex != 1 &&
+        _audioItems.isEmpty &&
+        _stations.isEmpty) {
       return ListView(
-        physics:
-            const AlwaysScrollableScrollPhysics(),
-        padding:
-            const EdgeInsets.all(24),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
         children: [
-          const SizedBox(height: 80),
+          const SizedBox(height: 70),
           const Icon(
             Icons.cloud_off_rounded,
-            size: 54,
             color: Colors.white38,
+            size: 52,
           ),
           const SizedBox(height: 16),
           Text(
@@ -860,7 +711,6 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 15,
               height: 1.6,
             ),
           ),
@@ -868,12 +718,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
           Center(
             child: ElevatedButton.icon(
               onPressed: _loadCategory,
-              icon: const Icon(
-                Icons.refresh_rounded,
-              ),
-              label: const Text(
-                'إعادة المحاولة',
-              ),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('إعادة المحاولة'),
             ),
           ),
         ],
@@ -882,546 +728,472 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
 
     switch (_categoryIndex) {
       case 0:
-        return _buildQuran();
-
+        return _quranView();
       case 1:
-        return _buildAdhkar();
-
+        return _audioList(
+          title: 'الأذكار',
+          items: _audioItems,
+          onPlay: _playAdhkar,
+          empty: 'لا توجد أذكار متاحة حاليًا.',
+        );
       case 2:
-        return _buildSearchAudioList(
+        return _searchableList(
           title: 'الموسيقى',
-          emptyText:
-              'ابحث عن فنان أو أغنية.',
+          items: _audioItems,
+          empty: 'ابحث عن أغنية أو فنان.',
         );
-
       case 3:
-        return _buildSearchAudioList(
+        return _searchableList(
           title: 'البودكاست',
-          emptyText:
-              'ابحث عن بودكاست أو برنامج.',
+          items: _audioItems,
+          empty: 'ابحث عن بودكاست أو برنامج.',
         );
-
       case 4:
-        return _buildRadio();
-
+        return _radioView();
       default:
         return const SizedBox.shrink();
     }
   }
 
-  // ============================================================
-  // QURAN UI
-  // ============================================================
+  Widget _quranView() {
+    final data = _quran;
 
-  Widget _buildQuran() {
-    final catalog = _quranCatalog;
-
-    if (catalog == null ||
-        catalog.reciters.isEmpty) {
+    if (data == null) {
       return ListView(
-        physics:
-            const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 80),
-          Center(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 80),
+          const Center(
             child: Text(
-              'لا توجد قائمة قراء متاحة حاليًا.',
-              style: TextStyle(
-                color: Colors.white70,
-              ),
+              'جارٍ تحميل القرآن...',
+              style: TextStyle(color: Colors.white70),
             ),
           ),
         ],
       );
     }
 
-    final reciters =
-        catalog.reciters;
-
-    final moshaf =
-        _selectedReciter?.moshaf ?? [];
-
     return ListView(
-      physics:
-          const AlwaysScrollableScrollPhysics(),
-      padding:
-          const EdgeInsets.fromLTRB(
-        14,
-        8,
-        14,
-        30,
-      ),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 30),
       children: [
-        _buildSectionIntro(
-          icon: Icons.menu_book_rounded,
-          title: 'القرآن الكريم',
-          subtitle:
-              'اختار القارئ أولًا ثم الرواية والسورة.',
-        ),
-        const SizedBox(height: 14),
-        _buildDropdown<QuranReciter>(
+        _sectionTitle('القرآن الكريم'),
+        const SizedBox(height: 10),
+
+        _dropdown<QuranReciter>(
+          value: _reciter,
+          items: data.reciters,
           label: 'القارئ',
-          value: _selectedReciter,
-          items: reciters,
-          labelBuilder: (item) =>
-              item.name,
-          onChanged: _onReciterChanged,
+          text: (item) => item.name,
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() {
+              _reciter = value;
+              _moshaf =
+                  value.moshaf.isNotEmpty ? value.moshaf.first : null;
+            });
+          },
         ),
-        const SizedBox(height: 12),
-        if (moshaf.isNotEmpty)
-          _buildDropdown<QuranMoshaf>(
-            label: 'الرواية / المصحف',
-            value: _selectedMoshaf,
-            items: moshaf,
-            labelBuilder: (item) =>
-                item.name.isEmpty
-                    ? 'رواية'
-                    : item.name,
-            onChanged:
-                _onMoshafChanged,
+
+        const SizedBox(height: 10),
+
+        if (_reciter != null)
+          _dropdown<QuranMoshaf>(
+            value: _moshaf,
+            items: _reciter!.moshaf,
+            label: 'الرواية',
+            text: (item) => item.name,
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => _moshaf = value);
+              }
+            },
           ),
-        if (catalog.suwar.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _buildDropdown<QuranSura>(
-            label: 'السورة',
-            value: _selectedSura,
-            items: catalog.suwar,
-            labelBuilder: (item) =>
-                '${item.id}. ${item.name}',
-            onChanged: _onSuraChanged,
+
+        const SizedBox(height: 10),
+
+        _dropdown<QuranSura>(
+          value: _sura,
+          items: data.suwar,
+          label: 'السورة',
+          text: (item) => '${item.id}. ${item.name}',
+          onChanged: (value) {
+            if (value != null) {
+              setState(() => _sura = value);
+            }
+          },
+        ),
+
+        const SizedBox(height: 16),
+
+        ElevatedButton.icon(
+          onPressed: _playQuran,
+          icon: const Icon(Icons.play_arrow_rounded),
+          label: const Text(
+            'تشغيل السورة والمتابعة تلقائيًا',
           ),
-        ],
-        const SizedBox(height: 18),
-        SizedBox(
-          height: 54,
-          child: ElevatedButton.icon(
-            onPressed:
-                _selectedMoshaf != null &&
-                        _selectedSura != null
-                    ? _playSelectedSura
-                    : null,
-            icon: const Icon(
-              Icons.play_arrow_rounded,
-            ),
-            label: const Text(
-              'تشغيل السورة',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-              ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _goldDark,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 50),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
             ),
           ),
         ),
-        const SizedBox(height: 22),
-        _buildInfoCard(
-          icon: Icons.people_alt_rounded,
-          title:
-              'عدد القراء المتاحين',
-          value:
-              '${reciters.length} قارئ',
+
+        const SizedBox(height: 20),
+
+        _infoCard(
+          Icons.queue_music_rounded,
+          'التشغيل المتواصل',
+          'بعد السورة المختارة، يكمل المشغل السور التالية تلقائيًا في الخلفية.',
         ),
       ],
     );
   }
 
-  // ============================================================
-  // ADHKAR UI
-  // ============================================================
-
-  Widget _buildAdhkar() {
+  Widget _searchableList({
+    required String title,
+    required List<AudioSearchItem> items,
+    required String empty,
+  }) {
     return ListView(
-      physics:
-          const AlwaysScrollableScrollPhysics(),
-      padding:
-          const EdgeInsets.fromLTRB(
-        14,
-        8,
-        14,
-        30,
-      ),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 30),
       children: [
-        _buildSearchBox(
-          hint:
-              'ابحث في الأذكار...',
-          onSearch: _search,
-        ),
-        const SizedBox(height: 14),
-        _buildSectionIntro(
-          icon: Icons.favorite_rounded,
-          title: 'الأذكار',
-          subtitle:
-              'محتوى الأذكار متاح داخل التطبيق.',
-        ),
-        const SizedBox(height: 12),
-        if (_audioItems.isEmpty)
-          _buildEmptyCard(
-            'لا توجد نتائج أذكار حاليًا.',
-          )
-        else
-          ..._audioItems.map(
-            _buildAdhkarCard,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildAdhkarCard(
-    AudioSearchItem item,
-  ) {
-    return Container(
-      margin:
-          const EdgeInsets.only(bottom: 10),
-      padding:
-          const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          Text(
-            item.title,
-            style: const TextStyle(
-              color: Color(0xFFE6C875),
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 9),
-          Text(
-            item.text.isEmpty
-                ? item.title
-                : item.text,
-            textDirection:
-                TextDirection.rtl,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              height: 1.8,
-            ),
-          ),
-          if (item.url.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Align(
-              alignment:
-                  Alignment.centerLeft,
-              child: IconButton(
-                onPressed: () =>
-                    _playUrl(
-                  url: item.url,
-                  title: item.title,
-                ),
-                icon: const Icon(
-                  Icons.play_circle_fill_rounded,
-                  color:
-                      Color(0xFFE6C875),
-                  size: 34,
-                ),
+        Row(
+          children: [
+            Expanded(child: _sectionTitle(title)),
+            IconButton(
+              onPressed: _search,
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: _gold,
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // MUSIC / PODCAST UI
-  // ============================================================
-
-  Widget _buildSearchAudioList({
-    required String title,
-    required String emptyText,
-  }) {
-    return ListView(
-      physics:
-          const AlwaysScrollableScrollPhysics(),
-      padding:
-          const EdgeInsets.fromLTRB(
-        14,
-        8,
-        14,
-        30,
-      ),
-      children: [
-        _buildSearchBox(
-          hint:
-              'ابحث في $title...',
-          onSearch: _search,
         ),
-        const SizedBox(height: 14),
-        _buildSectionIntro(
-          icon: title == 'الموسيقى'
-              ? Icons.music_note_rounded
-              : Icons.podcasts_rounded,
-          title: title,
-          subtitle:
-              'نتائج متاحة من المصادر الصوتية.',
-        ),
+        const SizedBox(height: 8),
+        _searchBox(),
         const SizedBox(height: 12),
-        if (_audioItems.isEmpty)
-          _buildEmptyCard(emptyText)
-        else
-          ..._audioItems.map(
-            _buildAudioCard,
-          ),
+        ..._audioCards(items, play: true),
+        if (items.isEmpty)
+          _emptyText(empty),
       ],
     );
   }
 
-  Widget _buildAudioCard(
+  Widget _audioList({
+    required String title,
+    required List<AudioSearchItem> items,
+    required Future<void> Function(AudioSearchItem) onPlay,
+    required String empty,
+  }) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 30),
+      children: [
+        Row(
+          children: [
+            Expanded(child: _sectionTitle(title)),
+            IconButton(
+              onPressed: _search,
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: _gold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _searchBox(),
+        const SizedBox(height: 12),
+        ...items.map(
+          (item) => _audioCard(
+            item,
+            () => onPlay(item),
+          ),
+        ),
+        if (items.isEmpty) _emptyText(empty),
+      ],
+    );
+  }
+
+  List<Widget> _audioCards(
+    List<AudioSearchItem> items, {
+    required bool play,
+  }) {
+    return items
+        .map(
+          (item) => _audioCard(
+            item,
+            () => _playUrl(
+              item.url,
+              item.title,
+              artist: item.artist,
+              artwork: item.artwork,
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  Widget _audioCard(
     AudioSearchItem item,
+    VoidCallback onPlay,
   ) {
     return Container(
-      margin:
-          const EdgeInsets.only(bottom: 10),
-      decoration: _cardDecoration(),
+      margin: const EdgeInsets.only(bottom: 9),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: Colors.white10),
+      ),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 6,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 2,
         ),
-        leading: _buildArtwork(
-          item.artwork,
-        ),
+        leading: _artwork(item.artwork),
         title: Text(
           item.title,
           maxLines: 2,
-          overflow:
-              TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        subtitle: item.artist == null ||
-                item.artist!.isEmpty
-            ? null
-            : Text(
-                item.artist!,
-                maxLines: 1,
-                overflow:
-                    TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white54,
-                ),
-              ),
-        trailing: item.url.isEmpty
-            ? null
-            : IconButton(
-                onPressed: () =>
-                    _playUrl(
-                  url: item.url,
-                  title: item.title,
-                  artist: item.artist,
-                  artwork:
-                      item.artwork,
-                ),
-                icon: const Icon(
-                  Icons.play_circle_fill_rounded,
-                  color:
-                      Color(0xFFE6C875),
-                  size: 36,
-                ),
-              ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // RADIO UI
-  // ============================================================
-
-  Widget _buildRadio() {
-    return ListView(
-      physics:
-          const AlwaysScrollableScrollPhysics(),
-      padding:
-          const EdgeInsets.fromLTRB(
-        14,
-        8,
-        14,
-        30,
-      ),
-      children: [
-        _buildSectionIntro(
-          icon: Icons.radio_rounded,
-          title: 'الراديو',
-          subtitle:
-              'اختار الدولة أولًا ثم اختار المحطة.',
-        ),
-        const SizedBox(height: 14),
-        if (_countries.isNotEmpty)
-          _buildDropdown<RadioCountry>(
-            label: 'الدولة',
-            value: _selectedCountry,
-            items: _countries,
-            labelBuilder: (item) =>
-                '${item.name} (${item.stationCount})',
-            onChanged:
-                _changeCountry,
-          ),
-        const SizedBox(height: 16),
-        if (_stations.isEmpty)
-          _buildEmptyCard(
-            'لا توجد محطات متاحة لهذه الدولة حاليًا.',
-          )
-        else
-          ..._stations.map(
-            _buildRadioStationCard,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildRadioStationCard(
-    RadioStation station,
-  ) {
-    return Container(
-      margin:
-          const EdgeInsets.only(bottom: 10),
-      decoration: _cardDecoration(),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 6,
-        ),
-        leading: _buildArtwork(
-          station.favicon,
-        ),
-        title: Text(
-          station.name,
-          maxLines: 2,
-          overflow:
-              TextOverflow.ellipsis,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w700,
           ),
         ),
         subtitle: Text(
-          [
-            if (station.codec.isNotEmpty)
-              station.codec,
-            if (station.bitrate > 0)
-              '${station.bitrate} kbps',
-          ].join(' • '),
+          item.artist?.isNotEmpty == true
+              ? item.artist!
+              : item.collection.isNotEmpty
+                  ? item.collection
+                  : 'صاحبي AI',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white54,
           ),
         ),
         trailing: IconButton(
-          onPressed: station.url.isEmpty
-              ? null
-              : () => _playUrl(
-                    url: station.url,
-                    title: station.name,
-                    artwork:
-                        station.favicon,
-                  ),
+          onPressed: onPlay,
           icon: const Icon(
             Icons.play_circle_fill_rounded,
-            color: Color(0xFFE6C875),
-            size: 36,
+            color: _gold,
+            size: 38,
           ),
         ),
       ),
     );
   }
 
-  // ============================================================
-  // COMMON WIDGETS
-  // ============================================================
+  Widget _radioView() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 30),
+      children: [
+        _sectionTitle('الراديو'),
+        const SizedBox(height: 10),
 
-  Widget _buildSearchBox({
-    required String hint,
-    required VoidCallback onSearch,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF101E31),
-        borderRadius:
-            BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white10,
+        _dropdown<RadioCountry>(
+          value: _country,
+          items: _countries,
+          label: 'الدولة',
+          text: (item) => '${item.name} (${item.code})',
+          onChanged: _changeCountry,
         ),
-      ),
-      child: TextField(
-        controller: _searchController,
-        textDirection: TextDirection.rtl,
-        style: const TextStyle(
-          color: Colors.white,
-        ),
-        onSubmitted: (_) => onSearch(),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(
-            color: Colors.white38,
-          ),
-          border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 15,
-          ),
-          prefixIcon: IconButton(
-            onPressed: onSearch,
-            icon: const Icon(
-              Icons.search_rounded,
-              color: Color(0xFFE6C875),
+
+        const SizedBox(height: 14),
+
+        ..._stations.map(
+          (station) => Container(
+            margin: const EdgeInsets.only(bottom: 9),
+            decoration: BoxDecoration(
+              color: _card,
+              borderRadius: BorderRadius.circular(17),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: ListTile(
+              leading: _stationIcon(station.favicon),
+              title: Text(
+                station.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              subtitle: Text(
+                station.tags.isNotEmpty
+                    ? station.tags
+                    : 'إذاعة ${_country?.name ?? ''}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white54),
+              ),
+              trailing: IconButton(
+                onPressed: () => _playUrl(
+                  station.url,
+                  station.name,
+                  artist: _country?.name,
+                  artwork: station.favicon,
+                ),
+                icon: const Icon(
+                  Icons.play_circle_fill_rounded,
+                  color: _gold,
+                  size: 38,
+                ),
+              ),
             ),
           ),
         ),
+
+        if (_stations.isEmpty)
+          _emptyText(
+            _error.isNotEmpty
+                ? _error
+                : 'لا توجد محطات متاحة حاليًا.',
+          ),
+      ],
+    );
+  }
+
+  Widget _searchBox() {
+    return TextField(
+      controller: _searchController,
+      textDirection: TextDirection.rtl,
+      style: const TextStyle(color: Colors.white),
+      onSubmitted: (_) => _search(),
+      decoration: InputDecoration(
+        hintText: 'ابحث هنا...',
+        hintStyle: const TextStyle(color: Colors.white38),
+        prefixIcon: IconButton(
+          onPressed: _search,
+          icon: const Icon(
+            Icons.search_rounded,
+            color: _gold,
+          ),
+        ),
+        filled: true,
+        fillColor: _card,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
 
-  Widget _buildSectionIntro({
-    required IconData icon,
-    required String title,
-    required String subtitle,
+  Widget _dropdown<T>({
+    required T? value,
+    required List<T> items,
+    required String label,
+    required String Function(T) text,
+    required ValueChanged<T?> onChanged,
   }) {
+    final safeValue = items.contains(value) ? value : null;
+
     return Container(
-      padding:
-          const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: safeValue,
+          isExpanded: true,
+          dropdownColor: const Color(0xFF17283E),
+          iconEnabledColor: _gold,
+          hint: Text(
+            label,
+            style: const TextStyle(color: Colors.white54),
+          ),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+          items: items
+              .map(
+                (item) => DropdownMenuItem<T>(
+                  value: item,
+                  child: Text(
+                    text(item),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 19,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+
+  Widget _emptyText(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 55),
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white54,
+            height: 1.6,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _infoCard(
+    IconData icon,
+    String title,
+    String text,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: Colors.white10),
+      ),
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color:
-                  const Color(0xFFE6C875)
-                      .withOpacity(.12),
-            ),
-            child: Icon(
-              icon,
-              color:
-                  const Color(0xFFE6C875),
-            ),
-          ),
+          Icon(icon, color: _gold, size: 32),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontWeight:
-                        FontWeight.w800,
-                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  subtitle,
+                  text,
                   style: const TextStyle(
-                    color: Colors.white54,
-                    height: 1.4,
+                    color: Colors.white60,
+                    height: 1.45,
                   ),
                 ),
               ],
@@ -1432,195 +1204,60 @@ class _AudioCenterScreenState extends State<AudioCenterScreen>
     );
   }
 
-  Widget _buildInfoCard({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
-    return Container(
-      padding:
-          const EdgeInsets.all(15),
-      decoration: _cardDecoration(),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            color:
-                const Color(0xFFE6C875),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white70,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight:
-                  FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyCard(String text) {
-    return Container(
-      padding:
-          const EdgeInsets.all(22),
-      decoration: _cardDecoration(),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Colors.white54,
-          height: 1.6,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDropdown<T>({
-    required String label,
-    required T? value,
-    required List<T> items,
-    required String Function(T item)
-        labelBuilder,
-    required ValueChanged<T?> onChanged,
-  }) {
-    if (items.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final safeValue =
-        items.contains(value)
-            ? value
-            : items.first;
-
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 3,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF101E31),
-        borderRadius:
-            BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white10,
-        ),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<T>(
-          value: safeValue,
-          isExpanded: true,
-          dropdownColor:
-              const Color(0xFF14243A),
-          iconEnabledColor:
-              const Color(0xFFE6C875),
-          style: const TextStyle(
-            color: Colors.white,
-          ),
-          hint: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white54,
-            ),
-          ),
-          items: items.map(
-            (item) {
-              return DropdownMenuItem<T>(
-                value: item,
-                child: Text(
-                  labelBuilder(item),
-                  maxLines: 1,
-                  overflow:
-                      TextOverflow.ellipsis,
-                ),
-              );
-            },
-          ).toList(),
-          onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildArtwork(String url) {
-    final clean = url.trim();
-
-    if (clean.isEmpty) {
-      return Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          borderRadius:
-              BorderRadius.circular(13),
-          color: Colors.white10,
-        ),
-        child: const Icon(
+  Widget _artwork(String url) {
+    if (url.trim().isEmpty) {
+      return const CircleAvatar(
+        backgroundColor: Color(0xFF243A55),
+        child: Icon(
           Icons.music_note_rounded,
-          color: Colors.white54,
+          color: _gold,
         ),
       );
     }
 
     return ClipRRect(
-      borderRadius:
-          BorderRadius.circular(13),
+      borderRadius: BorderRadius.circular(10),
       child: Image.network(
-        clean,
+        url,
         width: 48,
         height: 48,
         fit: BoxFit.cover,
-        errorBuilder:
-            (_, __, ___) {
-          return Container(
-            width: 48,
-            height: 48,
-            color: Colors.white10,
-            child: const Icon(
-              Icons.music_note_rounded,
-              color: Colors.white54,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: const Color(0xFF101E31),
-      borderRadius:
-          BorderRadius.circular(18),
-      border: Border.all(
-        color: Colors.white10,
-      ),
-    );
-  }
-
-  void _showMessage(String message) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            message,
-            textAlign: TextAlign.right,
+        errorBuilder: (_, __, ___) => const CircleAvatar(
+          backgroundColor: Color(0xFF243A55),
+          child: Icon(
+            Icons.music_note_rounded,
+            color: _gold,
           ),
-          behavior:
-              SnackBarBehavior.floating,
+        ),
+      ),
+    );
+  }
+
+  Widget _stationIcon(String url) {
+    if (url.trim().isEmpty) {
+      return const CircleAvatar(
+        backgroundColor: Color(0xFF243A55),
+        child: Icon(
+          Icons.radio_rounded,
+          color: _gold,
         ),
       );
+    }
+
+    return ClipOval(
+      child: Image.network(
+        url,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const CircleAvatar(
+          backgroundColor: Color(0xFF243A55),
+          child: Icon(
+            Icons.radio_rounded,
+            color: _gold,
+          ),
+        ),
+      ),
+    );
   }
 }
