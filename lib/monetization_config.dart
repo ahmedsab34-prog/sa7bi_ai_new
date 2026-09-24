@@ -9,7 +9,7 @@ class MonetizationConfig {
       'https://sa7bi-ai-new.ahmedsab34.workers.dev/download';
 
   // ============================================================
-  // AFFILIATE / SHOPPING LINKS
+  // SHOPPING / AFFILIATE DESTINATIONS
   // ============================================================
 
   static const String amazonUrl =
@@ -25,13 +25,13 @@ class MonetizationConfig {
       'https://www.facebook.com/marketplace/';
 
   // ============================================================
-  // MONETIZATION SWITCHES
+  // MASTER SWITCHES
   // ============================================================
 
-  /// تشغيل روابط التسوق والـ Affiliate.
+  /// تشغيل قسم التسوق.
   static const bool affiliateEnabled = true;
 
-  /// تشغيل AdMob.
+  /// تشغيل AdMob بالكامل.
   static const bool admobEnabled = true;
 
   // ============================================================
@@ -44,21 +44,19 @@ class MonetizationConfig {
   /// السماح بإعلانات Interstitial.
   static const bool interstitialEnabled = true;
 
-  /// السماح بالإعلانات المدفوعة Rewarded.
+  /// السماح بإعلانات Rewarded.
   static const bool rewardedAdsEnabled = true;
 
   // ============================================================
-  // AFFILIATE CAROUSEL
+  // AFFILIATE / SHOPPING CAROUSEL
   // ============================================================
 
-  /// إظهار شريط التسوق الأفقي في الصفحة الرئيسية.
+  /// إظهار شريط المتاجر في الصفحة الرئيسية.
   static const bool affiliateCarouselEnabled = true;
 
-  /// عنوان قسم التسوق.
   static const String affiliateCarouselTitle =
       'تسوق من صاحبي';
 
-  /// وصف قصير أسفل العنوان.
   static const String affiliateCarouselSubtitle =
       'اختار المتجر وافتحه مباشرة';
 
@@ -73,9 +71,9 @@ class MonetizationConfig {
       'نسخة التطبيق الرسمية';
 
   // ============================================================
-  // CREDIT / MONETIZATION SETTINGS
+  // CREDITS / REWARDED ADS
   // ============================================================
 
-  static const int rewardedCredits =
-      5;
-}
+  /// عدد الكريدت التي يحصل عليها المستخدم بعد
+  /// إكمال إعلان Rewarded بنجاح.
+  static const int rewardedCredits = 10;
