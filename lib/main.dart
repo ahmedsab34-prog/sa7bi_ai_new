@@ -9,27 +9,59 @@ import 'categories_screen.dart';
 import 'home_screen.dart';
 import 'khalasana_portal_screen.dart';
 import 'profile_screen.dart';
+import 'services/ads_service.dart';
 import 'widgets/khalasana_portal.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   runApp(const Sa7biAiApp());
 
-  // تشغيل خدمة الصوت بعد ظهور أول واجهة
-  // حتى لا تؤثر على سرعة فتح التطبيق.
+  // ------------------------------------------------------------
+  // خدمات التطبيق الأساسية بعد ظهور أول واجهة.
+  //
+  // لا نوقف فتح التطبيق بسبب فشل خدمة خارجية.
+  // ------------------------------------------------------------
+
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(
-      Future<void>.delayed(
-        const Duration(milliseconds: 700),
-        () async {
-          try {
-            await AudioController.initialize();
-          } catch (_) {}
-        },
-      ),
-    );
+    unawaited(_initializeApplicationServices());
   });
+}
+
+Future<void> _initializeApplicationServices() async {
+  // ------------------------------------------------------------
+  // Audio
+  // ------------------------------------------------------------
+
+  try {
+    await AudioController.initialize();
+  } catch (_) {
+    // الصوت لا يمنع باقي التطبيق من العمل.
+  }
+
+  // ------------------------------------------------------------
+  // AdMob
+  // ------------------------------------------------------------
+
+  try {
+    final ads = AdsService.instance;
+
+    await ads.initialize();
+
+    // تجهيز الإعلانات مسبقًا حتى تكون جاهزة عندما تحتاجها
+    // الواجهة، بدون إجبار المستخدم على مشاهدة إعلان عند الفتح.
+    if (ads.isAdMobInitialized) {
+      unawaited(
+        ads.loadInterstitial(),
+      );
+
+      unawaited(
+        ads.loadRewarded(),
+      );
+    }
+  } catch (_) {
+    // فشل الإعلانات لا يمنع التطبيق من العمل.
+  }
 }
 
 // ============================================================
@@ -37,24 +69,33 @@ void main() {
 // ============================================================
 
 class Sa7biAiApp extends StatelessWidget {
-  const Sa7biAiApp({super.key});
+  const Sa7biAiApp({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+
       title: 'صاحبي AI',
+
       theme: ThemeData(
         brightness: Brightness.dark,
+
         scaffoldBackgroundColor:
             const Color(0xFF070A12),
+
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFFFD76A),
           brightness: Brightness.dark,
         ),
+
         useMaterial3: true,
+
         fontFamily: 'sans',
       ),
+
       home: const MainContainerScreen(),
     );
   }
@@ -65,7 +106,9 @@ class Sa7biAiApp extends StatelessWidget {
 // ============================================================
 
 class MainContainerScreen extends StatefulWidget {
-  const MainContainerScreen({super.key});
+  const MainContainerScreen({
+    super.key,
+  });
 
   @override
   State<MainContainerScreen> createState() =>
@@ -81,7 +124,9 @@ class _MainContainerScreenState
   // ==========================================================
 
   void openProfile() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       index = 2;
@@ -89,19 +134,25 @@ class _MainContainerScreenState
   }
 
   void openAudioCenter() {
+    if (!mounted) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            const AudioCenterScreen(),
+        builder: (_) => const AudioCenterScreen(),
       ),
     );
   }
 
   void openKhalasana() {
+    if (!mounted) {
+      return;
+    }
+
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            const KhalasanaPortalScreen(),
+        builder: (_) => const KhalasanaPortalScreen(),
       ),
     );
   }
@@ -117,9 +168,11 @@ class _MainContainerScreenState
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
+
       CategoriesScreen(
         onAudio: openAudioCenter,
       ),
+
       ProfileScreen(
         onAudio: openAudioCenter,
       ),
@@ -183,7 +236,9 @@ class _MainContainerScreenState
 
         onDestinationSelected:
             (value) {
-          if (!mounted) return;
+          if (!mounted) {
+            return;
+          }
 
           setState(() {
             index = value;
@@ -238,10 +293,9 @@ class MiniAudioPlayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<MediaItem?>(
-      stream:
-          AudioController
-              .handler
-              ?.mediaItem,
+      stream: AudioController
+          .handler
+          ?.mediaItem,
 
       builder: (
         context,
@@ -483,7 +537,7 @@ class MiniAudioPlayer extends StatelessWidget {
                 ),
 
                 // ----------------------------------------------
-                // CLOSE / STOP
+                // STOP
                 // ----------------------------------------------
 
                 IconButton(
