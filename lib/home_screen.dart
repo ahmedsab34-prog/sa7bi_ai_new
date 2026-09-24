@@ -361,6 +361,10 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
 
   bool _loading = true;
 
+  int _attempt = 0;
+
+  bool _retryScheduled = false;
+
   @override
   void initState() {
     super.initState();
@@ -389,6 +393,12 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
       return;
     }
 
+    if (mounted) {
+      setState(() {
+        _loading = true;
+      });
+    }
+
     try {
       final ad = await AdsService.instance.loadBanner(
         adSize: AdSize.banner,
@@ -399,19 +409,62 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
         return;
       }
 
-      setState(() {
-        _bannerAd = ad;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) {
+      if (ad != null) {
+        _bannerAd?.dispose();
+
+        setState(() {
+          _bannerAd = ad;
+          _loading = false;
+          _attempt = 0;
+          _retryScheduled = false;
+        });
+
         return;
       }
 
+      _scheduleRetry();
+    } catch (_) {
+      _scheduleRetry();
+    }
+  }
+
+  void _scheduleRetry() {
+    if (!mounted) {
+      return;
+    }
+
+    if (_retryScheduled) {
+      return;
+    }
+
+    if (_attempt >= 3) {
       setState(() {
         _loading = false;
+        _retryScheduled = false;
       });
+      return;
     }
+
+    _attempt++;
+
+    _retryScheduled = true;
+
+    final delaySeconds = _attempt * 5;
+
+    Future<void>.delayed(
+      Duration(seconds: delaySeconds),
+      () {
+        if (!mounted) {
+          return;
+        }
+
+        _retryScheduled = false;
+
+        unawaited(
+          _loadBanner(),
+        );
+      },
+    );
   }
 
   @override
