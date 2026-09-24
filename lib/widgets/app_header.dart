@@ -11,12 +11,12 @@ import '../services/profile_service.dart';
 /// الترتيب ثابت:
 /// الشعار → الترحيب → الصوت → البروفايل
 ///
-/// مهم جدًا:
+/// مهم:
 /// - دائرة الصوت الخارجية ثابتة تمامًا.
-/// - لا تكبر ولا تصغر ولا تهتز أثناء تشغيل الصوت.
+/// - لا تكبر ولا تصغر ولا تهتز.
 /// - الحركة داخل الدائرة فقط.
-/// - الحركة عبارة عن نقاط صوتية صغيرة تطلع وتنزل بنبض ناعم.
-/// - عند توقف الصوت تتوقف النقاط وتظل الدائرة ثابتة.
+/// - عند تشغيل الصوت تظهر حركة داخلية تشبه المطر/الموجات الصوتية.
+/// - عند توقف الصوت يظل شكل هادئ وثابت.
 class AppHeader extends StatelessWidget {
   final VoidCallback? onProfileTap;
   final VoidCallback? onAudioTap;
@@ -32,17 +32,9 @@ class AppHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // ======================================================
-        // 1) SA7BI LOGO
-        // ======================================================
-
         const Sa7biLogo(),
 
         const SizedBox(width: 9),
-
-        // ======================================================
-        // 2) WELCOME
-        // ======================================================
 
         const Expanded(
           child: _HeaderWelcome(),
@@ -50,19 +42,11 @@ class AppHeader extends StatelessWidget {
 
         const SizedBox(width: 7),
 
-        // ======================================================
-        // 3) AUDIO
-        // ======================================================
-
         _HeaderAudioButton(
           onTap: onAudioTap,
         ),
 
         const SizedBox(width: 7),
-
-        // ======================================================
-        // 4) PROFILE
-        // ======================================================
 
         _HeaderProfileButton(
           onTap: onProfileTap,
@@ -110,7 +94,9 @@ class _HeaderWelcomeState extends State<_HeaderWelcome>
     timer = Timer.periodic(
       const Duration(seconds: 4),
       (_) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         setState(() {
           index = (index + 1) % messages.length;
@@ -244,7 +230,7 @@ class _HeaderAudioButton extends StatelessWidget {
 // ============================================================
 // AUDIO BUTTON
 //
-// الدائرة ثابتة تمامًا.
+// الدائرة الخارجية ثابتة تمامًا.
 // الحركة داخلها فقط.
 // ============================================================
 
@@ -275,7 +261,7 @@ class _PulsingAudioButtonState
     controller = AnimationController(
       vsync: this,
       duration:
-          const Duration(milliseconds: 1100),
+          const Duration(milliseconds: 1250),
     );
 
     _syncAnimation();
@@ -322,8 +308,10 @@ class _PulsingAudioButtonState
             // ==================================================
             // الدائرة الخارجية
             //
-            // ثابتة تمامًا.
-            // لا Animation عليها.
+            // ثابتة 100%.
+            // لا Rotation.
+            // لا Scale.
+            // لا Pulse.
             // ==================================================
 
             Container(
@@ -349,25 +337,24 @@ class _PulsingAudioButtonState
             ),
 
             // ==================================================
-            // النقاط الصوتية المتحركة
+            // RAIN AUDIO VISUALIZER
             //
-            // الدائرة لا تتحرك.
-            // النقاط فقط تطلع وتنزل.
+            // الحركة داخل الدائرة فقط.
             // ==================================================
 
             SizedBox(
-              width: 34,
-              height: 30,
+              width: 36,
+              height: 32,
               child: AnimatedBuilder(
                 animation: controller,
                 builder: (_, __) {
                   return CustomPaint(
                     painter:
-                        _AudioPulseDotsPainter(
+                        _AudioRainPainter(
                       progress:
                           widget.isPlaying
                               ? controller.value
-                              : 0.0,
+                              : 0,
                       isPlaying:
                           widget.isPlaying,
                     ),
@@ -383,21 +370,17 @@ class _PulsingAudioButtonState
 }
 
 // ============================================================
-// AUDIO PULSE DOTS
+// AUDIO RAIN PAINTER
 //
-// شكل النقط:
-// • • • • • • •
-//
-// كل نقطة تتحرك لأعلى وأسفل.
-// الحركة ناعمة ومختلفة قليلًا بين النقاط.
+// شكل داخلي يشبه المطر/الموجة الصوتية.
 // ============================================================
 
-class _AudioPulseDotsPainter
+class _AudioRainPainter
     extends CustomPainter {
   final double progress;
   final bool isPlaying;
 
-  const _AudioPulseDotsPainter({
+  const _AudioRainPainter({
     required this.progress,
     required this.isPlaying,
   });
@@ -407,91 +390,128 @@ class _AudioPulseDotsPainter
     Canvas canvas,
     Size size,
   ) {
-    final centerY =
-        size.height / 2;
+    final centerX = size.width / 2;
+    final centerY = size.height / 2;
 
-    final paint = Paint()
-      ..color =
-          const Color(0xFF63E6FF)
-      ..style =
-          PaintingStyle.fill;
+    final linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
-    const int dotCount = 7;
+    const int columnCount = 9;
 
-    const List<double> phases = [
+    const List<double> phaseOffsets = [
       0.0,
-      0.55,
-      1.05,
-      1.60,
-      2.10,
-      2.65,
-      3.15,
+      0.72,
+      1.45,
+      2.15,
+      2.85,
+      3.55,
+      4.25,
+      4.95,
+      5.65,
+    ];
+
+    const List<double> heightFactors = [
+      0.52,
+      0.82,
+      0.66,
+      1.0,
+      0.72,
+      0.92,
+      0.58,
+      0.78,
+      0.48,
     ];
 
     for (int i = 0;
-        i < dotCount;
+        i < columnCount;
         i++) {
       final x =
           2.5 +
-          (i *
-              (size.width - 5.0) /
-              (dotCount - 1));
+          i *
+              ((size.width - 5.0) /
+                  (columnCount - 1));
 
-      double offsetY;
+      final phase =
+          progress * math.pi * 2 +
+              phaseOffsets[i];
 
-      if (!isPlaying) {
-        // شكل ثابت وهادئ عند عدم تشغيل الصوت.
-        const idleOffsets = [
-          0.0,
-          -1.0,
-          -2.0,
-          -1.0,
-          0.0,
-          -1.0,
-          0.0,
-        ];
+      double length;
 
-        offsetY =
-            idleOffsets[i];
-      } else {
-        // موجة ناعمة صاعدة ونازلة.
-        //
-        // sin تعطي حركة نبضية طبيعية:
-        // تطلع → تصل للقمة → تنزل → تعود.
-        final phase =
-            progress *
-                math.pi *
-                2;
-
+      if (isPlaying) {
         final wave =
-            math.sin(
-              phase +
-                  phases[i],
-            );
+            (math.sin(phase) + 1) / 2;
 
-        // مدى الحركة محدود حتى لا يبدو
-        // أن النقط تهتز بعنف.
-        offsetY =
-            wave * 6.5;
+        length =
+            7.0 +
+            wave *
+                14.0 *
+                heightFactors[i];
+      } else {
+        length =
+            5.0 +
+            heightFactors[i] * 2.0;
       }
 
-      final radius =
-          isPlaying ? 2.25 : 2.0;
+      final top =
+          centerY - length / 2;
 
-      final dotY =
-          centerY + offsetY;
+      final bottom =
+          centerY + length / 2;
 
-      canvas.drawCircle(
-        Offset(x, dotY),
-        radius,
-        paint,
+      final opacity = isPlaying
+          ? 0.48 +
+              ((math.sin(phase) + 1) / 2) *
+                  0.52
+          : 0.48;
+
+      linePaint
+        ..color = const Color(0xFF63E6FF)
+            .withOpacity(opacity)
+        ..strokeWidth =
+            i.isEven ? 2.1 : 1.7;
+
+      canvas.drawLine(
+        Offset(x, top),
+        Offset(x, bottom),
+        linePaint,
       );
     }
+
+    // خط ضوء أفقي خفيف في المنتصف.
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.2
+      ..color = const Color(0xFFFFD76A)
+          .withOpacity(
+        isPlaying ? 0.45 : 0.25,
+      );
+
+    final centerWave =
+        isPlaying
+            ? math.sin(
+                  progress * math.pi * 2,
+                ) *
+                2.0
+            : 0.0;
+
+    canvas.drawLine(
+      Offset(
+        centerX - 10,
+        centerY + centerWave,
+      ),
+      Offset(
+        centerX + 10,
+        centerY - centerWave,
+      ),
+      glowPaint,
+    );
   }
 
   @override
   bool shouldRepaint(
-    covariant _AudioPulseDotsPainter
+    covariant _AudioRainPainter
         oldDelegate,
   ) {
     return oldDelegate.progress !=
