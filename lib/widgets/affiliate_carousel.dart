@@ -49,6 +49,10 @@ class AffiliateCarousel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
+        // ========================================================
+        // TITLE
+        // ========================================================
+
         Row(
           textDirection: TextDirection.rtl,
           children: [
@@ -66,6 +70,8 @@ class AffiliateCarousel extends StatelessWidget {
                     MonetizationConfig.affiliateCarouselTitle,
                     textDirection: TextDirection.rtl,
                     textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
@@ -76,6 +82,8 @@ class AffiliateCarousel extends StatelessWidget {
                     MonetizationConfig.affiliateCarouselSubtitle,
                     textDirection: TextDirection.rtl,
                     textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white54,
                       fontSize: 10.5,
@@ -90,16 +98,26 @@ class AffiliateCarousel extends StatelessWidget {
 
         const SizedBox(height: 11),
 
+        // ========================================================
+        // STORES
+        // ========================================================
+
         SizedBox(
           height: 126,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             reverse: true,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 2,
+            ),
             physics: const BouncingScrollPhysics(),
             itemCount: stores.length,
             separatorBuilder: (_, __) =>
                 const SizedBox(width: 10),
-            itemBuilder: (context, index) {
+            itemBuilder: (
+              context,
+              index,
+            ) {
               return _AffiliateStoreCard(
                 store: stores[index],
               );
@@ -110,6 +128,10 @@ class AffiliateCarousel extends StatelessWidget {
     );
   }
 }
+
+// ================================================================
+// STORE MODEL
+// ================================================================
 
 class _AffiliateStore {
   final String title;
@@ -127,6 +149,10 @@ class _AffiliateStore {
   });
 }
 
+// ================================================================
+// STORE CARD
+// ================================================================
+
 class _AffiliateStoreCard extends StatelessWidget {
   final _AffiliateStore store;
 
@@ -134,25 +160,60 @@ class _AffiliateStoreCard extends StatelessWidget {
     required this.store,
   });
 
-  Future<void> _openStore() async {
+  Future<void> _openStore(
+    BuildContext context,
+  ) async {
     final cleanUrl = store.url.trim();
 
     if (cleanUrl.isEmpty) {
+      _showUnavailable(context);
       return;
     }
 
     final uri = Uri.tryParse(cleanUrl);
 
-    if (uri == null) {
+    if (uri == null ||
+        !uri.hasScheme ||
+        (uri.scheme != 'http' &&
+            uri.scheme != 'https')) {
+      _showUnavailable(context);
       return;
     }
 
     try {
-      await launchUrl(
+      final opened = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
-    } catch (_) {}
+
+      if (!opened) {
+        _showUnavailable(context);
+      }
+    } catch (_) {
+      _showUnavailable(context);
+    }
+  }
+
+  void _showUnavailable(
+    BuildContext context,
+  ) {
+    if (!context.mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            'رابط ${store.title} غير متاح حاليًا',
+            textDirection: TextDirection.rtl,
+          ),
+          duration: const Duration(
+            seconds: 2,
+          ),
+        ),
+      );
   }
 
   @override
@@ -162,7 +223,9 @@ class _AffiliateStoreCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: _openStore,
+          onTap: () {
+            _openStore(context);
+          },
           borderRadius: BorderRadius.circular(21),
           child: Ink(
             decoration: BoxDecoration(
@@ -194,6 +257,10 @@ class _AffiliateStoreCard extends StatelessWidget {
                 crossAxisAlignment:
                     CrossAxisAlignment.end,
                 children: [
+                  // ------------------------------------------------
+                  // ICON + ARROW
+                  // ------------------------------------------------
+
                   Row(
                     textDirection: TextDirection.rtl,
                     children: [
@@ -210,6 +277,13 @@ class _AffiliateStoreCard extends StatelessWidget {
                               store.accent.withOpacity(0.35),
                             ],
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: store.accent.withOpacity(0.20),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                            ),
+                          ],
                         ),
                         child: Icon(
                           store.icon,
@@ -217,7 +291,9 @@ class _AffiliateStoreCard extends StatelessWidget {
                           size: 23,
                         ),
                       ),
+
                       const Spacer(),
+
                       const Icon(
                         Icons.arrow_back_ios_new_rounded,
                         color: Colors.white38,
@@ -228,10 +304,16 @@ class _AffiliateStoreCard extends StatelessWidget {
 
                   const Spacer(),
 
+                  // ------------------------------------------------
+                  // STORE NAME
+                  // ------------------------------------------------
+
                   Text(
                     store.title,
                     textDirection: TextDirection.rtl,
                     textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
