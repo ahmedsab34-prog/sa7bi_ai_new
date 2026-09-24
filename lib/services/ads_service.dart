@@ -8,23 +8,22 @@ import '../config/credits_config.dart';
 /// خدمة الإعلانات المركزية في صاحبي AI.
 ///
 /// المسؤوليات:
-/// - تهيئة AdMob.
+/// - تهيئة AdMob مرة واحدة بأمان.
 /// - Banner Ads.
 /// - Interstitial Ads.
 /// - Rewarded Ads.
-/// - عداد الـInterstitial.
+/// - حفظ عداد الـInterstitial.
 /// - حفظ حالة الـBanner.
 ///
 /// ملاحظات:
-/// - لا يتم عرض إعلان تلقائيًا عند تشغيل التطبيق.
+/// - لا يتم عرض إعلان تلقائي عند فتح التطبيق.
 /// - فشل الإعلان لا يمنع التطبيق من العمل.
-/// - Rewarded لا تُعتبر مكتملة إلا بعد onUserEarnedReward.
-/// - الـBanner لا يتم اعتباره جاهزًا إلا بعد onAdLoaded.
+/// - Rewarded لا تُعتبر ناجحة إلا بعد onUserEarnedReward.
+/// - Banner لا يُعتبر جاهزًا إلا بعد onAdLoaded.
 class AdsService {
   AdsService._();
 
-  static final AdsService instance =
-      AdsService._();
+  static final AdsService instance = AdsService._();
 
   // ============================================================
   // ADMOB PRODUCTION IDS
@@ -59,7 +58,6 @@ class AdsService {
   SharedPreferences? _preferences;
 
   bool _initialized = false;
-
   bool _adMobInitialized = false;
 
   bool _bannerEnabled = true;
@@ -67,44 +65,35 @@ class AdsService {
   int _interstitialCounter = 0;
 
   BannerAd? _bannerAd;
-
   InterstitialAd? _interstitialAd;
-
   RewardedAd? _rewardedAd;
 
   bool _isLoadingBanner = false;
-
   bool _isLoadingInterstitial = false;
-
   bool _isLoadingRewarded = false;
+
+  /// يمنع تشغيل تهيئة AdMob أكثر من مرة في نفس الوقت.
+  Future<void>? _initializationFuture;
 
   // ============================================================
   // GETTERS
   // ============================================================
 
-  bool get isInitialized =>
-      _initialized;
+  bool get isInitialized => _initialized;
 
-  bool get isAdMobInitialized =>
-      _adMobInitialized;
+  bool get isAdMobInitialized => _adMobInitialized;
 
-  bool get bannerEnabled =>
-      _bannerEnabled;
+  bool get bannerEnabled => _bannerEnabled;
 
-  int get interstitialCounter =>
-      _interstitialCounter;
+  int get interstitialCounter => _interstitialCounter;
 
-  BannerAd? get bannerAd =>
-      _bannerAd;
+  BannerAd? get bannerAd => _bannerAd;
 
-  bool get isBannerLoaded =>
-      _bannerAd != null;
+  bool get isBannerLoaded => _bannerAd != null;
 
-  bool get isInterstitialLoaded =>
-      _interstitialAd != null;
+  bool get isInterstitialLoaded => _interstitialAd != null;
 
-  bool get isRewardedLoaded =>
-      _rewardedAd != null;
+  bool get isRewardedLoaded => _rewardedAd != null;
 
   int get rewardedCredits =>
       CreditsConfig.rewardedAdCredits;
@@ -116,15 +105,28 @@ class AdsService {
   // INITIALIZATION
   // ============================================================
 
-  Future<void> initialize() async {
+  Future<void> initialize() {
+    final existing = _initializationFuture;
+
+    if (existing != null) {
+      return existing;
+    }
+
+    final future = _initializeInternal();
+
+    _initializationFuture = future;
+
+    return future;
+  }
+
+  Future<void> _initializeInternal() async {
     if (_initialized) {
       return;
     }
 
     try {
       _preferences =
-          await SharedPreferences
-              .getInstance();
+          await SharedPreferences.getInstance();
 
       _interstitialCounter =
           _preferences!.getInt(
@@ -138,9 +140,12 @@ class AdsService {
               ) ??
               true;
 
+      // ----------------------------------------------------------
+      // AdMob
+      // ----------------------------------------------------------
+
       try {
-        await MobileAds.instance
-            .initialize();
+        await MobileAds.instance.initialize();
 
         _adMobInitialized = true;
       } catch (_) {
@@ -155,9 +160,11 @@ class AdsService {
   }
 
   Future<void> _ensureInitialized() async {
-    if (!_initialized) {
-      await initialize();
+    if (_initialized) {
+      return;
     }
+
+    await initialize();
   }
 
   // ============================================================
@@ -192,9 +199,7 @@ class AdsService {
 
   /// تحميل Banner.
   ///
-  /// مهم:
-  /// لا نرجع Banner إلا بعد وصول
-  /// onAdLoaded فعليًا.
+  /// لا يرجع الإعلان إلا بعد onAdLoaded.
   Future<BannerAd?> loadBanner({
     AdSize adSize = AdSize.banner,
   }) async {
@@ -205,12 +210,12 @@ class AdsService {
       return null;
     }
 
-    if (_isLoadingBanner) {
+    if (_bannerAd != null) {
       return _bannerAd;
     }
 
-    if (_bannerAd != null) {
-      return _bannerAd;
+    if (_isLoadingBanner) {
+      return null;
     }
 
     _isLoadingBanner = true;
@@ -244,7 +249,6 @@ class AdsService {
             completer.complete(ad);
           }
         },
-
         onAdFailedToLoad: (
           ad,
           error,
@@ -259,21 +263,14 @@ class AdsService {
             completer.complete(null);
           }
         },
-
         onAdOpened: (ad) {},
-
         onAdClosed: (ad) {},
-
         onAdImpression: (ad) {},
       ),
     );
 
     try {
       await banner.load();
-
-      // بعض إصدارات SDK قد لا تستدعي
-      // callback فورًا؛ لذلك لا نعتبر
-      // الإعلان جاهزًا هنا.
     } catch (_) {
       try {
         banner.dispose();
@@ -289,9 +286,7 @@ class AdsService {
     try {
       result = await completer.future.timeout(
         const Duration(seconds: 15),
-        onTimeout: () {
-          return null;
-        },
+        onTimeout: () => null,
       );
     } catch (_) {
       result = null;
@@ -302,10 +297,7 @@ class AdsService {
         banner.dispose();
       } catch (_) {}
 
-      if (identical(
-        _bannerAd,
-        banner,
-      )) {
+      if (identical(_bannerAd, banner)) {
         _bannerAd = null;
       }
     }
@@ -327,8 +319,7 @@ class AdsService {
   // INTERSTITIAL
   // ============================================================
 
-  Future<bool>
-      registerInterstitialOpportunity({
+  Future<bool> registerInterstitialOpportunity({
     int every = 5,
   }) async {
     await _ensureInitialized();
@@ -362,8 +353,7 @@ class AdsService {
     return true;
   }
 
-  Future<void>
-      resetInterstitialCounter() async {
+  Future<void> resetInterstitialCounter() async {
     await _ensureInitialized();
 
     _interstitialCounter = 0;
@@ -379,13 +369,16 @@ class AdsService {
   Future<bool> loadInterstitial() async {
     await _ensureInitialized();
 
-    if (!_adMobInitialized ||
-        _isLoadingInterstitial) {
-      return _interstitialAd != null;
+    if (!_adMobInitialized) {
+      return false;
     }
 
     if (_interstitialAd != null) {
       return true;
+    }
+
+    if (_isLoadingInterstitial) {
+      return false;
     }
 
     _isLoadingInterstitial = true;
@@ -395,10 +388,8 @@ class AdsService {
 
     try {
       await InterstitialAd.load(
-        adUnitId:
-            interstitialAdUnitId,
-        request:
-            const AdRequest(),
+        adUnitId: interstitialAdUnitId,
+        request: const AdRequest(),
         adLoadCallback:
             InterstitialAdLoadCallback(
           onAdLoaded: (ad) {
@@ -410,8 +401,7 @@ class AdsService {
                   (ad) {
                 ad.dispose();
 
-                _interstitialAd =
-                    null;
+                _interstitialAd = null;
 
                 unawaited(
                   loadInterstitial(),
@@ -421,8 +411,7 @@ class AdsService {
                   (ad, error) {
                 ad.dispose();
 
-                _interstitialAd =
-                    null;
+                _interstitialAd = null;
 
                 unawaited(
                   loadInterstitial(),
@@ -431,19 +420,14 @@ class AdsService {
             );
 
             if (!completer.isCompleted) {
-              completer.complete(
-                true,
-              );
+              completer.complete(true);
             }
           },
           onAdFailedToLoad: (error) {
-            _interstitialAd =
-                null;
+            _interstitialAd = null;
 
             if (!completer.isCompleted) {
-              completer.complete(
-                false,
-              );
+              completer.complete(false);
             }
           },
         ),
@@ -452,12 +436,18 @@ class AdsService {
       if (!completer.isCompleted) {
         completer.complete(false);
       }
-    } finally {
-      _isLoadingInterstitial =
-          false;
     }
 
-    return completer.future;
+    _isLoadingInterstitial = false;
+
+    try {
+      return await completer.future.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => false,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> showInterstitial() async {
@@ -467,8 +457,7 @@ class AdsService {
       return false;
     }
 
-    final ad =
-        _interstitialAd;
+    final ad = _interstitialAd;
 
     if (ad == null) {
       await loadInterstitial();
@@ -497,31 +486,31 @@ class AdsService {
   // REWARDED
   // ============================================================
 
-  Future<bool>
-      canGiveRewardedCredits() async {
+  Future<bool> canGiveRewardedCredits() async {
     await _ensureInitialized();
 
-    return CreditsServiceAvailability
-        .canReward;
+    return CreditsServiceAvailability.canReward;
   }
 
   Future<int> getRewardAmount() async {
     await _ensureInitialized();
 
-    return CreditsConfig
-        .rewardedAdCredits;
+    return CreditsConfig.rewardedAdCredits;
   }
 
   Future<bool> loadRewarded() async {
     await _ensureInitialized();
 
-    if (!_adMobInitialized ||
-        _isLoadingRewarded) {
-      return _rewardedAd != null;
+    if (!_adMobInitialized) {
+      return false;
     }
 
     if (_rewardedAd != null) {
       return true;
+    }
+
+    if (_isLoadingRewarded) {
+      return false;
     }
 
     _isLoadingRewarded = true;
@@ -531,28 +520,22 @@ class AdsService {
 
     try {
       await RewardedAd.load(
-        adUnitId:
-            rewardedAdUnitId,
-        request:
-            const AdRequest(),
+        adUnitId: rewardedAdUnitId,
+        request: const AdRequest(),
         rewardedAdLoadCallback:
             RewardedAdLoadCallback(
           onAdLoaded: (ad) {
             _rewardedAd = ad;
 
             if (!completer.isCompleted) {
-              completer.complete(
-                true,
-              );
+              completer.complete(true);
             }
           },
           onAdFailedToLoad: (error) {
             _rewardedAd = null;
 
             if (!completer.isCompleted) {
-              completer.complete(
-                false,
-              );
+              completer.complete(false);
             }
           },
         ),
@@ -561,11 +544,18 @@ class AdsService {
       if (!completer.isCompleted) {
         completer.complete(false);
       }
-    } finally {
-      _isLoadingRewarded = false;
     }
 
-    return completer.future;
+    _isLoadingRewarded = false;
+
+    try {
+      return await completer.future.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => false,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> showRewarded({
@@ -575,17 +565,14 @@ class AdsService {
     await _ensureInitialized();
 
     if (!_adMobInitialized ||
-        !CreditsServiceAvailability
-            .canReward) {
+        !CreditsServiceAvailability.canReward) {
       return false;
     }
 
-    RewardedAd? ad =
-        _rewardedAd;
+    RewardedAd? ad = _rewardedAd;
 
     if (ad == null) {
-      final loaded =
-          await loadRewarded();
+      final loaded = await loadRewarded();
 
       if (!loaded) {
         return false;
@@ -644,12 +631,15 @@ class AdsService {
           final amount =
               reward.amount.toInt();
 
-          if (onRewardEarned != null) {
-            onRewardEarned(
+          final safeAmount =
               amount > 0
                   ? amount
                   : CreditsConfig
-                      .rewardedAdCredits,
+                      .rewardedAdCredits;
+
+          if (onRewardEarned != null) {
+            onRewardEarned(
+              safeAmount,
             );
           }
         },
