@@ -2,6 +2,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+/// أيقونة خلصانة العائمة.
+///
+/// - أيقونة فقط بدون كلمة "صاحبي".
+/// - أصغر من النسخة السابقة.
+/// - زجاجية وفاخرة.
+/// - الحركة داخلية حول الأيقونة.
+/// - الضغط يفتح ChatScreen مباشرة من MainContainerScreen.
 class KhalasanaPortal extends StatefulWidget {
   final VoidCallback onTap;
 
@@ -26,9 +33,7 @@ class _KhalasanaPortalState
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(
-        seconds: 5,
-      ),
+      duration: const Duration(seconds: 5),
     )..repeat();
   }
 
@@ -48,602 +53,307 @@ class _KhalasanaPortalState
         onTap: widget.onTap,
         child: AnimatedBuilder(
           animation: _controller,
-          builder: (
-            context,
-            child,
-          ) {
-            final progress =
-                _controller.value;
-
-            final angle =
-                progress *
-                    math.pi *
-                    2;
+          builder: (context, child) {
+            final progress = _controller.value;
+            final angle = progress * math.pi * 2;
 
             final pulse =
-                (math.sin(angle) + 1) /
-                    2;
+                (math.sin(angle) + 1) / 2;
 
             final glow =
-                0.18 +
-                    pulse * 0.18;
+                0.16 + pulse * 0.16;
 
-            return Padding(
-              padding:
-                  const EdgeInsets.symmetric(
-                vertical: 5,
-                horizontal: 2,
-              ),
-              child: Row(
-                mainAxisSize:
-                    MainAxisSize.min,
+            final borderColors = <Color>[
+              const Color(0xFFFFD76A),
+              const Color(0xFFFF6FD8),
+              const Color(0xFF63E6FF),
+              const Color(0xFF7864FF),
+              const Color(0xFF49E6A8),
+              const Color(0xFFFFD76A),
+            ];
+
+            final lightColor = Color.lerp(
+              const Color(0xFFFFD76A),
+              const Color(0xFF63E6FF),
+              pulse,
+            )!;
+
+            return SizedBox(
+              width: 70,
+              height: 70,
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  // ==================================================
-                  // MAIN KHALASANA GLASS ICON
-                  // ==================================================
+                  // ================================================
+                  // EXTERNAL GLOW
+                  // ================================================
 
-                  SizedBox(
-                    width: 82,
-                    height: 82,
-                    child: Stack(
-                      alignment:
-                          Alignment.center,
-                      children: [
-                        // ============================================
-                        // OUTER GLOW
-                        // ============================================
-
-                        Container(
-                          width: 78,
-                          height: 78,
-                          decoration:
-                              BoxDecoration(
-                            borderRadius:
-                                BorderRadius.circular(
-                              25,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color:
-                                    const Color(
-                                  0xFFFFD76A,
-                                ).withOpacity(
-                                  glow,
-                                ),
-                                blurRadius: 28,
-                                spreadRadius: 2,
-                              ),
-                              BoxShadow(
-                                color:
-                                    const Color(
-                                  0xFF63E6FF,
-                                ).withOpacity(
-                                  0.08 +
-                                      pulse *
-                                          0.10,
-                                ),
-                                blurRadius: 26,
-                              ),
-                              BoxShadow(
-                                color:
-                                    const Color(
-                                  0xFFB45CFF,
-                                ).withOpacity(
-                                  0.07 +
-                                      pulse *
-                                          0.08,
-                                ),
-                                blurRadius: 24,
-                              ),
-                            ],
-                          ),
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(21),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFFD76A)
+                              .withOpacity(glow),
+                          blurRadius: 24,
+                          spreadRadius: 1,
                         ),
-
-                        // ============================================
-                        // ROTATING LUXURY BORDER
-                        // ============================================
-
-                        Transform.rotate(
-                          angle: angle,
-                          child: Container(
-                            width: 76,
-                            height: 76,
-                            decoration:
-                                BoxDecoration(
-                              borderRadius:
-                                  BorderRadius.circular(
-                                24,
-                              ),
-                              gradient:
-                                  const SweepGradient(
-                                colors: [
-                                  Color(
-                                    0xFFFFD76A,
-                                  ),
-                                  Color(
-                                    0xFFFF6FD8,
-                                  ),
-                                  Color(
-                                    0xFF63E6FF,
-                                  ),
-                                  Color(
-                                    0xFF7864FF,
-                                  ),
-                                  Color(
-                                    0xFF49E6A8,
-                                  ),
-                                  Color(
-                                    0xFFFFD76A,
-                                  ),
-                                ],
-                                stops: [
-                                  0.0,
-                                  0.20,
-                                  0.40,
-                                  0.62,
-                                  0.82,
-                                  1.0,
-                                ],
-                              ),
-                            ),
+                        BoxShadow(
+                          color: const Color(0xFF63E6FF)
+                              .withOpacity(
+                            0.06 + pulse * 0.08,
                           ),
-                        ),
-
-                        // ============================================
-                        // INNER DARK GLASS
-                        // ============================================
-
-                        Container(
-                          width: 68,
-                          height: 68,
-                          decoration:
-                              BoxDecoration(
-                            borderRadius:
-                                BorderRadius.circular(
-                              21,
-                            ),
-                            gradient:
-                                const LinearGradient(
-                              begin:
-                                  Alignment.topLeft,
-                              end:
-                                  Alignment.bottomRight,
-                              colors: [
-                                Color(
-                                  0xFF30364A,
-                                ),
-                                Color(
-                                  0xFF151927,
-                                ),
-                                Color(
-                                  0xFF080B13,
-                                ),
-                              ],
-                            ),
-                            border:
-                                Border.all(
-                              color: Colors
-                                  .white
-                                  .withOpacity(
-                                0.14,
-                              ),
-                              width: 1,
-                            ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color:
-                                    Color(
-                                  0x55000000,
-                                ),
-                                blurRadius: 12,
-                                offset:
-                                    Offset(
-                                  0,
-                                  5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // ============================================
-                        // MOVING INTERNAL LIGHT
-                        // ============================================
-
-                        Positioned(
-                          left:
-                              10 +
-                                  progress *
-                                      36,
-                          top:
-                              13 +
-                                  math.sin(
-                                        angle,
-                                      ) *
-                                      8,
-                          child:
-                              Transform.rotate(
-                            angle: -0.35,
-                            child:
-                                Container(
-                              width: 34,
-                              height: 8,
-                              decoration:
-                                  BoxDecoration(
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  20,
-                                ),
-                                gradient:
-                                    LinearGradient(
-                                  colors: [
-                                    Colors
-                                        .white
-                                        .withOpacity(
-                                      0.0,
-                                    ),
-                                    Colors
-                                        .white
-                                        .withOpacity(
-                                      0.15,
-                                    ),
-                                    Colors
-                                        .white
-                                        .withOpacity(
-                                      0.0,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // ============================================
-                        // INTERNAL LIGHT ORB
-                        // ============================================
-
-                        Positioned(
-                          right:
-                              8 +
-                                  math.cos(
-                                        angle,
-                                      ) *
-                                      5,
-                          bottom:
-                              9 +
-                                  math.sin(
-                                        angle,
-                                      ) *
-                                      4,
-                          child:
-                              Container(
-                            width: 13,
-                            height: 13,
-                            decoration:
-                                BoxDecoration(
-                              shape:
-                                  BoxShape
-                                      .circle,
-                              color:
-                                  Color.lerp(
-                                const Color(
-                                  0xFFFFD76A,
-                                ),
-                                const Color(
-                                  0xFF63E6FF,
-                                ),
-                                pulse,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      Color.lerp(
-                                    const Color(
-                                      0xFFFFD76A,
-                                    ),
-                                    const Color(
-                                      0xFF63E6FF,
-                                    ),
-                                    pulse,
-                                  )!.withOpacity(
-                                    0.65,
-                                  ),
-                                  blurRadius: 14,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        // ============================================
-                        // AI
-                        // ============================================
-
-                        Positioned(
-                          top: 12,
-                          child: ShaderMask(
-                            shaderCallback:
-                                (bounds) {
-                              return
-                                  const LinearGradient(
-                                begin:
-                                    Alignment.topLeft,
-                                end:
-                                    Alignment.bottomRight,
-                                colors: [
-                                  Color(
-                                    0xFFFFF2AE,
-                                  ),
-                                  Color(
-                                    0xFFFFD76A,
-                                  ),
-                                  Color(
-                                    0xFFFF9F43,
-                                  ),
-                                ],
-                              ).createShader(
-                                bounds,
-                              );
-                            },
-                            child: Text(
-                              'AI',
-                              style:
-                                  TextStyle(
-                                color:
-                                    Colors.white,
-                                fontSize: 17,
-                                fontWeight:
-                                    FontWeight
-                                        .w900,
-                                letterSpacing:
-                                    1.5,
-                                shadows: [
-                                  Shadow(
-                                    color:
-                                        const Color(
-                                      0xFFFFD76A,
-                                    ).withOpacity(
-                                      0.55 +
-                                          pulse *
-                                              0.25,
-                                    ),
-                                    blurRadius:
-                                        9 +
-                                            pulse *
-                                                7,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // ============================================
-                        // خلصانة
-                        // ============================================
-
-                        Positioned(
-                          top: 33,
-                          child: ShaderMask(
-                            shaderCallback:
-                                (bounds) {
-                              return
-                                  const LinearGradient(
-                                begin:
-                                    Alignment.topCenter,
-                                end:
-                                    Alignment.bottomCenter,
-                                colors: [
-                                  Color(
-                                    0xFFFFF4B8,
-                                  ),
-                                  Color(
-                                    0xFFFFD76A,
-                                  ),
-                                  Color(
-                                    0xFFC9912E,
-                                  ),
-                                  Color(
-                                    0xFFFFE58F,
-                                  ),
-                                ],
-                                stops: [
-                                  0.0,
-                                  0.30,
-                                  0.72,
-                                  1.0,
-                                ],
-                              ).createShader(
-                                bounds,
-                              );
-                            },
-                            child: Text(
-                              'خلصانة',
-                              textDirection:
-                                  TextDirection
-                                      .rtl,
-                              style:
-                                  TextStyle(
-                                color:
-                                    Colors.white,
-                                fontSize: 15,
-                                fontWeight:
-                                    FontWeight
-                                        .w900,
-                                letterSpacing:
-                                    -0.5,
-                                shadows: [
-                                  Shadow(
-                                    color:
-                                        const Color(
-                                      0xFFFFD76A,
-                                    ).withOpacity(
-                                      0.35 +
-                                          pulse *
-                                              0.30,
-                                    ),
-                                    blurRadius:
-                                        9 +
-                                            pulse *
-                                                6,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // ============================================
-                        // SMALL AI DOTS
-                        // ============================================
-
-                        Positioned(
-                          bottom: 11,
-                          child: Row(
-                            mainAxisSize:
-                                MainAxisSize.min,
-                            children: [
-                              _LightDot(
-                                progress:
-                                    pulse,
-                                first: true,
-                              ),
-                              const SizedBox(
-                                width: 4,
-                              ),
-                              _LightDot(
-                                progress:
-                                    pulse,
-                                first: false,
-                              ),
-                              const SizedBox(
-                                width: 4,
-                              ),
-                              _LightDot(
-                                progress:
-                                    pulse *
-                                        0.7,
-                                first: true,
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // ============================================
-                        // ROTATING HIGHLIGHT
-                        // ============================================
-
-                        Transform.rotate(
-                          angle: angle,
-                          child:
-                              Align(
-                            alignment:
-                                Alignment
-                                    .topRight,
-                            child:
-                                Container(
-                              width: 6,
-                              height: 6,
-                              decoration:
-                                  BoxDecoration(
-                                shape:
-                                    BoxShape
-                                        .circle,
-                                color:
-                                    Colors.white,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color:
-                                        Color.lerp(
-                                      const Color(
-                                        0xFFFFD76A,
-                                      ),
-                                      const Color(
-                                        0xFF63E6FF,
-                                      ),
-                                      pulse,
-                                    )!,
-                                    blurRadius:
-                                        10,
-                                    spreadRadius:
-                                        1,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                          blurRadius: 22,
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(
-                    width: 5,
+                  // ================================================
+                  // ROTATING COLOR BORDER
+                  // ================================================
+
+                  Transform.rotate(
+                    angle: angle,
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(20),
+                        gradient: SweepGradient(
+                          colors: borderColors,
+                        ),
+                      ),
+                    ),
                   ),
 
-                  // ==================================================
-                  // صاحبي
-                  // ==================================================
+                  // ================================================
+                  // INNER GLASS
+                  // ================================================
 
-                  ShaderMask(
-                    shaderCallback:
-                        (bounds) {
-                      return const LinearGradient(
-                        begin:
-                            Alignment.topCenter,
-                        end:
-                            Alignment.bottomCenter,
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(17),
+                      gradient:
+                          const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                         colors: [
-                          Color(
-                            0xFFFFF1A8,
-                          ),
-                          Color(
-                            0xFFFFD76A,
-                          ),
-                          Color(
-                            0xFFC99228,
-                          ),
-                          Color(
-                            0xFFFFE38A,
-                          ),
+                          Color(0xFF343A50),
+                          Color(0xFF171B2A),
+                          Color(0xFF080B13),
                         ],
-                        stops: [
-                          0.0,
-                          0.32,
-                          0.70,
-                          1.0,
-                        ],
-                      ).createShader(
-                        bounds,
-                      );
-                    },
-                    child: Text(
-                      'صاحبي',
-                      textDirection:
-                          TextDirection.rtl,
-                      style:
-                          TextStyle(
-                        fontSize: 21,
-                        fontWeight:
-                            FontWeight.w900,
-                        letterSpacing: -0.4,
-                        shadows: [
-                          Shadow(
-                            color:
-                                const Color(
-                              0xFFFFD76A,
-                            ).withOpacity(
-                              0.35 +
-                                  pulse *
-                                      0.25,
+                      ),
+                      border: Border.all(
+                        color: Colors.white
+                            .withOpacity(0.15),
+                        width: 1,
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x55000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ================================================
+                  // MOVING GLASS REFLECTION
+                  // ================================================
+
+                  Positioned(
+                    left: 8 + progress * 42,
+                    top:
+                        12 +
+                        math.sin(angle) * 5,
+                    child: Transform.rotate(
+                      angle: -0.35,
+                      child: Container(
+                        width: 23,
+                        height: 6,
+                        decoration:
+                            BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(
+                            20,
+                          ),
+                          gradient:
+                              LinearGradient(
+                            colors: [
+                              Colors.white
+                                  .withOpacity(0.0),
+                              Colors.white
+                                  .withOpacity(0.16),
+                              Colors.white
+                                  .withOpacity(0.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ================================================
+                  // AI
+                  // ================================================
+
+                  Positioned(
+                    top: 10,
+                    child: ShaderMask(
+                      shaderCallback: (bounds) {
+                        return const LinearGradient(
+                          colors: [
+                            Color(0xFFFFF2AE),
+                            Color(0xFFFFD76A),
+                            Color(0xFFFF9F43),
+                          ],
+                        ).createShader(bounds);
+                      },
+                      child: Text(
+                        'AI',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight:
+                              FontWeight.w900,
+                          letterSpacing: 1.2,
+                          shadows: [
+                            Shadow(
+                              color:
+                                  const Color(
+                                0xFFFFD76A,
+                              ).withOpacity(
+                                0.45 + pulse * 0.25,
+                              ),
+                              blurRadius:
+                                  7 + pulse * 5,
                             ),
-                            blurRadius:
-                                12,
-                          ),
-                        ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ================================================
+                  // خلصانة
+                  // ================================================
+
+                  Positioned(
+                    top: 27,
+                    child: ShaderMask(
+                      shaderCallback: (bounds) {
+                        return const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0xFFFFF4B8),
+                            Color(0xFFFFD76A),
+                            Color(0xFFC9912E),
+                            Color(0xFFFFE58F),
+                          ],
+                          stops: [
+                            0.0,
+                            0.30,
+                            0.72,
+                            1.0,
+                          ],
+                        ).createShader(bounds);
+                      },
+                      child: Text(
+                        'خلصانة',
+                        textDirection:
+                            TextDirection.rtl,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight:
+                              FontWeight.w900,
+                          letterSpacing: -0.4,
+                          shadows: [
+                            Shadow(
+                              color:
+                                  const Color(
+                                0xFFFFD76A,
+                              ).withOpacity(
+                                0.30 + pulse * 0.25,
+                              ),
+                              blurRadius:
+                                  7 + pulse * 4,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ================================================
+                  // SMALL MOVING DOTS
+                  // ================================================
+
+                  Positioned(
+                    bottom: 9,
+                    child: Row(
+                      mainAxisSize:
+                          MainAxisSize.min,
+                      children: [
+                        _LightDot(
+                          progress: pulse,
+                          first: true,
+                        ),
+                        const SizedBox(width: 3),
+                        _LightDot(
+                          progress:
+                              (pulse + 0.35) % 1,
+                          first: false,
+                        ),
+                        const SizedBox(width: 3),
+                        _LightDot(
+                          progress:
+                              (pulse + 0.70) % 1,
+                          first: true,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ================================================
+                  // MOVING HIGHLIGHT
+                  // ================================================
+
+                  Transform.rotate(
+                    angle: angle,
+                    child: Align(
+                      alignment:
+                          Alignment.topRight,
+                      child: Container(
+                        margin:
+                            const EdgeInsets.only(
+                          top: 5,
+                          right: 5,
+                        ),
+                        width: 5,
+                        height: 5,
+                        decoration:
+                            BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: lightColor,
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -657,12 +367,7 @@ class _KhalasanaPortalState
   }
 }
 
-// ============================================================
-// SMALL INTERNAL LIGHT
-// ============================================================
-
-class _LightDot
-    extends StatelessWidget {
+class _LightDot extends StatelessWidget {
   final double progress;
   final bool first;
 
@@ -672,45 +377,29 @@ class _LightDot
   });
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    final color =
-        first
-            ? Color.lerp(
-                const Color(
-                  0xFFFFD76A,
-                ),
-                const Color(
-                  0xFFFF6FD8,
-                ),
-                progress,
-              )!
-            : Color.lerp(
-                const Color(
-                  0xFF63E6FF,
-                ),
-                const Color(
-                  0xFF49E6A8,
-                ),
-                progress,
-              )!;
+  Widget build(BuildContext context) {
+    final color = first
+        ? Color.lerp(
+            const Color(0xFFFFD76A),
+            const Color(0xFFFF6FD8),
+            progress,
+          )!
+        : Color.lerp(
+            const Color(0xFF63E6FF),
+            const Color(0xFF49E6A8),
+            progress,
+          )!;
 
     return Container(
-      width: 4,
-      height: 4,
-      decoration:
-          BoxDecoration(
-        shape:
-            BoxShape.circle,
+      width: 3.5,
+      height: 3.5,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
         color: color,
         boxShadow: [
           BoxShadow(
-            color:
-                color.withOpacity(
-              0.65,
-            ),
-            blurRadius: 6,
+            color: color.withOpacity(0.65),
+            blurRadius: 5,
           ),
         ],
       ),
