@@ -31,19 +31,19 @@ class AppConfig {
 
   /// Endpoint المحادثة مع الذكاء الاصطناعي.
   static const String aiChatEndpoint =
-      '$backendBaseUrl/chat';
+      '$backendBaseUrl/v1/chat';
 
   /// Endpoint إنشاء الصور.
   static const String imageGenerationEndpoint =
-      '$backendBaseUrl/image';
+      '$backendBaseUrl/v1/image';
 
   /// Endpoint الأخبار.
   static const String newsEndpoint =
-      '$backendBaseUrl/news';
+      '$backendBaseUrl/v1/news';
 
   /// Endpoint المقاطع القصيرة.
   static const String shortsEndpoint =
-      '$backendBaseUrl/shorts';
+      '$backendBaseUrl/v1/shorts';
 
   /// رابط تحميل التطبيق للمشاركة.
   static const String downloadEndpoint =
@@ -96,13 +96,13 @@ class AppConfig {
   // ============================================================
 
   /// أقصى حجم منطقي للصورة قبل إرسالها للـBackend بالـMB.
-  ///
-  /// هذه قيمة حماية في التطبيق، والـBackend يجب أن يتحقق
-  /// من الحجم أيضًا.
   static const int maximumImageSizeMb = 10;
 
   /// أقصى حجم منطقي للفيديو بالـMB.
   static const int maximumVideoSizeMb = 50;
+
+  /// أقصى عدد لقطات يتم استخراجها من الفيديو للتحليل.
+  static const int maximumVideoFrames = 4;
 
   // ============================================================
   // Audio
@@ -136,9 +136,11 @@ class AppConfig {
   /// السماح بتحليل الصور.
   static const bool imageAnalysisEnabled = true;
 
-  /// الفيديو موجود في الواجهة، لكن التحليل الحقيقي يعتمد
-  /// على دعم الـBackend قبل تفعيله بالكامل.
-  static const bool videoAnalysisEnabled = false;
+  /// تشغيل تحليل الفيديو.
+  ///
+  /// التحليل يتم عن طريق استخراج لقطات من الفيديو
+  /// ثم إرسال هذه اللقطات للذكاء الاصطناعي.
+  static const bool videoAnalysisEnabled = true;
 
   /// تشغيل Khalasana.
   static const bool khalasanaEnabled = true;
