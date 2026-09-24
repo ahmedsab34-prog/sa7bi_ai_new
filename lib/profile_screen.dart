@@ -60,11 +60,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (!mounted) return;
 
+      _syncProfile();
+
       setState(() {
         _loading = false;
       });
-
-      _syncProfile();
     } catch (_) {
       if (!mounted) return;
 
@@ -102,21 +102,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _syncProfile();
   }
 
+  void _showMessage(String message) {
+    if (!mounted || message.trim().isEmpty) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            textDirection: TextDirection.rtl,
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
+
   Widget _buildAiStatusBar() {
-    final bool connected = _aiConnected;
+    final connected = _aiConnected;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 2, 8, 6),
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
-        vertical: 9,
+        vertical: 8,
       ),
       decoration: BoxDecoration(
         color: Theme.of(context)
             .colorScheme
             .surfaceContainerHighest
             .withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(
           color: connected
               ? Colors.greenAccent.withValues(alpha: 0.35)
@@ -129,8 +146,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         children: [
           Container(
-            width: 10,
-            height: 10,
+            width: 9,
+            height: 9,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: connected
@@ -147,15 +164,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 9),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               connected
                   ? 'صاحبي AI متصل وجاهز'
                   : 'صاحبي AI غير متصل',
+              textDirection: TextDirection.rtl,
               style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
@@ -163,7 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             connected
                 ? Icons.cloud_done_rounded
                 : Icons.cloud_off_rounded,
-            size: 19,
+            size: 18,
             color: connected
                 ? Colors.greenAccent
                 : Colors.orangeAccent,
@@ -201,7 +219,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           photo: _photo,
                           displayName: _displayName,
                           reelName: _reelName,
-                          onProfileChanged: _syncProfile,
+                          onChanged: _syncProfile,
+                          onMessage: _showMessage,
                         ),
 
                         ProfileBioStatus(
