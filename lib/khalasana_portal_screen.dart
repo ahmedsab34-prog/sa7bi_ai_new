@@ -73,8 +73,9 @@ class _KhalasanaPortalScreenState
     _animationController =
         AnimationController(
       vsync: this,
-      duration:
-          const Duration(seconds: 4),
+      duration: const Duration(
+        seconds: 4,
+      ),
     )..repeat();
   }
 
@@ -95,29 +96,36 @@ class _KhalasanaPortalScreenState
           // MAIN AI CHAT
           // ==================================================
 
-          const Positioned.fill(
+          Positioned.fill(
             child: ChatScreen(
               serviceKey:
-                  khalasanaService.serviceKey,
+                  KhalasanaPortalScreen
+                      .khalasanaService
+                      .serviceKey,
               serviceTitle:
-                  khalasanaService.title,
+                  KhalasanaPortalScreen
+                      .khalasanaService
+                      .title,
               serviceContext:
-                  khalasanaService.aiRole,
+                  KhalasanaPortalScreen
+                      .khalasanaService
+                      .aiRole,
             ),
           ),
 
           // ==================================================
           // SUBTLE KHALASANA ANIMATION
           //
-          // IgnorePointer مهم جدًا:
-          // الأنيميشن لا يمنع الكتابة أو الضغط أو
-          // التعامل مع الصور والكاميرا والأدوات.
+          // IgnorePointer مهم:
+          // لا يمنع الكتابة أو الضغط أو الكاميرا
+          // أو الصور أو أي أداة من أدوات المحادثة.
           // ==================================================
 
           Positioned(
-            top: 56,
+            top: 58,
             right: 10,
             child: IgnorePointer(
+              ignoring: true,
               child: AnimatedBuilder(
                 animation:
                     _animationController,
@@ -137,7 +145,7 @@ class _KhalasanaPortalScreenState
 
                   return Opacity(
                     opacity:
-                        0.16 +
+                        0.12 +
                             wave * 0.10,
                     child:
                         Transform.scale(
@@ -146,21 +154,19 @@ class _KhalasanaPortalScreenState
                               wave * 0.08,
                       child:
                           Container(
-                        width: 42,
-                        height: 42,
+                        width: 40,
+                        height: 40,
                         decoration:
                             BoxDecoration(
                           shape:
-                              BoxShape
-                                  .circle,
+                              BoxShape.circle,
                           border:
                               Border.all(
                             color:
                                 const Color(
                               0xFF8EA8FF,
                             ),
-                            width:
-                                1.4,
+                            width: 1.3,
                           ),
                           boxShadow: [
                             BoxShadow(
@@ -168,14 +174,14 @@ class _KhalasanaPortalScreenState
                                   const Color(
                                 0xFF8EA8FF,
                               ).withOpacity(
-                                0.18 +
+                                0.14 +
                                     wave *
-                                        0.16,
+                                        0.12,
                               ),
                               blurRadius:
-                                  12 +
+                                  10 +
                                       wave *
-                                          8,
+                                          7,
                             ),
                           ],
                         ),
@@ -187,7 +193,7 @@ class _KhalasanaPortalScreenState
                               Color(
                             0xFFB9C8FF,
                           ),
-                          size: 21,
+                          size: 20,
                         ),
                       ),
                     ),
