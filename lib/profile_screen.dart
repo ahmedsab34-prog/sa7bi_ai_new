@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
 import 'widgets/app_header.dart';
+import 'widgets/credits_status.dart';
 import 'widgets/profile_actions.dart';
 import 'widgets/profile_bio_status.dart';
 import 'widgets/profile_header.dart';
 import 'widgets/profile_reminders.dart';
+import 'widgets/rewarded_ad_button.dart';
 
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onAudio;
@@ -19,10 +21,12 @@ class ProfileScreen extends StatefulWidget {
   });
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State<ProfileScreen> createState() =>
+      _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState
+    extends State<ProfileScreen> {
   final ProfileService _profileService =
       ProfileService.instance;
 
@@ -76,7 +80,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _reminderService.initialize(),
       ]);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       _syncProfile();
 
@@ -84,7 +90,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _loading = false;
@@ -93,20 +101,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _syncProfile() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
-      _photo = _profileService.photoBytes;
-      _displayName = _profileService.displayName;
-      _reelName = _profileService.reelName;
-      _bio = _profileService.bio;
-      _status = _profileService.status;
-      _aiConnected = _profileService.aiConnected;
+      _photo =
+          _profileService.photoBytes;
+      _displayName =
+          _profileService.displayName;
+      _reelName =
+          _profileService.reelName;
+      _bio =
+          _profileService.bio;
+      _status =
+          _profileService.status;
+      _aiConnected =
+          _profileService.aiConnected;
     });
   }
 
   void _onRemindersChanged() {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {});
   }
@@ -117,13 +135,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _reminderService.initialize();
     await _reminderService.rescheduleAll();
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     _syncProfile();
   }
 
-  void _showMessage(String message) {
-    if (!mounted || message.trim().isEmpty) {
+  void _showMessage(
+    String message,
+  ) {
+    if (!mounted ||
+        message.trim().isEmpty) {
       return;
     }
 
@@ -133,10 +156,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SnackBar(
           content: Text(
             message,
-            textDirection: TextDirection.rtl,
+            textDirection:
+                TextDirection.rtl,
           ),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(
+          behavior:
+              SnackBarBehavior.floating,
+          duration:
+              const Duration(
             seconds: 2,
           ),
         ),
@@ -144,31 +170,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildAiStatusBar() {
-    final bool connected = _aiConnected;
+    final bool connected =
+        _aiConnected;
 
-    final Color statusColor = connected
-        ? Colors.greenAccent
-        : Colors.orangeAccent;
+    final Color statusColor =
+        connected
+            ? Colors.greenAccent
+            : Colors.orangeAccent;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(
+      margin:
+          const EdgeInsets.fromLTRB(
         8,
         2,
         8,
         6,
       ),
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 8,
       ),
-      decoration: BoxDecoration(
+      decoration:
+          BoxDecoration(
         color: Theme.of(context)
             .colorScheme
             .surfaceContainerHighest
             .withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(15),
+        borderRadius:
+            BorderRadius.circular(15),
         border: Border.all(
-          color: statusColor.withValues(
+          color:
+              statusColor.withValues(
             alpha: 0.30,
           ),
         ),
@@ -178,12 +211,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             width: 9,
             height: 9,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: statusColor,
+            decoration:
+                BoxDecoration(
+              shape:
+                  BoxShape.circle,
+              color:
+                  statusColor,
               boxShadow: [
                 BoxShadow(
-                  color: statusColor.withValues(
+                  color:
+                      statusColor.withValues(
                     alpha: 0.35,
                   ),
                   blurRadius: 7,
@@ -191,25 +228,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
+
           const SizedBox(width: 8),
+
           Expanded(
             child: Text(
               connected
                   ? 'صاحبي AI متصل وجاهز'
                   : 'صاحبي AI غير متصل',
-              textDirection: TextDirection.rtl,
-              style: const TextStyle(
+              textDirection:
+                  TextDirection.rtl,
+              style:
+                  const TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w800,
+                fontWeight:
+                    FontWeight.w800,
               ),
             ),
           ),
+
           Icon(
             connected
-                ? Icons.cloud_done_rounded
-                : Icons.cloud_off_rounded,
+                ? Icons
+                    .cloud_done_rounded
+                : Icons
+                    .cloud_off_rounded,
             size: 18,
-            color: statusColor,
+            color:
+                statusColor,
           ),
         ],
       ),
@@ -217,57 +263,134 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return SafeArea(
       child: Column(
         children: [
+          // ==================================================
+          // SHARED HEADER
+          // ==================================================
+
           AppHeader(
-            onAudioTap: widget.onAudio,
+            onAudioTap:
+                widget.onAudio,
           ),
+
+          // ==================================================
+          // CONTENT
+          // ==================================================
 
           Expanded(
             child: _loading
                 ? const Center(
-                    child: CircularProgressIndicator(),
+                    child:
+                        CircularProgressIndicator(),
                   )
                 : RefreshIndicator(
-                    onRefresh: _refreshProfile,
-                    child: ListView(
+                    onRefresh:
+                        _refreshProfile,
+                    child:
+                        ListView(
                       physics:
                           const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.only(
+                      padding:
+                          const EdgeInsets.only(
                         top: 2,
                         bottom: 14,
                       ),
                       children: [
+                        // --------------------------------------
+                        // AI CONNECTION
+                        // --------------------------------------
+
                         _buildAiStatusBar(),
 
+                        // --------------------------------------
+                        // CREDITS
+                        // --------------------------------------
+
+                        Padding(
+                          padding:
+                              const EdgeInsets
+                                  .fromLTRB(
+                            8,
+                            0,
+                            8,
+                            6,
+                          ),
+                          child: Row(
+                            children: [
+                              const Expanded(
+                                child:
+                                    CreditsStatus(
+                                  compact:
+                                      true,
+                                  showRewardButton:
+                                      false,
+                                ),
+                              ),
+
+                              const SizedBox(
+                                width: 8,
+                              ),
+
+                              const RewardedAdButton(
+                                compact:
+                                    true,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // --------------------------------------
+                        // PROFILE ACTIONS
+                        // --------------------------------------
+
+                        ProfileActions(
+                          onMessage:
+                              _showMessage,
+                        ),
+
+                        // --------------------------------------
+                        // PROFILE HEADER
+                        // --------------------------------------
+
                         ProfileHeader(
-                          photo: _photo,
+                          photo:
+                              _photo,
                           displayName:
                               _displayName,
-                          reelName: _reelName,
+                          reelName:
+                              _reelName,
                           onChanged:
                               _syncProfile,
                           onMessage:
                               _showMessage,
                         ),
 
+                        // --------------------------------------
+                        // BIO + STATUS
+                        // --------------------------------------
+
                         ProfileBioStatus(
-                          bio: _bio,
-                          status: _status,
+                          bio:
+                              _bio,
+                          status:
+                              _status,
                           onProfileChanged:
                               _syncProfile,
                         ),
 
+                        // --------------------------------------
+                        // REMINDERS
+                        // --------------------------------------
+
                         ProfileReminders(
                           reminders:
-                              _reminderService.items,
-                          onMessage:
-                              _showMessage,
-                        ),
-
-                        ProfileActions(
+                              _reminderService
+                                  .items,
                           onMessage:
                               _showMessage,
                         ),
