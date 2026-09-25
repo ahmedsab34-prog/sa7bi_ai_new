@@ -273,8 +273,6 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
         album: 'القرآن الكريم',
       );
 
-      // AudioController يتولى إيقاف المصدر السابق
-      // وتبديل المصدر بشكل آمن.
       await handler.playMediaItem(first);
 
       final catalog = _quran;
@@ -291,7 +289,10 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
 
         for (var i = start; i < catalog.suwar.length; i++) {
           final nextSura = catalog.suwar[i];
-          final nextUrl = _quranUrl(moshaf, nextSura);
+          final nextUrl = _quranUrl(
+            moshaf,
+            nextSura,
+          );
 
           if (nextUrl == null || nextUrl.isEmpty) {
             continue;
@@ -301,7 +302,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
             MediaItem(
               id: nextUrl,
               title: nextSura.name,
-              artist: _reciter?.name ?? 'القرآن الكريم',
+              artist:
+                  _reciter?.name ?? 'القرآن الكريم',
               album: 'القرآن الكريم',
             ),
           );
@@ -311,8 +313,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
           try {
             await handler.addQueueItems(remaining);
           } catch (_) {
-            // تشغيل السورة الحالية يظل صالحًا
-            // حتى لو تعذر إنشاء قائمة المتابعة.
+            // تشغيل السورة الحالية يظل صالحًا.
           }
         }
       }
@@ -436,7 +437,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
       _audioItems = items;
 
       if (items.isEmpty) {
-        _error = 'لم يتم العثور على موسيقى متاحة حاليًا.';
+        _error =
+            'لم يتم العثور على موسيقى متاحة حاليًا.';
       }
     });
   }
@@ -461,7 +463,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
       _audioItems = items;
 
       if (items.isEmpty) {
-        _error = 'لم يتم العثور على بودكاست متاح حاليًا.';
+        _error =
+            'لم يتم العثور على بودكاست متاح حاليًا.';
       }
     });
   }
@@ -482,7 +485,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
         _countries = [];
         _country = null;
         _stations = [];
-        _error = 'تعذر تحميل الدول والإذاعات حاليًا.';
+        _error =
+            'تعذر تحميل الدول والإذاعات حاليًا.';
       });
       return;
     }
@@ -513,7 +517,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
     RadioCountry country,
   ) async {
     try {
-      final stations = await AiService.getRadioStations(
+      final stations =
+          await AiService.getRadioStations(
         country.code,
       );
 
@@ -521,7 +526,6 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
         return;
       }
 
-      // إزالة الروابط الفارغة وتكرار المحطات.
       final seen = <String>{};
       final cleanStations = <RadioStation>[];
 
@@ -549,7 +553,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
       if (mounted) {
         setState(() {
           _stations = [];
-          _error = 'تعذر تحميل محطات هذه الدولة.';
+          _error =
+              'تعذر تحميل محطات هذه الدولة.';
         });
       }
     }
@@ -617,8 +622,6 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
         );
       }
 
-      // لا ننشئ Player جديدًا.
-      // نستخدم نفس AudioController دائمًا.
       await AudioController.playUrl(
         url: clean,
         title: title,
@@ -683,19 +686,24 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
     }
 
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result =
+          await FilePicker.platform.pickFiles(
         type: FileType.audio,
       );
 
-      if (result == null || result.files.isEmpty) {
+      if (result == null ||
+          result.files.isEmpty) {
         return;
       }
 
       final file = result.files.single;
       final path = file.path;
 
-      if (path == null || path.trim().isEmpty) {
-        _message('تعذر الوصول إلى الملف.');
+      if (path == null ||
+          path.trim().isEmpty) {
+        _message(
+          'تعذر الوصول إلى الملف.',
+        );
         return;
       }
 
@@ -847,23 +855,31 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
           children: List.generate(
             _categories.length,
             (index) {
-              final selected = index == _categoryIndex;
+              final selected =
+                  index == _categoryIndex;
 
               return Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                      const EdgeInsets.symmetric(
                     horizontal: 2,
                   ),
                   child: GestureDetector(
                     onTap: _loading
                         ? null
-                        : () => _changeCategory(index),
+                        : () =>
+                            _changeCategory(index),
                     child: AnimatedContainer(
                       duration:
-                          const Duration(milliseconds: 180),
-                      decoration: BoxDecoration(
+                          const Duration(
+                        milliseconds: 180,
+                      ),
+                      decoration:
+                          BoxDecoration(
                         borderRadius:
-                            BorderRadius.circular(14),
+                            BorderRadius.circular(
+                          14,
+                        ),
                         color: selected
                             ? _goldDark
                             : _card,
@@ -880,7 +896,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
                             _categories[index],
                             maxLines: 1,
                             style: TextStyle(
-                              color: Colors.white,
+                              color:
+                                  Colors.white,
                               fontSize: 12,
                               fontWeight: selected
                                   ? FontWeight.w800
@@ -918,9 +935,12 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
       ),
       decoration: BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(17),
+        borderRadius:
+            BorderRadius.circular(17),
         border: Border.all(
-          color: _gold.withValues(alpha: 0.30),
+          color: _gold.withValues(
+            alpha: 0.30,
+          ),
         ),
       ),
       child: Row(
@@ -933,15 +953,20 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
                   ? 'يتم التشغيل الآن'
                   : _currentTitle,
               maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              overflow:
+                  TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
-                fontWeight: FontWeight.w700,
+                fontWeight:
+                    FontWeight.w700,
               ),
             ),
           ),
           IconButton(
-            onPressed: _switchingAudio ? null : _stop,
+            onPressed:
+                _switchingAudio
+                    ? null
+                    : _stop,
             icon: const Icon(
               Icons.stop_circle_rounded,
               color: _gold,
@@ -965,7 +990,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
         children: const [
           SizedBox(height: 100),
           Center(
-            child: CircularProgressIndicator(),
+            child:
+                CircularProgressIndicator(),
           ),
         ],
       );
@@ -1022,7 +1048,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
       return ListView(
         physics:
             const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding:
+            const EdgeInsets.all(16),
         children: [
           _emptyText(
             _error.isNotEmpty
@@ -1031,7 +1058,9 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
           ),
           ElevatedButton.icon(
             onPressed: _loadQuran,
-            icon: const Icon(Icons.refresh_rounded),
+            icon: const Icon(
+              Icons.refresh_rounded,
+            ),
             label: const Text('تحديث'),
           ),
         ],
@@ -1041,17 +1070,18 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
     return ListView(
       physics:
           const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         14,
         8,
         14,
         30,
       ),
       children: [
-        _sectionTitle('القرآن الكريم'),
-
+        _sectionTitle(
+          'القرآن الكريم',
+        ),
         const SizedBox(height: 12),
-
         _dropdown<QuranReciter>(
           value: _reciter,
           items: quran.reciters,
@@ -1064,32 +1094,30 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
 
             setState(() {
               _reciter = value;
-              _moshaf = value.moshaf.isNotEmpty
-                  ? value.moshaf.first
-                  : null;
+              _moshaf =
+                  value.moshaf.isNotEmpty
+                      ? value.moshaf.first
+                      : null;
             });
           },
         ),
-
         const SizedBox(height: 10),
-
         if (_reciter != null)
           _dropdown<QuranMoshaf>(
             value: _moshaf,
             items: _reciter!.moshaf,
             label: 'اختار الرواية',
-            text: (item) => item.name.isEmpty
-                ? 'الرواية'
-                : item.name,
+            text: (item) =>
+                item.name.isEmpty
+                    ? 'الرواية'
+                    : item.name,
             onChanged: (value) {
               setState(() {
                 _moshaf = value;
               });
             },
           ),
-
         const SizedBox(height: 10),
-
         _dropdown<QuranSura>(
           value: _sura,
           items: quran.suwar,
@@ -1102,9 +1130,7 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
             });
           },
         ),
-
         const SizedBox(height: 16),
-
         ElevatedButton.icon(
           onPressed: _switchingAudio
               ? null
@@ -1127,28 +1153,30 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
                 ? 'جاري التشغيل...'
                 : 'تشغيل السورة والمتابعة تلقائيًا',
           ),
-          style: ElevatedButton.styleFrom(
+          style:
+              ElevatedButton.styleFrom(
             backgroundColor: _goldDark,
-            foregroundColor: Colors.white,
+            foregroundColor:
+                Colors.white,
             minimumSize:
-                const Size(double.infinity, 50),
-            shape: RoundedRectangleBorder(
+                const Size(
+              double.infinity,
+              50,
+            ),
+            shape:
+                RoundedRectangleBorder(
               borderRadius:
                   BorderRadius.circular(15),
             ),
           ),
         ),
-
         const SizedBox(height: 18),
-
         _infoCard(
           Icons.queue_music_rounded,
           'تشغيل متواصل',
           'بعد السورة المختارة يكمل المشغل السور التالية تلقائيًا.',
         ),
-
         const SizedBox(height: 10),
-
         _infoCard(
           Icons.headphones_rounded,
           'تشغيل في الخلفية',
@@ -1170,7 +1198,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
     return ListView(
       physics:
           const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         14,
         8,
         14,
@@ -1180,10 +1209,12 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
         Row(
           children: [
             Expanded(
-              child: _sectionTitle(title),
+              child:
+                  _sectionTitle(title),
             ),
             IconButton(
-              onPressed: _loading ? null : _search,
+              onPressed:
+                  _loading ? null : _search,
               icon: const Icon(
                 Icons.refresh_rounded,
                 color: _gold,
@@ -1191,23 +1222,15 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
             ),
           ],
         ),
-
         const SizedBox(height: 8),
-
         _searchBox(),
-
         const SizedBox(height: 12),
-
         ..._audioCards(items),
-
-        if (items.isEmpty) _emptyText(empty),
+        if (items.isEmpty)
+          _emptyText(empty),
       ],
     );
   }
-
-  // ============================================================
-  // AUDIO LIST
-  // ============================================================
 
   Widget _audioList({
     required String title,
@@ -1220,7 +1243,8 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
     return ListView(
       physics:
           const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         14,
         8,
         14,
@@ -1230,10 +1254,12 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
         Row(
           children: [
             Expanded(
-              child: _sectionTitle(title),
+              child:
+                  _sectionTitle(title),
             ),
             IconButton(
-              onPressed: _loading ? null : _search,
+              onPressed:
+                  _loading ? null : _search,
               icon: const Icon(
                 Icons.refresh_rounded,
                 color: _gold,
@@ -1241,21 +1267,17 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
             ),
           ],
         ),
-
         const SizedBox(height: 8),
-
         _searchBox(),
-
         const SizedBox(height: 12),
-
         ...items.map(
           (item) => _audioCard(
             item,
             () => onPlay(item),
           ),
         ),
-
-        if (items.isEmpty) _emptyText(empty),
+        if (items.isEmpty)
+          _emptyText(empty),
       ],
     );
   }
@@ -1282,5 +1304,652 @@ class _AudioCenterScreenState extends State<AudioCenterScreen> {
     AudioSearchItem item,
     VoidCallback onPlay,
   ) {
+    final hasUrl =
+        item.url.trim().isNotEmpty;
+
     return Container(
-     
+      margin:
+          const EdgeInsets.only(
+        bottom: 10,
+      ),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius:
+            BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 6,
+        ),
+        leading: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius:
+                BorderRadius.circular(12),
+            color: _goldDark.withValues(
+              alpha: 0.22,
+            ),
+            image:
+                item.artwork.trim().isEmpty
+                    ? null
+                    : DecorationImage(
+                        image:
+                            NetworkImage(
+                          item.artwork
+                              .trim(),
+                        ),
+                        fit: BoxFit.cover,
+                      ),
+          ),
+          child:
+              item.artwork.trim().isEmpty
+                  ? const Icon(
+                      Icons
+                          .music_note_rounded,
+                      color: _gold,
+                    )
+                  : null,
+        ),
+        title: Text(
+          item.title,
+          maxLines: 2,
+          overflow:
+              TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight:
+                FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          [
+            if (item.artist != null &&
+                item.artist!
+                    .trim()
+                    .isNotEmpty)
+              item.artist!.trim(),
+            if (item.collection
+                .trim()
+                .isNotEmpty)
+              item.collection.trim(),
+            if (!hasUrl &&
+                item.text
+                    .trim()
+                    .isNotEmpty)
+              'تشغيل بالنطق الصوتي',
+          ].join(' • '),
+          maxLines: 2,
+          overflow:
+              TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white60,
+            fontSize: 11,
+          ),
+        ),
+        trailing: IconButton(
+          tooltip:
+              hasUrl ? 'تشغيل' : 'قراءة',
+          onPressed:
+              _switchingAudio
+                  ? null
+                  : onPlay,
+          icon: const Icon(
+            Icons
+                .play_circle_fill_rounded,
+            color: _gold,
+            size: 36,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // RADIO
+  // ============================================================
+
+  Widget _radioView() {
+    return ListView(
+      physics:
+          const AlwaysScrollableScrollPhysics(),
+      padding:
+          const EdgeInsets.fromLTRB(
+        14,
+        8,
+        14,
+        30,
+      ),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child:
+                  _sectionTitle('الراديو'),
+            ),
+            IconButton(
+              onPressed:
+                  _loading ? null : _search,
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: _gold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_countries.isNotEmpty)
+          DropdownButtonFormField<
+              RadioCountry>(
+            value: _country,
+            dropdownColor: _card,
+            style: const TextStyle(
+              color: Colors.white,
+            ),
+            decoration:
+                InputDecoration(
+              labelText: 'الدولة',
+              labelStyle:
+                  const TextStyle(
+                color: Colors.white70,
+              ),
+              filled: true,
+              fillColor: _card,
+              border:
+                  OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(
+                  14,
+                ),
+                borderSide:
+                    BorderSide.none,
+              ),
+            ),
+            items:
+                _countries.map(
+              (country) {
+                return DropdownMenuItem<
+                    RadioCountry>(
+                  value: country,
+                  child: Text(
+                    '${country.name} (${country.stationCount})',
+                    overflow:
+                        TextOverflow
+                            .ellipsis,
+                  ),
+                );
+              },
+            ).toList(),
+            onChanged:
+                _loading
+                    ? null
+                    : _changeCountry,
+          ),
+        const SizedBox(height: 12),
+        ..._stations.map(
+          _radioCard,
+        ),
+        if (_stations.isEmpty)
+          _emptyText(
+            _error.isNotEmpty
+                ? _error
+                : 'لا توجد محطات متاحة حاليًا.',
+          ),
+      ],
+    );
+  }
+
+  Widget _radioCard(
+    RadioStation station,
+  ) {
+    final favicon =
+        station.favicon.trim();
+
+    return Container(
+      margin:
+          const EdgeInsets.only(
+        bottom: 10,
+      ),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius:
+            BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 5,
+        ),
+        leading: Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius:
+                BorderRadius.circular(12),
+            color: _goldDark.withValues(
+              alpha: 0.22,
+            ),
+            image: favicon.isEmpty
+                ? null
+                : DecorationImage(
+                    image: NetworkImage(
+                      favicon,
+                    ),
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          child: favicon.isEmpty
+              ? const Icon(
+                  Icons.radio_rounded,
+                  color: _gold,
+                )
+              : null,
+        ),
+        title: Text(
+          station.name,
+          maxLines: 2,
+          overflow:
+              TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight:
+                FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          [
+            if (station.codec
+                .trim()
+                .isNotEmpty)
+              station.codec.trim(),
+            if (station.bitrate > 0)
+              '${station.bitrate} kbps',
+            if (station.tags
+                .trim()
+                .isNotEmpty)
+              station.tags.trim(),
+          ].join(' • '),
+          maxLines: 2,
+          overflow:
+              TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white60,
+            fontSize: 11,
+          ),
+        ),
+        trailing: IconButton(
+          tooltip:
+              'تشغيل المحطة',
+          onPressed:
+              _switchingAudio
+                  ? null
+                  : () => _playUrl(
+                        station.url,
+                        station.name,
+                        artist:
+                            'راديو ${_country?.name ?? ''}'
+                                .trim(),
+                        artwork:
+                            station.favicon,
+                      ),
+          icon: const Icon(
+            Icons
+                .play_circle_fill_rounded,
+            color: _gold,
+            size: 36,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // UI HELPERS
+  // ============================================================
+
+  Widget _dropdown<T>({
+    required T? value,
+    required List<T> items,
+    required String label,
+    required String Function(T)
+        text,
+    required ValueChanged<T?>
+        onChanged,
+  }) {
+    final safeValue =
+        items.contains(value)
+            ? value
+            : null;
+
+    return DropdownButtonFormField<T>(
+      value: safeValue,
+      isExpanded: true,
+      dropdownColor: _card,
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight:
+            FontWeight.w700,
+      ),
+      decoration:
+          InputDecoration(
+        labelText: label,
+        labelStyle:
+            const TextStyle(
+          color: Colors.white70,
+        ),
+        filled: true,
+        fillColor: _card,
+        border:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(
+            14,
+          ),
+          borderSide:
+              BorderSide.none,
+        ),
+      ),
+      items: items.map(
+        (item) {
+          return DropdownMenuItem<T>(
+            value: item,
+            child: Text(
+              text(item),
+              overflow:
+                  TextOverflow.ellipsis,
+            ),
+          );
+        },
+      ).toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _sectionTitle(
+    String title,
+  ) {
+    return Padding(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 2,
+      ),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight:
+              FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _searchBox() {
+    return TextField(
+      controller:
+          _searchController,
+      textDirection:
+          TextDirection.rtl,
+      style: const TextStyle(
+        color: Colors.white,
+      ),
+      textInputAction:
+          TextInputAction.search,
+      onSubmitted:
+          (_) => _search(),
+      decoration:
+          InputDecoration(
+        hintText: 'ابحث...',
+        hintStyle:
+            const TextStyle(
+          color: Colors.white38,
+        ),
+        prefixIcon:
+            const Icon(
+          Icons.search_rounded,
+          color: _gold,
+        ),
+        suffixIcon:
+            IconButton(
+          tooltip: 'بحث',
+          onPressed:
+              _loading
+                  ? null
+                  : _search,
+          icon: const Icon(
+            Icons
+                .arrow_forward_rounded,
+            color: _gold,
+          ),
+        ),
+        filled: true,
+        fillColor: _card,
+        border:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(
+            14,
+          ),
+          borderSide:
+              BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyText(
+    String text,
+  ) {
+    return Container(
+      margin:
+          const EdgeInsets.only(
+        top: 18,
+      ),
+      padding:
+          const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius:
+            BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: Text(
+        text,
+        textAlign:
+            TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white70,
+          height: 1.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _infoCard(
+    IconData icon,
+    String title,
+    String description,
+  ) {
+    return Container(
+      padding:
+          const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius:
+            BorderRadius.circular(16),
+        border: Border.all(
+          color:
+              _gold.withValues(
+            alpha: 0.14,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration:
+                BoxDecoration(
+              shape:
+                  BoxShape.circle,
+              color:
+                  _goldDark.withValues(
+                alpha: 0.22,
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: _gold,
+            ),
+          ),
+          const SizedBox(
+            width: 12,
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style:
+                      const TextStyle(
+                    color:
+                        Colors.white,
+                    fontWeight:
+                        FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(
+                  height: 4,
+                ),
+                Text(
+                  description,
+                  style:
+                      const TextStyle(
+                    color:
+                        Colors.white60,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// AUDIO RAIN VISUALIZER
+// ============================================================
+
+class _AudioRainVisualizer
+    extends StatefulWidget {
+  const _AudioRainVisualizer();
+
+  @override
+  State<_AudioRainVisualizer>
+      createState() =>
+          _AudioRainVisualizerState();
+}
+
+class _AudioRainVisualizerState
+    extends State<
+        _AudioRainVisualizer>
+    with
+        SingleTickerProviderStateMixin {
+  late final AnimationController
+      _controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller =
+        AnimationController(
+      vsync: this,
+      duration:
+          const Duration(
+        milliseconds: 1100,
+      ),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return SizedBox(
+      width: 42,
+      height: 34,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder:
+            (context, child) {
+          return Row(
+            mainAxisAlignment:
+                MainAxisAlignment
+                    .spaceEvenly,
+            crossAxisAlignment:
+                CrossAxisAlignment
+                    .end,
+            children:
+                List.generate(
+              7,
+              (index) {
+                final phase =
+                    (_controller.value +
+                            index * 0.13) %
+                        1.0;
+
+                final height =
+                    7.0 +
+                        (phase * 20.0);
+
+                return Container(
+                  width: 3,
+                  height: height,
+                  decoration:
+                      BoxDecoration(
+                    color: Color.lerp(
+                      Colors.white54,
+                      _gold,
+                      phase,
+                    ),
+                    borderRadius:
+                        BorderRadius
+                            .circular(
+                      8,
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
