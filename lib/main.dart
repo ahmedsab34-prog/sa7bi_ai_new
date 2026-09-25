@@ -10,6 +10,9 @@ import 'home_screen.dart';
 import 'khalasana_portal_screen.dart';
 import 'profile_screen.dart';
 import 'services/ads_service.dart';
+import 'services/ai_request_service.dart';
+import 'services/credits_service.dart';
+import 'services/profile_service.dart';
 import 'widgets/khalasana_portal.dart';
 
 Future<void> main() async {
@@ -24,11 +27,48 @@ Future<void> main() async {
   // ------------------------------------------------------------
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(_initializeApplicationServices());
+    unawaited(
+      _initializeApplicationServices(),
+    );
   });
 }
 
 Future<void> _initializeApplicationServices() async {
+  // ------------------------------------------------------------
+  // CREDITS
+  // ------------------------------------------------------------
+
+  try {
+    await CreditsService.instance.initialize();
+  } catch (_) {
+    // فشل Credits لا يمنع التطبيق من العمل.
+  }
+
+  // ------------------------------------------------------------
+  // AI BACKEND CONNECTION
+  // ------------------------------------------------------------
+
+  try {
+    final connected =
+        await AiRequestService.instance
+            .checkBackend();
+
+    if (connected) {
+      await ProfileService.instance
+          .markAiConnected();
+    } else {
+      await ProfileService.instance
+          .markAiDisconnected();
+    }
+  } catch (_) {
+    try {
+      await ProfileService.instance
+          .markAiDisconnected();
+    } catch (_) {
+      // لا شيء.
+    }
+  }
+
   // ------------------------------------------------------------
   // Audio
   // ------------------------------------------------------------
@@ -44,7 +84,8 @@ Future<void> _initializeApplicationServices() async {
   // ------------------------------------------------------------
 
   try {
-    final ads = AdsService.instance;
+    final ads =
+        AdsService.instance;
 
     await ads.initialize();
 
@@ -86,9 +127,12 @@ class Sa7biAiApp extends StatelessWidget {
         scaffoldBackgroundColor:
             const Color(0xFF070A12),
 
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFFD76A),
-          brightness: Brightness.dark,
+        colorScheme:
+            ColorScheme.fromSeed(
+          seedColor:
+              const Color(0xFFFFD76A),
+          brightness:
+              Brightness.dark,
         ),
 
         useMaterial3: true,
@@ -96,7 +140,8 @@ class Sa7biAiApp extends StatelessWidget {
         fontFamily: 'sans',
       ),
 
-      home: const MainContainerScreen(),
+      home:
+          const MainContainerScreen(),
     );
   }
 }
@@ -105,7 +150,8 @@ class Sa7biAiApp extends StatelessWidget {
 // MAIN CONTAINER
 // ============================================================
 
-class MainContainerScreen extends StatefulWidget {
+class MainContainerScreen
+    extends StatefulWidget {
   const MainContainerScreen({
     super.key,
   });
@@ -140,7 +186,8 @@ class _MainContainerScreenState
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const AudioCenterScreen(),
+        builder: (_) =>
+            const AudioCenterScreen(),
       ),
     );
   }
@@ -152,7 +199,8 @@ class _MainContainerScreenState
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const KhalasanaPortalScreen(),
+        builder: (_) =>
+            const KhalasanaPortalScreen(),
       ),
     );
   }
@@ -202,7 +250,8 @@ class _MainContainerScreenState
               left: 10,
               right: 10,
               bottom: 8,
-              child: MiniAudioPlayer(),
+              child:
+                  MiniAudioPlayer(),
             ),
 
             // --------------------------------------------------
@@ -212,8 +261,10 @@ class _MainContainerScreenState
             Positioned(
               right: 12,
               bottom: 92,
-              child: KhalasanaPortal(
-                onTap: openKhalasana,
+              child:
+                  KhalasanaPortal(
+                onTap:
+                    openKhalasana,
               ),
             ),
           ],
@@ -232,7 +283,8 @@ class _MainContainerScreenState
         indicatorColor:
             const Color(0x3348D8FF),
 
-        selectedIndex: index,
+        selectedIndex:
+            index,
 
         onDestinationSelected:
             (value) {
@@ -285,7 +337,8 @@ class _MainContainerScreenState
 // MINI AUDIO PLAYER
 // ============================================================
 
-class MiniAudioPlayer extends StatelessWidget {
+class MiniAudioPlayer
+    extends StatelessWidget {
   const MiniAudioPlayer({
     super.key,
   });
