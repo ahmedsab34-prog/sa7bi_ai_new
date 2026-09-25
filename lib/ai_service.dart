@@ -5,39 +5,35 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import 'config/app_config.dart';
 import 'services/ai_request_service.dart';
 
 class AiService {
   AiService._();
 
-  static const String base =
-      'https://sa7bi-ai-new.ahmedsab34.workers.dev';
+  static const String base = AppConfig.backendBaseUrl;
 
-  static const String chatEndpoint =
-      '$base/v1/chat';
+  static const String chatEndpoint = AppConfig.aiChatEndpoint;
 
   static const String imageEndpoint =
-      '$base/v1/image';
+      AppConfig.imageGenerationEndpoint;
 
-  static const String newsEndpoint =
-      '$base/v1/news';
+  static const String newsEndpoint = AppConfig.newsEndpoint;
 
   static const String audioSearchEndpoint =
-      '$base/v1/audio/search-v4';
+      AppConfig.audioSearchEndpoint;
 
-  static const String quranEndpoint =
-      '$base/v1/audio/quran';
+  static const String quranEndpoint = AppConfig.quranEndpoint;
 
   static const String radioCountriesEndpoint =
-      '$base/v1/radio/countries';
+      AppConfig.radioCountriesEndpoint;
 
   static const String radioStationsEndpoint =
-      '$base/v1/radio/stations';
+      AppConfig.radioStationsEndpoint;
 
-  static const String shortsEndpoint =
-      '$base/v1/shorts';
+  static const String shortsEndpoint = AppConfig.shortsEndpoint;
 
-  static const int maxHistory = 8;
+  static const int maxHistory = AppConfig.maximumContextMessages;
 
   // ============================================================
   // CONNECTION
@@ -54,7 +50,9 @@ class AiService {
             },
           )
           .timeout(
-            const Duration(seconds: 10),
+            const Duration(
+              seconds: 10,
+            ),
           );
 
       if (response.statusCode < 200 ||
@@ -90,7 +88,7 @@ class AiService {
         prompt: prompt,
         serviceContext: serviceContext,
         serviceTitle: serviceTitle,
-        history: history,
+        history: _limitHistory(history),
       );
     } on AiRequestException catch (error) {
       return error.message;
@@ -138,6 +136,10 @@ class AiService {
     String? serviceContext,
     String? serviceTitle,
   }) async {
+    if (images.isEmpty) {
+      return 'لم يتم العثور على لقطات لتحليلها.';
+    }
+
     try {
       return await AiRequestService.analyzeImages(
         images,
@@ -168,7 +170,8 @@ class AiService {
         );
       }
 
-      if (cleanPrompt.length > 8000) {
+      if (cleanPrompt.length >
+          AppConfig.maximumMessageCharacters) {
         return const ImageGenerationResult.failure(
           'وصف الصورة طويل جدًا.',
         );
@@ -187,7 +190,9 @@ class AiService {
             }),
           )
           .timeout(
-            const Duration(seconds: 180),
+            const Duration(
+              seconds: AppConfig.imageTimeoutSeconds,
+            ),
           );
 
       if (response.statusCode < 200 ||
@@ -219,20 +224,21 @@ class AiService {
         try {
           var cleanBase64 = direct.trim();
 
-          if (cleanBase64.startsWith('data:image/')) {
-            final comma =
-                cleanBase64.indexOf(',');
+          if (cleanBase64.startsWith(
+            'data:image/',
+          )) {
+            final comma = cleanBase64.indexOf(',');
 
             if (comma != -1) {
-              cleanBase64 =
-                  cleanBase64.substring(
+              cleanBase64 = cleanBase64.substring(
                 comma + 1,
               );
             }
           }
 
-          final bytes =
-              base64Decode(cleanBase64);
+          final bytes = base64Decode(
+            cleanBase64,
+          );
 
           if (bytes.isEmpty) {
             return const ImageGenerationResult.failure(
@@ -279,12 +285,14 @@ class AiService {
 
   static Future<List<NewsItem>> getNews() async {
     try {
-      final uri =
-          Uri.parse(newsEndpoint).replace(
+      final refreshToken =
+          DateTime.now().millisecondsSinceEpoch.toString();
+
+      final uri = Uri.parse(
+        newsEndpoint,
+      ).replace(
         queryParameters: {
-          'refresh': DateTime.now()
-              .millisecondsSinceEpoch
-              .toString(),
+          'refresh': refreshToken,
         },
       );
 
@@ -292,12 +300,14 @@ class AiService {
           .get(
             uri,
             headers: const {
-              'Cache-Control': 'no-cache',
+              'Cache-Control': 'no-cache, no-store',
               'Pragma': 'no-cache',
             },
           )
           .timeout(
-            const Duration(seconds: 25),
+            const Duration(
+              seconds: 25,
+            ),
           );
 
       if (response.statusCode < 200 ||
@@ -305,49 +315,58 @@ class AiService {
         return [];
       }
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (data == null ||
           data['items'] is! List) {
         return [];
       }
 
-      return (data['items'] as List)
-          .whereType<Map>()
-          .map(
-            (item) => NewsItem(
-              title:
-                  item['title']?.toString() ??
-                      '',
-              source:
-                  item['source']?.toString() ??
-                      'الأخبار',
-              link:
-                  item['link']?.toString() ??
-                      '',
-              imageUrl:
-                  (
-                    item['imageUrl'] ??
-                    item['image'] ??
-                    ''
-                  ).toString(),
-              description:
-                  item['description']
-                          ?.toString() ??
-                      '',
-              pubDate:
-                  item['pubDate']
-                          ?.toString() ??
-                      '',
-            ),
-          )
-          .where(
-            (item) =>
-                item.title.isNotEmpty &&
-                item.link.isNotEmpty,
-          )
-          .toList();
+      final result = <NewsItem>[];
+
+      for (final raw in data['items'] as List) {
+        if (raw is! Map) {
+          continue;
+        }
+
+        final item = NewsItem(
+          title: raw['title']?.toString() ?? '',
+          source:
+              raw['source']?.toString() ??
+              'الأخبار',
+          link: raw['link']?.toString() ?? '',
+          imageUrl: (
+            raw['imageUrl'] ??
+            raw['image'] ??
+            raw['thumbnail'] ??
+            raw['cover'] ??
+            ''
+          ).toString(),
+          description:
+              raw['description']?.toString() ?? '',
+          pubDate:
+              raw['pubDate']?.toString() ??
+              raw['publishedAt']?.toString() ??
+              '',
+        );
+
+        if (item.title.trim().isEmpty) {
+          continue;
+        }
+
+        if (item.link.trim().isEmpty) {
+          continue;
+        }
+
+        result.add(item);
+
+        if (result.length >=
+            AppConfig.maximumNewsItems) {
+          break;
+        }
+      }
+
+      return result;
     } catch (_) {
       return [];
     }
@@ -361,17 +380,16 @@ class AiService {
     String query, {
     String type = 'quran',
   }) async {
-    final clean =
-        query.trim();
+    final clean = query.trim();
 
     if (clean.isEmpty) {
       return [];
     }
 
     try {
-      final uri =
-          Uri.parse(audioSearchEndpoint)
-              .replace(
+      final uri = Uri.parse(
+        audioSearchEndpoint,
+      ).replace(
         queryParameters: {
           'q': clean,
           'type': type,
@@ -383,10 +401,13 @@ class AiService {
             uri,
             headers: const {
               'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
             },
           )
           .timeout(
-            const Duration(seconds: 25),
+            const Duration(
+              seconds: 25,
+            ),
           );
 
       if (response.statusCode < 200 ||
@@ -394,67 +415,59 @@ class AiService {
         return [];
       }
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (data == null ||
           data['items'] is! List) {
         return [];
       }
 
-      return (data['items'] as List)
-          .whereType<Map>()
-          .map(
-            (item) => AudioSearchItem(
-              id:
-                  item['id']?.toString() ??
-                      '',
-              title:
-                  item['title']?.toString() ??
-                      '',
-              artist:
-                  item['artist']?.toString(),
-              url:
-                  (
-                    item['url'] ??
-                    item['previewUrl'] ??
-                    ''
-                  ).toString(),
-              type:
-                  item['type']?.toString() ??
-                      type,
-              artwork:
-                  (
-                    item['artwork'] ??
-                    ''
-                  ).toString(),
-              storeUrl:
-                  (
-                    item['storeUrl'] ??
-                    ''
-                  ).toString(),
-              text:
-                  (
-                    item['text'] ??
-                    ''
-                  ).toString(),
-              repeat:
-                  item['repeat']?.toString() ??
-                      '',
-              collection:
-                  item['collection']
-                          ?.toString() ??
-                      '',
-              feedUrl:
-                  item['feedUrl']?.toString() ??
-                      '',
-            ),
-          )
-          .where(
-            (item) =>
-                item.title.isNotEmpty,
-          )
-          .toList();
+      final result = <AudioSearchItem>[];
+
+      for (final raw in data['items'] as List) {
+        if (raw is! Map) {
+          continue;
+        }
+
+        final item = AudioSearchItem(
+          id: raw['id']?.toString() ?? '',
+          title: raw['title']?.toString() ?? '',
+          artist: raw['artist']?.toString(),
+          url: (
+            raw['url'] ??
+            raw['previewUrl'] ??
+            raw['streamUrl'] ??
+            ''
+          ).toString(),
+          type:
+              raw['type']?.toString() ??
+              type,
+          artwork: (
+            raw['artwork'] ??
+            raw['artworkUrl'] ??
+            raw['image'] ??
+            ''
+          ).toString(),
+          storeUrl:
+              raw['storeUrl']?.toString() ?? '',
+          text:
+              raw['text']?.toString() ?? '',
+          repeat:
+              raw['repeat']?.toString() ?? '',
+          collection:
+              raw['collection']?.toString() ?? '',
+          feedUrl:
+              raw['feedUrl']?.toString() ?? '',
+        );
+
+        if (item.title.trim().isEmpty) {
+          continue;
+        }
+
+        result.add(item);
+      }
+
+      return result;
     } catch (_) {
       return [];
     }
@@ -471,10 +484,13 @@ class AiService {
             Uri.parse(quranEndpoint),
             headers: const {
               'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
             },
           )
           .timeout(
-            const Duration(seconds: 25),
+            const Duration(
+              seconds: 25,
+            ),
           );
 
       if (response.statusCode < 200 ||
@@ -482,103 +498,116 @@ class AiService {
         return null;
       }
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (data == null ||
           data['ok'] != true) {
         return null;
       }
 
-      final reciterList =
-          data['reciters'];
+      final reciterList = data['reciters'];
 
       final suraList =
           data['suras'] ??
-              data['suwar'];
+          data['suwar'];
 
-      final reciters =
-          <QuranReciter>[];
+      final reciters = <QuranReciter>[];
 
       if (reciterList is List) {
-        for (final item in reciterList) {
-          if (item is! Map) {
+        for (final raw in reciterList) {
+          if (raw is! Map) {
             continue;
           }
 
-          final moshafRaw =
-              item['moshaf'];
+          final moshafRaw = raw['moshaf'];
 
-          final moshafList =
-              <QuranMoshaf>[];
+          final moshafList = <QuranMoshaf>[];
 
           if (moshafRaw is List) {
-            for (final m in moshafRaw) {
-              if (m is! Map) {
+            for (final rawMoshaf in moshafRaw) {
+              if (rawMoshaf is! Map) {
+                continue;
+              }
+
+              final server = (
+                rawMoshaf['server'] ??
+                rawMoshaf['url'] ??
+                ''
+              ).toString().trim();
+
+              final name = (
+                rawMoshaf['name'] ??
+                rawMoshaf['title'] ??
+                ''
+              ).toString().trim();
+
+              final surahList = (
+                rawMoshaf['suras'] ??
+                rawMoshaf['surahList'] ??
+                ''
+              ).toString();
+
+              final surahTotal =
+                  int.tryParse(
+                    (
+                      rawMoshaf['surahTotal'] ??
+                      rawMoshaf['surah_total'] ??
+                      ''
+                    ).toString(),
+                  ) ??
+                  0;
+
+              if (server.isEmpty &&
+                  name.isEmpty) {
                 continue;
               }
 
               moshafList.add(
                 QuranMoshaf(
                   id:
-                      m['id']?.toString() ??
-                          '',
-                  name:
-                      m['name']?.toString() ??
-                          '',
-                  server:
-                      m['server']?.toString() ??
-                          '',
-                  surahTotal:
-                      int.tryParse(
-                            (
-                              m['surahTotal'] ??
-                              m['surah_total'] ??
-                              ''
-                            ).toString(),
-                          ) ??
-                          0,
-                  surahList:
-                      (
-                        m['suras'] ??
-                        m['surahList'] ??
-                        ''
-                      ).toString(),
+                      rawMoshaf['id']?.toString() ??
+                      '',
+                  name: name,
+                  server: server,
+                  surahTotal: surahTotal,
+                  surahList: surahList,
                 ),
               );
             }
           }
 
+          final name = (
+            raw['name'] ??
+            raw['title'] ??
+            'قارئ'
+          ).toString().trim();
+
           reciters.add(
             QuranReciter(
-              id:
-                  item['id']?.toString() ??
-                      '',
+              id: raw['id']?.toString() ?? '',
               name:
-                  item['name']?.toString() ??
-                      'قارئ',
-              moshaf:
-                  moshafList,
+                  name.isEmpty
+                      ? 'قارئ'
+                      : name,
+              moshaf: moshafList,
             ),
           );
         }
       }
 
-      final suwar =
-          <QuranSura>[];
+      final suwar = <QuranSura>[];
 
       if (suraList is List) {
-        for (final item in suraList) {
-          if (item is! Map) {
+        for (final raw in suraList) {
+          if (raw is! Map) {
             continue;
           }
 
-          final id =
-              int.tryParse(
+          final id = int.tryParse(
             (
-              item['id'] ??
-              item['sura_id'] ??
-              item['number'] ??
+              raw['id'] ??
+              raw['sura_id'] ??
+              raw['number'] ??
               ''
             ).toString(),
           );
@@ -589,19 +618,28 @@ class AiService {
             continue;
           }
 
+          final name = (
+            raw['name'] ??
+            raw['sura_name'] ??
+            raw['title'] ??
+            'سورة $id'
+          ).toString().trim();
+
           suwar.add(
             QuranSura(
               id: id,
               name:
-                  (
-                    item['name'] ??
-                    item['sura_name'] ??
-                    'سورة'
-                  ).toString(),
+                  name.isEmpty
+                      ? 'سورة $id'
+                      : name,
             ),
           );
         }
       }
+
+      suwar.sort(
+        (a, b) => a.id.compareTo(b.id),
+      );
 
       return QuranCatalog(
         reciters: reciters,
@@ -626,10 +664,13 @@ class AiService {
             ),
             headers: const {
               'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
             },
           )
           .timeout(
-            const Duration(seconds: 20),
+            const Duration(
+              seconds: 20,
+            ),
           );
 
       if (response.statusCode < 200 ||
@@ -637,43 +678,55 @@ class AiService {
         return [];
       }
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (data == null ||
           data['countries'] is! List) {
         return [];
       }
 
-      return (data['countries'] as List)
-          .whereType<Map>()
-          .map(
-            (item) => RadioCountry(
-              name:
-                  item['name']?.toString() ??
-                      '',
-              code:
-                  (
-                    item['iso'] ??
-                    item['code'] ??
-                    ''
-                  ).toString(),
-              stationCount:
-                  int.tryParse(
-                        (
-                          item['stationCount'] ??
-                          0
-                        ).toString(),
-                      ) ??
-                      0,
-            ),
-          )
-          .where(
-            (item) =>
-                item.name.isNotEmpty &&
-                item.code.isNotEmpty,
-          )
-          .toList();
+      final result = <RadioCountry>[];
+
+      for (final raw
+          in data['countries'] as List) {
+        if (raw is! Map) {
+          continue;
+        }
+
+        final country = RadioCountry(
+          name:
+              raw['name']?.toString() ?? '',
+          code: (
+            raw['iso'] ??
+            raw['code'] ??
+            ''
+          ).toString(),
+          stationCount:
+              int.tryParse(
+                    (
+                      raw['stationCount'] ??
+                      raw['station_count'] ??
+                      0
+                    ).toString(),
+                  ) ??
+                  0,
+        );
+
+        if (country.name.trim().isEmpty ||
+            country.code.trim().isEmpty) {
+          continue;
+        }
+
+        result.add(country);
+      }
+
+      result.sort(
+        (a, b) => b.stationCount.compareTo(
+          a.stationCount,
+        ),
+      );
+
+      return result;
     } catch (_) {
       return [];
     }
@@ -687,18 +740,16 @@ class AiService {
       getRadioStations(
     String country,
   ) async {
-    final clean =
-        country.trim();
+    final clean = country.trim();
 
     if (clean.isEmpty) {
       return [];
     }
 
     try {
-      final uri =
-          Uri.parse(
-            radioStationsEndpoint,
-          ).replace(
+      final uri = Uri.parse(
+        radioStationsEndpoint,
+      ).replace(
         queryParameters: {
           'country': clean,
         },
@@ -709,10 +760,13 @@ class AiService {
             uri,
             headers: const {
               'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
             },
           )
           .timeout(
-            const Duration(seconds: 25),
+            const Duration(
+              seconds: 25,
+            ),
           );
 
       if (response.statusCode < 200 ||
@@ -720,58 +774,67 @@ class AiService {
         return [];
       }
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (data == null ||
           data['stations'] is! List) {
         return [];
       }
 
-      return (data['stations'] as List)
-          .whereType<Map>()
-          .map(
-            (item) => RadioStation(
-              id:
-                  item['id']?.toString() ??
-                      '',
-              name:
-                  item['name']?.toString() ??
-                      'محطة',
-              url:
-                  (
-                    item['streamUrl'] ??
-                    item['url'] ??
-                    ''
-                  ).toString(),
-              homepage:
-                  item['homepage']?.toString() ??
-                      '',
-              favicon:
-                  item['favicon']?.toString() ??
-                      '',
-              tags:
-                  item['tags']?.toString() ??
-                      '',
-              codec:
-                  item['codec']?.toString() ??
-                      '',
-              bitrate:
-                  int.tryParse(
-                        (
-                          item['bitrate'] ??
-                          0
-                        ).toString(),
-                      ) ??
-                      0,
-            ),
-          )
-          .where(
-            (item) =>
-                item.name.isNotEmpty &&
-                item.url.isNotEmpty,
-          )
-          .toList();
+      final result = <RadioStation>[];
+
+      for (final raw
+          in data['stations'] as List) {
+        if (raw is! Map) {
+          continue;
+        }
+
+        final url = (
+          raw['streamUrl'] ??
+          raw['url'] ??
+          ''
+        ).toString().trim();
+
+        final name = (
+          raw['name'] ??
+          raw['title'] ??
+          'محطة'
+        ).toString().trim();
+
+        if (name.isEmpty ||
+            !_isPlayableHttpUrl(url)) {
+          continue;
+        }
+
+        final station = RadioStation(
+          id: raw['id']?.toString() ?? '',
+          name: name,
+          url: url,
+          homepage:
+              raw['homepage']?.toString() ?? '',
+          favicon: (
+            raw['favicon'] ??
+            raw['logo'] ??
+            ''
+          ).toString(),
+          tags:
+              raw['tags']?.toString() ?? '',
+          codec:
+              raw['codec']?.toString() ?? '',
+          bitrate:
+              int.tryParse(
+                    (
+                      raw['bitrate'] ??
+                      0
+                    ).toString(),
+                  ) ??
+                  0,
+        );
+
+        result.add(station);
+      }
+
+      return result;
     } catch (_) {
       return [];
     }
@@ -793,7 +856,9 @@ class AiService {
             },
           )
           .timeout(
-            const Duration(seconds: 25),
+            const Duration(
+              seconds: 25,
+            ),
           );
 
       if (response.statusCode < 200 ||
@@ -801,55 +866,58 @@ class AiService {
         return [];
       }
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (data == null ||
           data['items'] is! List) {
         return [];
       }
 
-      return (data['items'] as List)
-          .whereType<Map>()
-          .map(
-            (item) => ShortVideoItem(
-              id:
-                  item['id']?.toString() ??
-                      '',
-              title:
-                  item['title']?.toString() ??
-                      '',
-              creator:
-                  (
-                    item['creator'] ??
-                    item['source'] ??
-                    ''
-                  ).toString(),
-              videoUrl:
-                  (
-                    item['videoUrl'] ??
-                    item['url'] ??
-                    ''
-                  ).toString(),
-              thumbnail:
-                  (
-                    item['thumbnail'] ??
-                    item['image'] ??
-                    item['cover'] ??
-                    ''
-                  ).toString(),
-              description:
-                  item['description']
-                          ?.toString() ??
-                      '',
-            ),
-          )
-          .where(
-            (item) =>
-                item.videoUrl.isNotEmpty ||
-                item.thumbnail.isNotEmpty,
-          )
-          .toList();
+      final result = <ShortVideoItem>[];
+
+      for (final raw in data['items'] as List) {
+        if (raw is! Map) {
+          continue;
+        }
+
+        final item = ShortVideoItem(
+          id: raw['id']?.toString() ?? '',
+          title:
+              raw['title']?.toString() ?? '',
+          creator: (
+            raw['creator'] ??
+            raw['source'] ??
+            ''
+          ).toString(),
+          videoUrl: (
+            raw['videoUrl'] ??
+            raw['url'] ??
+            ''
+          ).toString(),
+          thumbnail: (
+            raw['thumbnail'] ??
+            raw['image'] ??
+            raw['cover'] ??
+            ''
+          ).toString(),
+          description:
+              raw['description']?.toString() ?? '',
+        );
+
+        if (item.videoUrl.trim().isEmpty &&
+            item.thumbnail.trim().isEmpty) {
+          continue;
+        }
+
+        result.add(item);
+
+        if (result.length >=
+            AppConfig.maximumShortsItems) {
+          break;
+        }
+      }
+
+      return result;
     } catch (_) {
       return [];
     }
@@ -859,11 +927,63 @@ class AiService {
   // HELPERS
   // ============================================================
 
+  static List<Map<String, String>> _limitHistory(
+    List<Map<String, String>> history,
+  ) {
+    if (history.isEmpty) {
+      return const [];
+    }
+
+    final cleaned = <Map<String, String>>[];
+
+    for (final item in history) {
+      final role = item['role']?.trim() ?? '';
+      final content =
+          item['content']?.trim() ?? '';
+
+      if (role.isEmpty ||
+          content.isEmpty) {
+        continue;
+      }
+
+      cleaned.add({
+        'role': role,
+        'content': content,
+      });
+    }
+
+    if (cleaned.length <= maxHistory) {
+      return cleaned;
+    }
+
+    return cleaned.sublist(
+      cleaned.length - maxHistory,
+    );
+  }
+
+  static bool _isPlayableHttpUrl(
+    String value,
+  ) {
+    final clean = value.trim();
+
+    if (clean.isEmpty) {
+      return false;
+    }
+
+    final uri = Uri.tryParse(clean);
+
+    if (uri == null) {
+      return false;
+    }
+
+    return uri.scheme == 'http' ||
+        uri.scheme == 'https';
+  }
+
   static Map<String, dynamic>?
       _decodeMap(String body) {
     try {
-      final decoded =
-          jsonDecode(body);
+      final decoded = jsonDecode(body);
 
       if (decoded is Map) {
         return Map<String, dynamic>.from(
@@ -880,13 +1000,10 @@ class AiService {
   static String _serverError(
     http.Response response,
   ) {
-    final data =
-        _decodeMap(response.body);
+    final data = _decodeMap(response.body);
 
     final error =
-        data?['error']
-            ?.toString()
-            .trim();
+        data?['error']?.toString().trim();
 
     if (error != null &&
         error.isNotEmpty) {
