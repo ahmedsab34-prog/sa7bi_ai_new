@@ -1,47 +1,78 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
-import '../ai_service.dart';
 import '../config/credits_config.dart';
+import 'ai_request_service.dart';
 import 'credits_service.dart';
 
 /// خدمة إنشاء الصور داخل المحادثة.
 ///
-/// مسؤوليتها:
+/// المسؤوليات:
 /// - التأكد من وجود Credits كافية.
 /// - خصم تكلفة إنشاء الصورة.
-/// - استدعاء AiService لتوليد الصورة.
-/// - إعادة الـCredits تلقائيًا إذا فشل التوليد.
+/// - إرسال الطلب من خلال AiRequestService.
+/// - الاتصال بالـCloudflare Worker فقط.
+/// - تحويل نتيجة الصورة إلى bytes أو الاحتفاظ بالرابط.
+/// - إعادة Credits تلقائيًا عند فشل الطلب.
 ///
-/// لا تحتوي على واجهة مستخدم.
+/// لا تحتوي هذه الخدمة على أي API Key.
 class ChatImageService {
   ChatImageService({
     CreditsService? creditsService,
-  }) : _credits = creditsService ?? CreditsService.instance;
+  }) : _credits =
+            creditsService ?? CreditsService.instance;
 
   final CreditsService _credits;
+
+  // ============================================================
+  // CONFIG
+  // ============================================================
 
   /// تكلفة إنشاء الصورة الحالية.
   int get imageGenerationCost =>
       CreditsConfig.imageGenerationCost;
 
   /// الرصيد الحالي.
-  int get credits => _credits.credits;
+  int get credits =>
+      _credits.credits;
 
-  /// التأكد من وجود رصيد كافٍ.
+  // ============================================================
+  // CREDIT CHECK
+  // ============================================================
+
+  /// التأكد من وجود رصيد كافٍ لإنشاء صورة.
   Future<bool> canGenerate() async {
+    await _credits.initialize();
+
     return _credits.canAfford(
       CreditsConfig.imageGenerationCost,
     );
   }
 
+  // ============================================================
+  // IMAGE GENERATION
+  // ============================================================
+
   /// إنشاء صورة باستخدام وصف المستخدم.
   ///
-  /// يتم خصم الـCredits قبل الطلب.
-  /// إذا فشل الطلب يتم إرجاع الـCredits للمستخدم.
+  /// المسار:
+  ///
+  /// ChatImageService
+  ///       ↓
+  /// AiRequestService
+  ///       ↓
+  /// Cloudflare Worker
+  ///       ↓
+  /// OpenAI
+  ///
+  /// لا يوجد أي مفتاح OpenAI داخل التطبيق.
   Future<ChatImageGenerationResult> generate(
-    String prompt,
-  ) async {
-    final cleanPrompt = prompt.trim();
+    String prompt, {
+    String? serviceContext,
+    String? serviceTitle,
+  }) async {
+    final cleanPrompt =
+        prompt.trim();
 
     if (cleanPrompt.isEmpty) {
       return const ChatImageGenerationResult.failure(
@@ -49,72 +80,253 @@ class ChatImageService {
       );
     }
 
+    if (cleanPrompt.length > 6000) {
+      return const ChatImageGenerationResult.failure(
+        'وصف الصورة طويل جدًا. حاول تختصر الوصف قليلًا.',
+      );
+    }
+
     await _credits.initialize();
 
-    final cost = CreditsConfig.imageGenerationCost;
+    final cost =
+        CreditsConfig.imageGenerationCost;
 
-    final canAfford = await _credits.canAfford(cost);
+    // ----------------------------------------------------------
+    // CHECK CREDITS
+    // ----------------------------------------------------------
+
+    final canAfford =
+        await _credits.canAfford(cost);
 
     if (!canAfford) {
-      return ChatImageGenerationResult.insufficientCredits(
-        currentCredits: _credits.credits,
-        requiredCredits: cost,
+      return ChatImageGenerationResult
+          .insufficientCredits(
+        currentCredits:
+            _credits.credits,
+        requiredCredits:
+            cost,
       );
     }
 
-    // نحجز التكلفة قبل إرسال الطلب.
-    final spent = await _credits.spend(cost);
+    // ----------------------------------------------------------
+    // SPEND
+    // ----------------------------------------------------------
+
+    final spent =
+        await _credits.spend(cost);
 
     if (!spent) {
-      return ChatImageGenerationResult.insufficientCredits(
-        currentCredits: _credits.credits,
-        requiredCredits: cost,
+      return ChatImageGenerationResult
+          .insufficientCredits(
+        currentCredits:
+            _credits.credits,
+        requiredCredits:
+            cost,
       );
     }
 
+    // ----------------------------------------------------------
+    // AI REQUEST
+    // ----------------------------------------------------------
+
     try {
-      final result = await AiService.generateImage(
-        cleanPrompt,
+      final result =
+          await AiRequestService.generateImage(
+        prompt: cleanPrompt,
+        serviceContext:
+            serviceContext,
+        serviceTitle:
+            serviceTitle,
       );
 
-      if (result.isSuccess) {
-        return ChatImageGenerationResult.success(
-          bytes: result.bytes,
-          imageUrl: result.imageUrl,
-          creditsUsed: cost,
-          remainingCredits: _credits.credits,
+      if (result.trim().isEmpty) {
+        await _refund(cost);
+
+        return ChatImageGenerationResult.failure(
+          'خدمة الصور لم ترجع صورة.',
+          remainingCredits:
+              _credits.credits,
         );
       }
 
-      // فشل التوليد:
-      // نرجع التكلفة للمستخدم حتى لا يخسر Credits
-      // بسبب خطأ في الخدمة.
-      await _credits.add(cost);
+      // --------------------------------------------------------
+      // DATA URL
+      // --------------------------------------------------------
+
+      if (_isDataImageUrl(result)) {
+        try {
+          final bytes =
+              _decodeDataImage(result);
+
+          if (bytes.isEmpty) {
+            await _refund(cost);
+
+            return ChatImageGenerationResult.failure(
+              'الصورة التي رجعتها الخدمة فارغة.',
+              remainingCredits:
+                  _credits.credits,
+            );
+          }
+
+          return ChatImageGenerationResult.success(
+            bytes: bytes,
+            creditsUsed: cost,
+            remainingCredits:
+                _credits.credits,
+          );
+        } catch (_) {
+          await _refund(cost);
+
+          return ChatImageGenerationResult.failure(
+            'تعذر قراءة الصورة التي رجعتها الخدمة.',
+            remainingCredits:
+                _credits.credits,
+          );
+        }
+      }
+
+      // --------------------------------------------------------
+      // NORMAL URL
+      // --------------------------------------------------------
+
+      if (_isHttpUrl(result)) {
+        return ChatImageGenerationResult.success(
+          imageUrl: result,
+          creditsUsed: cost,
+          remainingCredits:
+              _credits.credits,
+        );
+      }
+
+      // --------------------------------------------------------
+      // UNKNOWN RESULT
+      // --------------------------------------------------------
+
+      await _refund(cost);
 
       return ChatImageGenerationResult.failure(
-        result.error ??
-            'تعذر إنشاء الصورة حاليًا. حاول مرة أخرى.',
-        remainingCredits: _credits.credits,
+        'خدمة الصور رجعت نتيجة غير مفهومة.',
+        remainingCredits:
+            _credits.credits,
+      );
+    } on AiRequestException catch (error) {
+      await _refund(cost);
+
+      return ChatImageGenerationResult.failure(
+        error.message,
+        remainingCredits:
+            _credits.credits,
       );
     } catch (_) {
-      // في حالة حدوث خطأ غير متوقع، نعيد الرصيد.
-      await _credits.add(cost);
+      await _refund(cost);
 
       return ChatImageGenerationResult.failure(
         'حصل خطأ أثناء إنشاء الصورة. تم إرجاع الرصيد.',
-        remainingCredits: _credits.credits,
+        remainingCredits:
+            _credits.credits,
       );
     }
   }
+
+  // ============================================================
+  // REFUND
+  // ============================================================
+
+  Future<void> _refund(
+    int amount,
+  ) async {
+    if (amount <= 0) {
+      return;
+    }
+
+    try {
+      await _credits.add(amount);
+    } catch (_) {
+      // لا نسمح بفشل عملية الإرجاع
+      // بإسقاط التطبيق.
+    }
+  }
+
+  // ============================================================
+  // DATA URL HELPERS
+  // ============================================================
+
+  static bool _isDataImageUrl(
+    String value,
+  ) {
+    final clean =
+        value.trim().toLowerCase();
+
+    return clean.startsWith(
+      'data:image/',
+    );
+  }
+
+  static Uint8List _decodeDataImage(
+    String value,
+  ) {
+    final clean =
+        value.trim();
+
+    final comma =
+        clean.indexOf(',');
+
+    if (comma == -1) {
+      throw const FormatException(
+        'Invalid image data URL.',
+      );
+    }
+
+    final encoded =
+        clean.substring(
+      comma + 1,
+    );
+
+    if (encoded.trim().isEmpty) {
+      throw const FormatException(
+        'Empty image data.',
+      );
+    }
+
+    return base64Decode(
+      encoded,
+    );
+  }
+
+  // ============================================================
+  // URL HELPERS
+  // ============================================================
+
+  static bool _isHttpUrl(
+    String value,
+  ) {
+    final uri =
+        Uri.tryParse(
+      value.trim(),
+    );
+
+    if (uri == null) {
+      return false;
+    }
+
+    return uri.scheme == 'https' ||
+        uri.scheme == 'http';
+  }
 }
+
+// ============================================================
+// RESULT
+// ============================================================
 
 /// نتيجة إنشاء صورة داخل المحادثة.
 class ChatImageGenerationResult {
   final Uint8List? bytes;
   final String? imageUrl;
   final String? error;
+
   final int creditsUsed;
   final int remainingCredits;
+
   final int? requiredCredits;
 
   const ChatImageGenerationResult._({
@@ -126,6 +338,10 @@ class ChatImageGenerationResult {
     this.requiredCredits,
   });
 
+  // ============================================================
+  // SUCCESS
+  // ============================================================
+
   const ChatImageGenerationResult.success({
     Uint8List? bytes,
     String? imageUrl,
@@ -135,18 +351,29 @@ class ChatImageGenerationResult {
           bytes: bytes,
           imageUrl: imageUrl,
           creditsUsed: creditsUsed,
-          remainingCredits: remainingCredits,
+          remainingCredits:
+              remainingCredits,
         );
+
+  // ============================================================
+  // FAILURE
+  // ============================================================
 
   const ChatImageGenerationResult.failure(
     String error, {
     int remainingCredits = 0,
   }) : this._(
           error: error,
-          remainingCredits: remainingCredits,
+          remainingCredits:
+              remainingCredits,
         );
 
-  const ChatImageGenerationResult.insufficientCredits({
+  // ============================================================
+  // INSUFFICIENT CREDITS
+  // ============================================================
+
+  const ChatImageGenerationResult
+      .insufficientCredits({
     required int currentCredits,
     required int requiredCredits,
   }) : this._(
@@ -154,20 +381,34 @@ class ChatImageGenerationResult {
               'رصيدك غير كافٍ لإنشاء الصورة. '
               'تحتاج $requiredCredits Credits '
               'ولديك $currentCredits فقط.',
-          remainingCredits: currentCredits,
-          requiredCredits: requiredCredits,
+          remainingCredits:
+              currentCredits,
+          requiredCredits:
+              requiredCredits,
         );
 
+  // ============================================================
+  // STATUS
+  // ============================================================
+
   bool get isSuccess =>
-      (bytes != null && bytes!.isNotEmpty) ||
-      (imageUrl != null && imageUrl!.isNotEmpty);
+      (bytes != null &&
+          bytes!.isNotEmpty) ||
+      (imageUrl != null &&
+          imageUrl!.isNotEmpty);
 
   bool get isInsufficientCredits =>
       requiredCredits != null;
 
   bool get hasImageBytes =>
-      bytes != null && bytes!.isNotEmpty;
+      bytes != null &&
+      bytes!.isNotEmpty;
 
   bool get hasImageUrl =>
-      imageUrl != null && imageUrl!.isNotEmpty;
+      imageUrl != null &&
+      imageUrl!.isNotEmpty;
+
+  bool get hasError =>
+      error != null &&
+      error!.trim().isNotEmpty;
 }
