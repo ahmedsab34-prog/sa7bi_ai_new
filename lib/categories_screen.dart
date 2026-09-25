@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import 'chat_screen.dart';
+import 'service_detail_screen.dart';
 import 'service_config.dart';
 
 class CategoriesScreen extends StatelessWidget {
@@ -116,27 +116,26 @@ class CategoriesScreen extends StatelessWidget {
                           index: index,
                           onTap: () {
                             // ==================================
-                            // DIRECT CHAT
+                            // SERVICE DETAIL
                             // ==================================
                             //
-                            // لا نفتح ServiceDetailScreen.
-                            // الخدمة تدخل مباشرة إلى الشات
-                            // مع الحفاظ على:
-                            // - serviceKey
-                            // - serviceTitle
-                            // - serviceContext
+                            // الخدمة تفتح الآن صفحتها
+                            // الكاملة، ومنها:
+                            // - الشات
+                            // - الصوت
+                            // - الكاميرا
+                            // - الفيديو
+                            // - الكلام إلى نص
+                            // - إنشاء الصور
+                            // - تعديل الصور
+                            // - النص
                             //
                             Navigator.push(
                               context,
                               MaterialPageRoute(
                                 builder: (_) =>
-                                    ChatScreen(
-                                  serviceKey:
-                                      service.serviceKey,
-                                  serviceTitle:
-                                      service.title,
-                                  serviceContext:
-                                      service.aiRole,
+                                    ServiceDetailScreen(
+                                  service: service,
                                 ),
                               ),
                             );
