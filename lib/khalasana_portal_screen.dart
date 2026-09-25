@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-import 'chat_screen.dart';
+import 'service_config.dart';
+import 'service_detail_screen.dart';
 import 'config/service_keys.dart';
 
 /// شاشة خلصانة AI.
 ///
-/// خلصانة تدخل مباشرة إلى المحادثة الحقيقية
-/// بكل أدوات الشات الموجودة في ChatScreen.
+/// تستخدم نفس تخطيط وأدوات صفحات الخدمات،
+/// لكن بسياق عام شامل بدون اختيار قسم محدد.
 class KhalasanaPortalScreen extends StatelessWidget {
   const KhalasanaPortalScreen({
     super.key,
@@ -27,12 +28,21 @@ class KhalasanaPortalScreen extends StatelessWidget {
 إذا فشلت خدمة فعلية، وضح ذلك وقدم بديلًا مفيدًا.
 ''';
 
+  static const Sa7biService khalasanaService =
+      Sa7biService(
+    serviceKey: ServiceKeys.khalasana,
+    title: 'خلصانة AI',
+    description:
+        'المساعد الشامل بكل أدوات صاحبي AI',
+    icon: Icons.auto_awesome_rounded,
+    color: Color(0xFF8EA8FF),
+    aiRole: contextText,
+  );
+
   @override
   Widget build(BuildContext context) {
-    return const ChatScreen(
-      serviceKey: ServiceKeys.khalasana,
-      serviceTitle: 'خلصانة AI',
-      serviceContext: contextText,
+    return const ServiceDetailScreen(
+      service: khalasanaService,
     );
   }
 }
