@@ -5,7 +5,7 @@ const CORS_HEADERS = {
   "Cache-Control": "no-store"
 };
 
-const BACKEND_VERSION = "4.4.0";
+const BACKEND_VERSION = "4.5.0";
 
 const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
@@ -22,10 +22,13 @@ const MAX_TOTAL_CHARS = 24000;
 const MAX_IMAGE_CHARS = 2 * 1024 * 1024;
 const MAX_IMAGE_COUNT = 6;
 
-const MAX_RADIO_STATIONS = 1000;
+const MAX_RADIO_STATIONS = 120;
 
 const MP3QURAN_BASE =
   "https://www.mp3quran.net/api/v3";
+
+const RADIO_BROWSER_BASE =
+  "https://de1.api.radio-browser.info";
 
 function headers(extra = {}) {
   return {
@@ -81,11 +84,35 @@ function decodeXml(value) {
     .replace(/&#x27;/g, "'")
     .replace(/&#(\d+);/g, (_, n) => {
       try {
-        return String.fromCodePoint(Number(n));
+        return String.fromCodePoint(
+          Number(n)
+        );
       } catch {
         return "";
       }
     });
+}
+
+function isHttpUrl(value) {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return false;
+  }
+
+  try {
+    const url = new URL(
+      value.trim()
+    );
+
+    return (
+      url.protocol === "http:" ||
+      url.protocol === "https:"
+    );
+  } catch {
+    return false;
+  }
 }
 
 /* ============================================================
@@ -94,17 +121,28 @@ function decodeXml(value) {
 
 async function readJsonBody(request) {
   const contentLength = Number(
-    request.headers.get("content-length") || "0"
+    request.headers.get(
+      "content-length"
+    ) || "0"
   );
 
-  if (contentLength > MAX_BODY_BYTES) {
-    throw new Error("BODY_TOO_LARGE");
+  if (
+    contentLength > MAX_BODY_BYTES
+  ) {
+    throw new Error(
+      "BODY_TOO_LARGE"
+    );
   }
 
-  const raw = await request.text();
+  const raw =
+    await request.text();
 
-  if (raw.length > MAX_BODY_BYTES) {
-    throw new Error("BODY_TOO_LARGE");
+  if (
+    raw.length > MAX_BODY_BYTES
+  ) {
+    throw new Error(
+      "BODY_TOO_LARGE"
+    );
   }
 
   if (!raw.trim()) {
@@ -114,7 +152,9 @@ async function readJsonBody(request) {
   try {
     return JSON.parse(raw);
   } catch {
-    throw new Error("INVALID_JSON");
+    throw new Error(
+      "INVALID_JSON"
+    );
   }
 }
 
@@ -130,8 +170,15 @@ function cleanMessages(messages) {
   const result = [];
   let total = 0;
 
-  for (const item of messages.slice(-MAX_MESSAGES)) {
-    if (!item || typeof item !== "object") {
+  for (
+    const item of messages.slice(
+      -MAX_MESSAGES
+    )
+  ) {
+    if (
+      !item ||
+      typeof item !== "object"
+    ) {
       continue;
     }
 
@@ -141,13 +188,18 @@ function cleanMessages(messages) {
         : "user";
 
     let content =
-      String(item.content || "").trim();
+      String(
+        item.content || ""
+      ).trim();
 
     if (!content) {
       continue;
     }
 
-    if (content.length > MAX_MESSAGE_CHARS) {
+    if (
+      content.length >
+      MAX_MESSAGE_CHARS
+    ) {
       content =
         content.substring(
           0,
@@ -167,32 +219,54 @@ function cleanMessages(messages) {
       content
     });
 
-    total += content.length;
+    total +=
+      content.length;
   }
 
   return result;
 }
 
-function isValidImageDataUrl(value) {
-  if (typeof value !== "string") {
+function isValidImageDataUrl(
+  value
+) {
+  if (
+    typeof value !== "string"
+  ) {
     return false;
   }
 
-  if (!value.startsWith("data:image/")) {
+  if (
+    !value.startsWith(
+      "data:image/"
+    )
+  ) {
     return false;
   }
 
-  return value.length <= MAX_IMAGE_CHARS;
+  return (
+    value.length <=
+    MAX_IMAGE_CHARS
+  );
 }
 
-function extractImageDataUrls(body) {
+function extractImageDataUrls(
+  body
+) {
   const result = [];
 
-  if (Array.isArray(body.imageDataUrls)) {
-    for (const item of body.imageDataUrls) {
+  if (
+    Array.isArray(
+      body.imageDataUrls
+    )
+  ) {
+    for (
+      const item of
+        body.imageDataUrls
+    ) {
       if (
-        typeof item !== "string" ||
-        !isValidImageDataUrl(item)
+        !isValidImageDataUrl(
+          item
+        )
       ) {
         continue;
       }
@@ -210,7 +284,8 @@ function extractImageDataUrls(body) {
 
   if (
     result.length === 0 &&
-    typeof body.imageDataUrl === "string" &&
+    typeof body.imageDataUrl ===
+      "string" &&
     body.imageDataUrl.trim()
   ) {
     if (
@@ -237,33 +312,48 @@ function extractOutputText(data) {
   }
 
   if (
-    typeof data.output_text === "string"
+    typeof data.output_text ===
+    "string"
   ) {
     return data.output_text.trim();
   }
 
-  if (Array.isArray(data.output)) {
+  if (
+    Array.isArray(data.output)
+  ) {
     const parts = [];
 
-    for (const item of data.output) {
+    for (
+      const item of data.output
+    ) {
       if (
         !item ||
-        !Array.isArray(item.content)
+        !Array.isArray(
+          item.content
+        )
       ) {
         continue;
       }
 
-      for (const content of item.content) {
+      for (
+        const content of
+          item.content
+      ) {
         if (
           content &&
-          typeof content.text === "string"
+          typeof content.text ===
+            "string"
         ) {
-          parts.push(content.text);
+          parts.push(
+            content.text
+          );
         }
       }
     }
 
-    return parts.join("\n").trim();
+    return parts
+      .join("\n")
+      .trim();
   }
 
   return "";
@@ -273,7 +363,9 @@ async function callOpenAI(
   env,
   body
 ) {
-  if (!env.OPENAI_API_KEY) {
+  if (
+    !env.OPENAI_API_KEY
+  ) {
     throw new Error(
       "OPENAI_API_KEY_MISSING"
     );
@@ -304,7 +396,8 @@ async function callOpenAI(
   let data;
 
   try {
-    data = JSON.parse(raw);
+    data =
+      JSON.parse(raw);
   } catch {
     data = {
       raw
@@ -331,7 +424,9 @@ async function handleChat(
   env
 ) {
   const body =
-    await readJsonBody(request);
+    await readJsonBody(
+      request
+    );
 
   const messages =
     cleanMessages(
@@ -339,7 +434,9 @@ async function handleChat(
     );
 
   const images =
-    extractImageDataUrls(body);
+    extractImageDataUrls(
+      body
+    );
 
   if (
     messages.length === 0 &&
@@ -359,7 +456,8 @@ async function handleChat(
     Array.isArray(
       body.imageDataUrls
     ) &&
-    body.imageDataUrls.length > 0 &&
+    body.imageDataUrls.length >
+      0 &&
     images.length === 0
   ) {
     return json(
@@ -373,7 +471,8 @@ async function handleChat(
   }
 
   const serviceTitle =
-    typeof body.serviceTitle === "string"
+    typeof body.serviceTitle ===
+    "string"
       ? body.serviceTitle.substring(
           0,
           200
@@ -381,47 +480,65 @@ async function handleChat(
       : "صاحبي AI";
 
   const serviceContext =
-    typeof body.serviceContext === "string"
+    typeof body.serviceContext ===
+    "string"
       ? body.serviceContext.substring(
           0,
-          1000
+          1200
         )
       : "";
 
   const input = [];
 
-  for (const message of messages) {
+  for (
+    const message of messages
+  ) {
     input.push({
       role: message.role,
+
       content: [
         {
-          type: "input_text",
-          text: message.content
+          type:
+            "input_text",
+
+          text:
+            message.content
         }
       ]
     });
   }
 
-  if (images.length > 0) {
+  if (
+    images.length > 0
+  ) {
     const content = [
       {
-        type: "input_text",
+        type:
+          "input_text",
+
         text:
           images.length === 1
-            ? "حلل الصورة المرفقة فعليًا بدقة. صف ما يظهر فيها، واقرأ النصوص إن وجدت، وقدم إجابة عربية عملية ومفيدة. لا تخمن الأشياء غير الواضحة."
+            ? "حلل الصورة المرفقة فعليًا بدقة. صف ما يظهر فيها، اقرأ النصوص إن وجدت، وقدم إجابة عربية عملية. لا تخمن الأشياء غير الواضحة."
             : "الصور المرفقة عبارة عن لقطات متتابعة من نفس المحتوى أو الفيديو. حللها معًا واربط المعلومات الظاهرة بينها. لا تدّعي أنك شاهدت كل ثانية من الفيديو."
       }
     ];
 
-    for (const image of images) {
+    for (
+      const image of images
+    ) {
       content.push({
-        type: "input_image",
-        image_url: image
+        type:
+          "input_image",
+
+        image_url:
+          image
       });
     }
 
     input.push({
-      role: "user",
+      role:
+        "user",
+
       content
     });
   }
@@ -459,17 +576,25 @@ ${serviceContext}
       env,
       {
         model,
+
         instructions,
+
         input,
+
         reasoning: {
-          effort: "none"
+          effort:
+            "none"
         },
-        max_output_tokens: 1200
+
+        max_output_tokens:
+          1200
       }
     );
 
   const answer =
-    extractOutputText(data);
+    extractOutputText(
+      data
+    );
 
   if (!answer) {
     return json(
@@ -484,8 +609,11 @@ ${serviceContext}
 
   return json({
     ok: true,
+
     answer,
+
     model,
+
     backendVersion:
       BACKEND_VERSION
   });
@@ -499,7 +627,9 @@ async function handleImageGeneration(
   request,
   env
 ) {
-  if (!env.OPENAI_API_KEY) {
+  if (
+    !env.OPENAI_API_KEY
+  ) {
     return json(
       {
         ok: false,
@@ -511,10 +641,13 @@ async function handleImageGeneration(
   }
 
   const body =
-    await readJsonBody(request);
+    await readJsonBody(
+      request
+    );
 
   const prompt =
-    typeof body.prompt === "string"
+    typeof body.prompt ===
+    "string"
       ? body.prompt.trim()
       : "";
 
@@ -575,7 +708,8 @@ async function handleImageGeneration(
   let data;
 
   try {
-    data = JSON.parse(raw);
+    data =
+      JSON.parse(raw);
   } catch {
     data = {};
   }
@@ -584,6 +718,7 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
+
         error:
           data?.error?.message ||
           "IMAGE_GENERATION_FAILED"
@@ -593,7 +728,9 @@ async function handleImageGeneration(
   }
 
   const item =
-    Array.isArray(data.data) &&
+    Array.isArray(
+      data.data
+    ) &&
     data.data.length > 0
       ? data.data[0]
       : null;
@@ -609,7 +746,11 @@ async function handleImageGeneration(
     );
   }
 
-  if (item.b64_json) {
+  if (
+    typeof item.b64_json ===
+      "string" &&
+    item.b64_json.trim()
+  ) {
     return json({
       ok: true,
 
@@ -624,7 +765,8 @@ async function handleImageGeneration(
   }
 
   if (
-    typeof item.url === "string" &&
+    typeof item.url ===
+      "string" &&
     item.url.trim()
   ) {
     return json({
@@ -666,9 +808,10 @@ async function fetchJson(
 
         headers: {
           "User-Agent":
-            "Sa7bi-AI/4.4.0",
+            "Sa7bi-AI/4.5.0",
 
-          ...(options.headers || {})
+          ...(options.headers ||
+            {})
         },
 
         cache:
@@ -693,40 +836,53 @@ async function handleAudioSearch(
   request
 ) {
   const url =
-    new URL(request.url);
+    new URL(
+      request.url
+    );
 
   const query =
     normalizeArabic(
-      url.searchParams.get("q") ||
-        ""
+      url.searchParams.get(
+        "q"
+      ) || ""
     );
 
   const type =
     (
-      url.searchParams.get("type") ||
+      url.searchParams.get(
+        "type"
+      ) ||
       "quran"
     ).toLowerCase();
 
-  if (type === "quran") {
+  if (
+    type === "quran"
+  ) {
     return handleQuranSearch(
       query
     );
   }
 
-  if (type === "adhkar") {
+  if (
+    type === "adhkar"
+  ) {
     return handleAdhkarSearch(
       query
     );
   }
 
-  if (type === "music") {
+  if (
+    type === "music"
+  ) {
     return handleAppleSearch(
       query,
       "music"
     );
   }
 
-  if (type === "podcast") {
+  if (
+    type === "podcast"
+  ) {
     return handleAppleSearch(
       query,
       "podcast"
@@ -735,7 +891,9 @@ async function handleAudioSearch(
 
   return json({
     ok: true,
+
     items: [],
+
     type
   });
 }
@@ -760,7 +918,9 @@ async function handleQuranSearch(
 
     if (query) {
       const q =
-        normalizeArabic(query);
+        normalizeArabic(
+          query
+        );
 
       items =
         items.filter(
@@ -811,9 +971,11 @@ async function handleQuranSearch(
     return json(
       {
         ok: false,
+
         error:
           error?.message ||
           "QURAN_SEARCH_FAILED",
+
         items: []
       },
       502
@@ -835,7 +997,7 @@ async function handleAdhkarSearch(
         {
           headers: {
             "User-Agent":
-              "Sa7bi-AI/4.4.0"
+              "Sa7bi-AI/4.5.0"
           },
 
           cache:
@@ -860,9 +1022,13 @@ async function handleAdhkarSearch(
     const result = [];
 
     const q =
-      normalizeArabic(query);
+      normalizeArabic(
+        query
+      );
 
-    for (const group of groups) {
+    for (
+      const group of groups
+    ) {
       if (!group) {
         continue;
       }
@@ -873,13 +1039,19 @@ async function handleAdhkarSearch(
         "أذكار";
 
       const array =
-        Array.isArray(group.array)
+        Array.isArray(
+          group.array
+        )
           ? group.array
-          : Array.isArray(group.content)
+          : Array.isArray(
+              group.content
+            )
             ? group.content
             : [];
 
-      for (const item of array) {
+      for (
+        const item of array
+      ) {
         if (!item) {
           continue;
         }
@@ -906,10 +1078,18 @@ async function handleAdhkarSearch(
           continue;
         }
 
+        const audio =
+          item.audio ||
+          item.audioUrl ||
+          item.url ||
+          "";
+
         result.push({
           id:
             item.id ||
-            `adhkar-${result.length + 1}`,
+            `adhkar-${
+              result.length + 1
+            }`,
 
           title:
             category,
@@ -923,30 +1103,30 @@ async function handleAdhkarSearch(
             1,
 
           url:
-            item.audio ||
-            item.audioUrl ||
-            item.url ||
-            "",
+            isHttpUrl(audio)
+              ? audio
+              : "",
 
           audio:
-            item.audio ||
-            item.audioUrl ||
-            item.url ||
-            "",
+            isHttpUrl(audio)
+              ? audio
+              : "",
 
           type:
             "adhkar"
         });
 
         if (
-          result.length >= 80
+          result.length >=
+          80
         ) {
           break;
         }
       }
 
       if (
-        result.length >= 80
+        result.length >=
+        80
       ) {
         break;
       }
@@ -993,7 +1173,9 @@ function extractPodcastEpisode(
         /<item\b[\s\S]*?<\/item>/gi
       ) || [];
 
-  for (const block of blocks) {
+  for (
+    const block of blocks
+  ) {
     const titleMatch =
       block.match(
         /<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i
@@ -1013,7 +1195,9 @@ function extractPodcastEpisode(
         enclosureMatch[1]
       ).trim();
 
-    if (!url) {
+    if (
+      !isHttpUrl(url)
+    ) {
       continue;
     }
 
@@ -1039,8 +1223,7 @@ async function resolvePodcastAudio(
   feedUrl
 ) {
   if (
-    typeof feedUrl !== "string" ||
-    !feedUrl.trim()
+    !isHttpUrl(feedUrl)
   ) {
     return null;
   }
@@ -1052,7 +1235,7 @@ async function resolvePodcastAudio(
         {
           headers: {
             "User-Agent":
-              "Sa7bi-AI/4.4.0"
+              "Sa7bi-AI/4.5.0"
           },
 
           cache:
@@ -1126,7 +1309,9 @@ async function handleAppleSearch(
         ? data.results
         : [];
 
-    if (media === "podcast") {
+    if (
+      media === "podcast"
+    ) {
       const items =
         await Promise.all(
           results.map(
@@ -1140,11 +1325,16 @@ async function handleAppleSearch(
                   feedUrl
                 );
 
+              const audioUrl =
+                episode?.url ||
+                item.previewUrl ||
+                "";
+
               return {
                 id:
                   item.collectionId ||
                   item.trackId ||
-                  `podcast-${Math.random()}`,
+                  `podcast-${Date.now()}-${Math.random()}`,
 
                 title:
                   episode?.title ||
@@ -1162,14 +1352,15 @@ async function handleAppleSearch(
                   "",
 
                 previewUrl:
-                  episode?.url ||
                   item.previewUrl ||
                   "",
 
                 url:
-                  episode?.url ||
-                  item.previewUrl ||
-                  "",
+                  isHttpUrl(
+                    audioUrl
+                  )
+                    ? audioUrl
+                    : "",
 
                 feedUrl,
 
@@ -1233,8 +1424,12 @@ async function handleAppleSearch(
             "",
 
           url:
-            item.previewUrl ||
-            "",
+            isHttpUrl(
+              item.previewUrl ||
+              ""
+            )
+              ? item.previewUrl
+              : "",
 
           feedUrl:
             item.feedUrl ||
@@ -1252,6 +1447,10 @@ async function handleAppleSearch(
           type:
             "music"
         })
+      )
+      .filter(
+        item =>
+          item.title
       );
 
     return json({
@@ -1343,47 +1542,69 @@ async function handleQuranCatalog() {
                 "",
 
               moshaf:
-                moshaf.map(
-                  (m, index) => ({
-                    id:
-                      m.id ||
-                      index + 1,
+                moshaf
+                  .map(
+                    (
+                      m,
+                      index
+                    ) => ({
+                      id:
+                        m.id ||
+                        index + 1,
 
-                    name:
-                      m.name ||
-                      "رواية",
+                      name:
+                        m.name ||
+                        "رواية",
 
-                    server:
-                      m.server ||
-                      "",
+                      server:
+                        m.server ||
+                        "",
 
-                    surahTotal:
-                      m.surah_total ||
-                      m.surahTotal ||
-                      114,
+                      surahTotal:
+                        m.surah_total ||
+                        m.surahTotal ||
+                        114,
 
-                    suras:
-                      m.suras ||
-                      ""
-                  })
-                )
+                      suras:
+                        m.suras ||
+                        ""
+                    })
+                  )
+                  .filter(
+                    m =>
+                      isHttpUrl(
+                        m.server
+                      )
+                  )
             };
           }
+        )
+        .filter(
+          reciter =>
+            reciter.moshaf
+              .length > 0
         ),
 
       suras:
-        suwar.map(
-          sura => ({
-            id:
-              sura.id ||
-              sura.sura_id,
+        suwar
+          .map(
+            sura => ({
+              id:
+                sura.id ||
+                sura.sura_id,
 
-            name:
-              sura.name ||
-              sura.sura_name ||
-              "سورة"
-          })
-        ),
+              name:
+                sura.name ||
+                sura.sura_name ||
+                "سورة"
+            })
+          )
+          .filter(
+            sura =>
+              Number(sura.id) >= 1 &&
+              Number(sura.id) <=
+                114
+          ),
 
       backendVersion:
         BACKEND_VERSION
@@ -1414,7 +1635,7 @@ async function handleRadioCountries() {
   try {
     const data =
       await fetchJson(
-        "https://de1.api.radio-browser.info/json/countries?hidebroken=true"
+        `${RADIO_BROWSER_BASE}/json/countries?hidebroken=true`
       );
 
     const countries =
@@ -1460,10 +1681,8 @@ async function handleRadioCountries() {
           )
           .sort(
             (a, b) =>
-              a.name.localeCompare(
-                b.name,
-                "ar"
-              )
+              b.stationCount -
+              a.stationCount
           ),
 
       backendVersion:
@@ -1493,7 +1712,9 @@ async function handleRadioStations(
   request
 ) {
   const url =
-    new URL(request.url);
+    new URL(
+      request.url
+    );
 
   const country =
     (
@@ -1518,841 +1739,4 @@ async function handleRadioStations(
 
   try {
     const endpoint =
-      "https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/" +
-      encodeURIComponent(country) +
-      "?hidebroken=true" +
-      "&order=clickcount" +
-      "&reverse=true" +
-      `&limit=${MAX_RADIO_STATIONS}`;
-
-    const data =
-      await fetchJson(
-        endpoint
-      );
-
-    const stations =
-      Array.isArray(data)
-        ? data
-        : [];
-
-    return json({
-      ok: true,
-
-      country,
-
-      stations:
-        stations
-          .filter(
-            station =>
-              station &&
-              (
-                station.url_resolved ||
-                station.url
-              )
-          )
-          .map(
-            station => ({
-              id:
-                station.stationuuid ||
-                station.stationId ||
-                station.name,
-
-              name:
-                station.name ||
-                "محطة إذاعية",
-
-              streamUrl:
-                station.url_resolved ||
-                station.url ||
-                "",
-
-              url:
-                station.url_resolved ||
-                station.url ||
-                "",
-
-              homepage:
-                station.homepage ||
-                "",
-
-              favicon:
-                station.favicon ||
-                "",
-
-              tags:
-                station.tags ||
-                "",
-
-              codec:
-                station.codec ||
-                "",
-
-              bitrate:
-                Number(
-                  station.bitrate ||
-                  0
-                )
-            })
-          ),
-
-      backendVersion:
-        BACKEND_VERSION
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-
-        error:
-          error?.message ||
-          "RADIO_STATIONS_FAILED",
-
-        stations: []
-      },
-      502
-    );
-  }
-}
-
-/* ============================================================
-   SHORTS
-============================================================ */
-
-async function handleShorts() {
-  try {
-    const data =
-      await fetchJson(
-        `${MP3QURAN_BASE}/videos?language=ar`
-      );
-
-    /*
-     * MP3Quran يرجع:
-     *
-     * {
-     *   videos: [
-     *     {
-     *       reciter_name: "...",
-     *       videos: [...]
-     *     }
-     *   ]
-     * }
-     *
-     * لذلك لا نتعامل مع data.videos
-     * كأنها فيديوهات نهائية.
-     */
-
-    const groups =
-      Array.isArray(
-        data?.videos
-      )
-        ? data.videos
-        : [];
-
-    const items = [];
-
-    for (
-      const group of groups
-    ) {
-      if (!group) {
-        continue;
-      }
-
-      const creator =
-        group.reciter_name ||
-        group.name ||
-        "MP3Quran";
-
-      const videos =
-        Array.isArray(
-          group.videos
-        )
-          ? group.videos
-          : [];
-
-      for (
-        const video of videos
-      ) {
-        if (!video) {
-          continue;
-        }
-
-        const videoUrl =
-          video.video_url ||
-          video.url ||
-          "";
-
-        if (!videoUrl) {
-          continue;
-        }
-
-        items.push({
-          id:
-            video.id ||
-            `${group.id || "video"}-${items.length}`,
-
-          title:
-            video.title ||
-            video.name ||
-            `تلاوة مرئية - ${creator}`,
-
-          description:
-            video.description ||
-            "",
-
-          thumbnail:
-            video.video_thumb_url ||
-            video.thumbnail ||
-            video.image ||
-            "",
-
-          videoUrl,
-
-          creator,
-
-          source:
-            "MP3Quran",
-
-          type:
-            "short"
-        });
-
-        if (
-          items.length >= 50
-        ) {
-          break;
-        }
-      }
-
-      if (
-        items.length >= 50
-      ) {
-        break;
-      }
-    }
-
-    return json({
-      ok: true,
-
-      items,
-
-      backendVersion:
-        BACKEND_VERSION
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-
-        error:
-          error?.message ||
-          "SHORTS_FAILED",
-
-        items: [],
-
-        backendVersion:
-          BACKEND_VERSION
-      },
-      502
-    );
-  }
-}
-
-/* ============================================================
-   NEWS
-============================================================ */
-
-function extractNewsImage(
-  value
-) {
-  const text =
-    String(value || "");
-
-  const match =
-    text.match(
-      /<img[^>]+src=["']([^"']+)["']/i
-    ) ||
-    text.match(
-      /<img[^>]+url=["']([^"']+)["']/i
-    );
-
-  return match
-    ? decodeXml(match[1])
-    : "";
-}
-
-function parseRssItems(
-  xml
-) {
-  const items = [];
-
-  const matches =
-    String(xml || "")
-      .match(
-        /<item\b[\s\S]*?<\/item>/gi
-      ) || [];
-
-  for (
-    const block of matches
-  ) {
-    const getTag =
-      tag => {
-        const regex =
-          new RegExp(
-            `<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`,
-            "i"
-          );
-
-        const match =
-          block.match(regex);
-
-        if (!match) {
-          return "";
-        }
-
-        return decodeXml(
-          match[1]
-            .replace(
-              /<!\[CDATA\[([\s\S]*?)\]\]>/g,
-              "$1"
-            )
-            .trim()
-        );
-      };
-
-    const title =
-      stripHtml(
-        getTag("title")
-      );
-
-    const link =
-      getTag("link");
-
-    const pubDate =
-      getTag("pubDate");
-
-    const description =
-      getTag(
-        "description"
-      );
-
-    const encoded =
-      getTag(
-        "content:encoded"
-      );
-
-    const mediaImageMatch =
-      block.match(
-        /<(?:media:content|media:thumbnail)[^>]+url=["']([^"']+)["']/i
-      ) ||
-      block.match(
-        /<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\//i
-      );
-
-    const image =
-      extractNewsImage(
-        description
-      ) ||
-      extractNewsImage(
-        encoded
-      ) ||
-      (
-        mediaImageMatch
-          ? decodeXml(
-              mediaImageMatch[1]
-            )
-          : ""
-      );
-
-    if (
-      !title ||
-      !link
-    ) {
-      continue;
-    }
-
-    items.push({
-      id:
-        link,
-
-      title,
-
-      link,
-
-      pubDate,
-
-      description:
-        stripHtml(
-          description ||
-          encoded
-        ),
-
-      image,
-
-      imageUrl:
-        image,
-
-      source:
-        "Google News"
-    });
-  }
-
-  return items;
-}
-
-async function fetchGoogleNews() {
-  const feeds = [
-    "https://news.google.com/rss?hl=ar&gl=EG&ceid=EG:ar",
-    "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
-  ];
-
-  for (
-    const feed of feeds
-  ) {
-    try {
-      const separator =
-        feed.includes("?")
-          ? "&"
-          : "?";
-
-      const freshFeed =
-        `${feed}${separator}_=${Date.now()}`;
-
-      const response =
-        await fetch(
-          freshFeed,
-          {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 Sa7bi-AI/4.4.0",
-
-              "Cache-Control":
-                "no-cache"
-            },
-
-            cache:
-              "no-store"
-          }
-        );
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const xml =
-        await response.text();
-
-      const items =
-        parseRssItems(xml);
-
-      if (
-        items.length > 0
-      ) {
-        return items;
-      }
-    } catch {}
-  }
-
-  return [];
-}
-
-async function handleNews() {
-  try {
-    const items =
-      await fetchGoogleNews();
-
-    return json({
-      ok: true,
-
-      items:
-        items.slice(
-          0,
-          40
-        ),
-
-      backendVersion:
-        BACKEND_VERSION,
-
-      refreshedAt:
-        new Date().toISOString()
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-
-        error:
-          error?.message ||
-          "NEWS_FAILED",
-
-        items: []
-      },
-      502
-    );
-  }
-}
-
-/* ============================================================
-   ROOT
-============================================================ */
-
-async function handleRoot() {
-  return json({
-    ok: true,
-
-    app:
-      "Sa7bi AI",
-
-    backendVersion:
-      BACKEND_VERSION,
-
-    status:
-      "online",
-
-    features: {
-      chat:
-        true,
-
-      imageAnalysis:
-        true,
-
-      multiImageVision:
-        true,
-
-      videoFrameAnalysis:
-        true,
-
-      imageGeneration:
-        true,
-
-      news:
-        true,
-
-      audio:
-        true,
-
-      radio:
-        true,
-
-      shorts:
-        true
-    },
-
-    endpoints: {
-      chat:
-        "/v1/chat",
-
-      image:
-        "/v1/image",
-
-      news:
-        "/v1/news",
-
-      audio:
-        "/v1/audio/search-v4",
-
-      quran:
-        "/v1/audio/quran",
-
-      radioCountries:
-        "/v1/radio/countries",
-
-      radioStations:
-        "/v1/radio/stations?country=EG",
-
-      shorts:
-        "/v1/shorts",
-
-      download:
-        "/download",
-
-      health:
-        "/health"
-    }
-  });
-}
-
-/* ============================================================
-   DOWNLOAD
-============================================================ */
-
-function handleDownload() {
-  return Response.redirect(
-    DOWNLOAD_URL,
-    302
-  );
-}
-
-/* ============================================================
-   WORKER
-============================================================ */
-
-export default {
-  async fetch(
-    request,
-    env
-  ) {
-    try {
-      if (
-        request.method ===
-        "OPTIONS"
-      ) {
-        return new Response(
-          null,
-          {
-            status: 204,
-            headers:
-              headers()
-          }
-        );
-      }
-
-      const url =
-        new URL(
-          request.url
-        );
-
-      const path =
-        url.pathname.replace(
-          /\/+$/,
-          ""
-        ) || "/";
-
-      /* ROOT */
-
-      if (
-        request.method === "GET" &&
-        path === "/"
-      ) {
-        return handleRoot();
-      }
-
-      /* HEALTH */
-
-      if (
-        request.method === "GET" &&
-        path === "/health"
-      ) {
-        return json({
-          ok: true,
-
-          status:
-            "online",
-
-          backendVersion:
-            BACKEND_VERSION,
-
-          openaiConfigured:
-            Boolean(
-              env.OPENAI_API_KEY
-            ),
-
-          textModel:
-            env.OPENAI_MODEL ||
-            DEFAULT_TEXT_MODEL,
-
-          imageModel:
-            env.OPENAI_IMAGE_MODEL ||
-            DEFAULT_IMAGE_MODEL
-        });
-      }
-
-      /* DOWNLOAD */
-
-      if (
-        request.method === "GET" &&
-        path === "/download"
-      ) {
-        return handleDownload();
-      }
-
-      /* NEWS */
-
-      if (
-        request.method === "GET" &&
-        (
-          path === "/v1/news" ||
-          path === "/news"
-        )
-      ) {
-        return handleNews();
-      }
-
-      /* AUDIO SEARCH */
-
-      if (
-        request.method === "GET" &&
-        (
-          path ===
-            "/v1/audio/search" ||
-          path ===
-            "/v1/audio/search-v4" ||
-          path ===
-            "/audio/search"
-        )
-      ) {
-        return handleAudioSearch(
-          request
-        );
-      }
-
-      /* QURAN CATALOG */
-
-      if (
-        request.method === "GET" &&
-        (
-          path ===
-            "/v1/audio/quran" ||
-          path ===
-            "/audio/quran"
-        )
-      ) {
-        return handleQuranCatalog();
-      }
-
-      /* RADIO COUNTRIES */
-
-      if (
-        request.method === "GET" &&
-        (
-          path ===
-            "/v1/radio/countries" ||
-          path ===
-            "/radio/countries"
-        )
-      ) {
-        return handleRadioCountries();
-      }
-
-      /* RADIO STATIONS */
-
-      if (
-        request.method === "GET" &&
-        (
-          path ===
-            "/v1/radio/stations" ||
-          path ===
-            "/radio/stations"
-        )
-      ) {
-        return handleRadioStations(
-          request
-        );
-      }
-
-      /* SHORTS */
-
-      if (
-        request.method === "GET" &&
-        (
-          path ===
-            "/v1/shorts" ||
-          path ===
-            "/shorts"
-        )
-      ) {
-        return handleShorts();
-      }
-
-      /* CHAT */
-
-      if (
-        request.method === "POST" &&
-        (
-          path ===
-            "/v1/chat" ||
-          path ===
-            "/chat"
-        )
-      ) {
-        return handleChat(
-          request,
-          env
-        );
-      }
-
-      /* IMAGE */
-
-      if (
-        request.method === "POST" &&
-        (
-          path ===
-            "/v1/image" ||
-          path ===
-            "/image"
-        )
-      ) {
-        return handleImageGeneration(
-          request,
-          env
-        );
-      }
-
-      return json(
-        {
-          ok: false,
-
-          error:
-            "NOT_FOUND",
-
-          path
-        },
-        404
-      );
-    } catch (error) {
-      const message =
-        error?.message ||
-        "INTERNAL_SERVER_ERROR";
-
-      if (
-        message ===
-        "BODY_TOO_LARGE"
-      ) {
-        return json(
-          {
-            ok: false,
-            error:
-              "BODY_TOO_LARGE"
-          },
-          413
-        );
-      }
-
-      if (
-        message ===
-        "INVALID_JSON"
-      ) {
-        return json(
-          {
-            ok: false,
-            error:
-              "INVALID_JSON"
-          },
-          400
-        );
-      }
-
-      if (
-        message ===
-        "OPENAI_API_KEY_MISSING"
-      ) {
-        return json(
-          {
-            ok: false,
-            error:
-              "OPENAI_API_KEY_MISSING"
-          },
-          500
-        );
-      }
-
-      return json(
-        {
-          ok: false,
-          error:
-            message
-        },
-        500
-      );
-    }
-  }
-};
+      `${
