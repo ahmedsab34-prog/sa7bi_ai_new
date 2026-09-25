@@ -7,16 +7,18 @@ import 'package:image_picker/image_picker.dart';
 
 import '../config/app_config.dart';
 
-/// نقطة الاتصال الموحدة بالذكاء الاصطناعي.
+/// نقطة الاتصال الموحدة بخدمات الذكاء الاصطناعي.
 ///
 /// المسار:
+///
 /// Flutter App
 ///      ↓
 /// Cloudflare Worker
 ///      ↓
 /// OpenAI
 ///
-/// لا يوجد أي API Key داخل التطبيق.
+/// مهم جدًا:
+/// لا يوجد أي OpenAI API Key داخل التطبيق.
 class AiRequestService {
   AiRequestService._();
 
@@ -30,16 +32,21 @@ class AiRequestService {
   static const String chatEndpoint =
       AppConfig.aiChatEndpoint;
 
+  static const String imageEndpoint =
+      AppConfig.imageGenerationEndpoint;
+
   // ============================================================
   // LIMITS
   // ============================================================
 
-  static const int maxHistory = 8;
+  static const int maxHistory =
+      AppConfig.maximumContextMessages;
 
-  static const int maxAttempts = 3;
+  static const int maxAttempts =
+      AppConfig.maximumNetworkAttempts;
 
   static const int maxImageBytes =
-      5 * 1024 * 1024;
+      AppConfig.maximumImageSizeMb * 1024 * 1024;
 
   static const int maxVideoFrames =
       AppConfig.maximumVideoFrames;
@@ -48,36 +55,39 @@ class AiRequestService {
       5 * 1024 * 1024;
 
   static const Duration connectionTimeout =
-      Duration(seconds: 12);
+      Duration(
+    seconds: AppConfig.networkTimeoutSeconds,
+  );
 
   static const Duration chatTimeout =
-      Duration(seconds: 90);
+      Duration(
+    seconds: AppConfig.chatTimeoutSeconds,
+  );
 
   static const Duration imageTimeout =
-      Duration(seconds: 120);
+      Duration(
+    seconds: AppConfig.imageTimeoutSeconds,
+  );
 
   // ============================================================
-  // BACKEND CONNECTION TEST
+  // BACKEND CONNECTION
   // ============================================================
 
-  /// يتأكد أن الـWorker نفسه قابل للوصول قبل إرسال طلب AI.
+  /// فحص اتصال التطبيق بالـWorker.
   ///
-  /// هذا لا يرسل أي API Key من الهاتف.
+  /// لا يتم إرسال أي API Key من الهاتف.
   static Future<BackendConnectionResult>
       checkBackend() async {
     try {
-      final response =
-          await http
-              .get(
-                Uri.parse(base),
-                headers: const {
-                  'Cache-Control': 'no-cache',
-                  'Pragma': 'no-cache',
-                },
-              )
-              .timeout(
-                connectionTimeout,
-              );
+      final response = await http
+          .get(
+            Uri.parse(base),
+            headers: const {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+            },
+          )
+          .timeout(connectionTimeout);
 
       final data =
           _decodeMap(response.body);
@@ -104,15 +114,13 @@ class AiRequestService {
 
       return BackendConnectionResult.success(
         version:
-            data['backendVersion']
-                ?.toString(),
+            data['backendVersion']?.toString(),
       );
     } on TimeoutException {
       return const BackendConnectionResult.failure(
         'الاتصال بخادم صاحبي استغرق وقتًا أطول من اللازم.',
       );
-    } on http.ClientException catch (
-        error) {
+    } on http.ClientException catch (error) {
       return BackendConnectionResult.failure(
         'تعذر الاتصال بخادم صاحبي: ${error.message}',
       );
@@ -127,6 +135,7 @@ class AiRequestService {
   // TEXT CHAT
   // ============================================================
 
+  /// إرسال رسالة نصية إلى صاحبي AI.
   static Future<String> getResponse({
     required String prompt,
     String? serviceContext,
@@ -148,10 +157,6 @@ class AiRequestService {
       );
     }
 
-    // ----------------------------------------------------------
-    // تأكيد أن الـWorker نفسه متاح.
-    // ----------------------------------------------------------
-
     final backend =
         await checkBackend();
 
@@ -162,39 +167,27 @@ class AiRequestService {
       );
     }
 
-    // ----------------------------------------------------------
-    // تجهيز History
-    // ----------------------------------------------------------
-
-    final validHistory =
-        history
-            .where(
-              (item) =>
-                  (item['role'] ==
-                          'user' ||
-                      item['role'] ==
-                          'assistant') &&
-                  (item['content'] ??
-                          '')
-                      .trim()
-                      .isNotEmpty,
-            )
-            .toList();
+    final validHistory = history
+        .where(
+          (item) =>
+              (item['role'] == 'user' ||
+                  item['role'] == 'assistant') &&
+              (item['content'] ?? '')
+                  .trim()
+                  .isNotEmpty,
+        )
+        .toList();
 
     final start =
-        validHistory.length >
-                maxHistory
-            ? validHistory.length -
-                maxHistory
+        validHistory.length > maxHistory
+            ? validHistory.length - maxHistory
             : 0;
 
     final messages =
         <Map<String, String>>[];
 
-    for (
-      final item
-      in validHistory.sublist(start)
-    ) {
+    for (final item
+        in validHistory.sublist(start)) {
       final role =
           item['role'];
 
@@ -225,10 +218,8 @@ class AiRequestService {
 
     _addServiceData(
       body,
-      serviceTitle:
-          serviceTitle,
-      serviceContext:
-          serviceContext,
+      serviceTitle: serviceTitle,
+      serviceContext: serviceContext,
     );
 
     final response =
@@ -242,13 +233,14 @@ class AiRequestService {
   }
 
   // ============================================================
-  // SINGLE IMAGE - XFILE
+  // IMAGE - XFILE
   // ============================================================
 
   static Future<String> analyzeImage({
     required XFile file,
     String prompt =
-        'حلل الصورة المرسلة بدقة وباختصار، واذكر الأشياء المهمة الظاهرة فيها.',
+        'حلل الصورة المرسلة بدقة وباختصار، '
+        'واذكر الأشياء المهمة الظاهرة فيها.',
     String? serviceContext,
     String? serviceTitle,
   }) async {
@@ -261,8 +253,7 @@ class AiRequestService {
       );
     }
 
-    if (bytes.length >
-        maxImageBytes) {
+    if (bytes.length > maxImageBytes) {
       throw const AiRequestException(
         'الصورة كبيرة جدًا. ابعت صورة أصغر من 5 ميجابايت.',
       );
@@ -271,15 +262,13 @@ class AiRequestService {
     return analyzeImageBytes(
       bytes,
       prompt: prompt,
-      serviceContext:
-          serviceContext,
-      serviceTitle:
-          serviceTitle,
+      serviceContext: serviceContext,
+      serviceTitle: serviceTitle,
     );
   }
 
   // ============================================================
-  // SINGLE IMAGE - BYTES
+  // IMAGE - BYTES
   // ============================================================
 
   static Future<String> analyzeImageBytes(
@@ -295,8 +284,7 @@ class AiRequestService {
       );
     }
 
-    if (bytes.length >
-        maxImageBytes) {
+    if (bytes.length > maxImageBytes) {
       throw const AiRequestException(
         'الصورة كبيرة جدًا.',
       );
@@ -305,10 +293,8 @@ class AiRequestService {
     return analyzeImages(
       <Uint8List>[bytes],
       prompt: prompt,
-      serviceContext:
-          serviceContext,
-      serviceTitle:
-          serviceTitle,
+      serviceContext: serviceContext,
+      serviceTitle: serviceTitle,
     );
   }
 
@@ -319,9 +305,10 @@ class AiRequestService {
   static Future<String> analyzeImages(
     List<Uint8List> images, {
     String prompt =
-        'حلل الصور المرفقة معًا باعتبارها لقطات من نفس الفيديو. '
-        'اشرح ما يظهر فيها، وما الذي يحدث عبر اللقطات، '
-        'واذكر أي نصوص أو أدوات أو أشخاص أو أشياء مهمة. '
+        'حلل الصور المرفقة معًا باعتبارها لقطات '
+        'من نفس الفيديو. اشرح ما يظهر فيها، '
+        'وما الذي يحدث عبر اللقطات، واذكر أي '
+        'نصوص أو أدوات أو أشخاص أو أشياء مهمة. '
         'لا تخمن ما لا يظهر بوضوح.',
     String? serviceContext,
     String? serviceTitle,
@@ -332,14 +319,12 @@ class AiRequestService {
       );
     }
 
-    final selected =
-        images
-            .where(
-              (image) =>
-                  image.isNotEmpty,
-            )
-            .take(maxVideoFrames)
-            .toList();
+    final selected = images
+        .where(
+          (image) => image.isNotEmpty,
+        )
+        .take(maxVideoFrames)
+        .toList();
 
     if (selected.isEmpty) {
       throw const AiRequestException(
@@ -347,7 +332,7 @@ class AiRequestService {
       );
     }
 
-    int totalBytes = 0;
+    var totalBytes = 0;
 
     for (final image in selected) {
       totalBytes += image.length;
@@ -355,7 +340,8 @@ class AiRequestService {
       if (totalBytes >
           maxVideoTotalBytes) {
         throw const AiRequestException(
-          'حجم لقطات الفيديو كبير جدًا. حاول إرسال فيديو أقصر أو بجودة أقل.',
+          'حجم لقطات الفيديو كبير جدًا. '
+          'حاول إرسال فيديو أقصر أو بجودة أقل.',
         );
       }
     }
@@ -407,14 +393,10 @@ class AiRequestService {
 
     _addServiceData(
       body,
-      serviceTitle:
-          serviceTitle,
-      serviceContext:
-          null,
+      serviceTitle: serviceTitle,
+      serviceContext: null,
     );
 
-    // نتأكد أن الـWorker قابل للوصول قبل إرسال
-    // البيانات الكبيرة الخاصة بالصور.
     final backend =
         await checkBackend();
 
@@ -433,6 +415,120 @@ class AiRequestService {
     );
 
     return _readAnswer(response);
+  }
+
+  // ============================================================
+  // IMAGE GENERATION
+  // ============================================================
+
+  /// يطلب إنشاء صورة من الـWorker.
+  ///
+  /// النتيجة تكون Data URL أو رابط صورة.
+  static Future<String>
+      generateImage({
+    required String prompt,
+    String? serviceContext,
+    String? serviceTitle,
+  }) async {
+    final cleanPrompt =
+        prompt.trim();
+
+    if (cleanPrompt.isEmpty) {
+      throw const AiRequestException(
+        'اكتب وصف الصورة أولًا.',
+      );
+    }
+
+    if (cleanPrompt.length > 6000) {
+      throw const AiRequestException(
+        'وصف الصورة طويل جدًا.',
+      );
+    }
+
+    final backend =
+        await checkBackend();
+
+    if (!backend.isAvailable) {
+      throw AiRequestException(
+        backend.error ??
+            'خدمة صاحبي غير متاحة حاليًا.',
+      );
+    }
+
+    final body =
+        <String, dynamic>{
+      'prompt': cleanPrompt,
+    };
+
+    _addServiceData(
+      body,
+      serviceTitle: serviceTitle,
+      serviceContext: serviceContext,
+    );
+
+    final response =
+        await _postWithRetry(
+      imageEndpoint,
+      body: body,
+      timeout: imageTimeout,
+    );
+
+    final data =
+        _decodeMap(response.body);
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      throw AiRequestException(
+        _serverError(
+          response.statusCode,
+          data,
+        ),
+        statusCode:
+            response.statusCode,
+      );
+    }
+
+    if (data == null) {
+      throw const AiRequestException(
+        'رد خدمة إنشاء الصور غير مفهوم.',
+      );
+    }
+
+    if (data['ok'] != true) {
+      throw AiRequestException(
+        _errorFromData(
+          data,
+          fallback:
+              'تعذر إنشاء الصورة حاليًا.',
+        ),
+        statusCode:
+            response.statusCode,
+      );
+    }
+
+    final imageDataUrl =
+        data['imageDataUrl']
+            ?.toString()
+            .trim();
+
+    if (imageDataUrl != null &&
+        imageDataUrl.isNotEmpty) {
+      return imageDataUrl;
+    }
+
+    final imageUrl =
+        data['imageUrl']
+            ?.toString()
+            .trim();
+
+    if (imageUrl != null &&
+        imageUrl.isNotEmpty) {
+      return imageUrl;
+    }
+
+    throw const AiRequestException(
+      'خدمة الصور لم ترجع صورة.',
+    );
   }
 
   // ============================================================
@@ -531,7 +627,7 @@ class AiRequestService {
     Object? lastError;
 
     for (
-      int attempt = 1;
+      var attempt = 1;
       attempt <= maxAttempts;
       attempt++
     ) {
@@ -549,8 +645,7 @@ class AiRequestService {
           return response;
         }
 
-        if (attempt >=
-            maxAttempts) {
+        if (attempt >= maxAttempts) {
           return response;
         }
 
@@ -562,17 +657,14 @@ class AiRequestService {
       } catch (error) {
         lastError = error;
 
-        if (attempt >=
-            maxAttempts) {
+        if (attempt >= maxAttempts) {
           if (error
               is AiRequestException) {
             rethrow;
           }
 
           throw AiRequestException(
-            _connectionError(
-              error,
-            ),
+            _connectionError(error),
           );
         }
 
@@ -586,8 +678,7 @@ class AiRequestService {
 
     throw AiRequestException(
       _connectionError(
-        lastError ??
-            'Unknown error',
+        lastError ?? 'Unknown error',
       ),
     );
   }
@@ -633,11 +724,9 @@ class AiRequestService {
       throw const AiRequestException(
         'الاتصال بالخادم استغرق وقتًا أطول من اللازم.',
       );
-    } on http.ClientException catch (
-        error) {
+    } on http.ClientException catch (error) {
       throw AiRequestException(
-        'تعذر الاتصال بالخادم: '
-        '${error.message}',
+        'تعذر الاتصال بالخادم: ${error.message}',
       );
     } on FormatException {
       throw const AiRequestException(
@@ -675,7 +764,7 @@ class AiRequestService {
   }
 
   // ============================================================
-  // ERRORS
+  // ERROR HELPERS
   // ============================================================
 
   static String _errorFromData(
@@ -689,9 +778,7 @@ class AiRequestService {
 
     if (error != null &&
         error.isNotEmpty) {
-      return _friendlyError(
-        error,
-      );
+      return _friendlyError(error);
     }
 
     return fallback;
@@ -774,6 +861,9 @@ class AiRequestService {
       case 'BODY_TOO_LARGE':
         return 'البيانات المرسلة كبيرة جدًا.';
 
+      case 'INVALID_JSON':
+        return 'البيانات المرسلة غير صحيحة.';
+
       case 'NOT_FOUND':
         return 'خدمة الذكاء الاصطناعي غير موجودة حاليًا.';
 
@@ -782,6 +872,12 @@ class AiRequestService {
 
       case 'IMAGE_FORMAT_NOT_SUPPORTED':
         return 'صيغة الصورة التي رجعتها الخدمة غير مدعومة.';
+
+      case 'EMPTY_PROMPT':
+        return 'اكتب وصف الصورة أولًا.';
+
+      case 'IMAGE_GENERATION_FAILED':
+        return 'تعذر إنشاء الصورة حاليًا.';
 
       default:
         if (error.isEmpty) {
