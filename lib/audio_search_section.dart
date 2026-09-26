@@ -253,7 +253,9 @@ extension _AudioSearchSection on _AudioCenterScreenState {
         ...items.map(
           (item) => _audioCard(
             item,
-            () => onPlay(item),
+            () {
+              onPlay(item);
+            },
           ),
         ),
 
@@ -274,15 +276,16 @@ extension _AudioSearchSection on _AudioCenterScreenState {
               final url = item.url.trim();
 
               if (url.isNotEmpty) {
-                return _playUrl(
+                _playUrl(
                   url,
                   item.title,
                   artist: item.artist,
                   artwork: item.artwork,
                 );
+                return;
               }
 
-              return _playAdhkar(item);
+              _playAdhkar(item);
             },
           ),
         )
