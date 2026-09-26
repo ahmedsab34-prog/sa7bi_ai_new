@@ -30,7 +30,8 @@ extension _AudioQuranSection
 
     QuranReciter? selectedReciter;
 
-    for (final reciter in data.reciters) {
+    for (final reciter
+        in data.reciters) {
       if (reciter.moshaf.isNotEmpty) {
         selectedReciter = reciter;
         break;
@@ -41,8 +42,12 @@ extension _AudioQuranSection
         data.reciters.first;
 
     final moshaf =
-        selectedReciter.moshaf.isNotEmpty
-            ? selectedReciter.moshaf.first
+        selectedReciter
+                .moshaf
+                .isNotEmpty
+            ? selectedReciter
+                .moshaf
+                .first
             : null;
 
     setState(() {
@@ -90,9 +95,13 @@ extension _AudioQuranSection
     }
 
     final url =
-        _quranUrl(moshaf, sura);
+        _quranUrl(
+      moshaf,
+      sura,
+    );
 
-    if (url == null || url.isEmpty) {
+    if (url == null ||
+        url.isEmpty) {
       _message(
         'رابط الصوت غير متاح لهذه الرواية.',
       );
@@ -126,7 +135,8 @@ extension _AudioQuranSection
       if (catalog != null) {
         final selectedIndex =
             catalog.suwar.indexWhere(
-          (item) => item.id == sura.id,
+          (item) =>
+              item.id == sura.id,
         );
 
         final start =
@@ -252,7 +262,8 @@ extension _AudioQuranSection
           value: _reciter,
           items: quran.reciters,
           label: 'اختار القارئ',
-          text: (item) => item.name,
+          text: (item) =>
+              item.name,
           onChanged: (value) {
             if (value == null) {
               return;
@@ -298,9 +309,10 @@ extension _AudioQuranSection
         ),
         const SizedBox(height: 16),
         ElevatedButton.icon(
-          onPressed: _switchingAudio
-              ? null
-              : _playQuran,
+          onPressed:
+              _switchingAudio
+                  ? null
+                  : _playQuran,
           icon: _switchingAudio
               ? const SizedBox(
                   width: 20,
@@ -322,7 +334,8 @@ extension _AudioQuranSection
           style:
               ElevatedButton.styleFrom(
             backgroundColor:
-                _goldDark,
+                _AudioCenterScreenState
+                    ._goldDark,
             foregroundColor:
                 Colors.white,
             minimumSize:
