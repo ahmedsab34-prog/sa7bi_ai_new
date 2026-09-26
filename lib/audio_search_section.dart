@@ -1,3 +1,5 @@
+// ignore_for_file: invalid_use_of_protected_member
+
 part of 'audio_center_screen.dart';
 
 // ============================================================
@@ -7,18 +9,12 @@ part of 'audio_center_screen.dart';
 // SEARCH
 // ============================================================
 
-extension _AudioSearchSection
-    on _AudioCenterScreenState {
+extension _AudioSearchSection on _AudioCenterScreenState {
   Future<void> _loadAdhkar() async {
-    final query =
-        _searchController.text
-            .trim();
+    final query = _searchController.text.trim();
 
-    final items =
-        await AiService.searchAudio(
-      query.isEmpty
-          ? 'أذكار'
-          : query,
+    final items = await AiService.searchAudio(
+      query.isEmpty ? 'أذكار' : query,
       type: 'adhkar',
     );
 
@@ -28,37 +24,30 @@ extension _AudioSearchSection
 
     setState(() {
       _audioItems = items;
-
-      if (items.isEmpty) {
-        _error =
-            'لم يتم العثور على أذكار حاليًا.';
-      }
+      _error = items.isEmpty
+          ? 'لم يتم العثور على أذكار حاليًا.'
+          : '';
     });
   }
 
   Future<void> _playAdhkar(
     AudioSearchItem item,
   ) async {
-    final url =
-        item.url.trim();
+    final url = item.url.trim();
 
     if (url.isNotEmpty) {
       await _playUrl(
         url,
         item.title,
-        artist:
-            item.artist ??
-                'الأذكار',
-        artwork:
-            item.artwork,
+        artist: item.artist ?? 'الأذكار',
+        artwork: item.artwork,
       );
       return;
     }
 
-    final text =
-        item.text.trim().isNotEmpty
-            ? item.text.trim()
-            : item.title.trim();
+    final text = item.text.trim().isNotEmpty
+        ? item.text.trim()
+        : item.title.trim();
 
     if (text.isEmpty) {
       _message(
@@ -71,8 +60,7 @@ extension _AudioSearchSection
       await AudioController.stop();
     } catch (_) {}
 
-    final ok =
-        await _voice.speak(
+    final ok = await _voice.speak(
       text,
       language: 'ar-EG',
       rate: 0.45,
@@ -84,9 +72,9 @@ extension _AudioSearchSection
 
     if (ok) {
       setState(() {
-        _currentTitle =
-            item.title;
+        _currentTitle = item.title;
         _playing = true;
+        _error = '';
       });
     } else {
       _message(
@@ -100,15 +88,10 @@ extension _AudioSearchSection
   // ============================================================
 
   Future<void> _loadMusic() async {
-    final query =
-        _searchController.text
-            .trim();
+    final query = _searchController.text.trim();
 
-    final items =
-        await AiService.searchAudio(
-      query.isEmpty
-          ? 'Arabic music'
-          : query,
+    final items = await AiService.searchAudio(
+      query.isEmpty ? 'Arabic music' : query,
       type: 'music',
     );
 
@@ -118,11 +101,9 @@ extension _AudioSearchSection
 
     setState(() {
       _audioItems = items;
-
-      if (items.isEmpty) {
-        _error =
-            'لم يتم العثور على موسيقى متاحة حاليًا.';
-      }
+      _error = items.isEmpty
+          ? 'لم يتم العثور على موسيقى متاحة حاليًا.'
+          : '';
     });
   }
 
@@ -131,15 +112,10 @@ extension _AudioSearchSection
   // ============================================================
 
   Future<void> _loadPodcast() async {
-    final query =
-        _searchController.text
-            .trim();
+    final query = _searchController.text.trim();
 
-    final items =
-        await AiService.searchAudio(
-      query.isEmpty
-          ? 'Arabic podcast'
-          : query,
+    final items = await AiService.searchAudio(
+      query.isEmpty ? 'Arabic podcast' : query,
       type: 'podcast',
     );
 
@@ -149,11 +125,9 @@ extension _AudioSearchSection
 
     setState(() {
       _audioItems = items;
-
-      if (items.isEmpty) {
-        _error =
-            'لم يتم العثور على بودكاست متاح حاليًا.';
-      }
+      _error = items.isEmpty
+          ? 'لم يتم العثور على بودكاست متاح حاليًا.'
+          : '';
     });
   }
 
@@ -185,9 +159,7 @@ extension _AudioSearchSection
 
       case 4:
         if (_country != null) {
-          await _loadStations(
-            _country!,
-          );
+          await _loadStations(_country!);
         }
         break;
     }
@@ -199,15 +171,12 @@ extension _AudioSearchSection
 
   Widget _searchableList({
     required String title,
-    required List<AudioSearchItem>
-        items,
+    required List<AudioSearchItem> items,
     required String empty,
   }) {
     return ListView(
-      physics:
-          const AlwaysScrollableScrollPhysics(),
-      padding:
-          const EdgeInsets.fromLTRB(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
         14,
         8,
         14,
@@ -217,30 +186,27 @@ extension _AudioSearchSection
         Row(
           children: [
             Expanded(
-              child:
-                  _sectionTitle(
-                title,
-              ),
+              child: _sectionTitle(title),
             ),
             IconButton(
-              onPressed:
-                  _loading
-                      ? null
-                      : _search,
+              tooltip: 'تحديث',
+              onPressed: _loading ? null : _search,
               icon: Icon(
-                Icons
-                    .refresh_rounded,
-                color:
-                    _AudioCenterScreenState
-                        ._gold,
+                Icons.refresh_rounded,
+                color: _AudioCenterScreenState._gold,
               ),
             ),
           ],
         ),
+
         const SizedBox(height: 8),
+
         _searchBox(),
+
         const SizedBox(height: 12),
+
         ..._audioCards(items),
+
         if (items.isEmpty)
           _emptyText(empty),
       ],
@@ -249,18 +215,13 @@ extension _AudioSearchSection
 
   Widget _audioList({
     required String title,
-    required List<AudioSearchItem>
-        items,
-    required Future<void>
-        Function(AudioSearchItem)
-        onPlay,
+    required List<AudioSearchItem> items,
+    required Future<void> Function(AudioSearchItem) onPlay,
     required String empty,
   }) {
     return ListView(
-      physics:
-          const AlwaysScrollableScrollPhysics(),
-      padding:
-          const EdgeInsets.fromLTRB(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
         14,
         8,
         14,
@@ -270,35 +231,32 @@ extension _AudioSearchSection
         Row(
           children: [
             Expanded(
-              child:
-                  _sectionTitle(
-                title,
-              ),
+              child: _sectionTitle(title),
             ),
             IconButton(
-              onPressed:
-                  _loading
-                      ? null
-                      : _search,
+              tooltip: 'تحديث',
+              onPressed: _loading ? null : _search,
               icon: Icon(
-                Icons
-                    .refresh_rounded,
-                color:
-                    _AudioCenterScreenState
-                        ._gold,
+                Icons.refresh_rounded,
+                color: _AudioCenterScreenState._gold,
               ),
             ),
           ],
         ),
+
         const SizedBox(height: 8),
+
         _searchBox(),
+
         const SizedBox(height: 12),
+
         ...items.map(
           (item) => _audioCard(
             item,
             () => onPlay(item),
           ),
         ),
+
         if (items.isEmpty)
           _emptyText(empty),
       ],
@@ -312,12 +270,20 @@ extension _AudioSearchSection
         .map(
           (item) => _audioCard(
             item,
-            () => _playUrl(
-              item.url,
-              item.title,
-              artist: item.artist,
-              artwork: item.artwork,
-            ),
+            () {
+              final url = item.url.trim();
+
+              if (url.isNotEmpty) {
+                return _playUrl(
+                  url,
+                  item.title,
+                  artist: item.artist,
+                  artwork: item.artwork,
+                );
+              }
+
+              return _playAdhkar(item);
+            },
           ),
         )
         .toList();
@@ -327,127 +293,80 @@ extension _AudioSearchSection
     AudioSearchItem item,
     VoidCallback onPlay,
   ) {
-    final hasUrl =
-        item.url.trim().isNotEmpty;
+    final hasUrl = item.url.trim().isNotEmpty;
 
     return Container(
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 10,
       ),
       decoration: BoxDecoration(
-        color:
-            _AudioCenterScreenState
-                ._card,
-        borderRadius:
-            BorderRadius.circular(16),
+        color: _AudioCenterScreenState._card,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: Colors.white10,
         ),
       ),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(
+        contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 6,
         ),
         leading: Container(
           width: 48,
           height: 48,
-          decoration:
-              BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(
-              12,
-            ),
-            color:
-                _AudioCenterScreenState
-                    ._goldDark
-                    .withValues(
-              alpha: 0.22,
-            ),
-            image:
-                item.artwork
-                        .trim()
-                        .isEmpty
-                    ? null
-                    : DecorationImage(
-                        image:
-                            NetworkImage(
-                          item.artwork
-                              .trim(),
-                        ),
-                        fit:
-                            BoxFit.cover,
-                      ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: _AudioCenterScreenState._goldDark
+                .withValues(alpha: 0.22),
+            image: item.artwork.trim().isEmpty
+                ? null
+                : DecorationImage(
+                    image: NetworkImage(
+                      item.artwork.trim(),
+                    ),
+                    fit: BoxFit.cover,
+                  ),
           ),
-          child: item.artwork
-                  .trim()
-                  .isEmpty
+          child: item.artwork.trim().isEmpty
               ? Icon(
-                  Icons
-                      .music_note_rounded,
-                  color:
-                      _AudioCenterScreenState
-                          ._gold,
+                  Icons.music_note_rounded,
+                  color: _AudioCenterScreenState._gold,
                 )
               : null,
         ),
         title: Text(
           item.title,
           maxLines: 2,
-          overflow:
-              TextOverflow.ellipsis,
-          style:
-              const TextStyle(
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
             color: Colors.white,
-            fontWeight:
-                FontWeight.w800,
+            fontWeight: FontWeight.w800,
           ),
         ),
         subtitle: Text(
           [
-            if (item.artist !=
-                    null &&
-                item.artist!
-                    .trim()
-                    .isNotEmpty)
+            if (item.artist != null &&
+                item.artist!.trim().isNotEmpty)
               item.artist!.trim(),
-            if (item.collection
-                .trim()
-                .isNotEmpty)
+            if (item.collection.trim().isNotEmpty)
               item.collection.trim(),
             if (!hasUrl &&
-                item.text
-                    .trim()
-                    .isNotEmpty)
+                item.text.trim().isNotEmpty)
               'تشغيل بالنطق الصوتي',
           ].join(' • '),
           maxLines: 2,
-          overflow:
-              TextOverflow.ellipsis,
-          style:
-              const TextStyle(
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
             color: Colors.white60,
             fontSize: 11,
           ),
         ),
-        trailing:
-            IconButton(
-          tooltip:
-              hasUrl
-                  ? 'تشغيل'
-                  : 'قراءة',
-          onPressed:
-              _switchingAudio
-                  ? null
-                  : onPlay,
+        trailing: IconButton(
+          tooltip: hasUrl ? 'تشغيل' : 'قراءة',
+          onPressed: _switchingAudio ? null : onPlay,
           icon: Icon(
-            Icons
-                .play_circle_fill_rounded,
-            color:
-                _AudioCenterScreenState
-                    ._gold,
+            Icons.play_circle_fill_rounded,
+            color: _AudioCenterScreenState._gold,
             size: 36,
           ),
         ),
