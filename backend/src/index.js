@@ -1136,7 +1136,7 @@ const regex = new RegExp(
   return match
     ? decodeXml(
         match[1]
-          .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+          .replace(/<!CDATA\[([\s\S]*?)\]>/g, "$1")
           .trim()
       )
     : "";
