@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../services/chat_theme_service.dart';
 import 'chat_ai_avatar.dart';
-import 'chat_user_avatar.dart';
 
 /// فقاعة رسالة واحدة داخل المحادثة.
 ///
