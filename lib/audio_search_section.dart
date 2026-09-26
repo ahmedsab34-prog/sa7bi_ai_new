@@ -227,10 +227,12 @@ extension _AudioSearchSection
                   _loading
                       ? null
                       : _search,
-              icon: const Icon(
+              icon: Icon(
                 Icons
                     .refresh_rounded,
-                color: _gold,
+                color:
+                    _AudioCenterScreenState
+                        ._gold,
               ),
             ),
           ],
@@ -278,10 +280,12 @@ extension _AudioSearchSection
                   _loading
                       ? null
                       : _search,
-              icon: const Icon(
+              icon: Icon(
                 Icons
                     .refresh_rounded,
-                color: _gold,
+                color:
+                    _AudioCenterScreenState
+                        ._gold,
               ),
             ),
           ],
@@ -332,7 +336,9 @@ extension _AudioSearchSection
         bottom: 10,
       ),
       decoration: BoxDecoration(
-        color: _card,
+        color:
+            _AudioCenterScreenState
+                ._card,
         borderRadius:
             BorderRadius.circular(16),
         border: Border.all(
@@ -355,7 +361,9 @@ extension _AudioSearchSection
               12,
             ),
             color:
-                _goldDark.withValues(
+                _AudioCenterScreenState
+                    ._goldDark
+                    .withValues(
               alpha: 0.22,
             ),
             image:
@@ -376,10 +384,12 @@ extension _AudioSearchSection
           child: item.artwork
                   .trim()
                   .isEmpty
-              ? const Icon(
+              ? Icon(
                   Icons
                       .music_note_rounded,
-                  color: _gold,
+                  color:
+                      _AudioCenterScreenState
+                          ._gold,
                 )
               : null,
         ),
@@ -432,10 +442,12 @@ extension _AudioSearchSection
               _switchingAudio
                   ? null
                   : onPlay,
-          icon: const Icon(
+          icon: Icon(
             Icons
                 .play_circle_fill_rounded,
-            color: _gold,
+            color:
+                _AudioCenterScreenState
+                    ._gold,
             size: 36,
           ),
         ),
