@@ -29,9 +29,11 @@ extension _AudioRadioSection
     var selected =
         countries.first;
 
-    for (final country in countries) {
+    for (final country
+        in countries) {
       final code =
           country.code.toUpperCase();
+
       final name =
           country.name.toLowerCase();
 
@@ -67,7 +69,9 @@ extension _AudioRadioSection
         return;
       }
 
-      final seen = <String>{};
+      final seen =
+          <String>{};
+
       final cleanStations =
           <RadioStation>[];
 
@@ -93,6 +97,7 @@ extension _AudioRadioSection
       setState(() {
         _stations =
             cleanStations;
+
         _error =
             cleanStations.isEmpty
                 ? 'لا توجد محطات متاحة لهذه الدولة حاليًا.'
@@ -166,10 +171,12 @@ extension _AudioRadioSection
                   _loading
                       ? null
                       : _search,
-              icon: const Icon(
+              icon: Icon(
                 Icons
                     .refresh_rounded,
-                color: _gold,
+                color:
+                    _AudioCenterScreenState
+                        ._gold,
               ),
             ),
           ],
@@ -181,7 +188,8 @@ extension _AudioRadioSection
               RadioCountry>(
             value: _country,
             dropdownColor:
-                _card,
+                _AudioCenterScreenState
+                    ._card,
             style:
                 const TextStyle(
               color: Colors.white,
@@ -196,7 +204,9 @@ extension _AudioRadioSection
                     Colors.white70,
               ),
               filled: true,
-              fillColor: _card,
+              fillColor:
+                  _AudioCenterScreenState
+                      ._card,
               border:
                   OutlineInputBorder(
                 borderRadius:
@@ -254,7 +264,9 @@ extension _AudioRadioSection
         bottom: 10,
       ),
       decoration: BoxDecoration(
-        color: _card,
+        color:
+            _AudioCenterScreenState
+                ._card,
         borderRadius:
             BorderRadius.circular(16),
         border: Border.all(
@@ -277,7 +289,9 @@ extension _AudioRadioSection
               12,
             ),
             color:
-                _goldDark.withValues(
+                _AudioCenterScreenState
+                    ._goldDark
+                    .withValues(
               alpha: 0.22,
             ),
             image: favicon.isEmpty
@@ -292,10 +306,12 @@ extension _AudioRadioSection
                   ),
           ),
           child: favicon.isEmpty
-              ? const Icon(
+              ? Icon(
                   Icons
                       .radio_rounded,
-                  color: _gold,
+                  color:
+                      _AudioCenterScreenState
+                          ._gold,
                 )
               : null,
         ),
@@ -350,10 +366,12 @@ extension _AudioRadioSection
                         artwork:
                             station.favicon,
                       ),
-          icon: const Icon(
+          icon: Icon(
             Icons
                 .play_circle_fill_rounded,
-            color: _gold,
+            color:
+                _AudioCenterScreenState
+                    ._gold,
             size: 36,
           ),
         ),
