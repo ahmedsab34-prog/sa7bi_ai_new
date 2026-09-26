@@ -1,3 +1,5 @@
+// ignore_for_file: unused_field
+
 import 'dart:async';
 import 'dart:io';
 
@@ -42,19 +44,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
   // =========================================================================
   // SERIALIZED PLAYER OPERATIONS
   // =========================================================================
-  //
-  // just_audio لا نريد أن تصله عمليات تغيير مصدر متزامنة.
-  //
-  // مثال المشكلة القديمة:
-  //
-  // المستخدم يشغل محطة A
-  // ثم يضغط محطة B بسرعة
-  // ثم يضغط محطة C
-  //
-  // كان ممكنًا أن تبدأ عدة عمليات setAudioSource / stop / play معًا.
-  //
-  // الآن كل عملية تدخل طابورًا واحدًا.
-  // ===========================================================================
 
   Future<void> _operationTail = Future<void>.value();
 
@@ -169,7 +158,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
       _broadcastState();
     } catch (_) {
-      // لا نسمح لفشل AudioSession بإغلاق التطبيق.
       _initialized = true;
     }
   }
@@ -283,9 +271,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
       _resumeAfterInterruption = false;
 
       _broadcastState();
-    } catch (_) {
-      // لا نسمح بخطأ المقاطعة بإغلاق التطبيق.
-    }
+    } catch (_) {}
   }
 
   // =========================================================================
@@ -516,13 +502,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
     _rebuildingQueue = true;
 
     try {
-      // ---------------------------------------------------------------
-      // أوقف المصدر القديم أولًا.
-      //
-      // هذه أهم نقطة في تبديل المحطات.
-      // لا نضع مصدرًا جديدًا فوق مصدر قديم ما زال يعمل.
-      // ---------------------------------------------------------------
-
       try {
         await _player.stop();
       } catch (_) {}
@@ -540,10 +519,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
         useLazyPreparation: true,
       );
 
-      // ---------------------------------------------------------------
-      // سجل الـQueue قبل التشغيل.
-      // ---------------------------------------------------------------
-
       queue.add(
         List<MediaItem>.unmodifiable(
           items,
@@ -551,10 +526,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
       );
 
       _queueSource = source;
-
-      // ---------------------------------------------------------------
-      // مصدر واحد فقط في كل لحظة.
-      // ---------------------------------------------------------------
 
       await _player.setAudioSource(
         source,
@@ -1465,8 +1436,6 @@ class AudioController {
       return _handler!;
     }
 
-    // حماية إضافية لو initialize اتطلبت
-    // أكثر من مرة في نفس الوقت.
     await _initializationFuture;
 
     if (_handler != null &&
