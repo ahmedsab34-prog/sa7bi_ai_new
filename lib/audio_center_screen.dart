@@ -27,10 +27,13 @@ class _AudioCenterScreenState
     extends State<AudioCenterScreen> {
   static const Color _gold =
       Color(0xFFE6C875);
+
   static const Color _goldDark =
       Color(0xFFB9913E);
+
   static const Color _bg =
       Color(0xFF07111F);
+
   static const Color _card =
       Color(0xFF132238);
 
@@ -304,7 +307,9 @@ class _AudioCenterScreenState
         return;
       }
 
-      final file = result.files.single;
+      final file =
+          result.files.single;
+
       final path = file.path;
 
       if (path == null ||
@@ -372,7 +377,9 @@ class _AudioCenterScreenState
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Directionality(
       textDirection:
           TextDirection.rtl,
