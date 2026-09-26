@@ -5,7 +5,7 @@ const CORS_HEADERS = {
   "Cache-Control": "no-store",
 };
 
-const BACKEND_VERSION = "5.0.1";
+const BACKEND_VERSION = "5.1.0";
 const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
 const DEFAULT_IMAGE_MODEL = "gpt-image-2";
 
@@ -1644,13 +1644,49 @@ async function handleNews() {
   }
 }
 
-function handleHealth() {
+function handleHealth(env) {
   return json({
     ok: true,
     status: "online",
     app: "Sa7bi AI",
     backendVersion:
       BACKEND_VERSION,
+    openaiConfigured:
+      Boolean(env?.OPENAI_API_KEY),
+    textModel:
+      env?.OPENAI_MODEL ||
+      DEFAULT_TEXT_MODEL,
+    imageModel:
+      env?.OPENAI_IMAGE_MODEL ||
+      DEFAULT_IMAGE_MODEL,
+  });
+}
+
+function handleDiagnostics(env) {
+  return json({
+    ok: true,
+    status: "online",
+    app: "Sa7bi AI",
+    backendVersion:
+      BACKEND_VERSION,
+    runtime: {
+      worker: true,
+      openaiConfigured:
+        Boolean(env?.OPENAI_API_KEY),
+      textModel:
+        env?.OPENAI_MODEL ||
+        DEFAULT_TEXT_MODEL,
+      imageModel:
+        env?.OPENAI_IMAGE_MODEL ||
+        DEFAULT_IMAGE_MODEL,
+    },
+    endpoints: {
+      root: "/",
+      health: "/health",
+      diagnostics: "/v1/diagnostics",
+      chat: "/v1/chat",
+      image: "/v1/image",
+    },
   });
 }
 
@@ -1692,6 +1728,8 @@ function handleRoot() {
         "/download",
       health:
         "/health",
+      diagnostics:
+        "/v1/diagnostics",
     },
   });
 }
@@ -1745,7 +1783,15 @@ export default {
           "GET" &&
         path === "/health"
       ) {
-        return handleHealth();
+        return handleHealth(env);
+      }
+
+      if (
+        request.method ===
+          "GET" &&
+        path === "/v1/diagnostics"
+      ) {
+        return handleDiagnostics(env);
       }
 
       if (
