@@ -1,15 +1,14 @@
+// ignore_for_file: invalid_use_of_protected_member
+
 part of 'audio_center_screen.dart';
 
 // ============================================================
 // RADIO
 // ============================================================
 
-extension _AudioRadioSection
-    on _AudioCenterScreenState {
+extension _AudioRadioSection on _AudioCenterScreenState {
   Future<void> _loadRadio() async {
-    final countries =
-        await AiService
-            .getRadioCountries();
+    final countries = await AiService.getRadioCountries();
 
     if (!mounted) {
       return;
@@ -20,22 +19,16 @@ extension _AudioRadioSection
         _countries = [];
         _country = null;
         _stations = [];
-        _error =
-            'تعذر تحميل الدول والإذاعات حاليًا.';
+        _error = 'تعذر تحميل الدول والإذاعات حاليًا.';
       });
       return;
     }
 
-    var selected =
-        countries.first;
+    var selected = countries.first;
 
-    for (final country
-        in countries) {
-      final code =
-          country.code.toUpperCase();
-
-      final name =
-          country.name.toLowerCase();
+    for (final country in countries) {
+      final code = country.code.toUpperCase();
+      final name = country.name.toLowerCase();
 
       if (code == 'EG' ||
           name.contains('egypt') ||
@@ -48,20 +41,18 @@ extension _AudioRadioSection
     setState(() {
       _countries = countries;
       _country = selected;
+      _stations = [];
+      _error = '';
     });
 
-    await _loadStations(
-      selected,
-    );
+    await _loadStations(selected);
   }
 
   Future<void> _loadStations(
     RadioCountry country,
   ) async {
     try {
-      final stations =
-          await AiService
-              .getRadioStations(
+      final stations = await AiService.getRadioStations(
         country.code,
       );
 
@@ -69,46 +60,34 @@ extension _AudioRadioSection
         return;
       }
 
-      final seen =
-          <String>{};
+      final seen = <String>{};
+      final cleanStations = <RadioStation>[];
 
-      final cleanStations =
-          <RadioStation>[];
-
-      for (final station
-          in stations) {
-        final url =
-            station.url.trim();
+      for (final station in stations) {
+        final url = station.url.trim();
 
         if (url.isEmpty) {
           continue;
         }
 
-        final key =
-            url.toLowerCase();
+        final key = url.toLowerCase();
 
         if (seen.add(key)) {
-          cleanStations.add(
-            station,
-          );
+          cleanStations.add(station);
         }
       }
 
       setState(() {
-        _stations =
-            cleanStations;
-
-        _error =
-            cleanStations.isEmpty
-                ? 'لا توجد محطات متاحة لهذه الدولة حاليًا.'
-                : '';
+        _stations = cleanStations;
+        _error = cleanStations.isEmpty
+            ? 'لا توجد محطات متاحة لهذه الدولة حاليًا.'
+            : '';
       });
     } catch (_) {
       if (mounted) {
         setState(() {
           _stations = [];
-          _error =
-              'تعذر تحميل محطات هذه الدولة.';
+          _error = 'تعذر تحميل محطات هذه الدولة.';
         });
       }
     }
@@ -117,8 +96,7 @@ extension _AudioRadioSection
   Future<void> _changeCountry(
     RadioCountry? country,
   ) async {
-    if (country == null ||
-        _loading) {
+    if (country == null || _loading) {
       return;
     }
 
@@ -130,9 +108,7 @@ extension _AudioRadioSection
     });
 
     try {
-      await _loadStations(
-        country,
-      );
+      await _loadStations(country);
     } finally {
       if (mounted) {
         setState(() {
@@ -148,10 +124,8 @@ extension _AudioRadioSection
 
   Widget _radioView() {
     return ListView(
-      physics:
-          const AlwaysScrollableScrollPhysics(),
-      padding:
-          const EdgeInsets.fromLTRB(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
         14,
         8,
         14,
@@ -161,87 +135,62 @@ extension _AudioRadioSection
         Row(
           children: [
             Expanded(
-              child:
-                  _sectionTitle(
-                'الراديو',
-              ),
+              child: _sectionTitle('الراديو'),
             ),
             IconButton(
-              onPressed:
-                  _loading
-                      ? null
-                      : _search,
+              tooltip: 'تحديث الراديو',
+              onPressed: _loading ? null : _loadRadio,
               icon: Icon(
-                Icons
-                    .refresh_rounded,
-                color:
-                    _AudioCenterScreenState
-                        ._gold,
+                Icons.refresh_rounded,
+                color: _AudioCenterScreenState._gold,
               ),
             ),
           ],
         ),
+
         const SizedBox(height: 8),
-        if (_countries
-            .isNotEmpty)
-          DropdownButtonFormField<
-              RadioCountry>(
+
+        if (_countries.isNotEmpty)
+          DropdownButtonFormField<RadioCountry>(
             value: _country,
             dropdownColor:
-                _AudioCenterScreenState
-                    ._card,
-            style:
-                const TextStyle(
+                _AudioCenterScreenState._card,
+            style: const TextStyle(
               color: Colors.white,
             ),
-            decoration:
-                InputDecoration(
-              labelText:
-                  'الدولة',
-              labelStyle:
-                  const TextStyle(
-                color:
-                    Colors.white70,
+            decoration: InputDecoration(
+              labelText: 'الدولة',
+              labelStyle: const TextStyle(
+                color: Colors.white70,
               ),
               filled: true,
               fillColor:
-                  _AudioCenterScreenState
-                      ._card,
-              border:
-                  OutlineInputBorder(
-                borderRadius:
-                    BorderRadius
-                        .circular(
-                  14,
-                ),
-                borderSide:
-                    BorderSide.none,
+                  _AudioCenterScreenState._card,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
               ),
             ),
-            items:
-                _countries.map(
+            items: _countries.map(
               (country) {
-                return DropdownMenuItem<
-                    RadioCountry>(
+                return DropdownMenuItem<RadioCountry>(
                   value: country,
                   child: Text(
                     '${country.name} (${country.stationCount})',
-                    overflow:
-                        TextOverflow
-                            .ellipsis,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 );
               },
             ).toList(),
-            onChanged:
-                _loading
-                    ? null
-                    : _changeCountry,
+            onChanged: _loading
+                ? null
+                : _changeCountry,
           ),
+
         const SizedBox(height: 12),
-        ..._stations.map(
-          _radioCard,
-        ),
+
+        ..._stations.map(_radioCard),
+
         if (_stations.isEmpty)
           _emptyText(
             _error.isNotEmpty
@@ -255,123 +204,84 @@ extension _AudioRadioSection
   Widget _radioCard(
     RadioStation station,
   ) {
-    final favicon =
-        station.favicon.trim();
+    final favicon = station.favicon.trim();
 
     return Container(
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 10,
       ),
       decoration: BoxDecoration(
-        color:
-            _AudioCenterScreenState
-                ._card,
-        borderRadius:
-            BorderRadius.circular(16),
+        color: _AudioCenterScreenState._card,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: Colors.white10,
         ),
       ),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(
+        contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,
           vertical: 5,
         ),
         leading: Container(
           width: 48,
           height: 48,
-          decoration:
-              BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(
-              12,
-            ),
-            color:
-                _AudioCenterScreenState
-                    ._goldDark
-                    .withValues(
-              alpha: 0.22,
-            ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: _AudioCenterScreenState._goldDark
+                .withValues(alpha: 0.22),
             image: favicon.isEmpty
                 ? null
                 : DecorationImage(
-                    image:
-                        NetworkImage(
-                      favicon,
-                    ),
-                    fit:
-                        BoxFit.cover,
+                    image: NetworkImage(favicon),
+                    fit: BoxFit.cover,
                   ),
           ),
           child: favicon.isEmpty
               ? Icon(
-                  Icons
-                      .radio_rounded,
-                  color:
-                      _AudioCenterScreenState
-                          ._gold,
+                  Icons.radio_rounded,
+                  color: _AudioCenterScreenState._gold,
                 )
               : null,
         ),
         title: Text(
           station.name,
           maxLines: 2,
-          overflow:
-              TextOverflow.ellipsis,
-          style:
-              const TextStyle(
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
             color: Colors.white,
-            fontWeight:
-                FontWeight.w800,
+            fontWeight: FontWeight.w800,
           ),
         ),
         subtitle: Text(
           [
-            if (station.codec
-                .trim()
-                .isNotEmpty)
+            if (station.codec.trim().isNotEmpty)
               station.codec.trim(),
-            if (station.bitrate >
-                0)
+            if (station.bitrate > 0)
               '${station.bitrate} kbps',
-            if (station.tags
-                .trim()
-                .isNotEmpty)
+            if (station.tags.trim().isNotEmpty)
               station.tags.trim(),
           ].join(' • '),
           maxLines: 2,
-          overflow:
-              TextOverflow.ellipsis,
-          style:
-              const TextStyle(
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
             color: Colors.white60,
             fontSize: 11,
           ),
         ),
-        trailing:
-            IconButton(
-          tooltip:
-              'تشغيل المحطة',
-          onPressed:
-              _switchingAudio
-                  ? null
-                  : () => _playUrl(
-                        station.url,
-                        station.name,
-                        artist:
-                            'راديو ${_country?.name ?? ''}'
-                                .trim(),
-                        artwork:
-                            station.favicon,
-                      ),
+        trailing: IconButton(
+          tooltip: 'تشغيل المحطة',
+          onPressed: _switchingAudio
+              ? null
+              : () => _playUrl(
+                    station.url,
+                    station.name,
+                    artist:
+                        'راديو ${_country?.name ?? ''}'.trim(),
+                    artwork: station.favicon,
+                  ),
           icon: Icon(
-            Icons
-                .play_circle_fill_rounded,
-            color:
-                _AudioCenterScreenState
-                    ._gold,
+            Icons.play_circle_fill_rounded,
+            color: _AudioCenterScreenState._gold,
             size: 36,
           ),
         ),
