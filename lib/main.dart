@@ -20,12 +20,6 @@ Future<void> main() async {
 
   runApp(const Sa7biAiApp());
 
-  // ------------------------------------------------------------
-  // خدمات التطبيق الأساسية بعد ظهور أول واجهة.
-  //
-  // لا نوقف فتح التطبيق بسبب فشل خدمة خارجية.
-  // ------------------------------------------------------------
-
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(
       _initializeApplicationServices(),
@@ -34,9 +28,9 @@ Future<void> main() async {
 }
 
 Future<void> _initializeApplicationServices() async {
-  // ------------------------------------------------------------
+  // ============================================================
   // CREDITS
-  // ------------------------------------------------------------
+  // ============================================================
 
   try {
     await CreditsService.instance.initialize();
@@ -44,34 +38,30 @@ Future<void> _initializeApplicationServices() async {
     // فشل Credits لا يمنع التطبيق من العمل.
   }
 
-  // ------------------------------------------------------------
+  // ============================================================
   // AI BACKEND CONNECTION
-  // ------------------------------------------------------------
+  // ============================================================
 
   try {
-    final connected =
-        await AiRequestService.instance
-            .checkBackend();
+    final backend =
+        await AiRequestService.checkBackend();
 
-    if (connected) {
-      await ProfileService.instance
-          .markAiConnected();
+    if (backend.isAvailable) {
+      await ProfileService.instance.markAiConnected();
     } else {
-      await ProfileService.instance
-          .markAiDisconnected();
+      await ProfileService.instance.markAiDisconnected();
     }
   } catch (_) {
     try {
-      await ProfileService.instance
-          .markAiDisconnected();
+      await ProfileService.instance.markAiDisconnected();
     } catch (_) {
       // لا شيء.
     }
   }
 
-  // ------------------------------------------------------------
-  // Audio
-  // ------------------------------------------------------------
+  // ============================================================
+  // AUDIO
+  // ============================================================
 
   try {
     await AudioController.initialize();
@@ -79,18 +69,15 @@ Future<void> _initializeApplicationServices() async {
     // الصوت لا يمنع باقي التطبيق من العمل.
   }
 
-  // ------------------------------------------------------------
-  // AdMob
-  // ------------------------------------------------------------
+  // ============================================================
+  // ADMOB
+  // ============================================================
 
   try {
-    final ads =
-        AdsService.instance;
+    final ads = AdsService.instance;
 
     await ads.initialize();
 
-    // تجهيز الإعلانات مسبقًا حتى تكون جاهزة عندما تحتاجها
-    // الواجهة، بدون إجبار المستخدم على مشاهدة إعلان عند الفتح.
     if (ads.isAdMobInitialized) {
       unawaited(
         ads.loadInterstitial(),
@@ -118,15 +105,11 @@ class Sa7biAiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-
       title: 'صاحبي AI',
-
       theme: ThemeData(
         brightness: Brightness.dark,
-
         scaffoldBackgroundColor:
             const Color(0xFF070A12),
-
         colorScheme:
             ColorScheme.fromSeed(
           seedColor:
@@ -134,12 +117,9 @@ class Sa7biAiApp extends StatelessWidget {
           brightness:
               Brightness.dark,
         ),
-
         useMaterial3: true,
-
         fontFamily: 'sans',
       ),
-
       home:
           const MainContainerScreen(),
     );
@@ -216,11 +196,9 @@ class _MainContainerScreenState
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
-
       CategoriesScreen(
         onAudio: openAudioCenter,
       ),
-
       ProfileScreen(
         onAudio: openAudioCenter,
       ),
@@ -229,22 +207,13 @@ class _MainContainerScreenState
     return Scaffold(
       backgroundColor:
           const Color(0xFF070A12),
-
       body: SafeArea(
         child: Stack(
           children: [
-            // --------------------------------------------------
-            // MAIN PAGES
-            // --------------------------------------------------
-
             IndexedStack(
               index: index,
               children: pages,
             ),
-
-            // --------------------------------------------------
-            // MINI AUDIO PLAYER
-            // --------------------------------------------------
 
             const Positioned(
               left: 10,
@@ -253,10 +222,6 @@ class _MainContainerScreenState
               child:
                   MiniAudioPlayer(),
             ),
-
-            // --------------------------------------------------
-            // KHALASANA FLOATING BUTTON
-            // --------------------------------------------------
 
             Positioned(
               right: 12,
@@ -270,22 +235,14 @@ class _MainContainerScreenState
           ],
         ),
       ),
-
-      // --------------------------------------------------------
-      // BOTTOM NAVIGATION
-      // --------------------------------------------------------
-
       bottomNavigationBar:
           NavigationBar(
         backgroundColor:
             const Color(0xFF11141D),
-
         indicatorColor:
             const Color(0x3348D8FF),
-
         selectedIndex:
             index,
-
         onDestinationSelected:
             (value) {
           if (!mounted) {
@@ -296,7 +253,6 @@ class _MainContainerScreenState
             index = value;
           });
         },
-
         destinations: const [
           NavigationDestination(
             icon: Icon(
@@ -307,7 +263,6 @@ class _MainContainerScreenState
             ),
             label: 'الرئيسية',
           ),
-
           NavigationDestination(
             icon: Icon(
               Icons.apps_outlined,
@@ -317,7 +272,6 @@ class _MainContainerScreenState
             ),
             label: 'الخدمات',
           ),
-
           NavigationDestination(
             icon: Icon(
               Icons.person_outline_rounded,
@@ -349,7 +303,6 @@ class MiniAudioPlayer
       stream: AudioController
           .handler
           ?.mediaItem,
-
       builder: (
         context,
         mediaSnapshot,
@@ -370,29 +323,23 @@ class MiniAudioPlayer
 
         return Material(
           color: Colors.transparent,
-
           child: Container(
             height: 62,
-
             padding:
                 const EdgeInsets.symmetric(
               horizontal: 7,
             ),
-
             decoration:
                 BoxDecoration(
               color:
                   const Color(0xFF121720)
                       .withOpacity(0.98),
-
               borderRadius:
                   BorderRadius.circular(19),
-
               border: Border.all(
                 color:
                     const Color(0x55FFD76A),
               ),
-
               boxShadow: const [
                 BoxShadow(
                   color:
@@ -403,13 +350,8 @@ class MiniAudioPlayer
                 ),
               ],
             ),
-
             child: Row(
               children: [
-                // ----------------------------------------------
-                // OPEN AUDIO CENTER
-                // ----------------------------------------------
-
                 GestureDetector(
                   onTap: () {
                     Navigator.of(
@@ -421,16 +363,13 @@ class MiniAudioPlayer
                       ),
                     );
                   },
-
                   child: Container(
                     width: 44,
                     height: 44,
-
                     decoration:
                         const BoxDecoration(
                       shape:
                           BoxShape.circle,
-
                       gradient:
                           LinearGradient(
                         colors: [
@@ -443,7 +382,6 @@ class MiniAudioPlayer
                         ],
                       ),
                     ),
-
                     child: const Icon(
                       Icons
                           .graphic_eq_rounded,
@@ -456,10 +394,6 @@ class MiniAudioPlayer
                 const SizedBox(
                   width: 8,
                 ),
-
-                // ----------------------------------------------
-                // TITLE
-                // ----------------------------------------------
 
                 Expanded(
                   child:
@@ -474,30 +408,23 @@ class MiniAudioPlayer
                         ),
                       );
                     },
-
                     child: Column(
                       mainAxisAlignment:
                           MainAxisAlignment
                               .center,
-
                       crossAxisAlignment:
                           CrossAxisAlignment
                               .end,
-
                       children: [
                         Text(
                           item.title,
-
                           textDirection:
                               TextDirection
                                   .rtl,
-
                           maxLines: 1,
-
                           overflow:
                               TextOverflow
                                   .ellipsis,
-
                           style:
                               const TextStyle(
                             fontWeight:
@@ -506,21 +433,16 @@ class MiniAudioPlayer
                             fontSize: 11,
                           ),
                         ),
-
                         Text(
                           item.artist ??
                               'صاحبي AI',
-
                           textDirection:
                               TextDirection
                                   .rtl,
-
                           maxLines: 1,
-
                           overflow:
                               TextOverflow
                                   .ellipsis,
-
                           style:
                               const TextStyle(
                             color:
@@ -534,16 +456,11 @@ class MiniAudioPlayer
                   ),
                 ),
 
-                // ----------------------------------------------
-                // PLAY / PAUSE
-                // ----------------------------------------------
-
                 StreamBuilder<
                     PlaybackState>(
                   stream:
                       handler
                           .playbackState,
-
                   builder: (
                     context,
                     snapshot,
@@ -556,13 +473,11 @@ class MiniAudioPlayer
                     return IconButton(
                       padding:
                           EdgeInsets.zero,
-
                       constraints:
                           const BoxConstraints(
                         minWidth: 40,
                         minHeight: 40,
                       ),
-
                       onPressed: () {
                         if (playing) {
                           handler.pause();
@@ -570,43 +485,33 @@ class MiniAudioPlayer
                           handler.play();
                         }
                       },
-
                       icon: Icon(
                         playing
                             ? Icons
                                 .pause_rounded
                             : Icons
                                 .play_arrow_rounded,
-
                         color:
                             const Color(
                           0xFFFFD76A,
                         ),
-
                         size: 27,
                       ),
                     );
                   },
                 ),
 
-                // ----------------------------------------------
-                // STOP
-                // ----------------------------------------------
-
                 IconButton(
                   padding:
                       EdgeInsets.zero,
-
                   constraints:
                       const BoxConstraints(
                     minWidth: 34,
                     minHeight: 40,
                   ),
-
                   onPressed: () {
                     handler.stop();
                   },
-
                   icon: const Icon(
                     Icons.close_rounded,
                     color:
