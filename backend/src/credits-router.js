@@ -1,17 +1,40 @@
 // backend/src/credits-router.js
-// Sa7bi AI - Credits Router
+// Sa7bi AI - Final Credits Router
 //
-// This module keeps the public Worker routing logic separate
-// from the Durable Object credit ledger.
+// FINAL ARCHITECTURE
+// ------------------
+// credits.js
+//   = server-authoritative credit ledger
+//   = SQLite Durable Object
 //
-// Important:
-// - credits.js = actual server-side credit ledger
-// - credits-router.js = HTTP/request-level integration
-// - index.js = main Worker route dispatcher
+// credits-router.js
+//   = HTTP/request-level credit integration
 //
-// Rewarded-ad credit is intentionally NOT exposed here yet.
-// It will be enabled only after AdMob server-side verification
-// is connected.
+// index.js
+//   = main Worker route dispatcher
+//
+// admob-ssv.js
+//   = Google AdMob Server-Side Verification
+//   = the ONLY public reward path
+//
+// IMPORTANT
+// ---------
+// Rewarded-ad credits are NOT granted from the client
+// and are NOT exposed through a normal client reward route.
+//
+// The Flutter app only:
+//   1. shows the rewarded ad
+//   2. sends its stable device ID through custom_data
+//   3. waits for Google's verified SSV callback
+//
+// Google SSV -> admob-ssv.js -> credits.js
+//
+// This prevents the client from simply calling an endpoint
+// and giving itself free credits.
+
+/* =========================================================
+   IMPORTS
+   ========================================================= */
 
 import {
   CREDIT_COSTS,
@@ -35,6 +58,18 @@ export const CREDIT_REQUEST_HEADER =
    DEVICE ID
    ========================================================= */
 
+/**
+ * Reads the stable Sa7bi device identifier.
+ *
+ * Preferred:
+ *   X-Sa7bi-Device-Id
+ *
+ * Fallback:
+ *   body.deviceId
+ *   body.device_id
+ *
+ * The ID is limited to 128 characters.
+ */
 export function getCreditDeviceId(
   request,
   body = {},
@@ -45,8 +80,7 @@ export function getCreditDeviceId(
     );
 
   if (
-    typeof headerValue ===
-      "string" &&
+    typeof headerValue === "string" &&
     headerValue.trim()
   ) {
     return headerValue
@@ -60,8 +94,7 @@ export function getCreditDeviceId(
     "";
 
   if (
-    typeof bodyValue ===
-      "string" &&
+    typeof bodyValue === "string" &&
     bodyValue.trim()
   ) {
     return bodyValue
@@ -76,6 +109,21 @@ export function getCreditDeviceId(
    REQUEST ID
    ========================================================= */
 
+/**
+ * Reads the request ID used for credit idempotency.
+ *
+ * Preferred:
+ *   X-Sa7bi-Request-Id
+ *
+ * Fallback:
+ *   body.requestId
+ *   body.request_id
+ *
+ * If the client does not provide one, a UUID is generated.
+ *
+ * The Flutter client normally sends a UUID for every AI
+ * request, so retries of the same request can be identified.
+ */
 export function getCreditRequestId(
   request,
   body = {},
@@ -86,8 +134,7 @@ export function getCreditRequestId(
     );
 
   if (
-    typeof headerValue ===
-      "string" &&
+    typeof headerValue === "string" &&
     headerValue.trim()
   ) {
     return headerValue
@@ -101,8 +148,7 @@ export function getCreditRequestId(
     "";
 
   if (
-    typeof bodyValue ===
-      "string" &&
+    typeof bodyValue === "string" &&
     bodyValue.trim()
   ) {
     return bodyValue
@@ -110,13 +156,6 @@ export function getCreditRequestId(
       .substring(0, 128);
   }
 
-  /*
-   * The client should normally send its own
-   * stable request ID.
-   *
-   * This fallback prevents accidental duplicate
-   * requests from sharing the same reservation.
-   */
   return crypto.randomUUID();
 }
 
@@ -128,8 +167,7 @@ export function normalizeCreditOperation(
   value,
 ) {
   if (
-    typeof value !==
-    "string"
+    typeof value !== "string"
   ) {
     return "";
   }
@@ -140,9 +178,14 @@ export function normalizeCreditOperation(
 }
 
 /* =========================================================
-   OPERATION → COST
+   OPERATION → CREDIT COST
    ========================================================= */
 
+/**
+ * Returns the configured server-side cost.
+ *
+ * CREDIT_COSTS remains the single source of truth.
+ */
 export function getCreditCost(
   operation,
 ) {
@@ -159,63 +202,62 @@ export function getCreditCost(
 }
 
 /* =========================================================
-   CHAT OPERATION
+   CHAT → CREDIT OPERATION
    ========================================================= */
 
+/**
+ * Determines the credit operation for /v1/chat.
+ *
+ * Priority:
+ *
+ * 1. Video analysis
+ * 2. Image analysis
+ * 3. Normal text
+ *
+ * This means a video request remains a video operation
+ * even if extracted frames/images are also supplied.
+ */
 export function getChatCreditOperation(
   body = {},
   imageDataUrls = [],
 ) {
-  /*
-   * Video analysis has priority.
-   *
-   * A video request may contain extracted
-   * frames/images, but its credit cost is
-   * still the video-analysis cost.
-   */
   if (
-    body?.mediaType ===
-      "video" ||
-    body?.media_type ===
-      "video" ||
-    body?.videoAnalysis ===
-      true ||
-    body?.video_analysis ===
-      true
+    body?.mediaType === "video" ||
+    body?.media_type === "video" ||
+    body?.videoAnalysis === true ||
+    body?.video_analysis === true
   ) {
     return "video_analysis";
   }
 
-  /*
-   * Any image attached to a normal chat
-   * request means image analysis.
-   */
   if (
-    Array.isArray(
-      imageDataUrls,
-    ) &&
+    Array.isArray(imageDataUrls) &&
     imageDataUrls.length > 0
   ) {
     return "image_analysis";
   }
 
-  /*
-   * Normal text request.
-   */
   return "text";
 }
 
 /* =========================================================
-   IMAGE OPERATION
+   IMAGE → CREDIT OPERATION
    ========================================================= */
 
+/**
+ * Determines whether /v1/image is:
+ *
+ *   image_generation
+ *
+ * or:
+ *
+ *   image_edit
+ */
 export function getImageCreditOperation(
   imageDataUrls = [],
 ) {
   if (
-    Array.isArray(
-      imageDataUrls,
-    ) &&
+    Array.isArray(imageDataUrls) &&
     imageDataUrls.length > 0
   ) {
     return "image_edit";
@@ -225,7 +267,7 @@ export function getImageCreditOperation(
 }
 
 /* =========================================================
-   BASIC VALIDATION
+   CREDIT IDENTITY VALIDATION
    ========================================================= */
 
 export function requireCreditIdentity(
@@ -241,10 +283,7 @@ export function requireCreditIdentity(
   if (!deviceId) {
     return {
       ok: false,
-
-      error:
-        "DEVICE_ID_REQUIRED",
-
+      error: "DEVICE_ID_REQUIRED",
       message:
         "A stable Sa7bi device identifier is required.",
     };
@@ -257,9 +296,15 @@ export function requireCreditIdentity(
 }
 
 /* =========================================================
-   BALANCE
+   GET SERVER BALANCE
    ========================================================= */
 
+/**
+ * Reads the authoritative balance from the Durable Object.
+ *
+ * The client-side cached balance is never treated as the
+ * source of truth.
+ */
 export async function handleCreditsBalance(
   request,
   env,
@@ -281,18 +326,33 @@ export async function handleCreditsBalance(
 
   return {
     ok: true,
-
     deviceId:
       identity.deviceId,
-
     ...balance,
   };
 }
 
 /* =========================================================
-   RESERVE
+   RESERVE AI CREDITS
    ========================================================= */
 
+/**
+ * Reservation lifecycle:
+ *
+ *       RESERVE
+ *          |
+ *          v
+ *       AI WORK
+ *       /     \
+ *      /       \
+ * SUCCESS     FAILURE
+ *    |           |
+ *    v           v
+ * COMMIT      RELEASE
+ *
+ * Credits are therefore not permanently consumed merely
+ * because a request started.
+ */
 export async function reserveAIRequestCredits(
   request,
   env,
@@ -325,10 +385,8 @@ export async function reserveAIRequestCredits(
   if (cost === null) {
     return {
       ok: false,
-
       error:
         "UNKNOWN_CREDIT_OPERATION",
-
       operation:
         normalizedOperation,
     };
@@ -374,9 +432,12 @@ export async function reserveAIRequestCredits(
 }
 
 /* =========================================================
-   COMMIT
+   COMMIT AI CREDITS
    ========================================================= */
 
+/**
+ * Called ONLY after a successful AI response.
+ */
 export async function commitAIRequestCredits(
   request,
   env,
@@ -426,9 +487,14 @@ export async function commitAIRequestCredits(
 }
 
 /* =========================================================
-   RELEASE
+   RELEASE AI CREDITS
    ========================================================= */
 
+/**
+ * Called when the AI request fails after reservation.
+ *
+ * The reserved credits are returned.
+ */
 export async function releaseAIRequestCredits(
   request,
   env,
@@ -478,9 +544,13 @@ export async function releaseAIRequestCredits(
 }
 
 /* =========================================================
-   REQUEST CREDIT CONTEXT
+   BUILD CREDIT CONTEXT
    ========================================================= */
 
+/**
+ * Creates the normalized server-side context used by
+ * higher-level Worker routing.
+ */
 export function buildCreditContext(
   request,
   body = {},
@@ -540,29 +610,7 @@ export function buildCreditContext(
 }
 
 /* =========================================================
-   FULL AI CREDIT FLOW
-   ========================================================= */
-
-/*
- * This helper documents the intended lifecycle:
- *
- *     reserve
- *       ↓
- *     AI request
- *       ↓
- *   ┌───┴────┐
- *   │        │
- * success   failure
- *   │        │
- * commit   release
- *
- * The actual AI execution remains in index.js/ai-router.js.
- *
- * This module only handles the credit side.
- */
-
-/* =========================================================
-   CREDIT ERROR RESPONSE
+   CREDIT ERROR → HTTP STATUS
    ========================================================= */
 
 export function creditErrorStatus(
@@ -611,6 +659,11 @@ export function creditErrorStatus(
    SAFE CREDIT SUMMARY
    ========================================================= */
 
+/**
+ * Returns only safe balance fields intended for the app UI.
+ *
+ * Internal Durable Object details are never exposed.
+ */
 export function getSafeCreditSummary(
   result,
 ) {
@@ -628,44 +681,37 @@ export function getSafeCreditSummary(
   return {
     credits:
       Number(
-        balance.credits ??
-          0,
+        balance.credits ?? 0,
       ),
 
     availableCredits:
       Number(
-        balance.availableCredits ??
-          0,
+        balance.availableCredits ?? 0,
       ),
 
     reservedCredits:
       Number(
-        balance.reservedCredits ??
-          0,
+        balance.reservedCredits ?? 0,
       ),
 
     rewardedAdsToday:
       Number(
-        balance.rewardedAdsToday ??
-          0,
+        balance.rewardedAdsToday ?? 0,
       ),
 
     rewardedAdDailyLimit:
       Number(
-        balance.rewardedAdDailyLimit ??
-          0,
+        balance.rewardedAdDailyLimit ?? 0,
       ),
 
     remainingRewardedAds:
       Number(
-        balance.remainingRewardedAds ??
-          0,
+        balance.remainingRewardedAds ?? 0,
       ),
 
     rewardedAdCredits:
       Number(
-        balance.rewardedAdCredits ??
-          0,
+        balance.rewardedAdCredits ?? 0,
       ),
   };
 }
