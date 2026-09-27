@@ -1,6 +1,28 @@
 // backend/src/media/audio.js
-// Sa7bi AI Backend - Audio Search Module
-// Version: 6.0.0
+// Sa7bi AI Backend
+//
+// General audio search module.
+//
+// Supported:
+// - Quran
+// - Legacy Adhkar search
+// - Music metadata/search
+// - Podcast metadata/search
+//
+// Dedicated religious content endpoints are handled separately:
+// - /v1/hadith
+// - /v1/tafsir
+// - /v1/tafsir/audio
+//
+// Main routes:
+// GET /v1/audio/search
+// GET /v1/audio/search-v4
+//
+// No private API keys are required.
+
+/* =========================================================
+   IMPORTS
+   ========================================================= */
 
 import {
   json,
@@ -12,7 +34,12 @@ import {
   handleQuranSearch,
 } from "../content/quran.js";
 
-const BACKEND_VERSION = "6.0.0";
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
+
+const BACKEND_VERSION =
+  "6.3.0";
 
 const ADHKAR_URL =
   "https://raw.githubusercontent.com/rn0x/Adhkar-json/main/adhkar.json";
@@ -20,33 +47,71 @@ const ADHKAR_URL =
 const ITUNES_SEARCH_URL =
   "https://itunes.apple.com/search";
 
+const MAX_ADHKAR_RESULTS =
+  80;
+
+const MAX_APPLE_RESULTS =
+  30;
+
+/* =========================================================
+   MAIN AUDIO SEARCH
+   ========================================================= */
+
 /**
- * Main audio search handler.
+ * General audio search endpoint.
  *
- * Supported types:
- * - quran
- * - adhkar
- * - music
- * - podcast
+ * Supported:
+ *
+ * /v1/audio/search?type=quran&q=الفاتحة
+ * /v1/audio/search?type=adhkar&q=الصباح
+ * /v1/audio/search?type=music&q=عمرو دياب
+ * /v1/audio/search?type=podcast&q=تكنولوجيا
+ *
+ * The same handler is also exposed through:
+ *
+ * /v1/audio/search-v4
  */
-export async function handleAudioSearch(request) {
+export async function handleAudioSearch(
+  request
+) {
   try {
-    const url = new URL(request.url);
+    const url =
+      new URL(
+        request.url
+      );
 
-    const query = normalizeArabic(
-      url.searchParams.get("q") || ""
-    );
+    const rawQuery =
+      url.searchParams.get(
+        "q"
+      ) || "";
 
-    const type = (
-      url.searchParams.get("type") || "quran"
-    ).toLowerCase().trim();
+    const query =
+      normalizeArabic(
+        rawQuery
+      );
 
-    switch (type) {
+    const type =
+      (
+        url.searchParams.get(
+          "type"
+        ) || "quran"
+      )
+        .trim()
+        .toLowerCase();
+
+    switch (
+      type
+    ) {
       case "quran":
-        return await handleQuranSearch(query);
+        return await handleQuranSearch(
+          query
+        );
 
       case "adhkar":
-        return await handleAdhkarSearch(query);
+      case "azkar":
+        return await handleAdhkarSearch(
+          query
+        );
 
       case "music":
         return await handleAppleSearch(
@@ -61,101 +126,237 @@ export async function handleAudioSearch(request) {
           "podcast"
         );
 
+      /*
+       * Hadith and Tafsir have their own dedicated
+       * endpoints and are intentionally not routed
+       * through this legacy general-audio handler.
+       */
+      case "hadith":
+        return json(
+          {
+            ok: false,
+
+            type:
+              "hadith",
+
+            error:
+              "USE_HADITH_ENDPOINT",
+
+            endpoint:
+              "/v1/hadith",
+
+            backendVersion:
+              BACKEND_VERSION,
+          },
+          400
+        );
+
+      case "tafsir":
+        return json(
+          {
+            ok: false,
+
+            type:
+              "tafsir",
+
+            error:
+              "USE_TAFSIR_ENDPOINT",
+
+            endpoint:
+              "/v1/tafsir",
+
+            backendVersion:
+              BACKEND_VERSION,
+          },
+          400
+        );
+
       default:
         return json({
           ok: true,
+
           type,
-          query,
+
+          query:
+            rawQuery.trim(),
+
+          count:
+            0,
+
           items: [],
-          backendVersion: BACKEND_VERSION,
+
+          backendVersion:
+            BACKEND_VERSION,
         });
     }
   } catch (error) {
     return json(
       {
         ok: false,
-        error: "Audio search failed",
-        message: error?.message || "Unknown error",
-        backendVersion: BACKEND_VERSION,
+
+        type:
+          "audio",
+
+        error:
+          "AUDIO_SEARCH_FAILED",
+
+        message:
+          error?.message ||
+          "تعذر تنفيذ البحث الصوتي.",
+
+        items: [],
+
+        backendVersion:
+          BACKEND_VERSION,
       },
-      500
+      502
     );
   }
 }
 
-/**
- * Adhkar search.
- *
- * This is kept for backward compatibility with the
- * existing /v1/audio endpoint.
- */
-export async function handleAdhkarSearch(query = "") {
-  try {
-    const data = await fetchJson(ADHKAR_URL);
+/* =========================================================
+   ADHKAR
+   ========================================================= */
 
-    if (!Array.isArray(data)) {
+/**
+ * Legacy Adhkar search.
+ *
+ * Kept for compatibility with older Flutter builds.
+ *
+ * The current religious UI should use:
+ * - Hadith
+ * - Tafsir
+ *
+ * instead of treating Adhkar as a primary section.
+ */
+export async function handleAdhkarSearch(
+  query = ""
+) {
+  try {
+    const data =
+      await fetchJson(
+        ADHKAR_URL
+      );
+
+    if (
+      !Array.isArray(
+        data
+      )
+    ) {
       return json({
         ok: true,
-        type: "adhkar",
+
+        type:
+          "adhkar",
+
         query,
+
+        count:
+          0,
+
         items: [],
-        backendVersion: BACKEND_VERSION,
+
+        backendVersion:
+          BACKEND_VERSION,
       });
     }
 
-    const normalizedQuery = normalizeArabic(query);
+    const normalizedQuery =
+      normalizeArabic(
+        query
+      );
 
     const items = [];
 
-    for (const group of data) {
-      if (!group || typeof group !== "object") {
+    for (
+      const group
+      of data
+    ) {
+      if (
+        !group ||
+        typeof group !==
+          "object"
+      ) {
         continue;
       }
 
       const category =
-        group.category ||
-        group.name ||
-        group.title ||
-        "";
+        typeof group.category ===
+          "string"
+          ? group.category
+          : (
+              group.name ||
+              group.title ||
+              ""
+            );
 
       const entries =
-        Array.isArray(group.array)
+        Array.isArray(
+          group.array
+        )
           ? group.array
-          : Array.isArray(group.content)
+          : Array.isArray(
+              group.content
+            )
             ? group.content
             : [];
 
-      for (const entry of entries) {
+      for (
+        const entry
+        of entries
+      ) {
         if (!entry) {
           continue;
         }
 
         const text =
-          typeof entry === "string"
+          typeof entry ===
+            "string"
             ? entry
-            : entry.content ||
-              entry.text ||
-              entry.zekr ||
-              entry.description ||
-              "";
+            : (
+                entry.content ||
+                entry.text ||
+                entry.zekr ||
+                entry.description ||
+                ""
+              );
 
-        if (!text) {
+        if (
+          typeof text !==
+            "string" ||
+          !text.trim()
+        ) {
           continue;
         }
 
         const normalizedText =
-          normalizeArabic(text);
+          normalizeArabic(
+            text
+          );
 
         const normalizedCategory =
-          normalizeArabic(category);
+          normalizeArabic(
+            category
+          );
 
         if (
           normalizedQuery &&
-          !normalizedText.includes(normalizedQuery) &&
-          !normalizedCategory.includes(normalizedQuery)
+          !normalizedText.includes(
+            normalizedQuery
+          ) &&
+          !normalizedCategory.includes(
+            normalizedQuery
+          )
         ) {
           continue;
         }
+
+        const audioUrl =
+          normalizeHttpUrl(
+            entry.audio ||
+              entry.audioUrl ||
+              null
+          );
 
         items.push({
           id:
@@ -169,7 +370,8 @@ export async function handleAdhkarSearch(query = "") {
 
           category,
 
-          text,
+          text:
+            text.trim(),
 
           repeat:
             entry.count ??
@@ -178,192 +380,403 @@ export async function handleAdhkarSearch(query = "") {
             null,
 
           audioUrl:
-            entry.audio ||
-            entry.audioUrl ||
+            audioUrl ||
             null,
 
           source:
             "Adhkar JSON",
+
+          type:
+            "adhkar",
         });
 
-        if (items.length >= 80) {
+        if (
+          items.length >=
+          MAX_ADHKAR_RESULTS
+        ) {
           break;
         }
       }
 
-      if (items.length >= 80) {
+      if (
+        items.length >=
+        MAX_ADHKAR_RESULTS
+      ) {
         break;
       }
     }
 
     return json({
       ok: true,
-      type: "adhkar",
+
+      type:
+        "adhkar",
+
       query,
-      count: items.length,
+
+      count:
+        items.length,
+
       items,
-      backendVersion: BACKEND_VERSION,
+
+      backendVersion:
+        BACKEND_VERSION,
     });
   } catch (error) {
     return json(
       {
         ok: false,
-        type: "adhkar",
+
+        type:
+          "adhkar",
+
         query,
+
+        count:
+          0,
+
         items: [],
-        error: "Failed to load adhkar",
+
+        error:
+          "ADHKAR_PROVIDER_UNAVAILABLE",
+
         message:
-          error?.message || "Unknown error",
-        backendVersion: BACKEND_VERSION,
+          error?.message ||
+          "تعذر تحميل الأذكار.",
+
+        backendVersion:
+          BACKEND_VERSION,
       },
       502
     );
   }
 }
 
+/* =========================================================
+   APPLE MUSIC / PODCAST SEARCH
+   ========================================================= */
+
 /**
- * Music / Podcast search through Apple iTunes Search API.
+ * Search Apple public metadata.
  *
- * We keep this provider because it gives us metadata,
- * artwork and preview/store/feed URLs without exposing
- * any private API key.
+ * This endpoint returns metadata and public preview/store
+ * URLs where supplied by Apple.
+ *
+ * It does NOT attempt to proxy copyrighted audio through
+ * our Worker.
+ *
+ * media:
+ * - music
+ * - podcast
  */
 export async function handleAppleSearch(
   query = "",
   media = "music"
 ) {
   try {
-    const params = new URLSearchParams();
+    const normalizedMedia =
+      media === "podcast"
+        ? "podcast"
+        : "music";
+
+    const params =
+      new URLSearchParams();
 
     params.set(
       "term",
-      query || (media === "podcast" ? "podcast" : "music")
+      query ||
+        (
+          normalizedMedia ===
+            "podcast"
+            ? "podcast"
+            : "music"
+        )
     );
 
-    params.set("country", "eg");
-    params.set("limit", "30");
+    params.set(
+      "country",
+      "eg"
+    );
 
-    if (media === "podcast") {
-      params.set("media", "podcast");
+    params.set(
+      "limit",
+      String(
+        MAX_APPLE_RESULTS
+      )
+    );
+
+    params.set(
+      "media",
+      normalizedMedia
+    );
+
+    if (
+      normalizedMedia ===
+      "podcast"
+    ) {
+      params.set(
+        "entity",
+        "podcast"
+      );
     } else {
-      params.set("media", "music");
-    }
-
-    const response = await fetch(
-      `${ITUNES_SEARCH_URL}?${params.toString()}`,
-      {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(
-        `Apple Search API returned ${response.status}`
+      params.set(
+        "entity",
+        "song"
       );
     }
 
-    const data = await response.json();
+    const endpoint =
+      `${ITUNES_SEARCH_URL}?${params.toString()}`;
 
-    const rawResults = Array.isArray(
-      data?.results
-    )
-      ? data.results
-      : [];
+    const data =
+      await fetchJson(
+        endpoint
+      );
 
-    const items = rawResults.map(
-      (item, index) => {
-        const isPodcast =
-          media === "podcast";
+    const rawResults =
+      Array.isArray(
+        data?.results
+      )
+        ? data.results
+        : [];
 
-        return {
-          id:
-            item.trackId ??
-            item.collectionId ??
-            `${media}-${index + 1}`,
-
-          title:
-            isPodcast
-              ? (
-                  item.trackName ||
-                  item.collectionName ||
-                  item.artistName ||
-                  "Podcast"
-                )
-              : (
-                  item.trackName ||
-                  item.collectionName ||
-                  "Music"
-                ),
-
-          artist:
-            item.artistName ||
-            "",
-
-          collection:
-            item.collectionName ||
-            "",
-
-          artwork:
-            item.artworkUrl100 ||
-            item.artworkUrl600 ||
-            item.artworkUrl60 ||
-            null,
-
-          previewUrl:
-            item.previewUrl ||
-            null,
-
-          storeUrl:
-            item.trackViewUrl ||
-            item.collectionViewUrl ||
-            null,
-
-          feedUrl:
-            item.feedUrl ||
-            null,
-
-          releaseDate:
-            item.releaseDate ||
-            null,
-
-          genre:
-            item.primaryGenreName ||
-            "",
-
-          type: media,
-
-          source: "Apple Search",
-        };
-      }
-    );
+    const items =
+      rawResults
+        .map(
+          (
+            item,
+            index
+          ) =>
+            normalizeAppleResult(
+              item,
+              index,
+              normalizedMedia
+            )
+        )
+        .filter(
+          Boolean
+        );
 
     return json({
       ok: true,
-      type: media,
+
+      type:
+        normalizedMedia,
+
       query,
-      count: items.length,
+
+      count:
+        items.length,
+
       items,
-      backendVersion: BACKEND_VERSION,
+
+      backendVersion:
+        BACKEND_VERSION,
     });
   } catch (error) {
     return json(
       {
         ok: false,
-        type: media,
+
+        type:
+          media === "podcast"
+            ? "podcast"
+            : "music",
+
         query,
+
+        count:
+          0,
+
         items: [],
-        error: "Audio provider unavailable",
+
+        error:
+          "APPLE_AUDIO_PROVIDER_UNAVAILABLE",
+
         message:
-          error?.message || "Unknown error",
-        backendVersion: BACKEND_VERSION,
+          error?.message ||
+          "تعذر تحميل نتائج الصوت.",
+
+        backendVersion:
+          BACKEND_VERSION,
       },
       502
     );
   }
 }
+
+/* =========================================================
+   APPLE RESULT NORMALIZATION
+   ========================================================= */
+
+/**
+ * Normalize one Apple Search API result.
+ */
+function normalizeAppleResult(
+  item,
+  index,
+  media
+) {
+  if (
+    !item ||
+    typeof item !==
+      "object"
+  ) {
+    return null;
+  }
+
+  const isPodcast =
+    media ===
+    "podcast";
+
+  const artwork =
+    normalizeHttpUrl(
+      item.artworkUrl600 ||
+        item.artworkUrl100 ||
+        item.artworkUrl60 ||
+        null
+    );
+
+  const previewUrl =
+    normalizeHttpUrl(
+      item.previewUrl
+    );
+
+  const storeUrl =
+    normalizeHttpUrl(
+      item.trackViewUrl ||
+        item.collectionViewUrl ||
+        null
+    );
+
+  const feedUrl =
+    normalizeHttpUrl(
+      item.feedUrl
+    );
+
+  return {
+    id:
+      item.trackId ??
+      item.collectionId ??
+      `${media}-${index + 1}`,
+
+    title:
+      isPodcast
+        ? (
+            item.trackName ||
+            item.collectionName ||
+            item.artistName ||
+            "Podcast"
+          )
+        : (
+            item.trackName ||
+            item.collectionName ||
+            "Music"
+          ),
+
+    artist:
+      item.artistName ||
+      "",
+
+    collection:
+      item.collectionName ||
+      "",
+
+    artwork:
+      artwork ||
+      null,
+
+    previewUrl:
+      previewUrl ||
+      null,
+
+    storeUrl:
+      storeUrl ||
+      null,
+
+    feedUrl:
+      feedUrl ||
+      null,
+
+    releaseDate:
+      item.releaseDate ||
+      null,
+
+    genre:
+      item.primaryGenreName ||
+      "",
+
+    country:
+      item.country ||
+      "EG",
+
+    type:
+      media,
+
+    source:
+      "Apple Search",
+  };
+}
+
+/* =========================================================
+   URL SAFETY
+   ========================================================= */
+
+/**
+ * Only allow normal public HTTP/HTTPS URLs.
+ *
+ * These URLs are returned to the Flutter client as
+ * third-party media/navigation URLs.
+ */
+function normalizeHttpUrl(
+  value
+) {
+  if (
+    typeof value !==
+      "string"
+  ) {
+    return "";
+  }
+
+  const raw =
+    value.trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const parsed =
+      new URL(raw);
+
+    if (
+      parsed.protocol !==
+        "http:" &&
+      parsed.protocol !==
+        "https:"
+    ) {
+      return "";
+    }
+
+    /*
+     * Do not return credentials embedded in URLs.
+     */
+    if (
+      parsed.username ||
+      parsed.password
+    ) {
+      return "";
+    }
+
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+/* =========================================================
+   EXPORTS
+   ========================================================= */
 
 export default {
   handleAudioSearch,
