@@ -30,49 +30,39 @@ class ChatScreen extends StatefulWidget {
   });
 
   @override
-  State<ChatScreen> createState() =>
-      _ChatScreenState();
+  State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState
-    extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> {
   late final ChatController _chatController;
   late final ProfileService _profileService;
 
-  final ChatMediaService _mediaService =
-      ChatMediaService();
+  final ChatMediaService _mediaService = ChatMediaService();
+  final ChatVoiceService _voiceService = ChatVoiceService();
+  final ChatImageService _imageService = ChatImageService();
+  final CreditsService _creditsService = CreditsService.instance;
 
-  final ChatVoiceService _voiceService =
-      ChatVoiceService();
-
-  final ChatImageService _imageService =
-      ChatImageService();
-
-  final CreditsService _creditsService =
-      CreditsService.instance;
-
-  final TextEditingController
-      _textController =
+  final TextEditingController _textController =
       TextEditingController();
 
-  final FocusNode _focusNode =
-      FocusNode();
+  final FocusNode _focusNode = FocusNode();
 
-  final ScrollController
-      _scrollController =
+  final ScrollController _scrollController =
       ScrollController();
 
   bool _initialized = false;
   bool _listening = false;
   bool _generatingImage = false;
 
+  // يمنع الضغط السريع أو الإرسال المتكرر قبل انتهاء الطلب السابق.
+  bool _sending = false;
+
   // ============================================================
   // SERVICE
   // ============================================================
 
   String get _serviceKey {
-    final explicit =
-        (widget.serviceKey ?? '').trim();
+    final explicit = (widget.serviceKey ?? '').trim();
 
     if (explicit.isNotEmpty &&
         ServiceKeys.isValid(explicit)) {
@@ -83,15 +73,12 @@ class _ChatScreenState
   }
 
   String _inferServiceKey() {
-    final title =
-        (widget.serviceTitle ?? '').trim();
-
+    final title = (widget.serviceTitle ?? '').trim();
     final contextValue =
         (widget.serviceContext ?? '').trim();
 
     final combined =
-        '$title $contextValue'
-            .toLowerCase();
+        '$title $contextValue'.toLowerCase();
 
     if (combined.contains('خلصانة') ||
         combined.contains('khalasana')) {
@@ -163,8 +150,7 @@ class _ChatScreenState
   }
 
   String get _title {
-    final value =
-        (widget.serviceTitle ?? '').trim();
+    final value = (widget.serviceTitle ?? '').trim();
 
     if (value.isNotEmpty) {
       return value;
@@ -183,13 +169,11 @@ class _ChatScreenState
   void initState() {
     super.initState();
 
-    _chatController =
-        ChatController(
+    _chatController = ChatController(
       serviceKey: _serviceKey,
     );
 
-    _profileService =
-        ProfileService.instance;
+    _profileService = ProfileService.instance;
 
     _initialize();
   }
@@ -241,127 +225,126 @@ class _ChatScreenState
   // ============================================================
 
   Future<void> _send() async {
-    final text =
-        _textController.text.trim();
+    final text = _textController.text.trim();
 
     if (text.isEmpty ||
+        _sending ||
         _chatController.isLoading ||
         _listening ||
         !_initialized) {
       return;
     }
 
-    _textController.clear();
-
-    if (_looksLikeImageRequest(text)) {
-      await _generateImage(text);
-      return;
-    }
-
-    final history =
-        _buildAiHistory();
-
-    final cost =
-        CreditsConfig.textMessageCost;
-
-    await _creditsService.initialize();
-
-    if (cost > 0) {
-      final canAfford =
-          await _creditsService
-              .canAfford(cost);
-
-      if (!canAfford) {
-        _showMessage(
-          'رصيدك من Credits غير كافٍ لهذه الرسالة.',
-        );
-        return;
-      }
-
-      final spent =
-          await _creditsService
-              .spend(cost);
-
-      if (!spent) {
-        _showMessage(
-          'تعذر استخدام Credits حاليًا.',
-        );
-        return;
-      }
-    }
-
-    await _chatController
-        .addTextMessage(
-      text: text,
-      isUser: true,
-    );
-
-    _scrollToBottom();
-
-    _chatController.setLoading(true);
+    // نقفل الإرسال فورًا قبل أي await.
+    // ده يمنع الضغط السريع من إنشاء أكثر من طلب.
+    _sending = true;
 
     try {
-      final reply =
-          await AiRequestService
-              .getResponse(
-        prompt: text,
-        serviceTitle: _title,
-        serviceContext:
-            widget.serviceContext,
-        history: history,
-      );
-
-      if (!mounted) {
+      // لو الطلب خاص بإنشاء صورة، نمرره لمسار الصور.
+      if (_looksLikeImageRequest(text)) {
+        await _generateImage(text);
         return;
       }
 
-      await _chatController
-          .addTextMessage(
-        text: reply,
-        isUser: false,
-      );
-    } on AiRequestException catch (
-        error) {
+      final history = _buildAiHistory();
+
+      final cost = CreditsConfig.textMessageCost;
+
+      await _creditsService.initialize();
+
       if (cost > 0) {
-        await _creditsService.add(
-          cost,
-        );
+        final canAfford =
+            await _creditsService.canAfford(cost);
+
+        if (!canAfford) {
+          // مهم: لا نمسح النص هنا.
+          _showMessage(
+            'رصيدك من Credits غير كافٍ لهذه الرسالة.',
+          );
+          return;
+        }
+
+        final spent =
+            await _creditsService.spend(cost);
+
+        if (!spent) {
+          // مهم: لا نمسح النص هنا أيضًا.
+          _showMessage(
+            'تعذر استخدام Credits حاليًا.',
+          );
+          return;
+        }
       }
 
-      if (!mounted) {
-        return;
-      }
+      // يتم مسح النص فقط بعد نجاح التحقق من الرصيد
+      // ونجاح عملية الخصم.
+      _textController.clear();
 
-      await _chatController
-          .addTextMessage(
-        text: error.message,
-        isUser: false,
+      await _chatController.addTextMessage(
+        text: text,
+        isUser: true,
       );
-    } catch (_) {
-      if (cost > 0) {
-        await _creditsService.add(
-          cost,
-        );
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      await _chatController
-          .addTextMessage(
-        text:
-            'حصلت مشكلة مؤقتة في الاتصال بصاحبي. حاول مرة تانية.',
-        isUser: false,
-      );
-    } finally {
-      _chatController.setLoading(
-        false,
-      );
-
-      await _creditsService.refresh();
 
       _scrollToBottom();
+
+      _chatController.setLoading(true);
+
+      try {
+        final reply =
+            await AiRequestService.getResponse(
+          prompt: text,
+          serviceTitle: _title,
+          serviceContext: widget.serviceContext,
+          history: history,
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        await _chatController.addTextMessage(
+          text: reply,
+          isUser: false,
+        );
+      } on AiRequestException catch (error) {
+        // لو الاتصال فشل بعد خصم Credits،
+        // نرجع الرصيد للمستخدم.
+        if (cost > 0) {
+          await _creditsService.add(cost);
+        }
+
+        if (!mounted) {
+          return;
+        }
+
+        await _chatController.addTextMessage(
+          text: error.message,
+          isUser: false,
+        );
+      } catch (_) {
+        if (cost > 0) {
+          await _creditsService.add(cost);
+        }
+
+        if (!mounted) {
+          return;
+        }
+
+        await _chatController.addTextMessage(
+          text:
+              'حصلت مشكلة مؤقتة في الاتصال بصاحبي. حاول مرة تانية.',
+          isUser: false,
+        );
+      } finally {
+        _chatController.setLoading(false);
+
+        await _creditsService.refresh();
+
+        _scrollToBottom();
+      }
+    } finally {
+      // فتح الإرسال مرة أخرى بعد انتهاء العملية بالكامل.
+      _sending = false;
     }
   }
 
@@ -369,26 +352,21 @@ class _ChatScreenState
   // HISTORY
   // ============================================================
 
-  List<Map<String, String>>
-      _buildAiHistory() {
+  List<Map<String, String>> _buildAiHistory() {
     return _chatController.messages
         .where(
           (message) =>
-              message.text
-                  .trim()
-                  .isNotEmpty &&
+              message.text.trim().isNotEmpty &&
               message.image == null &&
               !message.isVideo,
         )
         .map(
-          (message) =>
-              <String, String>{
+          (message) => <String, String>{
             'role':
                 message.isUser
                     ? 'user'
                     : 'assistant',
-            'content':
-                message.text.trim(),
+            'content': message.text.trim(),
           },
         )
         .toList();
@@ -414,20 +392,16 @@ class _ChatScreenState
     }
 
     final bytes =
-        await _mediaService
-            .takePhoto();
+        await _mediaService.takePhoto();
 
-    if (bytes == null ||
-        bytes.isEmpty) {
+    if (bytes == null || bytes.isEmpty) {
       _showMessage(
         'تعذر التقاط الصورة.',
       );
       return;
     }
 
-    await _analyzeImageBytes(
-      bytes,
-    );
+    await _analyzeImageBytes(bytes);
   }
 
   // ============================================================
@@ -440,17 +414,13 @@ class _ChatScreenState
     }
 
     final bytes =
-        await _mediaService
-            .pickPhoto();
+        await _mediaService.pickPhoto();
 
-    if (bytes == null ||
-        bytes.isEmpty) {
+    if (bytes == null || bytes.isEmpty) {
       return;
     }
 
-    await _analyzeImageBytes(
-      bytes,
-    );
+    await _analyzeImageBytes(bytes);
   }
 
   // ============================================================
@@ -466,15 +436,13 @@ class _ChatScreenState
     }
 
     final cost =
-        CreditsConfig
-            .imageAnalysisCost;
+        CreditsConfig.imageAnalysisCost;
 
     await _creditsService.initialize();
 
     if (cost > 0) {
       final canAfford =
-          await _creditsService
-              .canAfford(cost);
+          await _creditsService.canAfford(cost);
 
       if (!canAfford) {
         _showMessage(
@@ -484,8 +452,7 @@ class _ChatScreenState
       }
 
       final spent =
-          await _creditsService
-              .spend(cost);
+          await _creditsService.spend(cost);
 
       if (!spent) {
         _showMessage(
@@ -495,10 +462,8 @@ class _ChatScreenState
       }
     }
 
-    await _chatController
-        .addImageMessage(
-      text:
-          'أرسلت صورة لتحليلها.',
+    await _chatController.addImageMessage(
+      text: 'أرسلت صورة لتحليلها.',
       isUser: true,
       image: bytes,
     );
@@ -509,57 +474,45 @@ class _ChatScreenState
 
     try {
       final reply =
-          await _analyzeBytesWithAi(
-        bytes,
-      );
+          await _analyzeBytesWithAi(bytes);
 
       if (!mounted) {
         return;
       }
 
-      await _chatController
-          .addTextMessage(
+      await _chatController.addTextMessage(
         text: reply,
         isUser: false,
       );
-    } on AiRequestException catch (
-        error) {
+    } on AiRequestException catch (error) {
       if (cost > 0) {
-        await _creditsService.add(
-          cost,
-        );
+        await _creditsService.add(cost);
       }
 
       if (!mounted) {
         return;
       }
 
-      await _chatController
-          .addTextMessage(
+      await _chatController.addTextMessage(
         text: error.message,
         isUser: false,
       );
     } catch (_) {
       if (cost > 0) {
-        await _creditsService.add(
-          cost,
-        );
+        await _creditsService.add(cost);
       }
 
       if (!mounted) {
         return;
       }
 
-      await _chatController
-          .addTextMessage(
+      await _chatController.addTextMessage(
         text:
             'تعذر تحليل الصورة حاليًا. حاول مرة أخرى.',
         isUser: false,
       );
     } finally {
-      _chatController.setLoading(
-        false,
-      );
+      _chatController.setLoading(false);
 
       await _creditsService.refresh();
 
@@ -567,8 +520,7 @@ class _ChatScreenState
     }
   }
 
-  Future<String>
-      _analyzeBytesWithAi(
+  Future<String> _analyzeBytesWithAi(
     Uint8List bytes,
   ) async {
     if (bytes.isEmpty) {
@@ -577,21 +529,16 @@ class _ChatScreenState
       );
     }
 
-    final file =
-        XFile.fromData(
+    final file = XFile.fromData(
       bytes,
-      name:
-          'chat_image.jpg',
-      mimeType:
-          'image/jpeg',
+      name: 'chat_image.jpg',
+      mimeType: 'image/jpeg',
     );
 
-    return AiRequestService
-        .analyzeImage(
+    return AiRequestService.analyzeImage(
       file: file,
       serviceTitle: _title,
-      serviceContext:
-          widget.serviceContext,
+      serviceContext: widget.serviceContext,
       prompt:
           'حلل الصورة المرسلة بدقة وباختصار. '
           'اذكر أهم الأشياء الظاهرة فيها، '
@@ -622,15 +569,13 @@ class _ChatScreenState
             : video.name;
 
     final cost =
-        CreditsConfig
-            .videoAnalysisCost;
+        CreditsConfig.videoAnalysisCost;
 
     await _creditsService.initialize();
 
     if (cost > 0) {
       final canAfford =
-          await _creditsService
-              .canAfford(cost);
+          await _creditsService.canAfford(cost);
 
       if (!canAfford) {
         _showMessage(
@@ -640,8 +585,7 @@ class _ChatScreenState
       }
 
       final spent =
-          await _creditsService
-              .spend(cost);
+          await _creditsService.spend(cost);
 
       if (!spent) {
         _showMessage(
@@ -651,8 +595,7 @@ class _ChatScreenState
       }
     }
 
-    await _chatController
-        .addVideoMessage(
+    await _chatController.addVideoMessage(
       text:
           'أرسلت فيديو: $fileName\n'
           'جاري تجهيز لقطات منه للتحليل...',
@@ -665,8 +608,9 @@ class _ChatScreenState
 
     try {
       final frames =
-          await VideoAnalysisService
-              .extractFrames(video);
+          await VideoAnalysisService.extractFrames(
+        video,
+      );
 
       if (frames.isEmpty) {
         throw const AiRequestException(
@@ -675,12 +619,10 @@ class _ChatScreenState
       }
 
       final reply =
-          await AiRequestService
-              .analyzeImages(
+          await AiRequestService.analyzeImages(
         frames,
         serviceTitle: _title,
-        serviceContext:
-            widget.serviceContext,
+        serviceContext: widget.serviceContext,
         prompt:
             'هذه لقطات مستخرجة من فيديو أرسله المستخدم. '
             'حلل اللقطات معًا وحاول فهم تسلسل ما يحدث بينها. '
@@ -694,49 +636,39 @@ class _ChatScreenState
         return;
       }
 
-      await _chatController
-          .addTextMessage(
+      await _chatController.addTextMessage(
         text: reply,
         isUser: false,
       );
-    } on AiRequestException catch (
-        error) {
+    } on AiRequestException catch (error) {
       if (cost > 0) {
-        await _creditsService.add(
-          cost,
-        );
+        await _creditsService.add(cost);
       }
 
       if (!mounted) {
         return;
       }
 
-      await _chatController
-          .addTextMessage(
+      await _chatController.addTextMessage(
         text: error.message,
         isUser: false,
       );
     } catch (_) {
       if (cost > 0) {
-        await _creditsService.add(
-          cost,
-        );
+        await _creditsService.add(cost);
       }
 
       if (!mounted) {
         return;
       }
 
-      await _chatController
-          .addTextMessage(
+      await _chatController.addTextMessage(
         text:
             'حصل خطأ أثناء تحليل الفيديو. حاول بفيديو أقصر.',
         isUser: false,
       );
     } finally {
-      _chatController.setLoading(
-        false,
-      );
+      _chatController.setLoading(false);
 
       await _creditsService.refresh();
 
@@ -748,15 +680,13 @@ class _ChatScreenState
   // SPEECH TO TEXT
   // ============================================================
 
-  Future<void>
-      _toggleSpeechToText() async {
+  Future<void> _toggleSpeechToText() async {
     if (_chatController.isLoading) {
       return;
     }
 
     if (_listening) {
-      await _voiceService
-          .stopListening();
+      await _voiceService.stopListening();
 
       if (!mounted) {
         return;
@@ -770,9 +700,7 @@ class _ChatScreenState
     }
 
     final permission =
-        await Permission
-            .microphone
-            .request();
+        await Permission.microphone.request();
 
     if (!permission.isGranted) {
       _showMessage(
@@ -782,8 +710,7 @@ class _ChatScreenState
     }
 
     final started =
-        await _voiceService
-            .startListening(
+        await _voiceService.startListening(
       localeId: 'ar-EG',
       onResult: (
         String text,
@@ -801,8 +728,7 @@ class _ChatScreenState
               TextSelection.fromPosition(
             TextPosition(
               offset:
-                  _textController.text
-                      .length,
+                  _textController.text.length,
             ),
           );
         }
@@ -847,8 +773,7 @@ class _ChatScreenState
 
   Future<void> _voiceAction() async {
     if (_voiceService.isSpeaking) {
-      await _voiceService
-          .stopSpeaking();
+      await _voiceService.stopSpeaking();
 
       if (mounted) {
         setState(() {});
@@ -862,9 +787,7 @@ class _ChatScreenState
     for (final message
         in _chatController.messages.reversed) {
       if (!message.isUser &&
-          message.text
-              .trim()
-              .isNotEmpty) {
+          message.text.trim().isNotEmpty) {
         latestAi = message;
         break;
       }
@@ -878,13 +801,10 @@ class _ChatScreenState
     }
 
     final cleaned =
-        _cleanSpeech(
-      latestAi.text,
-    );
+        _cleanSpeech(latestAi.text);
 
     final initialized =
-        await _voiceService
-            .initializeTts();
+        await _voiceService.initializeTts();
 
     if (!initialized) {
       _showMessage(
@@ -929,8 +849,7 @@ class _ChatScreenState
       _generatingImage = true;
     });
 
-    await _chatController
-        .addTextMessage(
+    await _chatController.addTextMessage(
       text:
           'طلب إنشاء صورة:\n$prompt',
       isUser: true,
@@ -942,16 +861,14 @@ class _ChatScreenState
 
     try {
       final result =
-          await _imageService
-              .generate(prompt);
+          await _imageService.generate(prompt);
 
       if (!mounted) {
         return;
       }
 
       if (!result.isSuccess) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text:
               result.error ??
                   'تعذر إنشاء الصورة حاليًا.',
@@ -963,30 +880,23 @@ class _ChatScreenState
 
       if (result.bytes != null &&
           result.bytes!.isNotEmpty) {
-        await _chatController
-            .addImageMessage(
-          text:
-              'تم إنشاء الصورة.',
+        await _chatController.addImageMessage(
+          text: 'تم إنشاء الصورة.',
           isUser: false,
-          image:
-              result.bytes!,
+          image: result.bytes!,
         );
-      } else if (
-          result.imageUrl != null &&
+      } else if (result.imageUrl != null &&
           result.imageUrl!
               .trim()
               .isNotEmpty) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text:
               'تم إنشاء الصورة:\n${result.imageUrl}',
           isUser: false,
         );
       } else {
-        await _chatController
-            .addTextMessage(
-          text:
-              'تم إنشاء الصورة.',
+        await _chatController.addTextMessage(
+          text: 'تم إنشاء الصورة.',
           isUser: false,
         );
       }
@@ -995,16 +905,13 @@ class _ChatScreenState
         return;
       }
 
-      await _chatController
-          .addTextMessage(
+      await _chatController.addTextMessage(
         text:
             'حصل خطأ أثناء إنشاء الصورة. حاول مرة أخرى.',
         isUser: false,
       );
     } finally {
-      _chatController.setLoading(
-        false,
-      );
+      _chatController.setLoading(false);
 
       await _creditsService.refresh();
 
@@ -1022,8 +929,7 @@ class _ChatScreenState
   // IMAGE GENERATOR DIALOG
   // ============================================================
 
-  Future<void>
-      _showImageGenerator() async {
+  Future<void> _showImageGenerator() async {
     if (_chatController.isLoading ||
         _generatingImage) {
       return;
@@ -1040,27 +946,23 @@ class _ChatScreenState
           backgroundColor:
               const Color(0xFF151923),
           title: Text(
-            _chatController
-                    .isKhalasana
+            _chatController.isKhalasana
                 ? 'خلصانة AI — إنشاء صورة'
                 : 'إنشاء صورة',
             textDirection:
                 TextDirection.rtl,
             style: const TextStyle(
               color: Colors.white,
-              fontWeight:
-                  FontWeight.w900,
+              fontWeight: FontWeight.w900,
             ),
           ),
           content: TextField(
-            controller:
-                promptController,
+            controller: promptController,
             maxLines: 5,
             autofocus: true,
             textDirection:
                 TextDirection.rtl,
-            textAlign:
-                TextAlign.right,
+            textAlign: TextAlign.right,
             style: const TextStyle(
               color: Colors.white,
             ),
@@ -1099,8 +1001,7 @@ class _ChatScreenState
               onPressed: () =>
                   Navigator.pop(
                 dialogContext,
-                promptController
-                    .text,
+                promptController.text,
               ),
               child:
                   const Text(
@@ -1129,7 +1030,8 @@ class _ChatScreenState
   // ============================================================
 
   Future<void> _clearChat() async {
-    if (_chatController.isLoading) {
+    if (_chatController.isLoading ||
+        _sending) {
       return;
     }
 
@@ -1146,8 +1048,7 @@ class _ChatScreenState
                 TextDirection.rtl,
             style: TextStyle(
               color: Colors.white,
-              fontWeight:
-                  FontWeight.w900,
+              fontWeight: FontWeight.w900,
             ),
           ),
           content: const Text(
@@ -1190,8 +1091,7 @@ class _ChatScreenState
       return;
     }
 
-    await _chatController
-        .clearChat();
+    await _chatController.clearChat();
 
     if (!mounted) {
       return;
@@ -1209,8 +1109,7 @@ class _ChatScreenState
   void _scrollToBottom() {
     WidgetsBinding.instance
         .addPostFrameCallback((_) {
-      if (!_scrollController
-          .hasClients) {
+      if (!_scrollController.hasClients) {
         return;
       }
 
@@ -1225,8 +1124,7 @@ class _ChatScreenState
             const Duration(
           milliseconds: 220,
         ),
-        curve:
-            Curves.easeOut,
+        curve: Curves.easeOut,
       );
     });
   }
@@ -1444,7 +1342,8 @@ class _ChatScreenState
                         .serviceContext,
             enabled:
                 !_chatController
-                    .isLoading,
+                    .isLoading &&
+                !_sending,
             isListening:
                 _listening,
             isGeneratingImage:
