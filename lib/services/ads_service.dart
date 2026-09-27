@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/credits_config.dart';
+import 'ai_request_service.dart';
 
 /// خدمة الإعلانات المركزية في صاحبي AI.
 ///
@@ -12,14 +14,36 @@ import '../config/credits_config.dart';
 /// - Banner Ads.
 /// - Interstitial Ads.
 /// - Rewarded Ads.
+/// - إعداد AdMob Server-Side Verification (SSV).
+/// - إرسال Device ID داخل customData إلى AdMob.
 /// - حفظ عداد الـInterstitial.
 /// - حفظ حالة الـBanner.
 ///
-/// ملاحظات:
-/// - لا يتم عرض إعلان تلقائي عند فتح التطبيق.
-/// - فشل الإعلان لا يمنع التطبيق من العمل.
-/// - Rewarded لا تُعتبر ناجحة إلا بعد onUserEarnedReward.
-/// - Banner لا يُعتبر جاهزًا إلا بعد onAdLoaded.
+/// مهم جدًا:
+/// - لا يوجد أي API Key داخل التطبيق.
+/// - لا يتم منح Credits من التطبيق مباشرة.
+/// - Rewarded Ad يستخدم AdMob SSV.
+/// - الـBackend هو الذي يقرر منح الـCredits بعد التحقق من Google.
+/// - onUserEarnedReward ليس مصدر السلطة لمنح الرصيد.
+///
+/// مسار Rewarded النهائي:
+///
+/// Flutter
+///   ↓
+/// AdMob Rewarded
+///   ↓
+/// onUserEarnedReward
+///   ↓
+/// AdMob SSV
+///   ↓
+/// Cloudflare Worker
+///   ↓
+/// Google Signature Verification
+///   ↓
+/// Durable Object Credits Ledger
+///
+/// الـDevice ID الموجود في customData يستخدم فقط لربط
+/// مكافأة AdMob بتثبيت التطبيق الصحيح.
 class AdsService {
   AdsService._();
 
@@ -498,6 +522,49 @@ class AdsService {
     return CreditsConfig.rewardedAdCredits;
   }
 
+  /// يجهز بيانات SSV للإعلان.
+  ///
+  /// لا نرسل أي API Key أو بيانات حساسة.
+  ///
+  /// customData تحتوي على Device ID فقط مع مصدر العملية.
+  ///
+  /// الـBackend سيستقبلها في:
+  ///
+  /// custom_data
+  ///
+  /// داخل AdMob SSV callback.
+  Future<bool> _configureRewardedSsv(
+    RewardedAd ad,
+  ) async {
+    try {
+      final deviceId =
+          await AiRequestService.getDeviceId();
+
+      if (deviceId.trim().isEmpty) {
+        return false;
+      }
+
+      final customData =
+          jsonEncode({
+        'deviceId': deviceId,
+        'source': 'sa7bi_rewarded_ad',
+      });
+
+      final options =
+          ServerSideVerificationOptions(
+        customData: customData,
+      );
+
+      await ad.setServerSideOptions(
+        options,
+      );
+
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> loadRewarded() async {
     await _ensureInitialized();
 
@@ -525,14 +592,16 @@ class AdsService {
         rewardedAdLoadCallback:
             RewardedAdLoadCallback(
           onAdLoaded: (ad) {
-            _rewardedAd = ad;
-
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
+            unawaited(
+              _finishRewardedLoad(
+                ad,
+                completer,
+              ),
+            );
           },
           onAdFailedToLoad: (error) {
             _rewardedAd = null;
+            _isLoadingRewarded = false;
 
             if (!completer.isCompleted) {
               completer.complete(false);
@@ -541,23 +610,97 @@ class AdsService {
         ),
       );
     } catch (_) {
+      _isLoadingRewarded = false;
+
       if (!completer.isCompleted) {
         completer.complete(false);
       }
     }
 
-    _isLoadingRewarded = false;
-
     try {
       return await completer.future.timeout(
         const Duration(seconds: 20),
-        onTimeout: () => false,
+        onTimeout: () {
+          _isLoadingRewarded = false;
+          return false;
+        },
       );
     } catch (_) {
+      _isLoadingRewarded = false;
       return false;
     }
   }
 
+  /// يكمل تحميل Rewarded بعد ضبط SSV.
+  ///
+  /// لا يتم اعتبار الإعلان جاهزًا قبل نجاح
+  /// setServerSideOptions().
+  Future<void> _finishRewardedLoad(
+    RewardedAd ad,
+    Completer<bool> completer,
+  ) async {
+    try {
+      final ssvReady =
+          await _configureRewardedSsv(
+        ad,
+      );
+
+      if (!ssvReady) {
+        try {
+          ad.dispose();
+        } catch (_) {}
+
+        _rewardedAd = null;
+        _isLoadingRewarded = false;
+
+        if (!completer.isCompleted) {
+          completer.complete(false);
+        }
+
+        return;
+      }
+
+      _rewardedAd = ad;
+      _isLoadingRewarded = false;
+
+      if (!completer.isCompleted) {
+        completer.complete(true);
+      }
+    } catch (_) {
+      try {
+        ad.dispose();
+      } catch (_) {}
+
+      _rewardedAd = null;
+      _isLoadingRewarded = false;
+
+      if (!completer.isCompleted) {
+        completer.complete(false);
+      }
+    }
+  }
+
+  /// عرض Rewarded Ad.
+  ///
+  /// مهم:
+  ///
+  /// onUserEarnedReward:
+  /// - يؤكد أن AdMob أعطى التطبيق حدث المكافأة.
+  /// - لا يمنح Credits محليًا.
+  /// - لا يعدل الرصيد.
+  ///
+  /// منح الرصيد الحقيقي يتم فقط من:
+  ///
+  /// AdMob SSV
+  ///      ↓
+  /// Cloudflare Worker
+  ///      ↓
+  /// Google signature verification
+  ///      ↓
+  /// Durable Object
+  ///
+  /// لذلك callback هنا يستخدم فقط لإبلاغ الواجهة
+  /// أن حدث المكافأة المحلي وقع.
   Future<bool> showRewarded({
     void Function(int amount)?
         onRewardEarned,
@@ -569,10 +712,12 @@ class AdsService {
       return false;
     }
 
-    RewardedAd? ad = _rewardedAd;
+    RewardedAd? ad =
+        _rewardedAd;
 
     if (ad == null) {
-      final loaded = await loadRewarded();
+      final loaded =
+          await loadRewarded();
 
       if (!loaded) {
         return false;
@@ -623,7 +768,7 @@ class AdsService {
     );
 
     try {
-      ad.show(
+      await ad.show(
         onUserEarnedReward:
             (ad, reward) {
           rewardEarned = true;
@@ -636,6 +781,15 @@ class AdsService {
                   ? amount
                   : CreditsConfig
                       .rewardedAdCredits;
+
+          // ----------------------------------------------------
+          // IMPORTANT:
+          //
+          // لا نضيف Credits هنا.
+          //
+          // هذه callback من AdMob فقط.
+          // المكافأة الحقيقية تأتي من SSV.
+          // ----------------------------------------------------
 
           if (onRewardEarned != null) {
             onRewardEarned(
@@ -683,6 +837,9 @@ class AdsService {
 
 /// حالة مستقلة لمعرفة هل يمكن إعطاء
 /// Rewarded Credits.
+///
+/// هذه لا تمنح الرصيد.
+/// هي مجرد مفتاح تشغيل/إيقاف لواجهة الإعلانات.
 class CreditsServiceAvailability {
   CreditsServiceAvailability._();
 
