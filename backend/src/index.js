@@ -1,6 +1,6 @@
 // backend/src/index.js
 // Sa7bi AI Backend
-// Modular Integration - Version 6.1.0
+// Modular Integration - Version 6.2.0
 
 /* =========================================================
    CORE / UTILS
@@ -22,7 +22,6 @@ import {
 import {
   runTextOrVisionWithFallback,
   runImageWithFallback,
-  getAIStatus,
 } from "./ai/ai-router.js";
 
 /* =========================================================
@@ -34,8 +33,6 @@ import {
 } from "./credits.js";
 
 import {
-  CREDIT_DEVICE_HEADER,
-  CREDIT_REQUEST_HEADER,
   getCreditDeviceId,
   getCreditRequestId,
   getChatCreditOperation,
@@ -46,6 +43,15 @@ import {
   releaseAIRequestCredits,
   getSafeCreditSummary,
 } from "./credits-router.js";
+
+/* =========================================================
+   ADMOB REWARDED ADS - SERVER SIDE VERIFICATION
+   ========================================================= */
+
+import {
+  handleAdMobSSV,
+  getAdMobSSVStatus,
+} from "./admob-ssv.js";
 
 /* =========================================================
    CONTENT
@@ -121,17 +127,12 @@ import {
    ========================================================= */
 
 const BACKEND_VERSION =
-  "6.1.0";
+  "6.2.0";
 
 const DOWNLOAD_URL =
   "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk";
 
-const MAX_MESSAGES = 20;
-
 const MAX_IMAGES = 4;
-
-const MAX_IMAGE_CHARS =
-  8 * 1024 * 1024;
 
 /* =========================================================
    AI INSTRUCTIONS
@@ -499,13 +500,6 @@ async function handleChat(
         },
       );
   } catch (error) {
-    /*
-     * AI failed.
-     *
-     * The reservation is released,
-     * so the user is NOT charged.
-     */
-
     await releaseAIRequestCredits(
       request,
       env,
@@ -569,10 +563,6 @@ async function handleChat(
   if (
     !creditCommit.ok
   ) {
-    /*
-     * Do not silently pretend that the
-     * credit transaction succeeded.
-     */
     return json(
       {
         ok: false,
@@ -618,8 +608,6 @@ async function handleChat(
 
     backendVersion:
       BACKEND_VERSION,
-
-    /* ---------- Credits ---------- */
 
     credits:
       getSafeCreditSummary(
@@ -843,11 +831,6 @@ async function handleImageGeneration(
         },
       );
   } catch (error) {
-    /*
-     * AI failed.
-     *
-     * Release the reservation.
-     */
     await releaseAIRequestCredits(
       request,
       env,
@@ -965,8 +948,6 @@ async function handleImageGeneration(
     backendVersion:
       BACKEND_VERSION,
 
-    /* ---------- Credits ---------- */
-
     credits:
       getSafeCreditSummary(
         creditCommit,
@@ -1064,7 +1045,9 @@ async function handleCredits(
    ROOT
    ========================================================= */
 
-function handleRoot() {
+function handleRoot(
+  env,
+) {
   return json({
     ok: true,
 
@@ -1115,6 +1098,9 @@ function handleRoot() {
       downloads: true,
 
       credits: true,
+
+      rewardedAds:
+        true,
     },
 
     ai: {
@@ -1130,8 +1116,22 @@ function handleRoot() {
         true,
 
       rewardedAds:
-        "server_validation_pending",
+        "admob_ssv_verified",
+
+      rewardVerification:
+        "google_signature",
+
+      rewardCredits:
+        10,
+
+      dailyRewardedAds:
+        5,
     },
+
+    rewardedAds:
+      getAdMobSSVStatus(
+        env,
+      ),
 
     endpoints: {
       chat:
@@ -1142,6 +1142,9 @@ function handleRoot() {
 
       credits:
         "/v1/credits",
+
+      rewardedAdSSV:
+        "/v1/rewards/admob/ssv",
 
       news:
         "/v1/news",
@@ -1273,7 +1276,9 @@ export default {
           "GET" &&
         path === "/"
       ) {
-        return handleRoot();
+        return handleRoot(
+          env,
+        );
       }
 
       /* =====================================================
@@ -1331,6 +1336,38 @@ export default {
           "/v1/credits"
       ) {
         return handleCredits(
+          request,
+          env,
+        );
+      }
+
+      /* =====================================================
+         ADMOB REWARDED ADS SSV
+         
+         IMPORTANT:
+         This endpoint is called by AdMob, NOT Flutter.
+         
+         The module verifies:
+         - Google signature
+         - key_id
+         - timestamp
+         - reward amount
+         - reward item
+         - ad unit when configured
+         - transaction_id
+         - custom_data/device ID
+         
+         Only after successful verification are credits
+         sent to the Durable Object.
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/rewards/admob/ssv"
+      ) {
+        return handleAdMobSSV(
           request,
           env,
         );
