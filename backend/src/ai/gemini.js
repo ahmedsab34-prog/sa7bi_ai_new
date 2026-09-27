@@ -1,3 +1,21 @@
+// backend/src/ai/gemini.js
+// Sa7bi AI - Gemini Provider
+//
+// Gemini is the primary AI provider.
+//
+// Supported:
+// - Text generation
+// - Conversation history
+// - Image analysis
+// - Multiple image inputs
+// - Image generation
+// - Image editing using reference images
+//
+// Security:
+// - GEMINI_API_KEY is read only from Cloudflare Worker secrets.
+// - The API key is never returned to the Flutter application.
+// - No API key is stored in source code.
+
 const DEFAULT_GEMINI_TEXT_MODEL =
   "gemini-3.8-flash";
 
@@ -7,40 +25,113 @@ const DEFAULT_GEMINI_IMAGE_MODEL =
 const GEMINI_API_BASE =
   "https://generativelanguage.googleapis.com/v1beta/models";
 
+const DEFAULT_IMAGE_PROMPT =
+  "حلل الصور المرفقة بدقة، واقرأ النصوص الواضحة فيها، واشرح الأشياء المهمة الظاهرة فقط دون تخمين.";
+
+const MAX_INPUT_IMAGES = 14;
+
+const MAX_IMAGE_DATA_URL_LENGTH =
+  8 * 1024 * 1024;
+
+const MAX_OUTPUT_TOKENS =
+  4096;
+
+const ALLOWED_ASPECT_RATIOS =
+  new Set([
+    "1:1",
+    "1:4",
+    "4:1",
+    "1:8",
+    "8:1",
+    "2:3",
+    "3:2",
+    "3:4",
+    "4:3",
+    "4:5",
+    "5:4",
+    "9:16",
+    "16:9",
+    "21:9",
+  ]);
+
+const ALLOWED_IMAGE_SIZES =
+  new Set([
+    "512",
+    "1K",
+    "2K",
+    "4K",
+  ]);
+
+/* -------------------------------------------------------------------------- */
+/* Configuration                                                              */
+/* -------------------------------------------------------------------------- */
+
 function getGeminiApiKey(env) {
   const key =
-    typeof env?.GEMINI_API_KEY === "string"
+    typeof env?.GEMINI_API_KEY ===
+      "string"
       ? env.GEMINI_API_KEY.trim()
       : "";
 
   if (!key) {
-    throw new Error("GEMINI_API_KEY_MISSING");
+    const error =
+      new Error(
+        "GEMINI_API_KEY_MISSING"
+      );
+
+    error.code =
+      "GEMINI_API_KEY_MISSING";
+
+    throw error;
   }
 
   return key;
 }
 
 function getTextModel(env) {
+  const model =
+    typeof env?.GEMINI_TEXT_MODEL ===
+      "string"
+      ? env.GEMINI_TEXT_MODEL.trim()
+      : "";
+
   return (
-    env?.GEMINI_TEXT_MODEL ||
+    model ||
     DEFAULT_GEMINI_TEXT_MODEL
   );
 }
 
 function getImageModel(env) {
+  const model =
+    typeof env?.GEMINI_IMAGE_MODEL ===
+      "string"
+      ? env.GEMINI_IMAGE_MODEL.trim()
+      : "";
+
   return (
-    env?.GEMINI_IMAGE_MODEL ||
+    model ||
     DEFAULT_GEMINI_IMAGE_MODEL
   );
 }
 
-function getErrorMessage(data, status) {
+/* -------------------------------------------------------------------------- */
+/* Request errors                                                             */
+/* -------------------------------------------------------------------------- */
+
+function getErrorMessage(
+  data,
+  status
+) {
   return (
     data?.error?.message ||
     data?.message ||
     `Gemini HTTP ${status}`
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Gemini HTTP request                                                        */
+/* -------------------------------------------------------------------------- */
 
 async function geminiRequest(
   env,
@@ -55,17 +146,40 @@ async function geminiRequest(
       model
     )}:generateContent`;
 
-  const response =
-    await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type":
-          "application/json",
-        "x-goog-api-key":
-          apiKey,
-      },
-      body: JSON.stringify(body),
-    });
+  let response;
+
+  try {
+    response =
+      await fetch(url, {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          "x-goog-api-key":
+            apiKey,
+        },
+
+        body:
+          JSON.stringify(body),
+      });
+  } catch (cause) {
+    const error =
+      new Error(
+        "GEMINI_NETWORK_ERROR"
+      );
+
+    error.code =
+      "GEMINI_NETWORK_ERROR";
+
+    error.cause =
+      cause?.message ||
+      cause?.name ||
+      "network_error";
+
+    throw error;
+  }
 
   const raw =
     await response.text();
@@ -98,7 +212,8 @@ async function geminiRequest(
     error.status =
       response.status;
 
-    error.data = data;
+    error.data =
+      data;
 
     throw error;
   }
@@ -106,7 +221,13 @@ async function geminiRequest(
   return data;
 }
 
-function extractGeminiParts(data) {
+/* -------------------------------------------------------------------------- */
+/* Response extraction                                                        */
+/* -------------------------------------------------------------------------- */
+
+function extractGeminiParts(
+  data
+) {
   const parts = [];
 
   const candidates =
@@ -117,7 +238,8 @@ function extractGeminiParts(data) {
       : [];
 
   for (
-    const candidate of candidates
+    const candidate of
+      candidates
   ) {
     const candidateParts =
       Array.isArray(
@@ -127,7 +249,8 @@ function extractGeminiParts(data) {
         : [];
 
     for (
-      const part of candidateParts
+      const part of
+        candidateParts
     ) {
       if (part) {
         parts.push(part);
@@ -138,7 +261,9 @@ function extractGeminiParts(data) {
   return parts;
 }
 
-function extractGeminiText(data) {
+function extractGeminiText(
+  data
+) {
   const parts =
     extractGeminiParts(data);
 
@@ -163,7 +288,9 @@ function extractGeminiText(data) {
     .trim();
 }
 
-function extractGeminiImage(data) {
+function extractGeminiImage(
+  data
+) {
   const parts =
     extractGeminiParts(data);
 
@@ -198,6 +325,10 @@ function extractGeminiImage(data) {
   return null;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Image input helpers                                                        */
+/* -------------------------------------------------------------------------- */
+
 function dataUrlParts(
   dataUrl
 ) {
@@ -209,9 +340,27 @@ function dataUrlParts(
     return null;
   }
 
+  const image =
+    dataUrl.trim();
+
+  if (
+    image.length >
+    MAX_IMAGE_DATA_URL_LENGTH
+  ) {
+    const error =
+      new Error(
+        "GEMINI_IMAGE_TOO_LARGE"
+      );
+
+    error.code =
+      "GEMINI_IMAGE_TOO_LARGE";
+
+    throw error;
+  }
+
   const match =
-    dataUrl.match(
-      /^data:([^;,]+);base64,(.+)$/s
+    image.match(
+      /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i
     );
 
   if (!match) {
@@ -221,9 +370,49 @@ function dataUrlParts(
   return {
     mimeType:
       match[1].trim(),
+
     data:
       match[2].trim(),
   };
+}
+
+function normalizeImageDataUrls(
+  imageDataUrls
+) {
+  if (
+    !Array.isArray(
+      imageDataUrls
+    )
+  ) {
+    return [];
+  }
+
+  const images = [];
+
+  for (
+    const imageDataUrl of
+      imageDataUrls
+  ) {
+    if (
+      images.length >=
+      MAX_INPUT_IMAGES
+    ) {
+      break;
+    }
+
+    const parsed =
+      dataUrlParts(
+        imageDataUrl
+      );
+
+    if (parsed) {
+      images.push(
+        parsed
+      );
+    }
+  }
+
+  return images;
 }
 
 function buildGeminiParts(
@@ -238,35 +427,36 @@ function buildGeminiParts(
     text.trim()
   ) {
     parts.push({
-      text: text.trim(),
+      text:
+        text.trim(),
     });
   }
 
-  for (
-    const imageDataUrl of
+  const images =
+    normalizeImageDataUrls(
       imageDataUrls
+    );
+
+  for (
+    const image of images
   ) {
-    const parsed =
-      dataUrlParts(
-        imageDataUrl
-      );
-
-    if (!parsed) {
-      continue;
-    }
-
     parts.push({
       inlineData: {
         mimeType:
-          parsed.mimeType,
+          image.mimeType,
+
         data:
-          parsed.data,
+          image.data,
       },
     });
   }
 
   return parts;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Conversation construction                                                 */
+/* -------------------------------------------------------------------------- */
 
 function buildContents(
   messages,
@@ -275,20 +465,25 @@ function buildContents(
 ) {
   const contents = [];
 
+  const normalizedMessages =
+    Array.isArray(messages)
+      ? messages
+      : [];
+
   for (
     const message of
-      Array.isArray(messages)
-        ? messages
-        : []
+      normalizedMessages
   ) {
-    const role =
-      message?.role ===
-      "assistant"
-        ? "model"
-        : "user";
+    if (
+      !message ||
+      typeof message !==
+        "object"
+    ) {
+      continue;
+    }
 
     const text =
-      typeof message?.content ===
+      typeof message.content ===
         "string"
         ? message.content.trim()
         : "";
@@ -297,8 +492,15 @@ function buildContents(
       continue;
     }
 
+    const role =
+      message.role ===
+      "assistant"
+        ? "model"
+        : "user";
+
     contents.push({
       role,
+
       parts: [
         {
           text,
@@ -307,14 +509,16 @@ function buildContents(
     });
   }
 
-  if (
-    imageDataUrls.length
-  ) {
+  const images =
+    normalizeImageDataUrls(
+      imageDataUrls
+    );
+
+  if (images.length) {
     const parts =
       buildGeminiParts(
         imagePrompt ||
-          "حلل الصور المرفقة بدقة، واقرأ النصوص الواضحة فيها، واشرح الأشياء المهمة الظاهرة فقط دون تخمين."
-        ,
+          DEFAULT_IMAGE_PROMPT,
         imageDataUrls
       );
 
@@ -350,6 +554,77 @@ function normalizeSystemInstruction(
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Generation configuration                                                  */
+/* -------------------------------------------------------------------------- */
+
+function normalizeMaxOutputTokens(
+  value
+) {
+  const parsed =
+    Number(value);
+
+  if (
+    !Number.isFinite(
+      parsed
+    )
+  ) {
+    return 1200;
+  }
+
+  return Math.max(
+    64,
+    Math.min(
+      MAX_OUTPUT_TOKENS,
+      Math.floor(parsed)
+    )
+  );
+}
+
+function normalizeAspectRatio(
+  value
+) {
+  const ratio =
+    typeof value ===
+      "string"
+      ? value.trim()
+      : "";
+
+  if (
+    ALLOWED_ASPECT_RATIOS.has(
+      ratio
+    )
+  ) {
+    return ratio;
+  }
+
+  return "1:1";
+}
+
+function normalizeImageSize(
+  value
+) {
+  const size =
+    typeof value ===
+      "string"
+      ? value.trim()
+      : "";
+
+  if (
+    ALLOWED_IMAGE_SIZES.has(
+      size
+    )
+  ) {
+    return size;
+  }
+
+  return "1K";
+}
+
+/* -------------------------------------------------------------------------- */
+/* Text + vision generation                                                   */
+/* -------------------------------------------------------------------------- */
+
 export async function generateGeminiText({
   env,
   messages,
@@ -357,7 +632,7 @@ export async function generateGeminiText({
   imageDataUrls = [],
   imagePrompt = "",
   maxOutputTokens = 1200,
-}) {
+} = {}) {
   const model =
     getTextModel(env);
 
@@ -369,23 +644,24 @@ export async function generateGeminiText({
     );
 
   if (!contents.length) {
-    throw new Error(
-      "GEMINI_EMPTY_CONTENT"
-    );
+    const error =
+      new Error(
+        "GEMINI_EMPTY_CONTENT"
+      );
+
+    error.code =
+      "GEMINI_EMPTY_CONTENT";
+
+    throw error;
   }
 
   const body = {
     contents,
+
     generationConfig: {
       maxOutputTokens:
-        Math.max(
-          64,
-          Math.min(
-            Number(
-              maxOutputTokens
-            ) || 1200,
-            4096
-          )
+        normalizeMaxOutputTokens(
+          maxOutputTokens
         ),
     },
   };
@@ -408,7 +684,9 @@ export async function generateGeminiText({
     );
 
   const answer =
-    extractGeminiText(data);
+    extractGeminiText(
+      data
+    );
 
   if (!answer) {
     const error =
@@ -419,17 +697,25 @@ export async function generateGeminiText({
     error.code =
       "GEMINI_EMPTY_RESPONSE";
 
-    error.data = data;
+    error.data =
+      data;
 
     throw error;
   }
 
   return {
     answer,
+
     model,
-    raw: data,
+
+    raw:
+      data,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Image generation / editing                                                */
+/* -------------------------------------------------------------------------- */
 
 export async function generateGeminiImage({
   env,
@@ -437,43 +723,103 @@ export async function generateGeminiImage({
   imageDataUrls = [],
   aspectRatio = "1:1",
   imageSize = "1K",
-}) {
+} = {}) {
   const model =
     getImageModel(env);
 
+  const normalizedPrompt =
+    typeof prompt ===
+      "string"
+      ? prompt.trim()
+      : "";
+
+  if (!normalizedPrompt) {
+    const error =
+      new Error(
+        "GEMINI_EMPTY_IMAGE_PROMPT"
+      );
+
+    error.code =
+      "GEMINI_EMPTY_IMAGE_PROMPT";
+
+    throw error;
+  }
+
+  const images =
+    normalizeImageDataUrls(
+      imageDataUrls
+    );
+
   const parts =
     buildGeminiParts(
-      prompt,
+      normalizedPrompt,
       imageDataUrls
     );
 
   if (!parts.length) {
-    throw new Error(
-      "GEMINI_EMPTY_IMAGE_PROMPT"
-    );
+    const error =
+      new Error(
+        "GEMINI_EMPTY_IMAGE_PROMPT"
+      );
+
+    error.code =
+      "GEMINI_EMPTY_IMAGE_PROMPT";
+
+    throw error;
   }
 
+  const normalizedRatio =
+    normalizeAspectRatio(
+      aspectRatio
+    );
+
+  const normalizedSize =
+    normalizeImageSize(
+      imageSize
+    );
+
+  /*
+   * Gemini's image generation API supports:
+   * - text prompt
+   * - reference images
+   * - TEXT + IMAGE response
+   * - aspect ratio
+   * - output image size
+   *
+   * Reference images are therefore passed directly
+   * as inlineData parts.
+   */
   const body = {
     contents: [
       {
         role: "user",
+
         parts,
       },
     ],
+
     generationConfig: {
       responseModalities: [
         "TEXT",
         "IMAGE",
       ],
+
       responseFormat: {
         image: {
-          aspectRatio,
-          imageSize,
+          aspectRatio:
+            normalizedRatio,
+
+          imageSize:
+            normalizedSize,
         },
       },
     },
   };
 
+  /*
+   * Keep the number of images visible in diagnostics,
+   * without ever returning their raw data in a status field.
+   */
   const data =
     await geminiRequest(
       env,
@@ -482,7 +828,9 @@ export async function generateGeminiImage({
     );
 
   const image =
-    extractGeminiImage(data);
+    extractGeminiImage(
+      data
+    );
 
   if (!image) {
     const error =
@@ -493,7 +841,11 @@ export async function generateGeminiImage({
     error.code =
       "GEMINI_NO_IMAGE_RESULT";
 
-    error.data = data;
+    error.data =
+      data;
+
+    error.imageCount =
+      images.length;
 
     throw error;
   }
@@ -501,14 +853,34 @@ export async function generateGeminiImage({
   return {
     imageDataUrl:
       `data:${image.mimeType};base64,${image.base64}`,
+
     mimeType:
       image.mimeType,
+
     model,
+
     text:
-      extractGeminiText(data),
-    raw: data,
+      extractGeminiText(
+        data
+      ),
+
+    imageCount:
+      images.length,
+
+    aspectRatio:
+      normalizedRatio,
+
+    imageSize:
+      normalizedSize,
+
+    raw:
+      data,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Provider status                                                            */
+/* -------------------------------------------------------------------------- */
 
 export function isGeminiConfigured(
   env
@@ -526,6 +898,7 @@ export function getGeminiModels(
   return {
     text:
       getTextModel(env),
+
     image:
       getImageModel(env),
   };
