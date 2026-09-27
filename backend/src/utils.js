@@ -1,8 +1,24 @@
+// backend/src/utils.js
+// Sa7bi AI - Shared Backend Utilities
+//
+// This file contains the common helpers used by:
+// - index.js
+// - AI routing/content services
+// - media services
+// - downloads/health endpoints
+//
+// Security rules:
+// - Never store API keys here.
+// - Never trust client-side credit values here.
+// - Keep request limits enforced server-side.
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Sa7bi-Force-Fallback",
+    "Content-Type, Authorization, X-Sa7bi-Force-Fallback, X-Sa7bi-Device-Id, X-Sa7bi-Request-Id",
+  "Access-Control-Expose-Headers":
+    "X-Sa7bi-Request-Id",
   "Cache-Control": "no-store",
 };
 
@@ -17,6 +33,10 @@ const MAX_TOTAL_CHARS = 24000;
 const MAX_IMAGE_CHARS = 8 * 1024 * 1024;
 
 const MAX_IMAGES = 4;
+
+/* -------------------------------------------------------------------------- */
+/* Response helpers                                                           */
+/* -------------------------------------------------------------------------- */
 
 /**
  * Build common response headers.
@@ -45,8 +65,19 @@ export function json(data, status = 200, extra = {}) {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Text helpers                                                               */
+/* -------------------------------------------------------------------------- */
+
 /**
  * Normalize Arabic text for searching/comparison.
+ *
+ * This intentionally removes:
+ * - tatweel
+ * - common Arabic diacritics
+ * - repeated whitespace
+ *
+ * It does not change the actual user-visible text stored elsewhere.
  */
 export function normalizeArabic(value) {
   return String(value || "")
@@ -57,7 +88,7 @@ export function normalizeArabic(value) {
 }
 
 /**
- * Remove HTML tags/scripts/styles.
+ * Remove HTML tags, scripts and styles.
  */
 export function stripHtml(value) {
   return String(value || "")
@@ -123,9 +154,7 @@ export function firstMatch(
 ) {
   for (const pattern of patterns) {
     const match =
-      String(block || "").match(
-        pattern
-      );
+      String(block || "").match(pattern);
 
     if (match?.[1]) {
       return decodeXml(
@@ -149,9 +178,17 @@ export function extractNewsImage(block) {
   ]);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Chat input helpers                                                         */
+/* -------------------------------------------------------------------------- */
+
 /**
  * Clean and limit chat messages before sending
  * them to an AI provider.
+ *
+ * The backend deliberately keeps only the latest
+ * MAX_MESSAGES messages and enforces both per-message
+ * and total text limits.
  */
 export function cleanMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -214,6 +251,9 @@ export function cleanMessages(messages) {
 
 /**
  * Validate a base64 image data URL.
+ *
+ * Only image data URLs are accepted here.
+ * Arbitrary remote URLs are not accepted as image input.
  */
 export function isValidImageDataUrl(
   value
@@ -227,6 +267,10 @@ export function isValidImageDataUrl(
       MAX_IMAGE_CHARS
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* Request body helpers                                                       */
+/* -------------------------------------------------------------------------- */
 
 /**
  * Read and validate a JSON request body.
@@ -242,8 +286,9 @@ export async function readJsonBody(
     );
 
   if (
+    Number.isFinite(contentLength) &&
     contentLength >
-    MAX_BODY_BYTES
+      MAX_BODY_BYTES
   ) {
     throw new Error(
       "BODY_TOO_LARGE"
@@ -287,8 +332,17 @@ export async function readJsonBody(
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/* External JSON helper                                                       */
+/* -------------------------------------------------------------------------- */
+
 /**
  * Fetch JSON from an external service.
+ *
+ * This helper is intended for public content providers
+ * such as news/audio/content services.
+ *
+ * API secrets must never be hard-coded here.
  */
 export async function fetchJson(
   url,
@@ -299,7 +353,7 @@ export async function fetchJson(
       ...options,
       headers: {
         "User-Agent":
-          "Sa7bi-AI/6.0.0",
+          "Sa7bi-AI/6.3.0",
         ...(options.headers || {}),
       },
     });
@@ -312,6 +366,10 @@ export async function fetchJson(
 
   return response.json();
 }
+
+/* -------------------------------------------------------------------------- */
+/* Limits                                                                     */
+/* -------------------------------------------------------------------------- */
 
 /**
  * Get the maximum number of images
@@ -328,14 +386,19 @@ export function getRequestLimits() {
   return {
     maxBodyBytes:
       MAX_BODY_BYTES,
+
     maxMessages:
       MAX_MESSAGES,
+
     maxMessageChars:
       MAX_MESSAGE_CHARS,
+
     maxTotalChars:
       MAX_TOTAL_CHARS,
+
     maxImageChars:
       MAX_IMAGE_CHARS,
+
     maxImages:
       MAX_IMAGES,
   };
