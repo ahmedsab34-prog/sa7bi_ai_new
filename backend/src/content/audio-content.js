@@ -1,6 +1,33 @@
 // backend/src/content/audio-content.js
 // Sa7bi AI Backend - Audio Content Aggregator
-// Version: 6.0.0
+// Version: 6.3.0
+//
+// This module provides one unified entry point for
+// religious content while keeping the actual providers
+// separated:
+//
+//   Quran  -> content/quran.js
+//   Hadith -> content/hadith.js
+//   Tafsir -> content/tafsir.js
+//
+// IMPORTANT
+// ---------
+// This file is an aggregator/router only.
+// It does not contain API keys or provider secrets.
+//
+// Dedicated endpoints remain available through index.js:
+//   /v1/audio/quran
+//   /v1/hadith
+//   /v1/tafsir
+//
+// The unified endpoint is:
+//   /v1/religious?type=quran
+//   /v1/religious?type=hadith
+//   /v1/religious?type=tafsir
+
+/* =========================================================
+   IMPORTS
+   ========================================================= */
 
 import {
   json,
@@ -19,92 +46,239 @@ import {
   handleTafsirSearch,
 } from "./tafsir.js";
 
-const BACKEND_VERSION = "6.0.0";
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
+
+const BACKEND_VERSION =
+  "6.3.0";
+
+/* =========================================================
+   RELIGIOUS CONTENT TYPES
+   ========================================================= */
 
 /**
- * Unified religious audio/content search.
+ * Stable list of supported religious content categories.
+ *
+ * These are internal service identifiers used by the
+ * Flutter application and should not depend on UI labels.
+ */
+const RELIGIOUS_TYPES = [
+  {
+    id: "quran",
+    name: "القرآن الكريم",
+    audio: true,
+    online: true,
+  },
+
+  {
+    id: "hadith",
+    name: "الحديث",
+    audio: true,
+    online: true,
+  },
+
+  {
+    id: "tafsir",
+    name: "التفسير",
+    audio: true,
+    online: true,
+  },
+];
+
+/* =========================================================
+   NORMALIZE RELIGIOUS TYPE
+   ========================================================= */
+
+/**
+ * Converts Arabic/English user-facing labels into one
+ * stable internal service identifier.
+ *
+ * Examples:
+ *
+ *   قرآن       -> quran
+ *   القرآن     -> quran
+ *   quran      -> quran
+ *
+ *   حديث       -> hadith
+ *   أحاديث     -> hadith
+ *   hadith     -> hadith
+ *
+ *   تفسير      -> tafsir
+ *   التفسير    -> tafsir
+ *   tafsir     -> tafsir
+ */
+export function normalizeReligiousType(
+  value,
+) {
+  const normalized =
+    normalizeArabic(
+      value || "",
+    )
+      .trim()
+      .toLowerCase();
+
+  if (
+    normalized === "قران" ||
+    normalized === "القران" ||
+    normalized === "quran"
+  ) {
+    return "quran";
+  }
+
+  if (
+    normalized === "حديث" ||
+    normalized === "الحديث" ||
+    normalized === "احاديث" ||
+    normalized === "الاحاديث" ||
+    normalized === "hadith"
+  ) {
+    return "hadith";
+  }
+
+  if (
+    normalized === "تفسير" ||
+    normalized === "التفسير" ||
+    normalized === "tafsir"
+  ) {
+    return "tafsir";
+  }
+
+  return "";
+}
+
+/* =========================================================
+   UNIFIED RELIGIOUS CONTENT SEARCH
+   ========================================================= */
+
+/**
+ * Unified religious content endpoint.
  *
  * Supported:
  *
- * type=quran
- * type=hadith
- * type=tafsir
+ *   /v1/religious?type=quran
+ *   /v1/religious?type=hadith
+ *   /v1/religious?type=tafsir
+ *
+ * The original request is forwarded to the dedicated
+ * provider handler so its existing query parameters remain
+ * available.
  */
 export async function handleReligiousContent(
-  request
+  request,
 ) {
   try {
     const url =
-      new URL(request.url);
+      new URL(
+        request.url,
+      );
+
+    const requestedType =
+      url.searchParams.get(
+        "type",
+      ) || "quran";
 
     const type =
-      (
-        url.searchParams.get(
-          "type"
-        ) || "quran"
-      )
-        .trim()
-        .toLowerCase();
+      normalizeReligiousType(
+        requestedType,
+      );
+
+    if (!type) {
+      return json(
+        {
+          ok: false,
+
+          error:
+            "UNSUPPORTED_RELIGIOUS_CONTENT_TYPE",
+
+          message:
+            "نوع المحتوى الديني غير مدعوم.",
+
+          supportedTypes:
+            RELIGIOUS_TYPES.map(
+              (item) => item.id,
+            ),
+
+          backendVersion:
+            BACKEND_VERSION,
+        },
+        400,
+      );
+    }
 
     switch (type) {
       case "quran":
         return await handleQuranSearch(
-          request
+          request,
         );
 
       case "hadith":
         return await handleHadithSearch(
-          request
+          request,
         );
 
       case "tafsir":
         return await handleTafsirSearch(
-          request
+          request,
         );
 
       default:
+        /*
+         * This branch should never be reached because
+         * normalizeReligiousType() validates the type.
+         */
         return json(
           {
             ok: false,
 
             error:
-              "Unsupported religious content type",
+              "UNSUPPORTED_RELIGIOUS_CONTENT_TYPE",
 
-            supportedTypes: [
-              "quran",
-              "hadith",
-              "tafsir",
-            ],
+            supportedTypes:
+              RELIGIOUS_TYPES.map(
+                (item) => item.id,
+              ),
 
             backendVersion:
               BACKEND_VERSION,
           },
-          400
+          400,
         );
     }
   } catch (error) {
+    /*
+     * Do not expose provider internals or stack traces.
+     */
     return json(
       {
         ok: false,
 
         error:
-          "Religious content service unavailable",
+          "RELIGIOUS_CONTENT_SERVICE_UNAVAILABLE",
 
         message:
           error?.message ||
-          "Unknown error",
+          "Religious content service unavailable.",
 
         backendVersion:
           BACKEND_VERSION,
       },
-      502
+      502,
     );
   }
 }
 
+/* =========================================================
+   RELIGIOUS CONTENT TYPES ENDPOINT
+   ========================================================= */
+
 /**
- * Return the available religious content
- * categories for the Flutter application.
+ * Returns the categories supported by the unified
+ * religious-content service.
+ *
+ * Endpoint:
+ *
+ *   /v1/religious/types
  */
 export async function handleReligiousContentTypes() {
   return json({
@@ -113,89 +287,59 @@ export async function handleReligiousContentTypes() {
     type:
       "religious-content-types",
 
-    items: [
-      {
-        id: "quran",
-        name: "القرآن الكريم",
-        audio: true,
-        online: true,
-      },
-
-      {
-        id: "hadith",
-        name: "الحديث",
-        audio: true,
-        online: true,
-      },
-
-      {
-        id: "tafsir",
-        name: "التفسير",
-        audio: true,
-        online: true,
-      },
-    ],
+    items:
+      RELIGIOUS_TYPES.map(
+        (item) => ({
+          ...item,
+        }),
+      ),
 
     backendVersion:
       BACKEND_VERSION,
   });
 }
 
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
 /**
- * Normalize a user-selected religious category.
- *
- * This helper allows the Flutter side to pass Arabic
- * labels without making the backend depend on exact
- * UI wording.
+ * Returns whether a normalized religious type is
+ * supported.
  */
-export function normalizeReligiousType(
-  value
+export function isSupportedReligiousType(
+  value,
 ) {
-  const normalized =
-    normalizeArabic(
-      value || ""
-    );
-
-  if (
-    normalized ===
-      "قران" ||
-    normalized ===
-      "القران" ||
-    normalized ===
-      "quran"
-  ) {
-    return "quran";
-  }
-
-  if (
-    normalized ===
-      "حديث" ||
-    normalized ===
-      "الحديث" ||
-    normalized ===
-      "احاديث" ||
-    normalized ===
-      "hadith"
-  ) {
-    return "hadith";
-  }
-
-  if (
-    normalized ===
-      "تفسير" ||
-    normalized ===
-      "التفسير" ||
-    normalized ===
-      "tafsir"
-  ) {
-    return "tafsir";
-  }
-
-  return "";
+  return Boolean(
+    normalizeReligiousType(
+      value,
+    ),
+  );
 }
+
+/**
+ * Returns a safe copy of the supported religious types.
+ */
+export function getReligiousContentTypes() {
+  return RELIGIOUS_TYPES.map(
+    (item) => ({
+      ...item,
+    }),
+  );
+}
+
+/* =========================================================
+   DEFAULT EXPORT
+   ========================================================= */
 
 export default {
   handleReligiousContent,
+
   handleReligiousContentTypes,
+
   normalizeReligiousType,
+
+  isSupportedReligiousType,
+
+  getReligiousContentTypes,
 };
