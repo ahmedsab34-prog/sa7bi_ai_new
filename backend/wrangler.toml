@@ -10,8 +10,33 @@ WORKERS_TEXT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 WORKERS_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
 WORKERS_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 
+# ============================================================
+# CLOUDFLARE WORKERS AI
+# ============================================================
+
 [ai]
 binding = "AI"
+
+# ============================================================
+# SERVER-AUTHORITATIVE CREDITS
+# ============================================================
+
+[[durable_objects.bindings]]
+name = "SA7BI_CREDITS"
+class_name = "Sa7biCredits"
+
+# ============================================================
+# DURABLE OBJECT LIFECYCLE
+# SQLite-backed Durable Object
+# ============================================================
+
+[exports.Sa7biCredits]
+type = "durable-object"
+storage = "sqlite"
+
+# ============================================================
+# SECRETS
+# ============================================================
 
 [secrets]
 required = ["GEMINI_API_KEY"]
