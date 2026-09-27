@@ -1,24 +1,39 @@
 // backend/src/admob-ssv.js
-// Sa7bi AI - AdMob Rewarded SSV Verification
+// Sa7bi AI - Final AdMob Rewarded SSV Verification
 //
-// Flow:
+// FINAL REWARD FLOW
+// -----------------
 //
-// AdMob
+// Flutter
 //   ↓
-// SSV callback
+// AdMob Rewarded Ad
 //   ↓
-// verify Google ECDSA signature
+// Google AdMob SSV
 //   ↓
-// validate timestamp / reward / ad unit / transaction
+// /v1/rewards/admob/ssv
 //   ↓
-// extract device ID from custom_data
+// Verify Google ECDSA signature
 //   ↓
-// Durable Object
+// Validate reward / timestamp / ad unit / transaction
+//   ↓
+// Extract Sa7bi device ID from custom_data
+//   ↓
+// credits.js
+//   ↓
+// SQLite Durable Object
 //   ↓
 // +10 server-authoritative credits
 //
-// IMPORTANT:
-// Flutter must NEVER be able to directly grant rewarded credits.
+// IMPORTANT
+// ---------
+// Flutter NEVER grants credits directly.
+//
+// The client-side onUserEarnedReward callback is only
+// a UI/event signal.
+//
+// The actual credit is granted ONLY after Google's
+// server-side verification callback is cryptographically
+// verified.
 
 /* =========================================================
    IMPORTS
@@ -34,47 +49,47 @@ import {
    CONSTANTS
    ========================================================= */
 
+/*
+ * Official Google AdMob SSV public-key endpoint.
+ */
 const ADMOB_PUBLIC_KEYS_URL =
   "https://www.gstatic.com/admob/reward/verifier-keys.json";
 
 /*
- * Google recommends refreshing rotated keys and not
- * caching them for more than 24 hours.
+ * Google rotates verification keys.
  *
- * We use a shorter 6-hour Worker cache.
+ * We refresh our Worker-isolate cache every 6 hours,
+ * which is safely below Google's 24-hour maximum.
  */
 const PUBLIC_KEY_CACHE_TTL_MS =
   6 * 60 * 60 * 1000;
 
 /*
- * SSV callbacks can be delayed.
+ * Maximum accepted callback age.
  *
- * 24 hours is the maximum age accepted by this backend.
+ * This prevents very old signed callbacks from being
+ * accepted indefinitely.
  */
 const MAX_CALLBACK_AGE_MS =
   24 * 60 * 60 * 1000;
 
 /*
- * Protect against obviously invalid future timestamps.
+ * Protect against timestamps that are clearly from the
+ * future because of malformed requests or clock issues.
  */
 const MAX_CALLBACK_FUTURE_MS =
   10 * 60 * 1000;
 
 /*
- * Must match the Reward item configured in AdMob.
- *
- * Expected configuration:
- *
- * reward_item = credits
+ * This is the reward item configured for Sa7bi's
+ * rewarded-ad unit.
  */
 const DEFAULT_REWARD_ITEM =
   "credits";
 
 /*
- * In-memory Worker-isolate cache.
- *
- * It is intentionally not persistent.
- * If the isolate restarts, keys are downloaded again.
+ * Public keys are cached only inside the current Worker
+ * isolate. The cache is intentionally not persistent.
  */
 let publicKeyCache = null;
 
@@ -116,7 +131,7 @@ function errorResponse(
 }
 
 /* =========================================================
-   BASE64URL / BASE64
+   BASE64 / BASE64URL → BYTES
    ========================================================= */
 
 function base64ToBytes(
@@ -138,8 +153,7 @@ function base64ToBytes(
       .replace(/_/g, "/");
 
   while (
-    normalized.length % 4 !==
-    0
+    normalized.length % 4 !== 0
   ) {
     normalized += "=";
   }
@@ -174,7 +188,7 @@ function base64ToBytes(
 }
 
 /* =========================================================
-   PUBLIC KEY DOWNLOAD
+   FETCH GOOGLE ADMOB PUBLIC KEYS
    ========================================================= */
 
 async function fetchAdMobPublicKeys() {
@@ -219,10 +233,8 @@ async function fetchAdMobPublicKeys() {
   ) {
     if (
       !item ||
-      item.keyId ===
-        undefined ||
-      item.keyId ===
-        null
+      item.keyId === undefined ||
+      item.keyId === null
     ) {
       continue;
     }
@@ -233,10 +245,10 @@ async function fetchAdMobPublicKeys() {
       );
 
     /*
-     * Google currently provides a base64 SPKI
-     * representation and also a PEM representation.
+     * Google provides the public key in base64
+     * and PEM representations.
      *
-     * Prefer base64, use PEM as fallback.
+     * Prefer the SPKI base64 representation.
      */
     let base64Key =
       typeof item.base64 ===
@@ -246,8 +258,7 @@ async function fetchAdMobPublicKeys() {
 
     if (
       !base64Key &&
-      typeof item.pem ===
-        "string"
+      typeof item.pem === "string"
     ) {
       base64Key =
         item.pem
@@ -318,7 +329,7 @@ async function getAdMobPublicKeys() {
 }
 
 /* =========================================================
-   PUBLIC KEY IMPORT
+   IMPORT GOOGLE PUBLIC KEY
    ========================================================= */
 
 async function importAdMobPublicKey(
@@ -356,25 +367,8 @@ async function importAdMobPublicKey(
 }
 
 /* =========================================================
-   DER ECDSA → P1363
+   DER LENGTH READER
    ========================================================= */
-
-/*
- * Google SSV uses an ECDSA DER signature.
- *
- * Cloudflare Web Crypto verification uses the
- * IEEE P1363 representation for ECDSA:
- *
- *     r || s
- *
- * Therefore:
- *
- *     DER sequence
- *          ↓
- *     32-byte R + 32-byte S
- *          ↓
- *     64-byte P1363
- */
 
 function readDerLength(
   bytes,
@@ -394,13 +388,20 @@ function readDerLength(
       state.offset++
     ];
 
+  /*
+   * Short-form DER length.
+   */
   if (
-    (length & 0x80) ===
-    0
+    (length & 0x80) === 0
   ) {
     return length;
   }
 
+  /*
+   * Long-form DER length.
+   *
+   * We only need small lengths for an ECDSA signature.
+   */
   const count =
     length & 0x7f;
 
@@ -433,13 +434,17 @@ function readDerLength(
   return length;
 }
 
+/* =========================================================
+   NORMALIZE DER INTEGER
+   ========================================================= */
+
 function normalizeDerInteger(
   value,
 ) {
   let start = 0;
 
   /*
-   * Remove DER sign-padding zeroes.
+   * Remove DER sign-padding zero bytes.
    */
   while (
     start <
@@ -455,8 +460,7 @@ function normalizeDerInteger(
     );
 
   if (
-    trimmed.length >
-    32
+    trimmed.length > 32
   ) {
     throw new Error(
       "ECDSA_INTEGER_TOO_LARGE",
@@ -478,6 +482,22 @@ function normalizeDerInteger(
   return result;
 }
 
+/* =========================================================
+   DER ECDSA → P1363
+   ========================================================= */
+
+/*
+ * AdMob SSV signatures use DER-encoded ECDSA.
+ *
+ * Web Crypto ECDSA verification uses the IEEE P1363
+ * representation:
+ *
+ *     R || S
+ *
+ * for a P-256 signature:
+ *
+ *     32-byte R + 32-byte S = 64 bytes
+ */
 function derEcdsaToRaw(
   der,
 ) {
@@ -648,9 +668,16 @@ function derEcdsaToRaw(
 }
 
 /* =========================================================
-   RAW QUERY STRING
+   ORIGINAL QUERY STRING
    ========================================================= */
 
+/**
+ * Returns the original raw query string.
+ *
+ * This is deliberately NOT reconstructed with
+ * URLSearchParams because Google's signature covers the
+ * exact query-string content and ordering.
+ */
 function getRawQueryString(
   request,
 ) {
@@ -665,26 +692,19 @@ function getRawQueryString(
 }
 
 /* =========================================================
-   SSV SIGNATURE EXTRACTION
+   EXTRACT SIGNED CONTENT
    ========================================================= */
 
-/*
- * According to Google's SSV format, the final two query
- * parameters are always:
+/**
+ * Google's SSV callback places:
  *
- *     signature
- *     key_id
+ *   signature
+ *   key_id
  *
- * in that order.
+ * at the end of the query string.
  *
- * The part before "&signature=" is the exact data that
- * must be verified.
- *
- * DO NOT use URLSearchParams to rebuild the signed content.
- * Rebuilding can change escaping/order and invalidate
- * the signature.
+ * Everything before "&signature=" is the signed content.
  */
-
 function extractSignedContent(
   rawQuery,
 ) {
@@ -704,12 +724,6 @@ function extractSignedContent(
   const keyIdMarker =
     "key_id=";
 
-  /*
-   * Find the signature parameter.
-   *
-   * It should be preceded by '&' unless it is the first
-   * parameter, which is not expected for a normal SSV URL.
-   */
   const signatureIndex =
     rawQuery.lastIndexOf(
       `&${signatureMarker}`,
@@ -724,7 +738,7 @@ function extractSignedContent(
   }
 
   /*
-   * Everything before "&signature=" is signed.
+   * Preserve the exact bytes before the signature.
    */
   const signedContent =
     rawQuery.substring(
@@ -741,9 +755,9 @@ function extractSignedContent(
   }
 
   /*
-   * Everything after "&signature=" should be:
+   * Remaining content:
    *
-   *     SIGNATURE&key_id=NUMBER
+   * signatureValue&key_id=123
    */
   const signatureAndKey =
     rawQuery.substring(
@@ -790,7 +804,7 @@ function extractSignedContent(
   }
 
   /*
-   * There must be no extra '&' after key_id.
+   * key_id must be the final parameter.
    */
   if (
     keyIdValue.includes("&")
@@ -800,9 +814,6 @@ function extractSignedContent(
     );
   }
 
-  /*
-   * The key ID is numeric.
-   */
   if (
     !/^\d+$/.test(
       keyIdValue,
@@ -823,7 +834,7 @@ function extractSignedContent(
 }
 
 /* =========================================================
-   SIGNATURE VERIFICATION
+   VERIFY SIGNATURE WITH PUBLIC KEY
    ========================================================= */
 
 async function verifyWithPublicKey(
@@ -847,9 +858,11 @@ async function verifyWithPublicKey(
     );
 
   /*
-   * IMPORTANT:
-   * signedContent is the original query-string bytes.
-   * Do not URL-decode or rebuild it.
+   * The signed data is the original query string.
+   *
+   * No decodeURIComponent().
+   * No URLSearchParams reconstruction.
+   * No parameter sorting.
    */
   const data =
     new TextEncoder().encode(
@@ -888,6 +901,10 @@ async function verifyWithPublicKey(
   return true;
 }
 
+/* =========================================================
+   VERIFY GOOGLE ADMOB SSV
+   ========================================================= */
+
 async function verifyAdMobSignature(
   request,
 ) {
@@ -916,10 +933,8 @@ async function verifyAdMobSignature(
     );
 
   /*
-   * If the key is unknown, force one immediate refresh.
-   *
-   * This handles Google key rotation without waiting
-   * for the six-hour local cache to expire.
+   * If Google rotated the key and our six-hour cache
+   * does not know it yet, refresh once immediately.
    */
   if (!publicKey) {
     publicKeyCache =
@@ -959,20 +974,22 @@ async function verifyAdMobSignature(
 }
 
 /* =========================================================
-   CUSTOM DATA
+   CUSTOM DATA → DEVICE ID
    ========================================================= */
 
-/*
- * Google passes the string supplied by the app through
- * the custom_data query parameter.
+/**
+ * Flutter sends:
  *
- * URLSearchParams.get() already performs the URL
- * percent-decoding required for a normal query value.
+ * {
+ *   "deviceId": "...",
+ *   "source": "sa7bi_rewarded_ad"
+ * }
  *
- * Therefore we intentionally do NOT call decodeURIComponent()
- * a second time.
+ * Google passes that string back as custom_data.
+ *
+ * URLSearchParams.get() already decodes the normal query
+ * parameter, so we do not decode it twice.
  */
-
 function extractDeviceIdFromCustomData(
   value,
 ) {
@@ -989,14 +1006,6 @@ function extractDeviceIdFromCustomData(
   const raw =
     value.trim();
 
-  /*
-   * Preferred Sa7bi format:
-   *
-   * {
-   *   "deviceId": "...",
-   *   "source": "sa7bi_rewarded_ad"
-   * }
-   */
   try {
     const parsed =
       JSON.parse(
@@ -1015,13 +1024,10 @@ function extractDeviceIdFromCustomData(
     }
   } catch (_) {
     /*
-     * A plain string is also accepted for compatibility.
+     * Plain device ID fallback.
      */
   }
 
-  /*
-   * Plain device ID fallback.
-   */
   return raw.substring(
     0,
     128,
@@ -1117,11 +1123,10 @@ function validateReward(
   }
 
   /*
-   * The callback amount must match our configured
-   * AdMob reward amount.
+   * The callback amount MUST equal our server policy.
    *
-   * We NEVER use the callback value as the amount
-   * to credit.
+   * We never blindly trust the callback value as the
+   * amount to add.
    */
   if (
     rewardAmount !==
@@ -1191,11 +1196,8 @@ function validateTransactionId(
     value.trim();
 
   /*
-   * Google describes transaction_id as a unique
-   * hex-encoded identifier.
-   *
-   * We allow up to 256 characters while requiring
-   * a safe identifier format.
+   * Google documents transaction_id as a unique
+   * hexadecimal identifier.
    */
   if (
     transactionId.length >
@@ -1227,6 +1229,10 @@ function validateAdUnit(
   url,
   env,
 ) {
+  /*
+   * We intentionally read this from configuration rather
+   * than hard-coding the AdMob unit ID into the verifier.
+   */
   const configuredAdUnit =
     String(
       env?.ADMOB_REWARDED_AD_UNIT_ID ||
@@ -1234,10 +1240,11 @@ function validateAdUnit(
     ).trim();
 
   /*
-   * If the Worker secret/variable is not configured yet,
-   * allow the callback.
+   * If it is not configured yet, verification can still
+   * operate using Google's cryptographic signature and
+   * the other server validations.
    *
-   * Once configured, enforce exact matching.
+   * Once configured, exact matching is enforced.
    */
   if (
     !configuredAdUnit
@@ -1273,7 +1280,7 @@ function validateAdUnit(
 }
 
 /* =========================================================
-   MAIN SSV HANDLER
+   MAIN ADMOB SSV HANDLER
    ========================================================= */
 
 export async function handleAdMobSSV(
@@ -1281,7 +1288,7 @@ export async function handleAdMobSSV(
   env,
 ) {
   /*
-   * Google sends SSV callbacks as GET requests.
+   * AdMob SSV uses GET callbacks.
    */
   if (
     request.method !==
@@ -1302,9 +1309,10 @@ export async function handleAdMobSSV(
     /*
      * -------------------------------------------------------
      * STEP 1
-     * Verify Google's cryptographic signature.
+     * Cryptographically verify the callback with Google's
+     * public key.
      *
-     * Nothing is rewarded before this succeeds.
+     * NOTHING is rewarded before this succeeds.
      * -------------------------------------------------------
      */
     await verifyAdMobSignature(
@@ -1314,7 +1322,7 @@ export async function handleAdMobSSV(
     /*
      * -------------------------------------------------------
      * STEP 2
-     * Validate timestamp.
+     * Validate callback timestamp.
      * -------------------------------------------------------
      */
     const timestamp =
@@ -1327,7 +1335,7 @@ export async function handleAdMobSSV(
     /*
      * -------------------------------------------------------
      * STEP 3
-     * Validate reward amount + reward item.
+     * Validate configured reward.
      * -------------------------------------------------------
      */
     const reward =
@@ -1339,7 +1347,7 @@ export async function handleAdMobSSV(
     /*
      * -------------------------------------------------------
      * STEP 4
-     * Validate the rewarded ad unit if configured.
+     * Validate rewarded ad unit when configured.
      * -------------------------------------------------------
      */
     validateAdUnit(
@@ -1350,7 +1358,7 @@ export async function handleAdMobSSV(
     /*
      * -------------------------------------------------------
      * STEP 5
-     * Validate unique AdMob transaction ID.
+     * Validate transaction ID.
      * -------------------------------------------------------
      */
     const transactionId =
@@ -1363,7 +1371,7 @@ export async function handleAdMobSSV(
     /*
      * -------------------------------------------------------
      * STEP 6
-     * Extract Sa7bi device ID.
+     * Get Sa7bi device ID.
      * -------------------------------------------------------
      */
     const deviceId =
@@ -1382,14 +1390,14 @@ export async function handleAdMobSSV(
     /*
      * -------------------------------------------------------
      * STEP 7
-     * Give the verified reward to the Durable Object.
+     * Server-authoritative reward.
      *
-     * credits.js guarantees:
+     * credits.js handles:
      *
-     * - server-authoritative reward
      * - exactly +10 credits
-     * - maximum 5 rewarded ads/day
+     * - daily reward limit
      * - transaction idempotency
+     * - SQLite atomicity
      * -------------------------------------------------------
      */
     const result =
@@ -1406,9 +1414,11 @@ export async function handleAdMobSSV(
       );
 
     /*
-     * A repeated SSV callback is still a successful
-     * callback because the original transaction was
-     * already processed.
+     * Repeated Google callback:
+     *
+     * The original transaction has already been processed.
+     *
+     * This is treated as successful/idempotent handling.
      */
     if (
       result?.ok === true
@@ -1418,8 +1428,7 @@ export async function handleAdMobSSV(
           ok: true,
 
           rewarded:
-            result.rewarded ===
-            true,
+            result.rewarded === true,
 
           alreadyRewarded:
             result.alreadyRewarded ===
@@ -1427,10 +1436,6 @@ export async function handleAdMobSSV(
 
           transactionId,
 
-          /*
-           * This value is always server policy.
-           * Never trust rewardAmount from the client.
-           */
           added:
             Number(
               result.added ??
@@ -1454,10 +1459,8 @@ export async function handleAdMobSSV(
     }
 
     /*
-     * Daily limit is an intentional rejection.
-     *
-     * Other reward failures are also not reported as
-     * successful credits.
+     * Daily limit is a valid server-side business rule,
+     * not a cryptographic failure.
      */
     if (
       result?.error ===
@@ -1480,15 +1483,13 @@ export async function handleAdMobSSV(
       "ADMOB_SSV_VERIFICATION_FAILED";
 
     /*
-     * Only expose safe validation errors.
+     * Only known/safe validation errors are returned.
      *
-     * Never expose public-key internals or cryptographic
-     * implementation details to the caller.
+     * Internal cryptographic/network/storage details are
+     * deliberately hidden.
      */
     const safeErrors =
       new Set([
-        "METHOD_NOT_ALLOWED",
-
         "ADMOB_SSV_QUERY_MISSING",
 
         "ADMOB_SSV_SIGNATURE_MISSING",
@@ -1545,19 +1546,12 @@ export async function handleAdMobSSV(
         message,
 
         message ===
-          "METHOD_NOT_ALLOWED"
-          ? 405
-          : message ===
-              "REWARDED_AD_DAILY_LIMIT"
-            ? 409
-            : 400,
+          "REWARDED_AD_DAILY_LIMIT"
+          ? 409
+          : 400,
       );
     }
 
-    /*
-     * Key download failure, crypto import failure,
-     * malformed signature, or another internal issue.
-     */
     return errorResponse(
       "ADMOB_SSV_VERIFICATION_FAILED",
       500,
@@ -1566,7 +1560,7 @@ export async function handleAdMobSSV(
 }
 
 /* =========================================================
-   SSV STATUS
+   STATUS
    ========================================================= */
 
 export function getAdMobSSVStatus(
@@ -1615,7 +1609,7 @@ export function getAdMobSSVStatus(
 }
 
 /* =========================================================
-   REQUEST DETECTION
+   SSV REQUEST DETECTION
    ========================================================= */
 
 export function isAdMobSSVRequest(
@@ -1628,8 +1622,7 @@ export function isAdMobSSVRequest(
       );
 
     return (
-      request.method ===
-        "GET" &&
+      request.method === "GET" &&
       url.searchParams.has(
         "signature",
       ) &&
