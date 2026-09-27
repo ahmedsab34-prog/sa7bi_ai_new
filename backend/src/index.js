@@ -1,22 +1,36 @@
+import {
+  runTextOrVisionWithFallback,
+  runImageWithFallback,
+  getAIStatus,
+} from "./ai/ai-router.js";
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-Sa7bi-Force-Fallback",
   "Cache-Control": "no-store",
 };
 
-const BACKEND_VERSION = "5.1.0";
-const DEFAULT_TEXT_MODEL = "gpt-5.6-luna";
-const DEFAULT_IMAGE_MODEL = "gpt-image-2";
+const BACKEND_VERSION = "6.0.0";
 
 const DOWNLOAD_URL =
   "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk";
 
-const MAX_BODY_BYTES = 10 * 1024 * 1024;
+const MAX_BODY_BYTES =
+  10 * 1024 * 1024;
+
 const MAX_MESSAGES = 20;
-const MAX_MESSAGE_CHARS = 8000;
-const MAX_TOTAL_CHARS = 24000;
-const MAX_IMAGE_CHARS = 8 * 1024 * 1024;
+
+const MAX_MESSAGE_CHARS =
+  8000;
+
+const MAX_TOTAL_CHARS =
+  24000;
+
+const MAX_IMAGE_CHARS =
+  8 * 1024 * 1024;
+
 const MAX_IMAGES = 4;
 
 const MP3QURAN_BASE =
@@ -29,7 +43,11 @@ function headers(extra = {}) {
   };
 }
 
-function json(data, status = 200, extra = {}) {
+function json(
+  data,
+  status = 200,
+  extra = {}
+) {
   return new Response(
     JSON.stringify(data),
     {
@@ -103,9 +121,13 @@ function decodeXml(value) {
     );
 }
 
-function firstMatch(block, patterns) {
+function firstMatch(
+  block,
+  patterns
+) {
   for (const pattern of patterns) {
-    const match = block.match(pattern);
+    const match =
+      block.match(pattern);
 
     if (match?.[1]) {
       return decodeXml(
@@ -152,7 +174,8 @@ function cleanMessages(messages) {
         : "user";
 
     let content =
-      typeof item.content === "string"
+      typeof item.content ===
+      "string"
         ? item.content.trim()
         : "";
 
@@ -160,10 +183,11 @@ function cleanMessages(messages) {
       continue;
     }
 
-    content = content.substring(
-      0,
-      MAX_MESSAGE_CHARS
-    );
+    content =
+      content.substring(
+        0,
+        MAX_MESSAGE_CHARS
+      );
 
     if (
       total + content.length >
@@ -183,22 +207,29 @@ function cleanMessages(messages) {
   return result;
 }
 
-function isValidImageDataUrl(value) {
+function isValidImageDataUrl(
+  value
+) {
   return (
-    typeof value === "string" &&
+    typeof value ===
+      "string" &&
     /^data:image\/[a-z0-9.+-]+;base64,/i.test(
       value
     ) &&
-    value.length <= MAX_IMAGE_CHARS
+    value.length <=
+      MAX_IMAGE_CHARS
   );
 }
 
-async function readJsonBody(request) {
-  const contentLength = Number(
-    request.headers.get(
-      "content-length"
-    ) || "0"
-  );
+async function readJsonBody(
+  request
+) {
+  const contentLength =
+    Number(
+      request.headers.get(
+        "content-length"
+      ) || "0"
+    );
 
   if (
     contentLength >
@@ -231,7 +262,8 @@ async function readJsonBody(request) {
 
     if (
       !data ||
-      typeof data !== "object" ||
+      typeof data !==
+        "object" ||
       Array.isArray(data)
     ) {
       throw new Error();
@@ -245,133 +277,34 @@ async function readJsonBody(request) {
   }
 }
 
-function extractOutputText(data) {
-  if (
-    typeof data?.output_text ===
-      "string" &&
-    data.output_text.trim()
-  ) {
-    return data.output_text.trim();
-  }
+/* =========================================================
+   AI
+   ========================================================= */
 
-  const parts = [];
+function buildAIInstructions({
+  serviceTitle,
+  serviceContext,
+}) {
+  return `
+أنت "صاحبي AI"، مساعد عربي ودود وعملي.
 
-  if (
-    Array.isArray(data?.output)
-  ) {
-    for (
-      const item of data.output
-    ) {
-      if (
-        !Array.isArray(
-          item?.content
-        )
-      ) {
-        continue;
-      }
+الخدمة الحالية:
+${serviceTitle || "صاحبي AI"}
 
-      for (
-        const content of
-          item.content
-      ) {
-        if (
-          typeof content?.text ===
-          "string"
-        ) {
-          parts.push(
-            content.text
-          );
-        }
-      }
-    }
-  }
+سياق الخدمة:
+${serviceContext || "مساعد عام"}
 
-  return parts.join("\n").trim();
-}
-
-async function callOpenAI(
-  env,
-  body
-) {
-  if (!env.OPENAI_API_KEY) {
-    throw new Error(
-      "OPENAI_API_KEY_MISSING"
-    );
-  }
-
-  const response =
-    await fetch(
-      "https://api.openai.com/v1/responses",
-      {
-        method: "POST",
-        headers: {
-          Authorization:
-            `Bearer ${env.OPENAI_API_KEY}`,
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify(
-          body
-        ),
-      }
-    );
-
-  const raw =
-    await response.text();
-
-  let data;
-
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    data = { raw };
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      data?.error?.message ||
-        data?.message ||
-        `OpenAI HTTP ${response.status}`
-    );
-  }
-
-  return data;
-}
-
-function buildImageInput(
-  imageDataUrls,
-  prompt
-) {
-  const content = [
-    {
-      type: "input_text",
-      text: prompt,
-    },
-  ];
-
-  for (
-    const imageUrl of
-      imageDataUrls.slice(
-        0,
-        MAX_IMAGES
-      )
-  ) {
-    if (
-      isValidImageDataUrl(
-        imageUrl
-      )
-    ) {
-      content.push({
-        type: "input_image",
-        image_url: imageUrl,
-      });
-    }
-  }
-
-  return {
-    role: "user",
-    content,
-  };
+القواعد:
+- أجب بالعربية ما لم يطلب المستخدم لغة أخرى.
+- استخدم المصرية عندما تكون مناسبة.
+- كن واضحًا ومباشرًا.
+- لا تكرر كلام المستخدم بلا فائدة.
+- لا تدّعي تنفيذ شيء لم تنفذه.
+- إذا كانت المعلومة غير مؤكدة وضّح ذلك.
+- إذا أرسل المستخدم صورًا فحلل ما يظهر فعليًا فقط.
+- لا تخمن تفاصيل غير ظاهرة في الصور.
+- في الخدمات المتخصصة قدم مساعدة عملية مع الالتزام بالسلامة.
+`;
 }
 
 async function handleChat(
@@ -491,89 +424,43 @@ async function handleChat(
           .substring(0, 4000)
       : "حلل الصور المرفقة بدقة، واقرأ أي نص واضح فيها، واشرح الأشياء المهمة الظاهرة.";
 
-  const instructions = `
-أنت "صاحبي AI"، مساعد عربي ودود وعملي.
+  const instructions =
+    buildAIInstructions({
+      serviceTitle,
+      serviceContext,
+    });
 
-الخدمة الحالية:
-${serviceTitle}
-
-سياق الخدمة:
-${serviceContext}
-
-القواعد:
-- أجب بالعربية ما لم يطلب المستخدم لغة أخرى.
-- استخدم المصرية عندما تكون مناسبة.
-- كن واضحًا ومباشرًا.
-- لا تكرر كلام المستخدم بلا فائدة.
-- لا تدّعي تنفيذ شيء لم تنفذه.
-- إذا كانت المعلومة غير مؤكدة وضّح ذلك.
-- إذا أرسل المستخدم صورًا فحلل ما يظهر فعليًا فقط، ولا تخمن تفاصيل غير ظاهرة.
-- في الخدمات المتخصصة قدم مساعدة عملية مع الالتزام بالسلامة.
-`;
-
-  const input =
-    messages.map(
-      (message) => ({
-        role: message.role,
-        content: [
-          {
-            type:
-              "input_text",
-            text:
-              message.content,
-          },
-        ],
-      })
-    );
-
-  if (imageDataUrls.length) {
-    input.push(
-      buildImageInput(
-        imageDataUrls,
-        imagePrompt
-      )
-    );
-  }
-
-  const model =
-    env.OPENAI_MODEL ||
-    DEFAULT_TEXT_MODEL;
-
-  const data =
-    await callOpenAI(
-      env,
+  const result =
+    await runTextOrVisionWithFallback(
       {
-        model,
+        request,
+        env,
+        messages,
         instructions,
-        input,
-        reasoning: {
-          effort: "none",
-        },
-        max_output_tokens:
-          1200,
+        imageDataUrls,
+        imagePrompt,
+        maxOutputTokens:
+          Number(
+            body.maxOutputTokens
+          ) || 1200,
       }
     );
 
-  const answer =
-    extractOutputText(
-      data
-    );
-
-  if (!answer) {
-    return json(
-      {
-        ok: false,
-        error:
-          "EMPTY_AI_RESPONSE",
-      },
-      502
-    );
-  }
-
   return json({
     ok: true,
-    answer,
-    model,
+    answer:
+      result.answer,
+    provider:
+      result.provider,
+    fallback:
+      Boolean(
+        result.fallback
+      ),
+    fallbackReason:
+      result.fallbackReason ||
+      null,
+    model:
+      result.model,
     backendVersion:
       BACKEND_VERSION,
   });
@@ -583,17 +470,6 @@ async function handleImageGeneration(
   request,
   env
 ) {
-  if (!env.OPENAI_API_KEY) {
-    return json(
-      {
-        ok: false,
-        error:
-          "OPENAI_API_KEY_MISSING",
-      },
-      500
-    );
-  }
-
   const body =
     await readJsonBody(
       request
@@ -616,137 +492,140 @@ async function handleImageGeneration(
     );
   }
 
-  const model =
-    env.OPENAI_IMAGE_MODEL ||
-    DEFAULT_IMAGE_MODEL;
+  const imageDataUrls = [];
 
-  const response =
-    await fetch(
-      "https://api.openai.com/v1/images/generations",
-      {
-        method: "POST",
-        headers: {
-          Authorization:
-            `Bearer ${env.OPENAI_API_KEY}`,
-          "Content-Type":
-            "application/json",
+  if (
+    typeof body.imageDataUrl ===
+      "string" &&
+    body.imageDataUrl.trim()
+  ) {
+    imageDataUrls.push(
+      body.imageDataUrl.trim()
+    );
+  }
+
+  if (
+    Array.isArray(
+      body.imageDataUrls
+    )
+  ) {
+    for (
+      const item of
+        body.imageDataUrls
+    ) {
+      if (
+        typeof item ===
+          "string" &&
+        item.trim() &&
+        !imageDataUrls.includes(
+          item.trim()
+        )
+      ) {
+        imageDataUrls.push(
+          item.trim()
+        );
+      }
+
+      if (
+        imageDataUrls.length >=
+        MAX_IMAGES
+      ) {
+        break;
+      }
+    }
+  }
+
+  for (
+    const image of imageDataUrls
+  ) {
+    if (
+      !isValidImageDataUrl(
+        image
+      )
+    ) {
+      return json(
+        {
+          ok: false,
+          error:
+            "INVALID_IMAGE",
         },
-        body: JSON.stringify({
-          model,
-          prompt:
-            prompt.substring(
-              0,
-              6000
-            ),
-          size:
-            "1024x1024",
-          quality:
-            "low",
-          output_format:
-            "png",
-        }),
+        400
+      );
+    }
+  }
+
+  const aspectRatio =
+    typeof body.aspectRatio ===
+      "string" &&
+    body.aspectRatio.trim()
+      ? body.aspectRatio.trim()
+      : "1:1";
+
+  const imageSize =
+    typeof body.imageSize ===
+      "string" &&
+    body.imageSize.trim()
+      ? body.imageSize.trim()
+      : "1K";
+
+  const result =
+    await runImageWithFallback(
+      {
+        request,
+        env,
+        prompt:
+          prompt.substring(
+            0,
+            6000
+          ),
+        imageDataUrls,
+        aspectRatio,
+        imageSize,
       }
     );
 
-  const raw =
-    await response.text();
-
-  let data;
-
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    return json(
-      {
-        ok: false,
-        error:
-          data?.error?.message ||
-          `Image API HTTP ${response.status}`,
-      },
-      response.status
-    );
-  }
-
-  const item =
-    Array.isArray(
-      data?.data
-    ) &&
-    data.data.length
-      ? data.data[0]
-      : null;
-
-  if (!item) {
-    return json(
-      {
-        ok: false,
-        error:
-          "NO_IMAGE_RESULT",
-      },
-      502
-    );
-  }
-
-  if (
-    typeof item.b64_json ===
-      "string" &&
-    item.b64_json.trim()
-  ) {
-    return json({
-      ok: true,
-      imageDataUrl:
-        `data:image/png;base64,${item.b64_json}`,
-      model,
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  }
-
-  if (
-    typeof item.url ===
-      "string" &&
-    item.url.trim()
-  ) {
-    return json({
-      ok: true,
-      imageUrl:
-        item.url.trim(),
-      model,
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  }
-
-  return json(
-    {
-      ok: false,
-      error:
-        "IMAGE_FORMAT_NOT_SUPPORTED",
-    },
-    502
-  );
+  return json({
+    ok: true,
+    imageDataUrl:
+      result.imageDataUrl,
+    mimeType:
+      result.mimeType,
+    provider:
+      result.provider,
+    fallback:
+      Boolean(
+        result.fallback
+      ),
+    fallbackReason:
+      result.fallbackReason ||
+      null,
+    model:
+      result.model,
+    text:
+      result.text || "",
+    backendVersion:
+      BACKEND_VERSION,
+  });
 }
+
+/* =========================================================
+   GENERAL NETWORK HELPERS
+   ========================================================= */
 
 async function fetchJson(
   url,
   options = {}
 ) {
   const response =
-    await fetch(
-      url,
-      {
-        ...options,
-        headers: {
-          "User-Agent":
-            "Sa7bi-AI/5.0.1",
-          ...(options.headers ||
-            {}),
-        },
-      }
-    );
+    await fetch(url, {
+      ...options,
+      headers: {
+        "User-Agent":
+          "Sa7bi-AI/6.0.0",
+        ...(options.headers ||
+          {}),
+      },
+    });
 
   if (!response.ok) {
     throw new Error(
@@ -756,6 +635,10 @@ async function fetchJson(
 
   return response.json();
 }
+
+/* =========================================================
+   AUDIO
+   ========================================================= */
 
 async function handleAudioSearch(
   request
@@ -834,9 +717,7 @@ async function handleQuranSearch(
               item?.name ||
                 item?.sura_name ||
                 ""
-            ).includes(
-              query
-            )
+            ).includes(query)
         );
     }
 
@@ -887,7 +768,7 @@ async function handleAdhkarSearch(
         {
           headers: {
             "User-Agent":
-              "Sa7bi-AI/5.0.1",
+              "Sa7bi-AI/6.0.0",
           },
         }
       );
@@ -902,6 +783,7 @@ async function handleAdhkarSearch(
       await response.json();
 
     const result = [];
+
     const queryNormalized =
       normalizeArabic(query);
 
@@ -911,7 +793,9 @@ async function handleAdhkarSearch(
           ? data
           : []
     ) {
-      if (!group) continue;
+      if (!group) {
+        continue;
+      }
 
       const category =
         group.category ||
@@ -932,7 +816,9 @@ async function handleAdhkarSearch(
       for (
         const item of list
       ) {
-        if (!item) continue;
+        if (!item) {
+          continue;
+        }
 
         const textValue =
           item.content ||
@@ -975,14 +861,16 @@ async function handleAdhkarSearch(
         });
 
         if (
-          result.length >= 80
+          result.length >=
+          80
         ) {
           break;
         }
       }
 
       if (
-        result.length >= 80
+        result.length >=
+        80
       ) {
         break;
       }
@@ -1021,7 +909,8 @@ async function handleAppleSearch(
       "term",
       query ||
         (
-          media === "podcast"
+          media ===
+          "podcast"
             ? "Arabic podcast"
             : "Arabic music"
         )
@@ -1112,20 +1001,23 @@ async function handleAppleSearch(
   }
 }
 
+/* =========================================================
+   QURAN CATALOG
+   ========================================================= */
+
 async function handleQuranCatalog() {
   try {
     const [
       recitersData,
       suwarData,
-    ] =
-      await Promise.all([
-        fetchJson(
-          `${MP3QURAN_BASE}/reciters?language=ar`
-        ),
-        fetchJson(
-          `${MP3QURAN_BASE}/suwar?language=ar`
-        ),
-      ]);
+    ] = await Promise.all([
+      fetchJson(
+        `${MP3QURAN_BASE}/reciters?language=ar`
+      ),
+      fetchJson(
+        `${MP3QURAN_BASE}/suwar?language=ar`
+      ),
+    ]);
 
     const reciters =
       Array.isArray(
@@ -1160,7 +1052,10 @@ async function handleQuranCatalog() {
                 ? reciter.moshaf
                 : []
             ).map(
-              (m, index) => ({
+              (
+                m,
+                index
+              ) => ({
                 id:
                   m.id ||
                   `${reciter.id || "reciter"}-${index + 1}`,
@@ -1228,6 +1123,10 @@ async function handleQuranCatalog() {
     );
   }
 }
+
+/* =========================================================
+   RADIO
+   ========================================================= */
 
 async function handleRadioCountries() {
   try {
@@ -1391,6 +1290,10 @@ async function handleRadioStations(
   }
 }
 
+/* =========================================================
+   SHORTS
+   ========================================================= */
+
 async function handleShorts() {
   try {
     const data =
@@ -1410,7 +1313,10 @@ async function handleShorts() {
     const items =
       raw
         .map(
-          (item, index) => ({
+          (
+            item,
+            index
+          ) => ({
             id:
               item?.id ||
               item?.video_id ||
@@ -1468,7 +1374,13 @@ async function handleShorts() {
   }
 }
 
-function parseRssItems(xml) {
+/* =========================================================
+   NEWS
+   ========================================================= */
+
+function parseRssItems(
+  xml
+) {
   const items = [];
 
   const blocks =
@@ -1522,14 +1434,18 @@ function parseRssItems(xml) {
         [
           /<source[^>]*>([\s\S]*?)<\/source>/i,
         ]
-      ) || "Google News";
+      ) ||
+      "Google News";
 
     const image =
       extractNewsImage(
         block
       );
 
-    if (!title || !link) {
+    if (
+      !title ||
+      !link
+    ) {
       continue;
     }
 
@@ -1543,7 +1459,8 @@ function parseRssItems(xml) {
           description
         ),
       image,
-      imageUrl: image,
+      imageUrl:
+        image,
       source,
     });
   }
@@ -1572,7 +1489,7 @@ async function fetchGoogleNews() {
           {
             headers: {
               "User-Agent":
-                "Mozilla/5.0 Sa7bi-AI/5.0.1",
+                "Mozilla/5.0 Sa7bi-AI/6.0.0",
             },
           }
         );
@@ -1590,12 +1507,17 @@ async function fetchGoogleNews() {
         const item of items
       ) {
         if (
-          seen.has(item.link)
+          seen.has(
+            item.link
+          )
         ) {
           continue;
         }
 
-        seen.add(item.link);
+        seen.add(
+          item.link
+        );
+
         all.push(item);
 
         if (
@@ -1626,7 +1548,10 @@ async function handleNews() {
     return json({
       ok: true,
       items:
-        items.slice(0, 40),
+        items.slice(
+          0,
+          40
+        ),
       backendVersion:
         BACKEND_VERSION,
     });
@@ -1644,51 +1569,123 @@ async function handleNews() {
   }
 }
 
-function handleHealth(env) {
+/* =========================================================
+   HEALTH / DIAGNOSTICS
+   ========================================================= */
+
+function handleHealth(
+  env
+) {
+  const ai =
+    getAIStatus(env);
+
   return json({
     ok: true,
     status: "online",
     app: "Sa7bi AI",
     backendVersion:
       BACKEND_VERSION,
+
+    geminiConfigured:
+      ai.geminiConfigured,
+
+    workersAiConfigured:
+      ai.workersAiConfigured,
+
     openaiConfigured:
-      Boolean(env?.OPENAI_API_KEY),
+      Boolean(
+        env?.OPENAI_API_KEY
+      ),
+
     textModel:
-      env?.OPENAI_MODEL ||
-      DEFAULT_TEXT_MODEL,
+      ai.gemini.text,
+
     imageModel:
-      env?.OPENAI_IMAGE_MODEL ||
-      DEFAULT_IMAGE_MODEL,
+      ai.gemini.image,
+
+    fallbackTextModel:
+      ai.workersAI.text,
+
+    fallbackVisionModel:
+      ai.workersAI.vision,
+
+    fallbackImageModel:
+      ai.workersAI.image,
   });
 }
 
-function handleDiagnostics(env) {
+function handleDiagnostics(
+  env
+) {
+  const ai =
+    getAIStatus(env);
+
   return json({
     ok: true,
     status: "online",
     app: "Sa7bi AI",
     backendVersion:
       BACKEND_VERSION,
+
     runtime: {
       worker: true,
+
+      geminiConfigured:
+        ai.geminiConfigured,
+
+      workersAiConfigured:
+        ai.workersAiConfigured,
+
       openaiConfigured:
-        Boolean(env?.OPENAI_API_KEY),
-      textModel:
-        env?.OPENAI_MODEL ||
-        DEFAULT_TEXT_MODEL,
-      imageModel:
-        env?.OPENAI_IMAGE_MODEL ||
-        DEFAULT_IMAGE_MODEL,
+        Boolean(
+          env?.OPENAI_API_KEY
+        ),
+
+      models: {
+        geminiText:
+          ai.gemini.text,
+
+        geminiImage:
+          ai.gemini.image,
+
+        workersText:
+          ai.workersAI.text,
+
+        workersVision:
+          ai.workersAI.vision,
+
+        workersImage:
+          ai.workersAI.image,
+      },
     },
+
     endpoints: {
       root: "/",
       health: "/health",
-      diagnostics: "/v1/diagnostics",
+      diagnostics:
+        "/v1/diagnostics",
       chat: "/v1/chat",
       image: "/v1/image",
+      news: "/v1/news",
+      audio:
+        "/v1/audio/search-v4",
+      quran:
+        "/v1/audio/quran",
+      radioCountries:
+        "/v1/radio/countries",
+      radioStations:
+        "/v1/radio/stations?country=EG",
+      shorts:
+        "/v1/shorts",
+      download:
+        "/download",
     },
   });
 }
+
+/* =========================================================
+   ROOT / DOWNLOAD
+   ========================================================= */
 
 function handleRoot() {
   return json({
@@ -1710,10 +1707,20 @@ function handleRoot() {
       shorts: true,
     },
 
+    ai: {
+      primary:
+        "gemini",
+      fallback:
+        "cloudflare_workers_ai",
+    },
+
     endpoints: {
-      chat: "/v1/chat",
-      image: "/v1/image",
-      news: "/v1/news",
+      chat:
+        "/v1/chat",
+      image:
+        "/v1/image",
+      news:
+        "/v1/news",
       audio:
         "/v1/audio/search-v4",
       quran:
@@ -1741,6 +1748,10 @@ function handleDownload() {
   );
 }
 
+/* =========================================================
+   WORKER ENTRY
+   ========================================================= */
+
 export default {
   async fetch(
     request,
@@ -1762,13 +1773,17 @@ export default {
       }
 
       const url =
-        new URL(request.url);
+        new URL(
+          request.url
+        );
 
       const path =
         url.pathname.replace(
           /\/+$/,
           ""
         ) || "/";
+
+      /* ROOT */
 
       if (
         request.method ===
@@ -1778,37 +1793,54 @@ export default {
         return handleRoot();
       }
 
+      /* HEALTH */
+
       if (
         request.method ===
           "GET" &&
         path === "/health"
       ) {
-        return handleHealth(env);
+        return handleHealth(
+          env
+        );
       }
+
+      /* DIAGNOSTICS */
 
       if (
         request.method ===
           "GET" &&
-        path === "/v1/diagnostics"
+        path ===
+          "/v1/diagnostics"
       ) {
-        return handleDiagnostics(env);
+        return handleDiagnostics(
+          env
+        );
       }
+
+      /* DOWNLOAD */
 
       if (
         request.method ===
           "GET" &&
-        path === "/download"
+        path ===
+          "/download"
       ) {
         return handleDownload();
       }
 
+      /* NEWS */
+
       if (
         request.method ===
           "GET" &&
-        path === "/v1/news"
+        path ===
+          "/v1/news"
       ) {
         return handleNews();
       }
+
+      /* AUDIO SEARCH */
 
       if (
         request.method ===
@@ -1825,6 +1857,8 @@ export default {
         );
       }
 
+      /* QURAN */
+
       if (
         request.method ===
           "GET" &&
@@ -1834,6 +1868,8 @@ export default {
         return handleQuranCatalog();
       }
 
+      /* RADIO COUNTRIES */
+
       if (
         request.method ===
           "GET" &&
@@ -1842,6 +1878,8 @@ export default {
       ) {
         return handleRadioCountries();
       }
+
+      /* RADIO STATIONS */
 
       if (
         request.method ===
@@ -1854,18 +1892,24 @@ export default {
         );
       }
 
+      /* SHORTS */
+
       if (
         request.method ===
           "GET" &&
-        path === "/v1/shorts"
+        path ===
+          "/v1/shorts"
       ) {
         return handleShorts();
       }
 
+      /* CHAT */
+
       if (
         request.method ===
           "POST" &&
-        path === "/v1/chat"
+        path ===
+          "/v1/chat"
       ) {
         return handleChat(
           request,
@@ -1873,10 +1917,13 @@ export default {
         );
       }
 
+      /* IMAGE */
+
       if (
         request.method ===
           "POST" &&
-        path === "/v1/image"
+        path ===
+          "/v1/image"
       ) {
         return handleImageGeneration(
           request,
@@ -1926,7 +1973,7 @@ export default {
 
       if (
         message ===
-        "OPENAI_API_KEY_MISSING"
+        "GEMINI_API_KEY_MISSING"
       ) {
         return json(
           {
@@ -1934,6 +1981,50 @@ export default {
             error: message,
           },
           500
+        );
+      }
+
+      if (
+        message ===
+        "WORKERS_AI_BINDING_MISSING"
+      ) {
+        return json(
+          {
+            ok: false,
+            error: message,
+          },
+          500
+        );
+      }
+
+      if (
+        message ===
+        "NO_AI_PROVIDER_CONFIGURED"
+      ) {
+        return json(
+          {
+            ok: false,
+            error: message,
+          },
+          500
+        );
+      }
+
+      if (
+        message ===
+        "ALL_AI_PROVIDERS_FAILED" ||
+        message ===
+        "ALL_IMAGE_PROVIDERS_FAILED"
+      ) {
+        return json(
+          {
+            ok: false,
+            error: message,
+            details:
+              error?.message ||
+              "",
+          },
+          502
         );
       }
 
