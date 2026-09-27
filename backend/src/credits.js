@@ -1,6 +1,7 @@
 // backend/src/credits.js
 // Sa7bi AI - Server Authoritative Credits
-// Persistent per-device credit ledger using Cloudflare Durable Objects.
+// Final Persistent Credit Ledger
+// Cloudflare Durable Objects + SQLite
 
 import { DurableObject } from "cloudflare:workers";
 
@@ -22,26 +23,38 @@ export const REWARDED_AD_CREDITS = 10;
 
 export const REWARDED_AD_DAILY_LIMIT = 5;
 
-const RESERVATION_TTL_MS = 10 * 60 * 1000;
+const RESERVATION_TTL_MS =
+  10 * 60 * 1000;
+
+const MAX_DEVICE_ID_LENGTH = 128;
+const MAX_REQUEST_ID_LENGTH = 128;
+const MAX_TRANSACTION_ID_LENGTH = 256;
+const MAX_SOURCE_LENGTH = 128;
 
 /* =========================================================
    HELPERS
    ========================================================= */
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        "Content-Type":
+          "application/json; charset=utf-8",
+        "Cache-Control":
+          "no-store",
+      },
     },
-  });
+  );
 }
 
 function todayKey() {
   const now = new Date();
 
-  const year = now.getUTCFullYear();
+  const year =
+    now.getUTCFullYear();
 
   const month = String(
     now.getUTCMonth() + 1,
@@ -65,7 +78,10 @@ function normalizeDeviceId(value) {
     return "";
   }
 
-  return clean.substring(0, 128);
+  return clean.substring(
+    0,
+    MAX_DEVICE_ID_LENGTH,
+  );
 }
 
 function normalizeRequestId(value) {
@@ -73,7 +89,12 @@ function normalizeRequestId(value) {
     return "";
   }
 
-  return value.trim().substring(0, 128);
+  return value
+    .trim()
+    .substring(
+      0,
+      MAX_REQUEST_ID_LENGTH,
+    );
 }
 
 function normalizeTransactionId(value) {
@@ -81,7 +102,12 @@ function normalizeTransactionId(value) {
     return "";
   }
 
-  return value.trim().substring(0, 256);
+  return value
+    .trim()
+    .substring(
+      0,
+      MAX_TRANSACTION_ID_LENGTH,
+    );
 }
 
 function normalizeOperation(value) {
@@ -89,13 +115,36 @@ function normalizeOperation(value) {
     return "";
   }
 
-  return value.trim().toLowerCase();
+  return value
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeSource(value) {
+  if (typeof value !== "string") {
+    return "admob_ssv";
+  }
+
+  const clean = value.trim();
+
+  if (!clean) {
+    return "admob_ssv";
+  }
+
+  return clean.substring(
+    0,
+    MAX_SOURCE_LENGTH,
+  );
 }
 
 function getCreditCost(operation) {
-  const normalized = normalizeOperation(operation);
+  const normalized =
+    normalizeOperation(operation);
 
-  return CREDIT_COSTS[normalized] ?? null;
+  return (
+    CREDIT_COSTS[normalized] ??
+    null
+  );
 }
 
 function clampCredits(value) {
@@ -116,11 +165,33 @@ function clampCredits(value) {
   return Math.floor(number);
 }
 
+function normalizeRewardedCount(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+
+  if (number < 0) {
+    return 0;
+  }
+
+  if (
+    number >
+    REWARDED_AD_DAILY_LIMIT
+  ) {
+    return REWARDED_AD_DAILY_LIMIT;
+  }
+
+  return Math.floor(number);
+}
+
 /* =========================================================
    DURABLE OBJECT
    ========================================================= */
 
-export class Sa7biCredits extends DurableObject {
+export class Sa7biCredits
+  extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
 
@@ -159,11 +230,6 @@ export class Sa7biCredits extends DurableObject {
 
     /* -------------------------------------------------------
        VERIFIED REWARDED AD TRANSACTIONS
-
-       transaction_id is the idempotency key.
-
-       A verified AdMob reward can therefore only
-       be credited once for this device.
        ------------------------------------------------------- */
 
     this.ctx.storage.sql.exec(`
@@ -181,22 +247,23 @@ export class Sa7biCredits extends DurableObject {
      ======================================================= */
 
   ensureAccount() {
-    const row = this.ctx.storage.sql
-      .exec(
-        `
-        SELECT
-          id,
-          credits,
-          rewarded_date,
-          rewarded_count,
-          created_at,
-          updated_at
-        FROM account
-        WHERE id = 1
-        LIMIT 1
-        `,
-      )
-      .one();
+    const row =
+      this.ctx.storage.sql
+        .exec(
+          `
+          SELECT
+            id,
+            credits,
+            rewarded_date,
+            rewarded_count,
+            created_at,
+            updated_at
+          FROM account
+          WHERE id = 1
+          LIMIT 1
+          `,
+        )
+        .one();
 
     if (row) {
       return row;
@@ -247,11 +314,16 @@ export class Sa7biCredits extends DurableObject {
      ======================================================= */
 
   resetRewardedCounterIfNeeded() {
-    const account = this.ensureAccount();
+    const account =
+      this.ensureAccount();
 
-    const today = todayKey();
+    const today =
+      todayKey();
 
-    if (account.rewarded_date === today) {
+    if (
+      account.rewarded_date ===
+      today
+    ) {
       return account;
     }
 
@@ -295,18 +367,24 @@ export class Sa7biCredits extends DurableObject {
      ======================================================= */
 
   getReservedTotal() {
-    const row = this.ctx.storage.sql
-      .exec(
-        `
-        SELECT
-          COALESCE(SUM(cost), 0) AS total
-        FROM reservations
-        WHERE state = 'reserved'
-        `,
-      )
-      .one();
+    const row =
+      this.ctx.storage.sql
+        .exec(
+          `
+          SELECT
+            COALESCE(
+              SUM(cost),
+              0
+            ) AS total
+          FROM reservations
+          WHERE state = 'reserved'
+          `,
+        )
+        .one();
 
-    return clampCredits(row?.total ?? 0);
+    return clampCredits(
+      row?.total ?? 0,
+    );
   }
 
   /* =======================================================
@@ -319,32 +397,40 @@ export class Sa7biCredits extends DurableObject {
     const account =
       this.resetRewardedCounterIfNeeded();
 
-    const reserved = this.getReservedTotal();
+    const reserved =
+      this.getReservedTotal();
 
-    const credits = clampCredits(account.credits);
+    const credits =
+      clampCredits(
+        account.credits,
+      );
 
-    const available = Math.max(
-      0,
-      credits - reserved,
-    );
+    const available =
+      Math.max(
+        0,
+        credits - reserved,
+      );
 
-    const rewardedAdsToday = Math.max(
-      0,
-      Number(account.rewarded_count || 0),
-    );
+    const rewardedAdsToday =
+      normalizeRewardedCount(
+        account.rewarded_count,
+      );
 
-    const remainingRewardedAds = Math.max(
-      0,
-      REWARDED_AD_DAILY_LIMIT -
-        rewardedAdsToday,
-    );
+    const remainingRewardedAds =
+      Math.max(
+        0,
+        REWARDED_AD_DAILY_LIMIT -
+          rewardedAdsToday,
+      );
 
     return {
       credits,
 
-      availableCredits: available,
+      availableCredits:
+        available,
 
-      reservedCredits: reserved,
+      reservedCredits:
+        reserved,
 
       rewardedAdsToday,
 
@@ -369,26 +455,34 @@ export class Sa7biCredits extends DurableObject {
     this.cleanupExpiredReservations();
 
     const normalizedOperation =
-      normalizeOperation(operation);
+      normalizeOperation(
+        operation,
+      );
 
     const normalizedRequestId =
-      normalizeRequestId(requestId);
+      normalizeRequestId(
+        requestId,
+      );
 
     if (!normalizedRequestId) {
       return {
         ok: false,
-        error: "REQUEST_ID_REQUIRED",
+        error:
+          "REQUEST_ID_REQUIRED",
       };
     }
 
-    const cost = getCreditCost(
-      normalizedOperation,
-    );
+    const cost =
+      getCreditCost(
+        normalizedOperation,
+      );
 
     if (cost === null) {
       return {
         ok: false,
-        error: "UNKNOWN_CREDIT_OPERATION",
+
+        error:
+          "UNKNOWN_CREDIT_OPERATION",
       };
     }
 
@@ -416,55 +510,73 @@ export class Sa7biCredits extends DurableObject {
         .one();
 
     if (existing) {
-      if (existing.state === "reserved") {
+      if (
+        existing.state ===
+        "reserved"
+      ) {
         return {
           ok: true,
 
           alreadyReserved: true,
 
-          operation: existing.operation,
+          operation:
+            existing.operation,
 
-          cost: Number(existing.cost),
-
-          requestId: existing.request_id,
-
-          state: existing.state,
-
-          expiresAt: Number(
-            existing.expires_at,
+          cost: Number(
+            existing.cost,
           ),
 
-          balance: this.getState(),
+          requestId:
+            existing.request_id,
+
+          state:
+            existing.state,
+
+          expiresAt:
+            Number(
+              existing.expires_at,
+            ),
+
+          balance:
+            this.getState(),
         };
       }
 
       return {
         ok: false,
-        error: "REQUEST_ALREADY_FINALIZED",
+
+        error:
+          "REQUEST_ALREADY_FINALIZED",
       };
     }
 
-    const account = this.ensureAccount();
+    const account =
+      this.ensureAccount();
 
-    const reserved = this.getReservedTotal();
+    const reserved =
+      this.getReservedTotal();
 
-    const available = Math.max(
-      0,
-      clampCredits(account.credits) -
-        reserved,
-    );
+    const available =
+      Math.max(
+        0,
+        clampCredits(
+          account.credits,
+        ) - reserved,
+      );
 
     if (available < cost) {
       return {
         ok: false,
 
-        error: "INSUFFICIENT_CREDITS",
+        error:
+          "INSUFFICIENT_CREDITS",
 
         required: cost,
 
         available,
 
-        balance: this.getState(),
+        balance:
+          this.getState(),
       };
     }
 
@@ -472,6 +584,15 @@ export class Sa7biCredits extends DurableObject {
 
     const expiresAt =
       now + RESERVATION_TTL_MS;
+
+    /*
+     * The INSERT is synchronous.
+     * No await occurs between the balance check
+     * and the reservation write.
+     *
+     * SQLite-backed Durable Objects keep these
+     * synchronous storage operations atomic.
+     */
 
     this.ctx.storage.sql.exec(
       `
@@ -497,17 +618,21 @@ export class Sa7biCredits extends DurableObject {
 
       alreadyReserved: false,
 
-      operation: normalizedOperation,
+      operation:
+        normalizedOperation,
 
       cost,
 
-      requestId: normalizedRequestId,
+      requestId:
+        normalizedRequestId,
 
-      state: "reserved",
+      state:
+        "reserved",
 
       expiresAt,
 
-      balance: this.getState(),
+      balance:
+        this.getState(),
     };
   }
 
@@ -519,12 +644,16 @@ export class Sa7biCredits extends DurableObject {
     this.cleanupExpiredReservations();
 
     const normalizedRequestId =
-      normalizeRequestId(requestId);
+      normalizeRequestId(
+        requestId,
+      );
 
     if (!normalizedRequestId) {
       return {
         ok: false,
-        error: "REQUEST_ID_REQUIRED",
+
+        error:
+          "REQUEST_ID_REQUIRED",
       };
     }
 
@@ -549,11 +678,16 @@ export class Sa7biCredits extends DurableObject {
     if (!reservation) {
       return {
         ok: false,
-        error: "RESERVATION_NOT_FOUND",
+
+        error:
+          "RESERVATION_NOT_FOUND",
       };
     }
 
-    if (reservation.state === "committed") {
+    if (
+      reservation.state ===
+      "committed"
+    ) {
       return {
         ok: true,
 
@@ -563,20 +697,27 @@ export class Sa7biCredits extends DurableObject {
           reservation.cost,
         ),
 
-        balance: this.getState(),
-      };
-    }
-
-    if (reservation.state !== "reserved") {
-      return {
-        ok: false,
-        error: "RESERVATION_NOT_ACTIVE",
+        balance:
+          this.getState(),
       };
     }
 
     if (
-      Number(reservation.expires_at) <=
-      Date.now()
+      reservation.state !==
+      "reserved"
+    ) {
+      return {
+        ok: false,
+
+        error:
+          "RESERVATION_NOT_ACTIVE",
+      };
+    }
+
+    if (
+      Number(
+        reservation.expires_at,
+      ) <= Date.now()
     ) {
       this.ctx.storage.sql.exec(
         `
@@ -589,20 +730,28 @@ export class Sa7biCredits extends DurableObject {
 
       return {
         ok: false,
-        error: "RESERVATION_EXPIRED",
+
+        error:
+          "RESERVATION_EXPIRED",
       };
     }
 
-    const cost = clampCredits(
-      reservation.cost,
-    );
+    const cost =
+      clampCredits(
+        reservation.cost,
+      );
 
-    const account = this.ensureAccount();
+    const account =
+      this.ensureAccount();
 
     const currentCredits =
-      clampCredits(account.credits);
+      clampCredits(
+        account.credits,
+      );
 
-    if (currentCredits < cost) {
+    if (
+      currentCredits < cost
+    ) {
       this.ctx.storage.sql.exec(
         `
         UPDATE reservations
@@ -615,34 +764,49 @@ export class Sa7biCredits extends DurableObject {
       return {
         ok: false,
 
-        error: "INSUFFICIENT_CREDITS",
+        error:
+          "INSUFFICIENT_CREDITS",
 
-        balance: this.getState(),
+        balance:
+          this.getState(),
       };
     }
 
     const now = Date.now();
 
-    this.ctx.storage.sql.exec(
-      `
-      UPDATE account
-      SET
-        credits = credits - ?,
-        updated_at = ?
-      WHERE id = 1
-      `,
-      cost,
-      now,
-    );
+    /*
+     * Explicit synchronous SQLite transaction.
+     *
+     * Both:
+     *   1. subtract credits
+     *   2. mark reservation committed
+     *
+     * must succeed together.
+     */
 
-    this.ctx.storage.sql.exec(
-      `
-      UPDATE reservations
-      SET state = 'committed'
-      WHERE request_id = ?
-      `,
-      normalizedRequestId,
-    );
+    this.ctx.storage
+      .transactionSync(() => {
+        this.ctx.storage.sql.exec(
+          `
+          UPDATE account
+          SET
+            credits = credits - ?,
+            updated_at = ?
+          WHERE id = 1
+          `,
+          cost,
+          now,
+        );
+
+        this.ctx.storage.sql.exec(
+          `
+          UPDATE reservations
+          SET state = 'committed'
+          WHERE request_id = ?
+          `,
+          normalizedRequestId,
+        );
+      });
 
     return {
       ok: true,
@@ -651,7 +815,8 @@ export class Sa7biCredits extends DurableObject {
 
       cost,
 
-      balance: this.getState(),
+      balance:
+        this.getState(),
     };
   }
 
@@ -661,12 +826,16 @@ export class Sa7biCredits extends DurableObject {
 
   release(requestId) {
     const normalizedRequestId =
-      normalizeRequestId(requestId);
+      normalizeRequestId(
+        requestId,
+      );
 
     if (!normalizedRequestId) {
       return {
         ok: false,
-        error: "REQUEST_ID_REQUIRED",
+
+        error:
+          "REQUEST_ID_REQUIRED",
       };
     }
 
@@ -690,24 +859,35 @@ export class Sa7biCredits extends DurableObject {
     if (!reservation) {
       return {
         ok: false,
-        error: "RESERVATION_NOT_FOUND",
+
+        error:
+          "RESERVATION_NOT_FOUND",
       };
     }
 
-    if (reservation.state === "released") {
+    if (
+      reservation.state ===
+      "released"
+    ) {
       return {
         ok: true,
 
         alreadyReleased: true,
 
-        balance: this.getState(),
+        balance:
+          this.getState(),
       };
     }
 
-    if (reservation.state === "committed") {
+    if (
+      reservation.state ===
+      "committed"
+    ) {
       return {
         ok: false,
-        error: "REQUEST_ALREADY_COMMITTED",
+
+        error:
+          "REQUEST_ALREADY_COMMITTED",
       };
     }
 
@@ -729,7 +909,8 @@ export class Sa7biCredits extends DurableObject {
         reservation.cost,
       ),
 
-      balance: this.getState(),
+      balance:
+        this.getState(),
     };
   }
 
@@ -740,16 +921,20 @@ export class Sa7biCredits extends DurableObject {
   /*
    * IMPORTANT:
    *
-   * This function must ONLY be called after the Worker
-   * verifies the AdMob SSV signature and callback data.
+   * This method MUST only be reached after the
+   * AdMob SSV handler verifies the Google signature.
    *
-   * Flutter NEVER calls this function directly.
+   * Flutter cannot call the Worker route that grants
+   * this reward directly.
    *
-   * The server determines the reward amount from:
+   * The reward amount is controlled by the server:
    *
    * REWARDED_AD_CREDITS = 10
    *
-   * The client cannot choose the reward amount.
+   * The client cannot choose:
+   * - reward amount
+   * - transaction ID
+   * - daily reward count
    */
 
   rewardVerifiedAd({
@@ -761,7 +946,9 @@ export class Sa7biCredits extends DurableObject {
         transactionId,
       );
 
-    if (!normalizedTransactionId) {
+    if (
+      !normalizedTransactionId
+    ) {
       return {
         ok: false,
 
@@ -800,11 +987,13 @@ export class Sa7biCredits extends DurableObject {
         transactionId:
           existing.transaction_id,
 
-        added: Number(
-          existing.reward_amount,
-        ),
+        added:
+          Number(
+            existing.reward_amount,
+          ),
 
-        balance: this.getState(),
+        balance:
+          this.getState(),
       };
     }
 
@@ -815,10 +1004,10 @@ export class Sa7biCredits extends DurableObject {
     const account =
       this.resetRewardedCounterIfNeeded();
 
-    const rewardedCount = Math.max(
-      0,
-      Number(account.rewarded_count || 0),
-    );
+    const rewardedCount =
+      normalizeRewardedCount(
+        account.rewarded_count,
+      );
 
     if (
       rewardedCount >=
@@ -830,7 +1019,8 @@ export class Sa7biCredits extends DurableObject {
         error:
           "REWARDED_AD_DAILY_LIMIT",
 
-        balance: this.getState(),
+        balance:
+          this.getState(),
       };
     }
 
@@ -840,47 +1030,56 @@ export class Sa7biCredits extends DurableObject {
 
     const now = Date.now();
 
+    const cleanSource =
+      normalizeSource(source);
+
     /*
-     * Store the transaction BEFORE updating the balance.
+     * Explicit SQLite transaction.
      *
-     * Cloudflare Durable Objects execute this request
-     * serially, so the transaction ID remains the
-     * idempotency barrier for repeated callbacks.
+     * These two writes must succeed together:
+     *
+     * 1. Store transaction ID.
+     * 2. Add exactly 10 credits and increment
+     *    today's rewarded-ad counter.
+     *
+     * If either operation fails, SQLite rolls back
+     * the whole transaction.
      */
 
-    this.ctx.storage.sql.exec(
-      `
-      INSERT INTO rewarded_transactions (
-        transaction_id,
-        reward_amount,
-        created_at,
-        source
-      )
-      VALUES (?, ?, ?, ?)
-      `,
-      normalizedTransactionId,
-      REWARDED_AD_CREDITS,
-      now,
-      typeof source === "string" &&
-        source.trim()
-        ? source.trim().substring(0, 128)
-        : "admob_ssv",
-    );
+    this.ctx.storage
+      .transactionSync(() => {
+        this.ctx.storage.sql.exec(
+          `
+          INSERT INTO rewarded_transactions (
+            transaction_id,
+            reward_amount,
+            created_at,
+            source
+          )
+          VALUES (?, ?, ?, ?)
+          `,
+          normalizedTransactionId,
+          REWARDED_AD_CREDITS,
+          now,
+          cleanSource,
+        );
 
-    this.ctx.storage.sql.exec(
-      `
-      UPDATE account
-      SET
-        credits = credits + ?,
-        rewarded_count = rewarded_count + 1,
-        rewarded_date = ?,
-        updated_at = ?
-      WHERE id = 1
-      `,
-      REWARDED_AD_CREDITS,
-      todayKey(),
-      now,
-    );
+        this.ctx.storage.sql.exec(
+          `
+          UPDATE account
+          SET
+            credits = credits + ?,
+            rewarded_count =
+              rewarded_count + 1,
+            rewarded_date = ?,
+            updated_at = ?
+          WHERE id = 1
+          `,
+          REWARDED_AD_CREDITS,
+          todayKey(),
+          now,
+        );
+      });
 
     return {
       ok: true,
@@ -895,7 +1094,8 @@ export class Sa7biCredits extends DurableObject {
       added:
         REWARDED_AD_CREDITS,
 
-      balance: this.getState(),
+      balance:
+        this.getState(),
     };
   }
 
@@ -906,8 +1106,10 @@ export class Sa7biCredits extends DurableObject {
   /*
    * Old direct reward path intentionally disabled.
    *
-   * This prevents Flutter or an unauthenticated request
-   * from creating credits.
+   * No Flutter request can simply say:
+   * "give me 10 credits".
+   *
+   * A valid Google SSV callback is required.
    */
 
   rewardAd() {
@@ -925,18 +1127,27 @@ export class Sa7biCredits extends DurableObject {
 
   async fetch(request) {
     try {
-      const url = new URL(request.url);
+      const url =
+        new URL(request.url);
 
       const action =
-        url.searchParams.get("action") ||
+        url.searchParams.get(
+          "action",
+        ) ||
         "balance";
 
       /* -----------------------------------------------------
          GET
          ----------------------------------------------------- */
 
-      if (request.method === "GET") {
-        if (action === "balance") {
+      if (
+        request.method ===
+        "GET"
+      ) {
+        if (
+          action ===
+          "balance"
+        ) {
           return json({
             ok: true,
             ...this.getState(),
@@ -946,7 +1157,9 @@ export class Sa7biCredits extends DurableObject {
         return json(
           {
             ok: false,
-            error: "UNKNOWN_ACTION",
+
+            error:
+              "UNKNOWN_ACTION",
           },
           400,
         );
@@ -956,11 +1169,16 @@ export class Sa7biCredits extends DurableObject {
          METHOD
          ----------------------------------------------------- */
 
-      if (request.method !== "POST") {
+      if (
+        request.method !==
+        "POST"
+      ) {
         return json(
           {
             ok: false,
-            error: "METHOD_NOT_ALLOWED",
+
+            error:
+              "METHOD_NOT_ALLOWED",
           },
           405,
         );
@@ -969,7 +1187,8 @@ export class Sa7biCredits extends DurableObject {
       let body = {};
 
       try {
-        body = await request.json();
+        body =
+          await request.json();
       } catch (_) {
         body = {};
       }
@@ -978,11 +1197,17 @@ export class Sa7biCredits extends DurableObject {
          RESERVE
          ----------------------------------------------------- */
 
-      if (action === "reserve") {
+      if (
+        action ===
+        "reserve"
+      ) {
         return json(
           this.reserve({
-            operation: body.operation,
-            requestId: body.requestId,
+            operation:
+              body.operation,
+
+            requestId:
+              body.requestId,
           }),
           200,
         );
@@ -992,7 +1217,10 @@ export class Sa7biCredits extends DurableObject {
          COMMIT
          ----------------------------------------------------- */
 
-      if (action === "commit") {
+      if (
+        action ===
+        "commit"
+      ) {
         return json(
           this.commit(
             body.requestId,
@@ -1005,7 +1233,10 @@ export class Sa7biCredits extends DurableObject {
          RELEASE
          ----------------------------------------------------- */
 
-      if (action === "release") {
+      if (
+        action ===
+        "release"
+      ) {
         return json(
           this.release(
             body.requestId,
@@ -1016,16 +1247,11 @@ export class Sa7biCredits extends DurableObject {
 
       /* -----------------------------------------------------
          VERIFIED REWARD
-
-         This action is intentionally NOT publicly
-         authorized by the main Worker route.
-
-         The module-level rewardVerifiedAd() helper
-         calls it only after SSV verification.
          ----------------------------------------------------- */
 
       if (
-        action === "verified-reward"
+        action ===
+        "verified-reward"
       ) {
         return json(
           this.rewardVerifiedAd({
@@ -1041,10 +1267,13 @@ export class Sa7biCredits extends DurableObject {
       }
 
       /* -----------------------------------------------------
-         LEGACY REWARD-AD ROUTE
+         LEGACY REWARD
          ----------------------------------------------------- */
 
-      if (action === "reward-ad") {
+      if (
+        action ===
+        "reward-ad"
+      ) {
         return json(
           {
             ok: false,
@@ -1059,7 +1288,9 @@ export class Sa7biCredits extends DurableObject {
       return json(
         {
           ok: false,
-          error: "UNKNOWN_ACTION",
+
+          error:
+            "UNKNOWN_ACTION",
         },
         400,
       );
@@ -1093,7 +1324,9 @@ export async function getCreditsObject(
   }
 
   const normalized =
-    normalizeDeviceId(deviceId);
+    normalizeDeviceId(
+      deviceId,
+    );
 
   if (!normalized) {
     throw new Error(
@@ -1102,8 +1335,16 @@ export async function getCreditsObject(
   }
 
   /*
-   * SHA-256 prevents the raw installation identifier
-   * from becoming the Durable Object name.
+   * Never use the raw device ID as the
+   * Durable Object name.
+   *
+   * Instead:
+   *
+   * device ID
+   *     ↓
+   * SHA-256
+   *     ↓
+   * Durable Object name
    */
 
   const bytes =
@@ -1122,7 +1363,10 @@ export async function getCreditsObject(
 
   let hex = "";
 
-  for (const byte of digestBytes) {
+  for (
+    const byte of
+      digestBytes
+  ) {
     hex += byte
       .toString(16)
       .padStart(2, "0");
@@ -1184,10 +1428,11 @@ export async function reserveCredits(
               "application/json",
           },
 
-          body: JSON.stringify({
-            operation,
-            requestId,
-          }),
+          body:
+            JSON.stringify({
+              operation,
+              requestId,
+            }),
         },
       ),
     );
@@ -1220,9 +1465,10 @@ export async function commitCredits(
               "application/json",
           },
 
-          body: JSON.stringify({
-            requestId,
-          }),
+          body:
+            JSON.stringify({
+              requestId,
+            }),
         },
       ),
     );
@@ -1255,9 +1501,10 @@ export async function releaseCredits(
               "application/json",
           },
 
-          body: JSON.stringify({
-            requestId,
-          }),
+          body:
+            JSON.stringify({
+              requestId,
+            }),
         },
       ),
     );
@@ -1268,28 +1515,6 @@ export async function releaseCredits(
 /* =========================================================
    VERIFIED REWARDED AD HELPER
    ========================================================= */
-
-/*
- * ONLY the verified AdMob SSV handler should call this.
- *
- * The SSV handler must first verify:
- *
- * - Google signature
- * - timestamp
- * - transaction_id
- * - reward_amount
- * - reward_item
- * - custom_data / device ID
- * - optional ad unit
- *
- * After successful verification, this function:
- *
- * - finds the device Durable Object
- * - checks transaction idempotency
- * - checks daily reward limit
- * - adds exactly REWARDED_AD_CREDITS
- * - stores the transaction
- */
 
 export async function rewardVerifiedAd(
   env,
@@ -1310,7 +1535,9 @@ export async function rewardVerifiedAd(
       transactionId,
     );
 
-  if (!normalizedTransactionId) {
+  if (
+    !normalizedTransactionId
+  ) {
     return {
       ok: false,
 
@@ -1331,12 +1558,16 @@ export async function rewardVerifiedAd(
               "application/json",
           },
 
-          body: JSON.stringify({
-            transactionId:
-              normalizedTransactionId,
+          body:
+            JSON.stringify({
+              transactionId:
+                normalizedTransactionId,
 
-            source,
-          }),
+              source:
+                normalizeSource(
+                  source,
+                ),
+            }),
         },
       ),
     );
