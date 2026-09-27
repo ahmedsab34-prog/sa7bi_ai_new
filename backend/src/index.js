@@ -1,284 +1,117 @@
+// backend/src/index.js
+// Sa7bi AI Backend
+// Modular Integration - Version 6.0.0
+
+/* =========================================================
+   CORE / UTILS
+   ========================================================= */
+
+import {
+  headers,
+  json,
+  readJsonBody,
+  cleanMessages,
+  isValidImageDataUrl,
+  getRequestLimits,
+} from "./utils.js";
+
+/* =========================================================
+   AI
+   ========================================================= */
+
 import {
   runTextOrVisionWithFallback,
   runImageWithFallback,
   getAIStatus,
 } from "./ai/ai-router.js";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Sa7bi-Force-Fallback",
-  "Cache-Control": "no-store",
-};
+/* =========================================================
+   CONTENT
+   ========================================================= */
+
+import {
+  handleNews,
+} from "./content/news.js";
+
+import {
+  handleQuranSearch,
+  handleQuranCatalog,
+} from "./content/quran.js";
+
+import {
+  handleShorts,
+} from "./content/shorts.js";
+
+import {
+  handleHadithSearch,
+  handleHadithBooks,
+} from "./content/hadith.js";
+
+import {
+  handleTafsirSearch,
+  handleTafsirBooks,
+  handleTafsirAudio,
+} from "./content/tafsir.js";
+
+import {
+  handleReligiousContent,
+  handleReligiousContentTypes,
+} from "./content/audio-content.js";
+
+/* =========================================================
+   MEDIA
+   ========================================================= */
+
+import {
+  handleAudioSearch,
+} from "./media/audio.js";
+
+import {
+  handleRadioSearch,
+  handleRadioCountries,
+  handleRadioByCountry,
+  handleRadioHealth,
+} from "./media/radio.js";
+
+import {
+  handlePodcastSearch,
+  handlePodcastLookup,
+  handlePodcastEpisodes,
+} from "./media/podcasts.js";
+
+/* =========================================================
+   OTHER SERVICES
+   ========================================================= */
+
+import {
+  handleDownload,
+  handleDownloadHealth,
+} from "./downloads.js";
+
+import {
+  handleHealth,
+  handleDiagnostics,
+  handleServiceStatus,
+} from "./health.js";
+
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
 
 const BACKEND_VERSION = "6.0.0";
 
 const DOWNLOAD_URL =
   "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk";
 
-const MAX_BODY_BYTES =
-  10 * 1024 * 1024;
-
 const MAX_MESSAGES = 20;
 
-const MAX_MESSAGE_CHARS =
-  8000;
-
-const MAX_TOTAL_CHARS =
-  24000;
+const MAX_IMAGES = 4;
 
 const MAX_IMAGE_CHARS =
   8 * 1024 * 1024;
 
-const MAX_IMAGES = 4;
-
-const MP3QURAN_BASE =
-  "https://www.mp3quran.net/api/v3";
-
-function headers(extra = {}) {
-  return {
-    ...CORS_HEADERS,
-    ...extra,
-  };
-}
-
-function json(
-  data,
-  status = 200,
-  extra = {}
-) {
-  return new Response(
-    JSON.stringify(data),
-    {
-      status,
-      headers: headers({
-        "Content-Type":
-          "application/json; charset=utf-8",
-        ...extra,
-      }),
-    }
-  );
-}
-
-function normalizeArabic(value) {
-  return String(value || "")
-    .replace(/\u0640/g, "")
-    .replace(/[\u064B-\u065F\u0670]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function stripHtml(value) {
-  return String(value || "")
-    .replace(
-      /<script[\s\S]*?<\/script>/gi,
-      ""
-    )
-    .replace(
-      /<style[\s\S]*?<\/style>/gi,
-      ""
-    )
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function decodeXml(value) {
-  return String(value || "")
-    .replace(
-      /<!\[CDATA\[([\s\S]*?)\]\]>/gi,
-      "$1"
-    )
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'")
-    .replace(
-      /&#(\d+);/g,
-      (_, n) => {
-        try {
-          return String.fromCodePoint(
-            Number(n)
-          );
-        } catch {
-          return "";
-        }
-      }
-    )
-    .replace(
-      /&#x([0-9a-f]+);/gi,
-      (_, n) => {
-        try {
-          return String.fromCodePoint(
-            parseInt(n, 16)
-          );
-        } catch {
-          return "";
-        }
-      }
-    );
-}
-
-function firstMatch(
-  block,
-  patterns
-) {
-  for (const pattern of patterns) {
-    const match =
-      block.match(pattern);
-
-    if (match?.[1]) {
-      return decodeXml(
-        match[1].trim()
-      );
-    }
-  }
-
-  return "";
-}
-
-function extractNewsImage(block) {
-  return firstMatch(block, [
-    /<media:content[^>]+url=["']([^"']+)["']/i,
-    /<media:thumbnail[^>]+url=["']([^"']+)["']/i,
-    /<enclosure[^>]+url=["']([^"']+)["']/i,
-    /<img[^>]+src=["']([^"']+)["']/i,
-  ]);
-}
-
-function cleanMessages(messages) {
-  if (!Array.isArray(messages)) {
-    return [];
-  }
-
-  const result = [];
-  let total = 0;
-
-  for (
-    const item of messages.slice(
-      -MAX_MESSAGES
-    )
-  ) {
-    if (
-      !item ||
-      typeof item !== "object"
-    ) {
-      continue;
-    }
-
-    const role =
-      item.role === "assistant"
-        ? "assistant"
-        : "user";
-
-    let content =
-      typeof item.content ===
-      "string"
-        ? item.content.trim()
-        : "";
-
-    if (!content) {
-      continue;
-    }
-
-    content =
-      content.substring(
-        0,
-        MAX_MESSAGE_CHARS
-      );
-
-    if (
-      total + content.length >
-      MAX_TOTAL_CHARS
-    ) {
-      break;
-    }
-
-    result.push({
-      role,
-      content,
-    });
-
-    total += content.length;
-  }
-
-  return result;
-}
-
-function isValidImageDataUrl(
-  value
-) {
-  return (
-    typeof value ===
-      "string" &&
-    /^data:image\/[a-z0-9.+-]+;base64,/i.test(
-      value
-    ) &&
-    value.length <=
-      MAX_IMAGE_CHARS
-  );
-}
-
-async function readJsonBody(
-  request
-) {
-  const contentLength =
-    Number(
-      request.headers.get(
-        "content-length"
-      ) || "0"
-    );
-
-  if (
-    contentLength >
-    MAX_BODY_BYTES
-  ) {
-    throw new Error(
-      "BODY_TOO_LARGE"
-    );
-  }
-
-  const raw =
-    await request.text();
-
-  if (
-    raw.length >
-    MAX_BODY_BYTES
-  ) {
-    throw new Error(
-      "BODY_TOO_LARGE"
-    );
-  }
-
-  if (!raw.trim()) {
-    return {};
-  }
-
-  try {
-    const data =
-      JSON.parse(raw);
-
-    if (
-      !data ||
-      typeof data !==
-        "object" ||
-      Array.isArray(data)
-    ) {
-      throw new Error();
-    }
-
-    return data;
-  } catch {
-    throw new Error(
-      "INVALID_JSON_BODY"
-    );
-  }
-}
-
 /* =========================================================
-   AI
+   AI INSTRUCTIONS
    ========================================================= */
 
 function buildAIInstructions({
@@ -303,18 +136,24 @@ ${serviceContext || "مساعد عام"}
 - إذا كانت المعلومة غير مؤكدة وضّح ذلك.
 - إذا أرسل المستخدم صورًا فحلل ما يظهر فعليًا فقط.
 - لا تخمن تفاصيل غير ظاهرة في الصور.
-- في الخدمات المتخصصة قدم مساعدة عملية مع الالتزام بالسلامة.
+- إذا طلب المستخدم تعديل أو إنشاء صورة، تعامل مع الطلب كطلب إبداعي واضح.
+- في الخدمات المتخصصة قدم مساعدة عملية.
+- في الأمور الطبية أو الدينية أو القانونية أو المالية، تجنب الادعاءات غير المؤكدة.
+- إذا كان السؤال يحتاج معلومات حديثة وغير متاحة لك، وضح حدود معرفتك.
+- لا تكشف مفاتيح API أو الأسرار أو تفاصيل البنية الداخلية للـWorker.
 `;
 }
+
+/* =========================================================
+   CHAT
+   ========================================================= */
 
 async function handleChat(
   request,
   env
 ) {
   const body =
-    await readJsonBody(
-      request
-    );
+    await readJsonBody(request);
 
   const messages =
     cleanMessages(
@@ -323,9 +162,10 @@ async function handleChat(
 
   const imageDataUrls = [];
 
+  /* ---------- Single image ---------- */
+
   const singleImage =
-    typeof body.imageDataUrl ===
-    "string"
+    typeof body.imageDataUrl === "string"
       ? body.imageDataUrl.trim()
       : "";
 
@@ -334,6 +174,8 @@ async function handleChat(
       singleImage
     );
   }
+
+  /* ---------- Multiple images ---------- */
 
   if (
     Array.isArray(
@@ -345,8 +187,7 @@ async function handleChat(
         body.imageDataUrls
     ) {
       if (
-        typeof item ===
-          "string" &&
+        typeof item === "string" &&
         item.trim() &&
         !imageDataUrls.includes(
           item.trim()
@@ -365,6 +206,8 @@ async function handleChat(
       }
     }
   }
+
+  /* ---------- Validate images ---------- */
 
   for (
     const image of imageDataUrls
@@ -385,6 +228,8 @@ async function handleChat(
     }
   }
 
+  /* ---------- Empty request ---------- */
+
   if (
     !messages.length &&
     !imageDataUrls.length
@@ -399,9 +244,11 @@ async function handleChat(
     );
   }
 
+  /* ---------- Service context ---------- */
+
   const serviceTitle =
     typeof body.serviceTitle ===
-    "string"
+      "string"
       ? body.serviceTitle
           .trim()
           .substring(0, 200)
@@ -409,11 +256,13 @@ async function handleChat(
 
   const serviceContext =
     typeof body.serviceContext ===
-    "string"
+      "string"
       ? body.serviceContext
           .trim()
           .substring(0, 1500)
       : "";
+
+  /* ---------- Vision prompt ---------- */
 
   const imagePrompt =
     typeof body.imagePrompt ===
@@ -429,6 +278,8 @@ async function handleChat(
       serviceTitle,
       serviceContext,
     });
+
+  /* ---------- AI ---------- */
 
   const result =
     await runTextOrVisionWithFallback(
@@ -448,36 +299,44 @@ async function handleChat(
 
   return json({
     ok: true,
+
     answer:
-      result.answer,
+      result.answer || "",
+
     provider:
-      result.provider,
+      result.provider || null,
+
     fallback:
       Boolean(
         result.fallback
       ),
+
     fallbackReason:
       result.fallbackReason ||
       null,
+
     model:
-      result.model,
+      result.model || null,
+
     backendVersion:
       BACKEND_VERSION,
   });
 }
+
+/* =========================================================
+   IMAGE GENERATION / EDITING
+   ========================================================= */
 
 async function handleImageGeneration(
   request,
   env
 ) {
   const body =
-    await readJsonBody(
-      request
-    );
+    await readJsonBody(request);
 
   const prompt =
     typeof body.prompt ===
-    "string"
+      "string"
       ? body.prompt.trim()
       : "";
 
@@ -494,6 +353,8 @@ async function handleImageGeneration(
 
   const imageDataUrls = [];
 
+  /* ---------- Single image ---------- */
+
   if (
     typeof body.imageDataUrl ===
       "string" &&
@@ -503,6 +364,8 @@ async function handleImageGeneration(
       body.imageDataUrl.trim()
     );
   }
+
+  /* ---------- Multiple images ---------- */
 
   if (
     Array.isArray(
@@ -514,8 +377,7 @@ async function handleImageGeneration(
         body.imageDataUrls
     ) {
       if (
-        typeof item ===
-          "string" &&
+        typeof item === "string" &&
         item.trim() &&
         !imageDataUrls.includes(
           item.trim()
@@ -534,6 +396,8 @@ async function handleImageGeneration(
       }
     }
   }
+
+  /* ---------- Validate images ---------- */
 
   for (
     const image of imageDataUrls
@@ -556,15 +420,15 @@ async function handleImageGeneration(
 
   const aspectRatio =
     typeof body.aspectRatio ===
-      "string" &&
-    body.aspectRatio.trim()
+        "string" &&
+      body.aspectRatio.trim()
       ? body.aspectRatio.trim()
       : "1:1";
 
   const imageSize =
     typeof body.imageSize ===
-      "string" &&
-    body.imageSize.trim()
+        "string" &&
+      body.imageSize.trim()
       ? body.imageSize.trim()
       : "1K";
 
@@ -573,1143 +437,112 @@ async function handleImageGeneration(
       {
         request,
         env,
+
         prompt:
           prompt.substring(
             0,
             6000
           ),
+
         imageDataUrls,
+
         aspectRatio,
+
         imageSize,
       }
     );
 
   return json({
     ok: true,
+
     imageDataUrl:
-      result.imageDataUrl,
+      result.imageDataUrl || null,
+
     mimeType:
-      result.mimeType,
+      result.mimeType || null,
+
     provider:
-      result.provider,
+      result.provider || null,
+
     fallback:
       Boolean(
         result.fallback
       ),
+
     fallbackReason:
       result.fallbackReason ||
       null,
+
     model:
-      result.model,
+      result.model || null,
+
     text:
       result.text || "",
+
     backendVersion:
       BACKEND_VERSION,
   });
 }
 
 /* =========================================================
-   GENERAL NETWORK HELPERS
-   ========================================================= */
-
-async function fetchJson(
-  url,
-  options = {}
-) {
-  const response =
-    await fetch(url, {
-      ...options,
-      headers: {
-        "User-Agent":
-          "Sa7bi-AI/6.0.0",
-        ...(options.headers ||
-          {}),
-      },
-    });
-
-  if (!response.ok) {
-    throw new Error(
-      `HTTP_${response.status}`
-    );
-  }
-
-  return response.json();
-}
-
-/* =========================================================
-   AUDIO
-   ========================================================= */
-
-async function handleAudioSearch(
-  request
-) {
-  const url =
-    new URL(request.url);
-
-  const query =
-    normalizeArabic(
-      url.searchParams.get(
-        "q"
-      ) || ""
-    );
-
-  const type =
-    (
-      url.searchParams.get(
-        "type"
-      ) || "quran"
-    ).toLowerCase();
-
-  if (type === "quran") {
-    return handleQuranSearch(
-      query
-    );
-  }
-
-  if (type === "adhkar") {
-    return handleAdhkarSearch(
-      query
-    );
-  }
-
-  if (type === "music") {
-    return handleAppleSearch(
-      query,
-      "music"
-    );
-  }
-
-  if (type === "podcast") {
-    return handleAppleSearch(
-      query,
-      "podcast"
-    );
-  }
-
-  return json({
-    ok: true,
-    type,
-    items: [],
-    backendVersion:
-      BACKEND_VERSION,
-  });
-}
-
-async function handleQuranSearch(
-  query
-) {
-  try {
-    const data =
-      await fetchJson(
-        `${MP3QURAN_BASE}/suwar?language=ar`
-      );
-
-    let items =
-      Array.isArray(data)
-        ? data
-        : [];
-
-    if (query) {
-      items =
-        items.filter(
-          (item) =>
-            normalizeArabic(
-              item?.name ||
-                item?.sura_name ||
-                ""
-            ).includes(query)
-        );
-    }
-
-    return json({
-      ok: true,
-      type: "quran",
-      items: items
-        .slice(0, 100)
-        .map((item) => ({
-          id:
-            item.id ||
-            item.sura_id ||
-            item.number,
-          title:
-            item.name ||
-            item.sura_name ||
-            "سورة",
-          name:
-            item.name ||
-            item.sura_name ||
-            "سورة",
-          type: "quran",
-        })),
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "QURAN_SEARCH_FAILED",
-        items: [],
-      },
-      502
-    );
-  }
-}
-
-async function handleAdhkarSearch(
-  query
-) {
-  try {
-    const response =
-      await fetch(
-        "https://raw.githubusercontent.com/rn0x/Adhkar-json/main/adhkar.json",
-        {
-          headers: {
-            "User-Agent":
-              "Sa7bi-AI/6.0.0",
-          },
-        }
-      );
-
-    if (!response.ok) {
-      throw new Error(
-        `ADHKAR_HTTP_${response.status}`
-      );
-    }
-
-    const data =
-      await response.json();
-
-    const result = [];
-
-    const queryNormalized =
-      normalizeArabic(query);
-
-    for (
-      const group of
-        Array.isArray(data)
-          ? data
-          : []
-    ) {
-      if (!group) {
-        continue;
-      }
-
-      const category =
-        group.category ||
-        group.name ||
-        "أذكار";
-
-      const list =
-        Array.isArray(
-          group.array
-        )
-          ? group.array
-          : Array.isArray(
-                group.content
-              )
-            ? group.content
-            : [];
-
-      for (
-        const item of list
-      ) {
-        if (!item) {
-          continue;
-        }
-
-        const textValue =
-          item.content ||
-          item.text ||
-          item.zekr ||
-          "";
-
-        if (!textValue) {
-          continue;
-        }
-
-        const haystack =
-          normalizeArabic(
-            `${category} ${textValue}`
-          );
-
-        if (
-          queryNormalized &&
-          !haystack.includes(
-            queryNormalized
-          )
-        ) {
-          continue;
-        }
-
-        result.push({
-          id:
-            item.id ||
-            `adhkar-${result.length + 1}`,
-          title:
-            category,
-          text:
-            textValue,
-          repeat:
-            item.count ||
-            item.repeat ||
-            1,
-          type:
-            "adhkar",
-        });
-
-        if (
-          result.length >=
-          80
-        ) {
-          break;
-        }
-      }
-
-      if (
-        result.length >=
-        80
-      ) {
-        break;
-      }
-    }
-
-    return json({
-      ok: true,
-      type: "adhkar",
-      items: result,
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "ADHKAR_SEARCH_FAILED",
-        items: [],
-      },
-      502
-    );
-  }
-}
-
-async function handleAppleSearch(
-  query,
-  media
-) {
-  try {
-    const params =
-      new URLSearchParams();
-
-    params.set(
-      "term",
-      query ||
-        (
-          media ===
-          "podcast"
-            ? "Arabic podcast"
-            : "Arabic music"
-        )
-    );
-
-    params.set(
-      "country",
-      "eg"
-    );
-
-    params.set(
-      "media",
-      media
-    );
-
-    params.set(
-      "limit",
-      "30"
-    );
-
-    const data =
-      await fetchJson(
-        `https://itunes.apple.com/search?${params.toString()}`
-      );
-
-    const results =
-      Array.isArray(
-        data?.results
-      )
-        ? data.results
-        : [];
-
-    const items =
-      results.map(
-        (item) => ({
-          id:
-            item.trackId ||
-            item.collectionId ||
-            `${media}-${item.wrapperType || "item"}-${item.artistName || "0"}`,
-          title:
-            item.trackName ||
-            item.collectionName ||
-            item.trackCensoredName ||
-            "بدون عنوان",
-          artist:
-            item.artistName ||
-            "",
-          artwork:
-            item.artworkUrl600 ||
-            item.artworkUrl100 ||
-            "",
-          previewUrl:
-            item.previewUrl ||
-            "",
-          storeUrl:
-            item.trackViewUrl ||
-            item.collectionViewUrl ||
-            "",
-          feedUrl:
-            item.feedUrl ||
-            "",
-          collection:
-            item.collectionName ||
-            "",
-          type:
-            media,
-        })
-      );
-
-    return json({
-      ok: true,
-      type: media,
-      items,
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "APPLE_SEARCH_FAILED",
-        items: [],
-      },
-      502
-    );
-  }
-}
-
-/* =========================================================
-   QURAN CATALOG
-   ========================================================= */
-
-async function handleQuranCatalog() {
-  try {
-    const [
-      recitersData,
-      suwarData,
-    ] = await Promise.all([
-      fetchJson(
-        `${MP3QURAN_BASE}/reciters?language=ar`
-      ),
-      fetchJson(
-        `${MP3QURAN_BASE}/suwar?language=ar`
-      ),
-    ]);
-
-    const reciters =
-      Array.isArray(
-        recitersData
-      )
-        ? recitersData
-        : [];
-
-    const suwar =
-      Array.isArray(
-        suwarData
-      )
-        ? suwarData
-        : [];
-
-    const output =
-      reciters.map(
-        (reciter) => ({
-          id:
-            reciter.id ||
-            reciter.reciter_id ||
-            reciter.name ||
-            "",
-          name:
-            reciter.name ||
-            "قارئ",
-          moshaf:
-            (
-              Array.isArray(
-                reciter.moshaf
-              )
-                ? reciter.moshaf
-                : []
-            ).map(
-              (
-                m,
-                index
-              ) => ({
-                id:
-                  m.id ||
-                  `${reciter.id || "reciter"}-${index + 1}`,
-                name:
-                  m.name ||
-                  "رواية",
-                server:
-                  m.server ||
-                  m.url ||
-                  "",
-                surahTotal:
-                  Number(
-                    m.surah_total ||
-                      m.surahTotal ||
-                      114
-                  ),
-                suras:
-                  m.suras ||
-                  "",
-              })
-            ),
-        })
-      );
-
-    return json({
-      ok: true,
-      reciters:
-        output,
-      suras:
-        suwar
-          .map(
-            (sura) => ({
-              id:
-                Number(
-                  sura.id ||
-                    sura.sura_id ||
-                    sura.number ||
-                    0
-                ),
-              name:
-                sura.name ||
-                sura.sura_name ||
-                "سورة",
-            })
-          )
-          .filter(
-            (sura) =>
-              sura.id >= 1 &&
-              sura.id <= 114
-          ),
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "QURAN_CATALOG_FAILED",
-        reciters: [],
-        suras: [],
-      },
-      502
-    );
-  }
-}
-
-/* =========================================================
-   RADIO
-   ========================================================= */
-
-async function handleRadioCountries() {
-  try {
-    const data =
-      await fetchJson(
-        "https://de1.api.radio-browser.info/json/countries?hidebroken=true"
-      );
-
-    const countries =
-      Array.isArray(data)
-        ? data
-        : [];
-
-    return json({
-      ok: true,
-      countries:
-        countries
-          .map(
-            (item) => ({
-              name:
-                item?.name ||
-                "",
-              iso:
-                item?.iso_3166_1 ||
-                item?.iso_3166_2 ||
-                "",
-              stationCount:
-                Number(
-                  item?.stationcount ||
-                    0
-                ),
-            })
-          )
-          .filter(
-            (item) =>
-              item.name &&
-              item.iso
-          )
-          .sort(
-            (a, b) =>
-              a.name.localeCompare(
-                b.name,
-                "ar"
-              )
-          ),
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "RADIO_COUNTRIES_FAILED",
-        countries: [],
-      },
-      502
-    );
-  }
-}
-
-async function handleRadioStations(
-  request
-) {
-  const url =
-    new URL(request.url);
-
-  const country =
-    (
-      url.searchParams.get(
-        "country"
-      ) || ""
-    ).trim();
-
-  if (!country) {
-    return json(
-      {
-        ok: false,
-        error:
-          "COUNTRY_REQUIRED",
-        stations: [],
-      },
-      400
-    );
-  }
-
-  try {
-    const endpoint =
-      `https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/${encodeURIComponent(country)}?hidebroken=true&order=clickcount&reverse=true&limit=100`;
-
-    const data =
-      await fetchJson(
-        endpoint
-      );
-
-    const stations =
-      Array.isArray(data)
-        ? data
-        : [];
-
-    return json({
-      ok: true,
-      country,
-      stations:
-        stations
-          .filter(
-            (station) =>
-              station &&
-              (
-                station.url_resolved ||
-                station.url
-              )
-          )
-          .map(
-            (station) => ({
-              id:
-                station.stationuuid ||
-                station.name ||
-                "",
-              name:
-                station.name ||
-                "محطة إذاعية",
-              streamUrl:
-                station.url_resolved ||
-                station.url ||
-                "",
-              homepage:
-                station.homepage ||
-                "",
-              favicon:
-                station.favicon ||
-                "",
-              tags:
-                station.tags ||
-                "",
-              codec:
-                station.codec ||
-                "",
-              bitrate:
-                Number(
-                  station.bitrate ||
-                    0
-                ),
-            })
-          ),
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "RADIO_STATIONS_FAILED",
-        stations: [],
-      },
-      502
-    );
-  }
-}
-
-/* =========================================================
-   SHORTS
-   ========================================================= */
-
-async function handleShorts() {
-  try {
-    const data =
-      await fetchJson(
-        `${MP3QURAN_BASE}/videos?language=ar`
-      );
-
-    const raw =
-      Array.isArray(data)
-        ? data
-        : Array.isArray(
-              data?.videos
-            )
-          ? data.videos
-          : [];
-
-    const items =
-      raw
-        .map(
-          (
-            item,
-            index
-          ) => ({
-            id:
-              item?.id ||
-              item?.video_id ||
-              `short-${index}`,
-            title:
-              item?.title ||
-              item?.name ||
-              "فيديو قصير",
-            description:
-              item?.description ||
-              "",
-            thumbnail:
-              item?.thumbnail ||
-              item?.image ||
-              item?.cover ||
-              "",
-            videoUrl:
-              item?.video_url ||
-              item?.videoUrl ||
-              item?.url ||
-              item?.video ||
-              "",
-            source:
-              item?.source ||
-              "Sa7bi AI",
-            type:
-              "short",
-          })
-        )
-        .filter(
-          (item) =>
-            item.title ||
-            item.thumbnail ||
-            item.videoUrl
-        )
-        .slice(0, 20);
-
-    return json({
-      ok: true,
-      items,
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "SHORTS_FAILED",
-        items: [],
-      },
-      502
-    );
-  }
-}
-
-/* =========================================================
-   NEWS
-   ========================================================= */
-
-function parseRssItems(
-  xml
-) {
-  const items = [];
-
-  const blocks =
-    String(xml || "")
-      .match(
-        /<item\b[\s\S]*?<\/item>/gi
-      ) || [];
-
-  for (
-    const block of blocks
-  ) {
-    const title =
-      stripHtml(
-        firstMatch(
-          block,
-          [
-            /<title[^>]*>([\s\S]*?)<\/title>/i,
-          ]
-        )
-      );
-
-    const link =
-      firstMatch(
-        block,
-        [
-          /<link[^>]*>([\s\S]*?)<\/link>/i,
-        ]
-      );
-
-    const pubDate =
-      firstMatch(
-        block,
-        [
-          /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i,
-          /<published[^>]*>([\s\S]*?)<\/published>/i,
-        ]
-      );
-
-    const description =
-      firstMatch(
-        block,
-        [
-          /<description[^>]*>([\s\S]*?)<\/description>/i,
-          /<summary[^>]*>([\s\S]*?)<\/summary>/i,
-        ]
-      );
-
-    const source =
-      firstMatch(
-        block,
-        [
-          /<source[^>]*>([\s\S]*?)<\/source>/i,
-        ]
-      ) ||
-      "Google News";
-
-    const image =
-      extractNewsImage(
-        block
-      );
-
-    if (
-      !title ||
-      !link
-    ) {
-      continue;
-    }
-
-    items.push({
-      id: link,
-      title,
-      link,
-      pubDate,
-      description:
-        stripHtml(
-          description
-        ),
-      image,
-      imageUrl:
-        image,
-      source,
-    });
-  }
-
-  return items;
-}
-
-async function fetchGoogleNews() {
-  const feeds = [
-    "https://news.google.com/rss?hl=ar&gl=EG&ceid=EG:ar",
-    "https://news.google.com/rss/search?q=مصر&hl=ar&gl=EG&ceid=EG:ar",
-    "https://news.google.com/rss/search?q=تكنولوجيا&hl=ar&gl=EG&ceid=EG:ar",
-  ];
-
-  const all = [];
-  const seen =
-    new Set();
-
-  for (
-    const feed of feeds
-  ) {
-    try {
-      const response =
-        await fetch(
-          feed,
-          {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 Sa7bi-AI/6.0.0",
-            },
-          }
-        );
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const items =
-        parseRssItems(
-          await response.text()
-        );
-
-      for (
-        const item of items
-      ) {
-        if (
-          seen.has(
-            item.link
-          )
-        ) {
-          continue;
-        }
-
-        seen.add(
-          item.link
-        );
-
-        all.push(item);
-
-        if (
-          all.length >= 40
-        ) {
-          break;
-        }
-      }
-
-      if (
-        all.length >= 40
-      ) {
-        break;
-      }
-    } catch (_) {
-      // Try the next feed.
-    }
-  }
-
-  return all;
-}
-
-async function handleNews() {
-  try {
-    const items =
-      await fetchGoogleNews();
-
-    return json({
-      ok: true,
-      items:
-        items.slice(
-          0,
-          40
-        ),
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return json(
-      {
-        ok: false,
-        error:
-          error?.message ||
-          "NEWS_FAILED",
-        items: [],
-      },
-      502
-    );
-  }
-}
-
-/* =========================================================
-   HEALTH / DIAGNOSTICS
-   ========================================================= */
-
-function handleHealth(
-  env
-) {
-  const ai =
-    getAIStatus(env);
-
-  return json({
-    ok: true,
-    status: "online",
-    app: "Sa7bi AI",
-    backendVersion:
-      BACKEND_VERSION,
-
-    geminiConfigured:
-      ai.geminiConfigured,
-
-    workersAiConfigured:
-      ai.workersAiConfigured,
-
-    openaiConfigured:
-      Boolean(
-        env?.OPENAI_API_KEY
-      ),
-
-    textModel:
-      ai.gemini.text,
-
-    imageModel:
-      ai.gemini.image,
-
-    fallbackTextModel:
-      ai.workersAI.text,
-
-    fallbackVisionModel:
-      ai.workersAI.vision,
-
-    fallbackImageModel:
-      ai.workersAI.image,
-  });
-}
-
-function handleDiagnostics(
-  env
-) {
-  const ai =
-    getAIStatus(env);
-
-  return json({
-    ok: true,
-    status: "online",
-    app: "Sa7bi AI",
-    backendVersion:
-      BACKEND_VERSION,
-
-    runtime: {
-      worker: true,
-
-      geminiConfigured:
-        ai.geminiConfigured,
-
-      workersAiConfigured:
-        ai.workersAiConfigured,
-
-      openaiConfigured:
-        Boolean(
-          env?.OPENAI_API_KEY
-        ),
-
-      models: {
-        geminiText:
-          ai.gemini.text,
-
-        geminiImage:
-          ai.gemini.image,
-
-        workersText:
-          ai.workersAI.text,
-
-        workersVision:
-          ai.workersAI.vision,
-
-        workersImage:
-          ai.workersAI.image,
-      },
-    },
-
-    endpoints: {
-      root: "/",
-      health: "/health",
-      diagnostics:
-        "/v1/diagnostics",
-      chat: "/v1/chat",
-      image: "/v1/image",
-      news: "/v1/news",
-      audio:
-        "/v1/audio/search-v4",
-      quran:
-        "/v1/audio/quran",
-      radioCountries:
-        "/v1/radio/countries",
-      radioStations:
-        "/v1/radio/stations?country=EG",
-      shorts:
-        "/v1/shorts",
-      download:
-        "/download",
-    },
-  });
-}
-
-/* =========================================================
-   ROOT / DOWNLOAD
+   ROOT
    ========================================================= */
 
 function handleRoot() {
   return json({
     ok: true,
-    app: "Sa7bi AI",
+
+    app:
+      "Sa7bi AI",
+
     backendVersion:
       BACKEND_VERSION,
-    status: "online",
+
+    status:
+      "online",
+
+    architecture:
+      "modular",
 
     features: {
       chat: true,
+
       imageAnalysis: true,
+
       multiImageVision: true,
-      videoFrameAnalysis: true,
-      imageGeneration: true,
+
+      videoFrameAnalysis:
+        true,
+
+      imageGeneration:
+        true,
+
+      imageEditing:
+        true,
+
       news: true,
+
       audio: true,
+
+      quran: true,
+
+      hadith: true,
+
+      tafsir: true,
+
       radio: true,
+
+      podcasts: true,
+
       shorts: true,
+
+      downloads: true,
     },
 
     ai: {
       primary:
         "gemini",
+
       fallback:
         "cloudflare_workers_ai",
     },
@@ -1717,35 +550,89 @@ function handleRoot() {
     endpoints: {
       chat:
         "/v1/chat",
+
       image:
         "/v1/image",
+
       news:
         "/v1/news",
+
       audio:
         "/v1/audio/search-v4",
+
       quran:
         "/v1/audio/quran",
+
+      hadith:
+        "/v1/hadith",
+
+      hadithBooks:
+        "/v1/hadith/books",
+
+      tafsir:
+        "/v1/tafsir",
+
+      tafsirBooks:
+        "/v1/tafsir/books",
+
+      tafsirAudio:
+        "/v1/tafsir/audio",
+
+      religious:
+        "/v1/religious",
+
+      religiousTypes:
+        "/v1/religious/types",
+
+      radio:
+        "/v1/radio/search",
+
       radioCountries:
         "/v1/radio/countries",
+
+      radioCountry:
+        "/v1/radio/country?country=EG",
+
       radioStations:
         "/v1/radio/stations?country=EG",
+
+      radioHealth:
+        "/v1/radio/health",
+
+      podcasts:
+        "/v1/podcasts/search",
+
+      podcast:
+        "/v1/podcasts/lookup",
+
+      podcastEpisodes:
+        "/v1/podcasts/episodes",
+
       shorts:
         "/v1/shorts",
+
       download:
         "/download",
+
+      downloadHealth:
+        "/download/health",
+
       health:
         "/health",
+
+      serviceStatus:
+        "/v1/service-status",
+
       diagnostics:
         "/v1/diagnostics",
     },
-  });
-}
 
-function handleDownload() {
-  return Response.redirect(
-    DOWNLOAD_URL,
-    302
-  );
+    limits:
+      getRequestLimits(),
+
+    apk:
+      DOWNLOAD_URL,
+  });
 }
 
 /* =========================================================
@@ -1758,6 +645,10 @@ export default {
     env
   ) {
     try {
+      /* =====================================================
+         CORS PREFLIGHT
+         ===================================================== */
+
       if (
         request.method ===
         "OPTIONS"
@@ -1783,7 +674,9 @@ export default {
           ""
         ) || "/";
 
-      /* ROOT */
+      /* =====================================================
+         ROOT
+         ===================================================== */
 
       if (
         request.method ===
@@ -1793,7 +686,9 @@ export default {
         return handleRoot();
       }
 
-      /* HEALTH */
+      /* =====================================================
+         HEALTH
+         ===================================================== */
 
       if (
         request.method ===
@@ -1805,7 +700,9 @@ export default {
         );
       }
 
-      /* DIAGNOSTICS */
+      /* =====================================================
+         DIAGNOSTICS
+         ===================================================== */
 
       if (
         request.method ===
@@ -1818,29 +715,59 @@ export default {
         );
       }
 
-      /* DOWNLOAD */
+      /* =====================================================
+         SERVICE STATUS
+         ===================================================== */
 
       if (
         request.method ===
           "GET" &&
         path ===
-          "/download"
+          "/v1/service-status"
       ) {
-        return handleDownload();
+        return handleServiceStatus(
+          env
+        );
       }
 
-      /* NEWS */
+      /* =====================================================
+         DOWNLOAD
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path === "/download"
+      ) {
+        return handleDownload(
+          request
+        );
+      }
 
       if (
         request.method ===
           "GET" &&
         path ===
-          "/v1/news"
+          "/download/health"
+      ) {
+        return handleDownloadHealth();
+      }
+
+      /* =====================================================
+         NEWS
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path === "/v1/news"
       ) {
         return handleNews();
       }
 
-      /* AUDIO SEARCH */
+      /* =====================================================
+         AUDIO SEARCH
+         ===================================================== */
 
       if (
         request.method ===
@@ -1857,7 +784,9 @@ export default {
         );
       }
 
-      /* QURAN */
+      /* =====================================================
+         QURAN
+         ===================================================== */
 
       if (
         request.method ===
@@ -1868,7 +797,107 @@ export default {
         return handleQuranCatalog();
       }
 
-      /* RADIO COUNTRIES */
+      /* =====================================================
+         HADITH
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/hadith"
+      ) {
+        return handleHadithSearch(
+          request
+        );
+      }
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/hadith/books"
+      ) {
+        return handleHadithBooks();
+      }
+
+      /* =====================================================
+         TAFSIR
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/tafsir"
+      ) {
+        return handleTafsirSearch(
+          request
+        );
+      }
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/tafsir/books"
+      ) {
+        return handleTafsirBooks();
+      }
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/tafsir/audio"
+      ) {
+        return handleTafsirAudio(
+          request
+        );
+      }
+
+      /* =====================================================
+         RELIGIOUS CONTENT AGGREGATOR
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/religious"
+      ) {
+        return handleReligiousContent(
+          request
+        );
+      }
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/religious/types"
+      ) {
+        return handleReligiousContentTypes();
+      }
+
+      /* =====================================================
+         RADIO - GENERAL SEARCH
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/radio/search"
+      ) {
+        return handleRadioSearch(
+          request
+        );
+      }
+
+      /* =====================================================
+         RADIO - COUNTRIES
+         ===================================================== */
 
       if (
         request.method ===
@@ -1879,7 +908,41 @@ export default {
         return handleRadioCountries();
       }
 
-      /* RADIO STATIONS */
+      /* =====================================================
+         RADIO - COUNTRY
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/radio/country"
+      ) {
+        const countryCode =
+          url.searchParams.get(
+            "country"
+          ) ||
+          url.searchParams.get(
+            "countryCode"
+          ) ||
+          "";
+
+        const limit =
+          Number(
+            url.searchParams.get(
+              "limit"
+            ) || 50
+          );
+
+        return handleRadioByCountry(
+          countryCode,
+          limit
+        );
+      }
+
+      /* =====================================================
+         RADIO - LEGACY STATIONS
+         ===================================================== */
 
       if (
         request.method ===
@@ -1887,12 +950,77 @@ export default {
         path ===
           "/v1/radio/stations"
       ) {
-        return handleRadioStations(
+        /*
+         * Keep the old endpoint alive for the
+         * current Flutter application.
+         */
+
+        return handleRadioSearch(
           request
         );
       }
 
-      /* SHORTS */
+      /* =====================================================
+         RADIO HEALTH
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/radio/health"
+      ) {
+        return handleRadioHealth();
+      }
+
+      /* =====================================================
+         PODCAST SEARCH
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/podcasts/search"
+      ) {
+        return handlePodcastSearch(
+          request
+        );
+      }
+
+      /* =====================================================
+         PODCAST LOOKUP
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/podcasts/lookup"
+      ) {
+        return handlePodcastLookup(
+          request
+        );
+      }
+
+      /* =====================================================
+         PODCAST EPISODES
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/podcasts/episodes"
+      ) {
+        return handlePodcastEpisodes(
+          request
+        );
+      }
+
+      /* =====================================================
+         SHORTS
+         ===================================================== */
 
       if (
         request.method ===
@@ -1903,7 +1031,9 @@ export default {
         return handleShorts();
       }
 
-      /* CHAT */
+      /* =====================================================
+         CHAT
+         ===================================================== */
 
       if (
         request.method ===
@@ -1917,7 +1047,9 @@ export default {
         );
       }
 
-      /* IMAGE */
+      /* =====================================================
+         IMAGE
+         ===================================================== */
 
       if (
         request.method ===
@@ -1931,12 +1063,21 @@ export default {
         );
       }
 
+      /* =====================================================
+         404
+         ===================================================== */
+
       return json(
         {
           ok: false,
+
           error:
             "NOT_FOUND",
+
           path,
+
+          backendVersion:
+            BACKEND_VERSION,
         },
         404
       );
@@ -1944,6 +1085,10 @@ export default {
       const message =
         error?.message ||
         "INTERNAL_ERROR";
+
+      /* =====================================================
+         REQUEST ERRORS
+         ===================================================== */
 
       if (
         message ===
@@ -1970,6 +1115,10 @@ export default {
           400
         );
       }
+
+      /* =====================================================
+         AI CONFIG ERRORS
+         ===================================================== */
 
       if (
         message ===
@@ -2010,17 +1159,25 @@ export default {
         );
       }
 
+      /* =====================================================
+         AI PROVIDER FAILURES
+         ===================================================== */
+
       if (
         message ===
-        "ALL_AI_PROVIDERS_FAILED" ||
+          "ALL_AI_PROVIDERS_FAILED" ||
         message ===
-        "ALL_IMAGE_PROVIDERS_FAILED"
+          "ALL_IMAGE_PROVIDERS_FAILED"
       ) {
         return json(
           {
             ok: false,
-            error: message,
+
+            error:
+              message,
+
             details:
+              error?.cause?.message ||
               error?.message ||
               "",
           },
@@ -2028,10 +1185,19 @@ export default {
         );
       }
 
+      /* =====================================================
+         GENERIC ERROR
+         ===================================================== */
+
       return json(
         {
           ok: false,
-          error: message,
+
+          error:
+            message,
+
+          backendVersion:
+            BACKEND_VERSION,
         },
         500
       );
