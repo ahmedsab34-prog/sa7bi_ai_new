@@ -1,6 +1,6 @@
 // backend/src/index.js
 // Sa7bi AI Backend
-// Modular Integration - Version 6.0.0
+// Modular Integration - Version 6.1.0
 
 /* =========================================================
    CORE / UTILS
@@ -24,6 +24,28 @@ import {
   runImageWithFallback,
   getAIStatus,
 } from "./ai/ai-router.js";
+
+/* =========================================================
+   CREDITS
+   ========================================================= */
+
+import {
+  Sa7biCredits,
+} from "./credits.js";
+
+import {
+  CREDIT_DEVICE_HEADER,
+  CREDIT_REQUEST_HEADER,
+  getCreditDeviceId,
+  getCreditRequestId,
+  getChatCreditOperation,
+  getImageCreditOperation,
+  handleCreditsBalance,
+  reserveAIRequestCredits,
+  commitAIRequestCredits,
+  releaseAIRequestCredits,
+  getSafeCreditSummary,
+} from "./credits-router.js";
 
 /* =========================================================
    CONTENT
@@ -98,7 +120,8 @@ import {
    CONSTANTS
    ========================================================= */
 
-const BACKEND_VERSION = "6.0.0";
+const BACKEND_VERSION =
+  "6.1.0";
 
 const DOWNLOAD_URL =
   "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk";
@@ -145,19 +168,120 @@ ${serviceContext || "مساعد عام"}
 }
 
 /* =========================================================
+   CREDIT ERROR HELPER
+   ========================================================= */
+
+function creditErrorResponse(
+  result,
+) {
+  if (!result) {
+    return json(
+      {
+        ok: false,
+        error:
+          "CREDIT_SYSTEM_ERROR",
+      },
+      500,
+    );
+  }
+
+  let status = 500;
+
+  switch (
+    result.error
+  ) {
+    case "DEVICE_ID_REQUIRED":
+      status = 400;
+      break;
+
+    case "REQUEST_ID_REQUIRED":
+      status = 400;
+      break;
+
+    case "UNKNOWN_CREDIT_OPERATION":
+      status = 400;
+      break;
+
+    case "INSUFFICIENT_CREDITS":
+      status = 402;
+      break;
+
+    case "REQUEST_ALREADY_FINALIZED":
+      status = 409;
+      break;
+
+    case "RESERVATION_NOT_FOUND":
+      status = 409;
+      break;
+
+    case "RESERVATION_NOT_ACTIVE":
+      status = 409;
+      break;
+
+    case "RESERVATION_EXPIRED":
+      status = 409;
+      break;
+
+    case "REQUEST_ALREADY_COMMITTED":
+      status = 409;
+      break;
+
+    default:
+      status = 500;
+  }
+
+  return json(
+    {
+      ok: false,
+
+      error:
+        result.error ||
+        "CREDIT_SYSTEM_ERROR",
+
+      required:
+        result.required,
+
+      available:
+        result.available,
+
+      credits:
+        getSafeCreditSummary(
+          result,
+        ),
+
+      requestId:
+        result.requestId ||
+        null,
+
+      operation:
+        result.operation ||
+        null,
+
+      creditCost:
+        result.creditCost ??
+        result.cost ??
+        null,
+    },
+    status,
+  );
+}
+
+/* =========================================================
    CHAT
    ========================================================= */
 
 async function handleChat(
   request,
-  env
+  env,
 ) {
   const body =
-    await readJsonBody(request);
+    await readJsonBody(
+      request,
+    );
 
   const messages =
     cleanMessages(
-      body.messages
+      body.messages,
     );
 
   const imageDataUrls = [];
@@ -165,13 +289,14 @@ async function handleChat(
   /* ---------- Single image ---------- */
 
   const singleImage =
-    typeof body.imageDataUrl === "string"
+    typeof body.imageDataUrl ===
+    "string"
       ? body.imageDataUrl.trim()
       : "";
 
   if (singleImage) {
     imageDataUrls.push(
-      singleImage
+      singleImage,
     );
   }
 
@@ -179,7 +304,7 @@ async function handleChat(
 
   if (
     Array.isArray(
-      body.imageDataUrls
+      body.imageDataUrls,
     )
   ) {
     for (
@@ -190,11 +315,11 @@ async function handleChat(
         typeof item === "string" &&
         item.trim() &&
         !imageDataUrls.includes(
-          item.trim()
+          item.trim(),
         )
       ) {
         imageDataUrls.push(
-          item.trim()
+          item.trim(),
         );
       }
 
@@ -210,11 +335,12 @@ async function handleChat(
   /* ---------- Validate images ---------- */
 
   for (
-    const image of imageDataUrls
+    const image of
+      imageDataUrls
   ) {
     if (
       !isValidImageDataUrl(
-        image
+        image,
       )
     ) {
       return json(
@@ -223,7 +349,7 @@ async function handleChat(
           error:
             "INVALID_IMAGE",
         },
-        400
+        400,
       );
     }
   }
@@ -240,7 +366,7 @@ async function handleChat(
         error:
           "EMPTY_MESSAGE",
       },
-      400
+      400,
     );
   }
 
@@ -248,7 +374,7 @@ async function handleChat(
 
   const serviceTitle =
     typeof body.serviceTitle ===
-      "string"
+    "string"
       ? body.serviceTitle
           .trim()
           .substring(0, 200)
@@ -256,7 +382,7 @@ async function handleChat(
 
   const serviceContext =
     typeof body.serviceContext ===
-      "string"
+    "string"
       ? body.serviceContext
           .trim()
           .substring(0, 1500)
@@ -273,29 +399,201 @@ async function handleChat(
           .substring(0, 4000)
       : "حلل الصور المرفقة بدقة، واقرأ أي نص واضح فيها، واشرح الأشياء المهمة الظاهرة.";
 
+  /* =======================================================
+     CREDIT PREPARATION
+     ======================================================= */
+
+  const creditOperation =
+    getChatCreditOperation(
+      body,
+      imageDataUrls,
+    );
+
+  const deviceId =
+    getCreditDeviceId(
+      request,
+      body,
+    );
+
+  const requestId =
+    getCreditRequestId(
+      request,
+      body,
+    );
+
+  if (!deviceId) {
+    return json(
+      {
+        ok: false,
+
+        error:
+          "DEVICE_ID_REQUIRED",
+
+        message:
+          "تطبيق صاحبي AI يحتاج معرفًا ثابتًا للجهاز لإدارة رصيد الذكاء الاصطناعي بأمان.",
+      },
+      400,
+    );
+  }
+
+  /* =======================================================
+     RESERVE CREDITS
+     ======================================================= */
+
+  const creditReservation =
+    await reserveAIRequestCredits(
+      request,
+      env,
+      {
+        body,
+
+        operation:
+          creditOperation,
+
+        requestId,
+      },
+    );
+
+  if (
+    !creditReservation.ok
+  ) {
+    return creditErrorResponse(
+      creditReservation,
+    );
+  }
+
+  const reservationRequestId =
+    creditReservation.requestId ||
+    requestId;
+
+  /* =======================================================
+     AI INSTRUCTIONS
+     ======================================================= */
+
   const instructions =
     buildAIInstructions({
       serviceTitle,
       serviceContext,
     });
 
-  /* ---------- AI ---------- */
+  /* =======================================================
+     AI EXECUTION
+     ======================================================= */
 
-  const result =
-    await runTextOrVisionWithFallback(
+  let result;
+
+  try {
+    result =
+      await runTextOrVisionWithFallback(
+        {
+          request,
+          env,
+          messages,
+          instructions,
+          imageDataUrls,
+          imagePrompt,
+          maxOutputTokens:
+            Number(
+              body.maxOutputTokens,
+            ) || 1200,
+        },
+      );
+  } catch (error) {
+    /*
+     * AI failed.
+     *
+     * The reservation is released,
+     * so the user is NOT charged.
+     */
+
+    await releaseAIRequestCredits(
+      request,
+      env,
       {
-        request,
-        env,
-        messages,
-        instructions,
-        imageDataUrls,
-        imagePrompt,
-        maxOutputTokens:
-          Number(
-            body.maxOutputTokens
-          ) || 1200,
-      }
+        body,
+        requestId:
+          reservationRequestId,
+      },
     );
+
+    throw error;
+  }
+
+  /* =======================================================
+     EMPTY AI RESULT
+     ======================================================= */
+
+  if (
+    !result ||
+    typeof result.answer !==
+      "string" ||
+    !result.answer.trim()
+  ) {
+    await releaseAIRequestCredits(
+      request,
+      env,
+      {
+        body,
+        requestId:
+          reservationRequestId,
+      },
+    );
+
+    return json(
+      {
+        ok: false,
+
+        error:
+          "EMPTY_AI_RESPONSE",
+      },
+      502,
+    );
+  }
+
+  /* =======================================================
+     COMMIT CREDITS
+     ======================================================= */
+
+  const creditCommit =
+    await commitAIRequestCredits(
+      request,
+      env,
+      {
+        body,
+
+        requestId:
+          reservationRequestId,
+      },
+    );
+
+  if (
+    !creditCommit.ok
+  ) {
+    /*
+     * Do not silently pretend that the
+     * credit transaction succeeded.
+     */
+    return json(
+      {
+        ok: false,
+
+        error:
+          creditCommit.error ||
+          "CREDIT_COMMIT_FAILED",
+
+        requestId:
+          reservationRequestId,
+
+        answer:
+          result.answer || "",
+      },
+      500,
+    );
+  }
+
+  /* =======================================================
+     SUCCESS
+     ======================================================= */
 
   return json({
     ok: true,
@@ -308,7 +606,7 @@ async function handleChat(
 
     fallback:
       Boolean(
-        result.fallback
+        result.fallback,
       ),
 
     fallbackReason:
@@ -320,6 +618,23 @@ async function handleChat(
 
     backendVersion:
       BACKEND_VERSION,
+
+    /* ---------- Credits ---------- */
+
+    credits:
+      getSafeCreditSummary(
+        creditCommit,
+      ),
+
+    creditOperation,
+
+    creditCost:
+      creditCommit.cost ??
+      creditReservation.cost ??
+      null,
+
+    requestId:
+      reservationRequestId,
   });
 }
 
@@ -329,14 +644,16 @@ async function handleChat(
 
 async function handleImageGeneration(
   request,
-  env
+  env,
 ) {
   const body =
-    await readJsonBody(request);
+    await readJsonBody(
+      request,
+    );
 
   const prompt =
     typeof body.prompt ===
-      "string"
+    "string"
       ? body.prompt.trim()
       : "";
 
@@ -347,7 +664,7 @@ async function handleImageGeneration(
         error:
           "EMPTY_PROMPT",
       },
-      400
+      400,
     );
   }
 
@@ -361,7 +678,7 @@ async function handleImageGeneration(
     body.imageDataUrl.trim()
   ) {
     imageDataUrls.push(
-      body.imageDataUrl.trim()
+      body.imageDataUrl.trim(),
     );
   }
 
@@ -369,7 +686,7 @@ async function handleImageGeneration(
 
   if (
     Array.isArray(
-      body.imageDataUrls
+      body.imageDataUrls,
     )
   ) {
     for (
@@ -380,11 +697,11 @@ async function handleImageGeneration(
         typeof item === "string" &&
         item.trim() &&
         !imageDataUrls.includes(
-          item.trim()
+          item.trim(),
         )
       ) {
         imageDataUrls.push(
-          item.trim()
+          item.trim(),
         );
       }
 
@@ -400,11 +717,12 @@ async function handleImageGeneration(
   /* ---------- Validate images ---------- */
 
   for (
-    const image of imageDataUrls
+    const image of
+      imageDataUrls
   ) {
     if (
       !isValidImageDataUrl(
-        image
+        image,
       )
     ) {
       return json(
@@ -413,7 +731,7 @@ async function handleImageGeneration(
           error:
             "INVALID_IMAGE",
         },
-        400
+        400,
       );
     }
   }
@@ -432,41 +750,204 @@ async function handleImageGeneration(
       ? body.imageSize.trim()
       : "1K";
 
-  const result =
-    await runImageWithFallback(
-      {
-        request,
-        env,
+  /* =======================================================
+     CREDIT PREPARATION
+     ======================================================= */
 
-        prompt:
-          prompt.substring(
-            0,
-            6000
-          ),
-
-        imageDataUrls,
-
-        aspectRatio,
-
-        imageSize,
-      }
+  const creditOperation =
+    getImageCreditOperation(
+      imageDataUrls,
     );
+
+  const deviceId =
+    getCreditDeviceId(
+      request,
+      body,
+    );
+
+  const requestId =
+    getCreditRequestId(
+      request,
+      body,
+    );
+
+  if (!deviceId) {
+    return json(
+      {
+        ok: false,
+
+        error:
+          "DEVICE_ID_REQUIRED",
+
+        message:
+          "تطبيق صاحبي AI يحتاج معرفًا ثابتًا للجهاز لإدارة رصيد الذكاء الاصطناعي بأمان.",
+      },
+      400,
+    );
+  }
+
+  /* =======================================================
+     RESERVE CREDITS
+     ======================================================= */
+
+  const creditReservation =
+    await reserveAIRequestCredits(
+      request,
+      env,
+      {
+        body,
+
+        operation:
+          creditOperation,
+
+        requestId,
+      },
+    );
+
+  if (
+    !creditReservation.ok
+  ) {
+    return creditErrorResponse(
+      creditReservation,
+    );
+  }
+
+  const reservationRequestId =
+    creditReservation.requestId ||
+    requestId;
+
+  /* =======================================================
+     AI IMAGE EXECUTION
+     ======================================================= */
+
+  let result;
+
+  try {
+    result =
+      await runImageWithFallback(
+        {
+          request,
+          env,
+
+          prompt:
+            prompt.substring(
+              0,
+              6000,
+            ),
+
+          imageDataUrls,
+
+          aspectRatio,
+
+          imageSize,
+        },
+      );
+  } catch (error) {
+    /*
+     * AI failed.
+     *
+     * Release the reservation.
+     */
+    await releaseAIRequestCredits(
+      request,
+      env,
+      {
+        body,
+        requestId:
+          reservationRequestId,
+      },
+    );
+
+    throw error;
+  }
+
+  /* =======================================================
+     EMPTY IMAGE RESULT
+     ======================================================= */
+
+  if (
+    !result ||
+    typeof result.imageDataUrl !==
+      "string" ||
+    !result.imageDataUrl.trim()
+  ) {
+    await releaseAIRequestCredits(
+      request,
+      env,
+      {
+        body,
+        requestId:
+          reservationRequestId,
+      },
+    );
+
+    return json(
+      {
+        ok: false,
+
+        error:
+          "EMPTY_IMAGE_RESPONSE",
+      },
+      502,
+    );
+  }
+
+  /* =======================================================
+     COMMIT CREDITS
+     ======================================================= */
+
+  const creditCommit =
+    await commitAIRequestCredits(
+      request,
+      env,
+      {
+        body,
+
+        requestId:
+          reservationRequestId,
+      },
+    );
+
+  if (
+    !creditCommit.ok
+  ) {
+    return json(
+      {
+        ok: false,
+
+        error:
+          creditCommit.error ||
+          "CREDIT_COMMIT_FAILED",
+
+        requestId:
+          reservationRequestId,
+      },
+      500,
+    );
+  }
+
+  /* =======================================================
+     SUCCESS
+     ======================================================= */
 
   return json({
     ok: true,
 
     imageDataUrl:
-      result.imageDataUrl || null,
+      result.imageDataUrl ||
+      null,
 
     mimeType:
-      result.mimeType || null,
+      result.mimeType ||
+      null,
 
     provider:
-      result.provider || null,
+      result.provider ||
+      null,
 
     fallback:
       Boolean(
-        result.fallback
+        result.fallback,
       ),
 
     fallbackReason:
@@ -474,14 +955,109 @@ async function handleImageGeneration(
       null,
 
     model:
-      result.model || null,
+      result.model ||
+      null,
 
     text:
-      result.text || "",
+      result.text ||
+      "",
 
     backendVersion:
       BACKEND_VERSION,
+
+    /* ---------- Credits ---------- */
+
+    credits:
+      getSafeCreditSummary(
+        creditCommit,
+      ),
+
+    creditOperation,
+
+    creditCost:
+      creditCommit.cost ??
+      creditReservation.cost ??
+      null,
+
+    requestId:
+      reservationRequestId,
   });
+}
+
+/* =========================================================
+   CREDITS API
+   ========================================================= */
+
+async function handleCredits(
+  request,
+  env,
+) {
+  try {
+    const result =
+      await handleCreditsBalance(
+        request,
+        env,
+      );
+
+    if (!result.ok) {
+      return creditErrorResponse(
+        result,
+      );
+    }
+
+    return json(
+      {
+        ...result,
+
+        backendVersion:
+          BACKEND_VERSION,
+      },
+    );
+  } catch (error) {
+    const message =
+      error?.message ||
+      "CREDIT_SYSTEM_ERROR";
+
+    if (
+      message ===
+      "DEVICE_ID_REQUIRED"
+    ) {
+      return json(
+        {
+          ok: false,
+
+          error:
+            "DEVICE_ID_REQUIRED",
+        },
+        400,
+      );
+    }
+
+    if (
+      message ===
+      "SA7BI_CREDITS_BINDING_MISSING"
+    ) {
+      return json(
+        {
+          ok: false,
+
+          error:
+            message,
+        },
+        500,
+      );
+    }
+
+    return json(
+      {
+        ok: false,
+
+        error:
+          message,
+      },
+      500,
+    );
+  }
 }
 
 /* =========================================================
@@ -537,6 +1113,8 @@ function handleRoot() {
       shorts: true,
 
       downloads: true,
+
+      credits: true,
     },
 
     ai: {
@@ -547,12 +1125,23 @@ function handleRoot() {
         "cloudflare_workers_ai",
     },
 
+    credits: {
+      serverAuthoritative:
+        true,
+
+      rewardedAds:
+        "server_validation_pending",
+    },
+
     endpoints: {
       chat:
         "/v1/chat",
 
       image:
         "/v1/image",
+
+      credits:
+        "/v1/credits",
 
       news:
         "/v1/news",
@@ -642,7 +1231,7 @@ function handleRoot() {
 export default {
   async fetch(
     request,
-    env
+    env,
   ) {
     try {
       /* =====================================================
@@ -657,21 +1246,22 @@ export default {
           null,
           {
             status: 204,
+
             headers:
               headers(),
-          }
+          },
         );
       }
 
       const url =
         new URL(
-          request.url
+          request.url,
         );
 
       const path =
         url.pathname.replace(
           /\/+$/,
-          ""
+          "",
         ) || "/";
 
       /* =====================================================
@@ -696,7 +1286,7 @@ export default {
         path === "/health"
       ) {
         return handleHealth(
-          env
+          env,
         );
       }
 
@@ -711,7 +1301,7 @@ export default {
           "/v1/diagnostics"
       ) {
         return handleDiagnostics(
-          env
+          env,
         );
       }
 
@@ -726,7 +1316,23 @@ export default {
           "/v1/service-status"
       ) {
         return handleServiceStatus(
-          env
+          env,
+        );
+      }
+
+      /* =====================================================
+         CREDITS
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/credits"
+      ) {
+        return handleCredits(
+          request,
+          env,
         );
       }
 
@@ -740,7 +1346,7 @@ export default {
         path === "/download"
       ) {
         return handleDownload(
-          request
+          request,
         );
       }
 
@@ -780,7 +1386,7 @@ export default {
         )
       ) {
         return handleAudioSearch(
-          request
+          request,
         );
       }
 
@@ -808,7 +1414,7 @@ export default {
           "/v1/hadith"
       ) {
         return handleHadithSearch(
-          request
+          request,
         );
       }
 
@@ -832,7 +1438,7 @@ export default {
           "/v1/tafsir"
       ) {
         return handleTafsirSearch(
-          request
+          request,
         );
       }
 
@@ -852,7 +1458,7 @@ export default {
           "/v1/tafsir/audio"
       ) {
         return handleTafsirAudio(
-          request
+          request,
         );
       }
 
@@ -867,7 +1473,7 @@ export default {
           "/v1/religious"
       ) {
         return handleReligiousContent(
-          request
+          request,
         );
       }
 
@@ -891,7 +1497,7 @@ export default {
           "/v1/radio/search"
       ) {
         return handleRadioSearch(
-          request
+          request,
         );
       }
 
@@ -920,23 +1526,23 @@ export default {
       ) {
         const countryCode =
           url.searchParams.get(
-            "country"
+            "country",
           ) ||
           url.searchParams.get(
-            "countryCode"
+            "countryCode",
           ) ||
           "";
 
         const limit =
           Number(
             url.searchParams.get(
-              "limit"
-            ) || 50
+              "limit",
+            ) || 50,
           );
 
         return handleRadioByCountry(
           countryCode,
-          limit
+          limit,
         );
       }
 
@@ -950,13 +1556,8 @@ export default {
         path ===
           "/v1/radio/stations"
       ) {
-        /*
-         * Keep the old endpoint alive for the
-         * current Flutter application.
-         */
-
         return handleRadioSearch(
-          request
+          request,
         );
       }
 
@@ -984,7 +1585,7 @@ export default {
           "/v1/podcasts/search"
       ) {
         return handlePodcastSearch(
-          request
+          request,
         );
       }
 
@@ -999,7 +1600,7 @@ export default {
           "/v1/podcasts/lookup"
       ) {
         return handlePodcastLookup(
-          request
+          request,
         );
       }
 
@@ -1014,7 +1615,7 @@ export default {
           "/v1/podcasts/episodes"
       ) {
         return handlePodcastEpisodes(
-          request
+          request,
         );
       }
 
@@ -1043,7 +1644,7 @@ export default {
       ) {
         return handleChat(
           request,
-          env
+          env,
         );
       }
 
@@ -1059,7 +1660,7 @@ export default {
       ) {
         return handleImageGeneration(
           request,
-          env
+          env,
         );
       }
 
@@ -1079,7 +1680,7 @@ export default {
           backendVersion:
             BACKEND_VERSION,
         },
-        404
+        404,
       );
     } catch (error) {
       const message =
@@ -1099,7 +1700,7 @@ export default {
             ok: false,
             error: message,
           },
-          413
+          413,
         );
       }
 
@@ -1112,7 +1713,24 @@ export default {
             ok: false,
             error: message,
           },
-          400
+          400,
+        );
+      }
+
+      /* =====================================================
+         CREDIT CONFIG ERRORS
+         ===================================================== */
+
+      if (
+        message ===
+        "SA7BI_CREDITS_BINDING_MISSING"
+      ) {
+        return json(
+          {
+            ok: false,
+            error: message,
+          },
+          500,
         );
       }
 
@@ -1129,7 +1747,7 @@ export default {
             ok: false,
             error: message,
           },
-          500
+          500,
         );
       }
 
@@ -1142,7 +1760,7 @@ export default {
             ok: false,
             error: message,
           },
-          500
+          500,
         );
       }
 
@@ -1155,7 +1773,7 @@ export default {
             ok: false,
             error: message,
           },
-          500
+          500,
         );
       }
 
@@ -1181,7 +1799,7 @@ export default {
               error?.message ||
               "",
           },
-          502
+          502,
         );
       }
 
@@ -1199,8 +1817,16 @@ export default {
           backendVersion:
             BACKEND_VERSION,
         },
-        500
+        500,
       );
     }
   },
+};
+
+/* =========================================================
+   DURABLE OBJECT EXPORT
+   ========================================================= */
+
+export {
+  Sa7biCredits,
 };
