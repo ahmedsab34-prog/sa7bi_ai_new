@@ -1,19 +1,313 @@
+// backend/src/content/quran.js
+// Sa7bi AI Backend
+//
+// Quran content module.
+//
+// Source:
+// MP3Quran public API
+//
+// Endpoints:
+// GET /v1/audio/search?q=...
+// GET /v1/audio/quran
+//
+// Responsibilities:
+// - Quran Surah search
+// - Quran reciters catalog
+// - Moshaf / narration information
+// - Surah list
+// - Reliable MP3 URL construction
+//
+// No API keys are required here.
+
+/* =========================================================
+   IMPORTS
+   ========================================================= */
+
 import {
   json,
   normalizeArabic,
   fetchJson,
 } from "../utils.js";
 
-const BACKEND_VERSION = "6.0.0";
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
+
+const BACKEND_VERSION =
+  "6.3.0";
 
 const MP3QURAN_BASE =
   "https://www.mp3quran.net/api/v3";
 
+const MAX_SURAS = 114;
+
+const MAX_RECITERS = 500;
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
 /**
- * البحث عن السور.
+ * Convert a value into a valid Surah number.
+ */
+function normalizeSurahId(
+  value
+) {
+  const id =
+    Number(value);
+
+  if (
+    !Number.isInteger(id) ||
+    id < 1 ||
+    id > MAX_SURAS
+  ) {
+    return 0;
+  }
+
+  return id;
+}
+
+/**
+ * Normalize a public media/server URL.
+ */
+function normalizeServerUrl(
+  value
+) {
+  if (
+    typeof value !==
+      "string"
+  ) {
+    return "";
+  }
+
+  const raw =
+    value.trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const url =
+      new URL(raw);
+
+    if (
+      url.protocol !==
+        "http:" &&
+      url.protocol !==
+        "https:"
+    ) {
+      return "";
+    }
+
+    return url.toString()
+      .replace(
+        /\/+$/,
+        ""
+      );
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Normalize a reciter's Moshaf list.
+ */
+function normalizeMoshafList(
+  reciter
+) {
+  const raw =
+    Array.isArray(
+      reciter?.moshaf
+    )
+      ? reciter.moshaf
+      : [];
+
+  return raw
+    .map(
+      (
+        moshaf,
+        index
+      ) => {
+        const server =
+          normalizeServerUrl(
+            moshaf?.server ||
+              moshaf?.url ||
+              ""
+          );
+
+        const totalRaw =
+          Number(
+            moshaf?.surah_total ??
+              moshaf?.surahTotal ??
+              MAX_SURAS
+          );
+
+        const surahTotal =
+          Number.isInteger(
+            totalRaw
+          ) &&
+          totalRaw > 0 &&
+          totalRaw <=
+            MAX_SURAS
+            ? totalRaw
+            : MAX_SURAS;
+
+        return {
+          id:
+            moshaf?.id ||
+            `${reciter?.id || "reciter"}-${index + 1}`,
+
+          name:
+            typeof moshaf?.name ===
+              "string" &&
+            moshaf.name.trim()
+              ? moshaf.name.trim()
+              : "رواية",
+
+          server,
+
+          surahTotal,
+
+          suras:
+            typeof moshaf?.suras ===
+              "string"
+              ? moshaf.suras
+              : "",
+        };
+      }
+    )
+    .filter(
+      (
+        moshaf
+      ) =>
+        Boolean(
+          moshaf.server
+        )
+    );
+}
+
+/**
+ * Normalize reciters returned by MP3Quran.
+ */
+function normalizeReciters(
+  data
+) {
+  const raw =
+    Array.isArray(data)
+      ? data
+      : [];
+
+  return raw
+    .slice(
+      0,
+      MAX_RECITERS
+    )
+    .map(
+      (
+        reciter,
+        index
+      ) => {
+        const id =
+          reciter?.id ||
+          reciter?.reciter_id ||
+          reciter?.name ||
+          `reciter-${index + 1}`;
+
+        const name =
+          typeof reciter?.name ===
+            "string" &&
+          reciter.name.trim()
+            ? reciter.name.trim()
+            : "قارئ";
+
+        return {
+          id,
+
+          name,
+
+          moshaf:
+            normalizeMoshafList(
+              reciter
+            ),
+        };
+      }
+    )
+    .filter(
+      (
+        reciter
+      ) =>
+        Boolean(
+          reciter.name
+        )
+    );
+}
+
+/**
+ * Normalize the Surah catalog.
+ */
+function normalizeSuras(
+  data
+) {
+  const raw =
+    Array.isArray(data)
+      ? data
+      : [];
+
+  return raw
+    .map(
+      (
+        sura
+      ) => {
+        const id =
+          normalizeSurahId(
+            sura?.id ||
+              sura?.sura_id ||
+              sura?.number
+          );
+
+        const name =
+          typeof sura?.name ===
+            "string" &&
+          sura.name.trim()
+            ? sura.name.trim()
+            : "سورة";
+
+        return {
+          id,
+
+          title:
+            name,
+
+          name,
+
+          type:
+            "quran",
+        };
+      }
+    )
+    .filter(
+      (
+        sura
+      ) =>
+        sura.id >= 1 &&
+        sura.id <=
+          MAX_SURAS
+    );
+}
+
+/* =========================================================
+   QURAN SEARCH
+   ========================================================= */
+
+/**
+ * Search Quran Surahs.
  *
  * GET /v1/audio/search?q=...
- * type=quran
+ *
+ * The existing Flutter application can use this endpoint
+ * with type=quran without requiring any change to the
+ * response contract.
  */
 export async function handleQuranSearch(
   query = ""
@@ -25,53 +319,51 @@ export async function handleQuranSearch(
       );
 
     let items =
-      Array.isArray(data)
-        ? data
-        : [];
+      normalizeSuras(
+        data
+      );
 
     const normalizedQuery =
-      normalizeArabic(query);
+      normalizeArabic(
+        query
+      );
 
-    if (normalizedQuery) {
+    if (
+      normalizedQuery
+    ) {
       items =
-        items.filter((item) =>
-          normalizeArabic(
-            item?.name ||
-              item?.sura_name ||
-              ""
-          ).includes(
-            normalizedQuery
-          )
+        items.filter(
+          (
+            item
+          ) =>
+            normalizeArabic(
+              item.name
+            ).includes(
+              normalizedQuery
+            )
         );
     }
 
     return json({
       ok: true,
 
-      type: "quran",
+      type:
+        "quran",
+
+      query:
+        typeof query ===
+          "string"
+          ? query.trim()
+          : "",
+
+      count:
+        items.length,
 
       items:
-        items
-          .slice(0, 100)
-          .map((item) => ({
-            id:
-              item?.id ||
-              item?.sura_id ||
-              item?.number ||
-              0,
-
-            title:
-              item?.name ||
-              item?.sura_name ||
-              "سورة",
-
-            name:
-              item?.name ||
-              item?.sura_name ||
-              "سورة",
-
-            type: "quran",
-          })),
+        items.slice(
+          0,
+          MAX_SURAS
+        ),
 
       backendVersion:
         BACKEND_VERSION,
@@ -81,9 +373,15 @@ export async function handleQuranSearch(
       {
         ok: false,
 
+        type:
+          "quran",
+
         error:
-          error?.message ||
           "QURAN_SEARCH_FAILED",
+
+        message:
+          error?.message ||
+          "تعذر تحميل سور القرآن.",
 
         items: [],
 
@@ -95,124 +393,64 @@ export async function handleQuranSearch(
   }
 }
 
+/* =========================================================
+   QURAN CATALOG
+   ========================================================= */
+
 /**
- * جلب قائمة القراء والسور.
+ * Get Quran reciters and Surahs.
  *
  * GET /v1/audio/quran
+ *
+ * The Flutter app can use:
+ *
+ * reciters
+ *   -> moshaf
+ *       -> server
+ *       -> suras
+ *
+ * and:
+ *
+ * suras
  */
 export async function handleQuranCatalog() {
   try {
     const [
       recitersData,
       suwarData,
-    ] = await Promise.all([
-      fetchJson(
-        `${MP3QURAN_BASE}/reciters?language=ar`
-      ),
+    ] =
+      await Promise.all([
+        fetchJson(
+          `${MP3QURAN_BASE}/reciters?language=ar`
+        ),
 
-      fetchJson(
-        `${MP3QURAN_BASE}/suwar?language=ar`
-      ),
-    ]);
+        fetchJson(
+          `${MP3QURAN_BASE}/suwar?language=ar`
+        ),
+      ]);
 
     const reciters =
-      Array.isArray(
+      normalizeReciters(
         recitersData
-      )
-        ? recitersData
-        : [];
-
-    const suwar =
-      Array.isArray(
-        suwarData
-      )
-        ? suwarData
-        : [];
-
-    const output =
-      reciters.map(
-        (reciter) => ({
-          id:
-            reciter?.id ||
-            reciter?.reciter_id ||
-            reciter?.name ||
-            "",
-
-          name:
-            reciter?.name ||
-            "قارئ",
-
-          moshaf:
-            (
-              Array.isArray(
-                reciter?.moshaf
-              )
-                ? reciter.moshaf
-                : []
-            ).map(
-              (
-                moshaf,
-                index
-              ) => ({
-                id:
-                  moshaf?.id ||
-                  `${reciter?.id || "reciter"}-${index + 1}`,
-
-                name:
-                  moshaf?.name ||
-                  "رواية",
-
-                server:
-                  moshaf?.server ||
-                  moshaf?.url ||
-                  "",
-
-                surahTotal:
-                  Number(
-                    moshaf?.surah_total ||
-                      moshaf?.surahTotal ||
-                      114
-                  ),
-
-                suras:
-                  moshaf?.suras ||
-                  "",
-              })
-            ),
-        })
       );
 
     const suras =
-      suwar
-        .map(
-          (sura) => ({
-            id:
-              Number(
-                sura?.id ||
-                  sura?.sura_id ||
-                  sura?.number ||
-                  0
-              ),
-
-            name:
-              sura?.name ||
-              sura?.sura_name ||
-              "سورة",
-          })
-        )
-        .filter(
-          (sura) =>
-            sura.id >= 1 &&
-            sura.id <= 114
-        );
+      normalizeSuras(
+        suwarData
+      );
 
     return json({
       ok: true,
 
-      reciters:
-        output,
+      type:
+        "quran-catalog",
+
+      reciters,
 
       suras,
+
+      count:
+        suras.length,
 
       backendVersion:
         BACKEND_VERSION,
@@ -222,9 +460,15 @@ export async function handleQuranCatalog() {
       {
         ok: false,
 
+        type:
+          "quran-catalog",
+
         error:
-          error?.message ||
           "QURAN_CATALOG_FAILED",
+
+        message:
+          error?.message ||
+          "تعذر تحميل قائمة القراء والسور.",
 
         reciters: [],
 
@@ -238,35 +482,66 @@ export async function handleQuranCatalog() {
   }
 }
 
+/* =========================================================
+   AUDIO URL
+   ========================================================= */
+
 /**
- * بناء رابط ملف السورة عند الحاجة.
+ * Build the MP3 URL for one Surah.
  *
- * بعض روايات MP3Quran تستخدم:
- * server + رقم السورة بصيغة ثلاثية.
+ * MP3Quran commonly uses:
+ *
+ * server + 001.mp3
+ * server + 002.mp3
+ * ...
+ * server + 114.mp3
+ *
+ * Example:
+ *
+ * buildQuranAudioUrl(
+ *   "https://server.example/",
+ *   2
+ * )
+ *
+ * =>
+ * https://server.example/002.mp3
  */
 export function buildQuranAudioUrl(
   server,
   surahId
 ) {
   const cleanServer =
-    String(server || "")
-      .trim()
-      .replace(/\/+$/, "");
+    normalizeServerUrl(
+      server
+    );
 
   const id =
-    Number(surahId);
+    normalizeSurahId(
+      surahId
+    );
 
   if (
     !cleanServer ||
-    !Number.isInteger(id) ||
-    id < 1 ||
-    id > 114
+    !id
   ) {
     return "";
   }
 
   const padded =
-    String(id).padStart(3, "0");
+    String(id).padStart(
+      3,
+      "0"
+    );
 
   return `${cleanServer}/${padded}.mp3`;
 }
+
+/* =========================================================
+   EXPORTS
+   ========================================================= */
+
+export default {
+  handleQuranSearch,
+  handleQuranCatalog,
+  buildQuranAudioUrl,
+};
