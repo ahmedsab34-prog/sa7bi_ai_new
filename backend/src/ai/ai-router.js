@@ -1,20 +1,31 @@
-/**
- * Sa7bi AI
- * AI Provider Router
- *
- * Primary provider:
- *   Gemini
- *
- * Automatic fallback:
- *   Cloudflare Workers AI
- *
- * This file:
- * - Routes text requests.
- * - Routes image/vision requests.
- * - Routes image generation requests.
- * - Supports forced fallback testing.
- * - Never exposes API keys.
- */
+// backend/src/ai/ai-router.js
+// Sa7bi AI - AI Provider Router
+//
+// Architecture:
+//   Flutter App
+//       ↓
+//   Cloudflare Worker
+//       ↓
+//   Gemini (Primary)
+//       ↓ on failure/unavailable
+//   Cloudflare Workers AI (Fallback)
+//
+// Responsibilities:
+// - Text generation routing
+// - Vision/image analysis routing
+// - Image generation routing
+// - Automatic Gemini → Workers AI fallback
+// - Explicit fallback testing
+// - Provider/capability status
+//
+// Security:
+// - No API keys are exposed here.
+// - Gemini key is read only by gemini.js from Worker secrets.
+// - Workers AI uses the Cloudflare AI binding.
+
+/* -------------------------------------------------------------------------- */
+/* Providers                                                                  */
+/* -------------------------------------------------------------------------- */
 
 import {
   generateGeminiText,
@@ -31,9 +42,9 @@ import {
   getWorkersAIModels,
 } from "./workers-ai.js";
 
-/* =========================================================
-   ERROR HELPERS
-   ========================================================= */
+/* -------------------------------------------------------------------------- */
+/* Error helpers                                                              */
+/* -------------------------------------------------------------------------- */
 
 function getErrorCode(error) {
   return (
@@ -58,21 +69,25 @@ function normalizeProviderError(error) {
   };
 }
 
-/* =========================================================
-   FORCE FALLBACK
-   ========================================================= */
+/* -------------------------------------------------------------------------- */
+/* Provider selection                                                         */
+/* -------------------------------------------------------------------------- */
 
 /**
- * Used only for testing.
+ * Force Workers AI for testing.
  *
  * Supported:
- *   Header:
- *     X-Sa7bi-Force-Fallback: 1
  *
- *   Query:
- *     ?provider=workers
- *     ?provider=workers-ai
- *     ?provider=fallback
+ * Header:
+ *   X-Sa7bi-Force-Fallback: 1
+ *
+ * Query:
+ *   ?provider=workers
+ *   ?provider=workers-ai
+ *   ?provider=fallback
+ *
+ * This is intentionally a test mechanism.
+ * It does not expose any provider credentials.
  */
 function isForcedFallback(request) {
   if (!request) {
@@ -120,9 +135,20 @@ function isForcedFallback(request) {
   }
 }
 
-/* =========================================================
-   TEXT / VISION ROUTER
-   ========================================================= */
+/**
+ * Create the standard fallback reason.
+ */
+function forcedFallbackReason() {
+  return {
+    code: "FORCED_FALLBACK",
+    message:
+      "Workers AI fallback was explicitly requested.",
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Text / Vision router                                                       */
+/* -------------------------------------------------------------------------- */
 
 export async function runTextOrVisionWithFallback({
   request,
@@ -147,9 +173,9 @@ export async function runTextOrVisionWithFallback({
 
   let geminiFailure = null;
 
-  /* -------------------------------------------------------
-     PRIMARY: GEMINI
-     ------------------------------------------------------- */
+  /* ------------------------------------------------------------------------ */
+  /* Primary: Gemini                                                          */
+  /* ------------------------------------------------------------------------ */
 
   if (
     !forcedFallback &&
@@ -166,24 +192,37 @@ export async function runTextOrVisionWithFallback({
           maxOutputTokens,
         });
 
-      return {
-        answer:
-          result.answer || "",
+      if (
+        typeof result?.answer === "string" &&
+        result.answer.trim()
+      ) {
+        return {
+          answer:
+            result.answer.trim(),
 
-        provider:
-          "gemini",
+          provider:
+            "gemini",
 
-        fallback:
-          false,
+          fallback:
+            false,
 
-        fallbackReason:
-          null,
+          fallbackReason:
+            null,
 
-        model:
-          result.model || null,
+          model:
+            result.model || null,
 
-        raw:
-          result.raw,
+          raw:
+            result.raw,
+        };
+      }
+
+      geminiFailure = {
+        code:
+          "GEMINI_EMPTY_RESPONSE",
+
+        message:
+          "Gemini returned no usable answer.",
       };
     } catch (error) {
       geminiFailure =
@@ -201,9 +240,9 @@ export async function runTextOrVisionWithFallback({
     };
   }
 
-  /* -------------------------------------------------------
-     FALLBACK: WORKERS AI
-     ------------------------------------------------------- */
+  /* ------------------------------------------------------------------------ */
+  /* Fallback: Workers AI text                                                */
+  /* ------------------------------------------------------------------------ */
 
   if (!images.length) {
     const result =
@@ -216,9 +255,20 @@ export async function runTextOrVisionWithFallback({
         maxOutputTokens,
       });
 
+    const answer =
+      typeof result?.answer ===
+        "string"
+        ? result.answer.trim()
+        : "";
+
+    if (!answer) {
+      throw new Error(
+        "WORKERS_TEXT_EMPTY"
+      );
+    }
+
     return {
-      answer:
-        result.answer || "",
+      answer,
 
       provider:
         "cloudflare-workers-ai",
@@ -227,13 +277,8 @@ export async function runTextOrVisionWithFallback({
         true,
 
       fallbackReason:
-        geminiFailure || {
-          code:
-            "FORCED_FALLBACK",
-
-          message:
-            "Workers AI fallback was explicitly requested.",
-        },
+        geminiFailure ||
+        forcedFallbackReason(),
 
       model:
         result.model || null,
@@ -243,23 +288,29 @@ export async function runTextOrVisionWithFallback({
     };
   }
 
-  /* -------------------------------------------------------
-     VISION FALLBACK
-     -------------------------------------------------------
-
-     Gemini can analyze multiple images in one request.
-
-     The Workers AI vision provider is called one image
-     at a time here. The individual answers are combined
-     into one final answer.
-  */
+  /* ------------------------------------------------------------------------ */
+  /* Fallback: Workers AI Vision                                              */
+  /* ------------------------------------------------------------------------ */
+  //
+  // Gemini can receive multiple images in a single request.
+  //
+  // The Workers AI vision provider is intentionally called
+  // once per image. This keeps the provider request shape
+  // compatible with the configured Llama Vision model.
+  //
 
   if (
     !isWorkersAIConfigured(env)
   ) {
-    throw new Error(
-      "WORKERS_AI_BINDING_MISSING"
-    );
+    const error =
+      new Error(
+        "WORKERS_AI_BINDING_MISSING"
+      );
+
+    error.code =
+      "WORKERS_AI_BINDING_MISSING";
+
+    throw error;
   }
 
   const visionAnswers = [];
@@ -269,9 +320,6 @@ export async function runTextOrVisionWithFallback({
     index < images.length;
     index += 1
   ) {
-    const image =
-      images[index];
-
     const result =
       await generateWorkersVision({
         env,
@@ -286,15 +334,35 @@ export async function runTextOrVisionWithFallback({
           instructions,
 
         imageDataUrls: [
-          image,
+          images[index],
         ],
 
         maxOutputTokens,
       });
 
-    visionAnswers.push(
-      result.answer || ""
-    );
+    const answer =
+      typeof result?.answer ===
+        "string"
+        ? result.answer.trim()
+        : "";
+
+    if (answer) {
+      visionAnswers.push(
+        answer
+      );
+    }
+  }
+
+  if (!visionAnswers.length) {
+    const error =
+      new Error(
+        "WORKERS_VISION_EMPTY"
+      );
+
+    error.code =
+      "WORKERS_VISION_EMPTY";
+
+    throw error;
   }
 
   const combinedAnswer =
@@ -306,8 +374,7 @@ export async function runTextOrVisionWithFallback({
               answer,
               index
             ) =>
-              `الصورة ${index + 1}:
-${answer}`
+              `الصورة ${index + 1}:\n${answer}`
           )
           .join("\n\n");
 
@@ -322,13 +389,8 @@ ${answer}`
       true,
 
     fallbackReason:
-      geminiFailure || {
-        code:
-          "FORCED_FALLBACK",
-
-        message:
-          "Workers AI fallback was explicitly requested.",
-      },
+      geminiFailure ||
+      forcedFallbackReason(),
 
     model:
       getWorkersAIModels(
@@ -339,15 +401,18 @@ ${answer}`
       imageCount:
         images.length,
 
+      analyzedImages:
+        visionAnswers.length,
+
       results:
         visionAnswers,
     },
   };
 }
 
-/* =========================================================
-   IMAGE GENERATION ROUTER
-   ========================================================= */
+/* -------------------------------------------------------------------------- */
+/* Image generation router                                                   */
+/* -------------------------------------------------------------------------- */
 
 export async function runImageWithFallback({
   request,
@@ -362,9 +427,9 @@ export async function runImageWithFallback({
 
   let geminiFailure = null;
 
-  /* -------------------------------------------------------
-     PRIMARY: GEMINI IMAGE
-     ------------------------------------------------------- */
+  /* ------------------------------------------------------------------------ */
+  /* Primary: Gemini Image                                                    */
+  /* ------------------------------------------------------------------------ */
 
   if (
     !forcedFallback &&
@@ -384,34 +449,45 @@ export async function runImageWithFallback({
           imageSize,
         });
 
-      return {
-        imageDataUrl:
-          result.imageDataUrl ||
-          null,
+      if (
+        result?.imageDataUrl
+      ) {
+        return {
+          imageDataUrl:
+            result.imageDataUrl,
 
-        mimeType:
-          result.mimeType ||
-          null,
+          mimeType:
+            result.mimeType ||
+            "image/png",
 
-        provider:
-          "gemini",
+          provider:
+            "gemini",
 
-        fallback:
-          false,
+          fallback:
+            false,
 
-        fallbackReason:
-          null,
+          fallbackReason:
+            null,
 
-        model:
-          result.model ||
-          null,
+          model:
+            result.model ||
+            null,
 
-        text:
-          result.text ||
-          "",
+          text:
+            result.text ||
+            "",
 
-        raw:
-          result.raw,
+          raw:
+            result.raw,
+        };
+      }
+
+      geminiFailure = {
+        code:
+          "GEMINI_NO_IMAGE_RESULT",
+
+        message:
+          "Gemini returned no usable generated image.",
       };
     } catch (error) {
       geminiFailure =
@@ -429,25 +505,35 @@ export async function runImageWithFallback({
     };
   }
 
-  /* -------------------------------------------------------
-     FALLBACK: FLUX / WORKERS AI
-     ------------------------------------------------------- */
+  /* ------------------------------------------------------------------------ */
+  /* Fallback: Workers AI / FLUX                                             */
+  /* ------------------------------------------------------------------------ */
 
   const result =
     await generateWorkersImage({
       env,
-
       prompt,
     });
 
+  if (!result?.imageDataUrl) {
+    const error =
+      new Error(
+        "WORKERS_IMAGE_EMPTY"
+      );
+
+    error.code =
+      "WORKERS_IMAGE_EMPTY";
+
+    throw error;
+  }
+
   return {
     imageDataUrl:
-      result.imageDataUrl ||
-      null,
+      result.imageDataUrl,
 
     mimeType:
       result.mimeType ||
-      null,
+      "image/jpeg",
 
     provider:
       "cloudflare-workers-ai",
@@ -456,13 +542,8 @@ export async function runImageWithFallback({
       true,
 
     fallbackReason:
-      geminiFailure || {
-        code:
-          "FORCED_FALLBACK",
-
-        message:
-          "Workers AI image fallback was explicitly requested.",
-      },
+      geminiFailure ||
+      forcedFallbackReason(),
 
     model:
       result.model ||
@@ -476,9 +557,9 @@ export async function runImageWithFallback({
   };
 }
 
-/* =========================================================
-   AI STATUS
-   ========================================================= */
+/* -------------------------------------------------------------------------- */
+/* AI status                                                                  */
+/* -------------------------------------------------------------------------- */
 
 export function getAIStatus(env) {
   const geminiConfigured =
