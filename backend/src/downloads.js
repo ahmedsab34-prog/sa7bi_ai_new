@@ -1,31 +1,166 @@
 // backend/src/downloads.js
 // Sa7bi AI Backend - Downloads Module
-// Version: 6.0.0
+// Final Backend Version: 6.3.0
+//
+// Responsibilities:
+// - Safe HTTP/HTTPS media proxy
+// - Download health check
+// - Safe filename handling
+//
+// Security:
+// - No API keys
+// - No client-side secrets
+// - Rejects unsupported URL protocols
+// - Rejects credentials inside URLs
+// - Rejects obvious local/private network targets
+// - Does not forward Authorization/Cookie headers
+// - Limits redirect handling
+// - Limits downloadable response size
 
 import {
   json,
 } from "./utils.js";
 
-const BACKEND_VERSION = "6.0.0";
+const BACKEND_VERSION = "6.3.0";
 
-/**
- * Allowed media URL protocols.
- *
- * We intentionally allow only HTTP/HTTPS URLs.
- */
 const ALLOWED_PROTOCOLS = new Set([
   "http:",
   "https:",
 ]);
 
-/**
- * Maximum URL length accepted by the download helper.
- */
 const MAX_URL_LENGTH = 4096;
 
+const MAX_REDIRECTS = 3;
+
+const MAX_DOWNLOAD_BYTES =
+  50 * 1024 * 1024;
+
+/* -------------------------------------------------------------------------- */
+/* URL security                                                               */
+/* -------------------------------------------------------------------------- */
+
+function isPrivateIpv4(
+  hostname
+) {
+  const parts =
+    hostname.split(".").map(
+      (part) => Number(part)
+    );
+
+  if (
+    parts.length !== 4 ||
+    parts.some(
+      (part) =>
+        !Number.isInteger(part) ||
+        part < 0 ||
+        part > 255
+    )
+  ) {
+    return false;
+  }
+
+  const [
+    a,
+    b,
+  ] = parts;
+
+  if (a === 10) {
+    return true;
+  }
+
+  if (
+    a === 127
+  ) {
+    return true;
+  }
+
+  if (
+    a === 169 &&
+    b === 254
+  ) {
+    return true;
+  }
+
+  if (
+    a === 172 &&
+    b >= 16 &&
+    b <= 31
+  ) {
+    return true;
+  }
+
+  if (
+    a === 192 &&
+    b === 168
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isBlockedHostname(
+  hostname
+) {
+  const host =
+    String(
+      hostname || ""
+    )
+      .toLowerCase()
+      .trim();
+
+  if (!host) {
+    return true;
+  }
+
+  if (
+    host === "localhost" ||
+    host === "localhost.localdomain"
+  ) {
+    return true;
+  }
+
+  if (
+    host.endsWith(
+      ".localhost"
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    host === "0.0.0.0" ||
+    host === "::" ||
+    host === "::1"
+  ) {
+    return true;
+  }
+
+  if (
+    isPrivateIpv4(host)
+  ) {
+    return true;
+  }
+
+  /*
+   * Obvious local/internal hostnames.
+   *
+   * Public content providers normally do not use
+   * these suffixes.
+   */
+  if (
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".lan")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
- * Check whether a URL is valid and safe enough
- * for the backend's download/proxy route.
+ * Validate and normalize a download URL.
  */
 function validateDownloadUrl(
   value
@@ -36,8 +171,7 @@ function validateDownloadUrl(
   ) {
     return {
       ok: false,
-      error:
-        "url is required",
+      error: "url is required",
     };
   }
 
@@ -50,8 +184,7 @@ function validateDownloadUrl(
   ) {
     return {
       ok: false,
-      error:
-        "url is too long",
+      error: "url is too long",
     };
   }
 
@@ -63,8 +196,7 @@ function validateDownloadUrl(
   } catch (_) {
     return {
       ok: false,
-      error:
-        "Invalid URL",
+      error: "Invalid URL",
     };
   }
 
@@ -80,6 +212,42 @@ function validateDownloadUrl(
     };
   }
 
+  /*
+   * Reject URLs containing username/password.
+   *
+   * Example:
+   * https://user:password@example.com/file
+   */
+  if (
+    parsed.username ||
+    parsed.password
+  ) {
+    return {
+      ok: false,
+      error:
+        "URLs containing credentials are not supported",
+    };
+  }
+
+  if (
+    isBlockedHostname(
+      parsed.hostname
+    )
+  ) {
+    return {
+      ok: false,
+      error:
+        "Local or private network URLs are not supported",
+    };
+  }
+
+  /*
+   * Explicitly reject URL fragments because they are
+   * not sent to the remote server and can cause
+   * confusing cache/proxy behavior.
+   */
+  parsed.hash = "";
+
   return {
     ok: true,
     url:
@@ -87,9 +255,10 @@ function validateDownloadUrl(
   };
 }
 
-/**
- * Extract a filename from a URL.
- */
+/* -------------------------------------------------------------------------- */
+/* Filename helpers                                                           */
+/* -------------------------------------------------------------------------- */
+
 function filenameFromUrl(
   value
 ) {
@@ -119,15 +288,12 @@ function filenameFromUrl(
       }
     }
   } catch (_) {
-    // Ignore and use fallback below.
+    // Use fallback below.
   }
 
   return "download";
 }
 
-/**
- * Guess an extension from content type.
- */
 function extensionFromContentType(
   contentType
 ) {
@@ -145,6 +311,7 @@ function extensionFromContentType(
     "image/png": ".png",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "image/avif": ".avif",
 
     "audio/mpeg": ".mp3",
     "audio/mp3": ".mp3",
@@ -152,28 +319,25 @@ function extensionFromContentType(
     "audio/x-wav": ".wav",
     "audio/ogg": ".ogg",
     "audio/mp4": ".m4a",
+    "audio/aac": ".aac",
+    "audio/flac": ".flac",
 
     "video/mp4": ".mp4",
     "video/webm": ".webm",
     "video/quicktime": ".mov",
+    "video/x-matroska": ".mkv",
 
     "application/pdf": ".pdf",
 
     "text/plain": ".txt",
+    "text/csv": ".csv",
   };
 
-  return (
-    map[type] || ""
-  );
+  return map[type] || "";
 }
 
-/**
- * Add a safe extension if the original filename
- * does not contain one.
- */
-function ensureExtension(
-  filename,
-  contentType
+function sanitizeFilename(
+  filename
 ) {
   const clean =
     String(
@@ -184,37 +348,195 @@ function ensureExtension(
         /[<>:"/\\|?*\x00-\x1F]/g,
         "_"
       )
+      .replace(
+        /\s+/g,
+        " "
+      )
       .trim();
 
+  if (!clean) {
+    return "download";
+  }
+
+  return clean.substring(
+    0,
+    180
+  );
+}
+
+function ensureExtension(
+  filename,
+  contentType
+) {
+  const clean =
+    sanitizeFilename(
+      filename
+    );
+
   if (
-    /\.[a-z0-9]{1,8}$/i.test(
+    /\.[a-z0-9]{1,10}$/i.test(
       clean
     )
   ) {
     return clean;
   }
 
-  const extension =
-    extensionFromContentType(
-      contentType
-    );
-
   return (
     clean +
-    extension
+    extensionFromContentType(
+      contentType
+    )
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Remote response validation                                                 */
+/* -------------------------------------------------------------------------- */
+
+function getContentLength(
+  response
+) {
+  const value =
+    response.headers.get(
+      "Content-Length"
+    );
+
+  if (!value) {
+    return null;
+  }
+
+  const parsed =
+    Number(value);
+
+  if (
+    !Number.isFinite(parsed) ||
+    parsed < 0
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function isResponseTooLarge(
+  response
+) {
+  const length =
+    getContentLength(
+      response
+    );
+
+  return (
+    length !== null &&
+    length >
+      MAX_DOWNLOAD_BYTES
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Remote fetch                                                               */
+/* -------------------------------------------------------------------------- */
+
+async function fetchRemote(
+  targetUrl,
+  accept,
+  redirectCount = 0
+) {
+  if (
+    redirectCount >
+    MAX_REDIRECTS
+  ) {
+    throw new Error(
+      "TOO_MANY_REDIRECTS"
+    );
+  }
+
+  const response =
+    await fetch(
+      targetUrl,
+      {
+        method: "GET",
+
+        headers: {
+          Accept:
+            accept || "*/*",
+        },
+
+        /*
+         * We handle redirects ourselves so every
+         * redirect target can be validated before
+         * another request is made.
+         */
+        redirect:
+          "manual",
+      }
+    );
+
+  const status =
+    response.status;
+
+  const isRedirect =
+    status >= 300 &&
+    status < 400;
+
+  if (isRedirect) {
+    const location =
+      response.headers.get(
+        "Location"
+      );
+
+    if (!location) {
+      throw new Error(
+        "REDIRECT_LOCATION_MISSING"
+      );
+    }
+
+    let nextUrl;
+
+    try {
+      nextUrl =
+        new URL(
+          location,
+          targetUrl
+        ).toString();
+    } catch (_) {
+      throw new Error(
+        "INVALID_REDIRECT_URL"
+      );
+    }
+
+    const validation =
+      validateDownloadUrl(
+        nextUrl
+      );
+
+    if (
+      !validation.ok
+    ) {
+      throw new Error(
+        "UNSAFE_REDIRECT_URL"
+      );
+    }
+
+    return fetchRemote(
+      validation.url,
+      accept,
+      redirectCount + 1
+    );
+  }
+
+  return response;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Main download handler                                                      */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Main download/proxy handler.
- *
- * Supported:
- *
  * GET /download?url=https://...
  *
- * The route streams the remote response back to
- * the Flutter application without exposing any
- * backend secret.
+ * The Worker proxies a public remote media/file response
+ * to the Flutter application.
  */
 export async function handleDownload(
   request
@@ -241,8 +563,10 @@ export async function handleDownload(
       return json(
         {
           ok: false,
+
           error:
             validation.error,
+
           backendVersion:
             BACKEND_VERSION,
         },
@@ -253,28 +577,18 @@ export async function handleDownload(
     const targetUrl =
       validation.url;
 
+    const accept =
+      request.headers.get(
+        "Accept"
+      ) || "*/*";
+
     const response =
-      await fetch(
+      await fetchRemote(
         targetUrl,
-        {
-          method: "GET",
-
-          headers: {
-            Accept:
-              request.headers.get(
-                "Accept"
-              ) ||
-              "*/*",
-          },
-
-          redirect:
-            "follow",
-        }
+        accept
       );
 
-    if (
-      !response.ok
-    ) {
+    if (!response.ok) {
       return json(
         {
           ok: false,
@@ -292,8 +606,31 @@ export async function handleDownload(
       );
     }
 
-    const headers =
-      new Headers();
+    /*
+     * Protect the Worker from accidentally proxying
+     * very large files.
+     */
+    if (
+      isResponseTooLarge(
+        response
+      )
+    ) {
+      return json(
+        {
+          ok: false,
+
+          error:
+            "DOWNLOAD_TOO_LARGE",
+
+          maxBytes:
+            MAX_DOWNLOAD_BYTES,
+
+          backendVersion:
+            BACKEND_VERSION,
+        },
+        413
+      );
+    }
 
     const contentType =
       response.headers.get(
@@ -301,36 +638,46 @@ export async function handleDownload(
       ) ||
       "application/octet-stream";
 
+    const contentLength =
+      getContentLength(
+        response
+      );
+
+    const headers =
+      new Headers();
+
     headers.set(
       "Content-Type",
       contentType
     );
 
-    const contentLength =
-      response.headers.get(
-        "Content-Length"
-      );
-
     if (
-      contentLength
+      contentLength !== null
     ) {
       headers.set(
         "Content-Length",
-        contentLength
+        String(
+          contentLength
+        )
       );
     }
 
-    const contentDisposition =
+    const remoteDisposition =
       response.headers.get(
         "Content-Disposition"
       );
 
     if (
-      contentDisposition
+      remoteDisposition
     ) {
+      /*
+       * We do not blindly copy arbitrary response
+       * headers. Only the useful download metadata
+       * is retained.
+       */
       headers.set(
         "Content-Disposition",
-        contentDisposition
+        remoteDisposition
       );
     } else {
       const filename =
@@ -360,36 +707,52 @@ export async function handleDownload(
     return new Response(
       response.body,
       {
-        status:
-          response.status,
-
+        status: 200,
         headers,
       }
     );
   } catch (error) {
+    const code =
+      error?.message ||
+      "DOWNLOAD_SERVICE_UNAVAILABLE";
+
+    let status = 502;
+
+    if (
+      code ===
+        "TOO_MANY_REDIRECTS" ||
+      code ===
+        "UNSAFE_REDIRECT_URL" ||
+      code ===
+        "INVALID_REDIRECT_URL" ||
+      code ===
+        "REDIRECT_LOCATION_MISSING"
+    ) {
+      status = 400;
+    }
+
     return json(
       {
         ok: false,
 
         error:
-          "Download service unavailable",
-
-        message:
-          error?.message ||
-          "Unknown error",
+          code ===
+          "DOWNLOAD_SERVICE_UNAVAILABLE"
+            ? code
+            : code,
 
         backendVersion:
           BACKEND_VERSION,
       },
-      502
+      status
     );
   }
 }
 
-/**
- * Lightweight endpoint for checking whether the
- * download module is available.
- */
+/* -------------------------------------------------------------------------- */
+/* Health                                                                     */
+/* -------------------------------------------------------------------------- */
+
 export async function handleDownloadHealth() {
   return json({
     ok: true,
@@ -399,18 +762,26 @@ export async function handleDownloadHealth() {
 
     backendVersion:
       BACKEND_VERSION,
+
+    maxDownloadBytes:
+      MAX_DOWNLOAD_BYTES,
   });
 }
 
-/**
- * Export helpers for later tests.
- */
+/* -------------------------------------------------------------------------- */
+/* Public test helpers                                                        */
+/* -------------------------------------------------------------------------- */
+
 export {
   validateDownloadUrl,
   filenameFromUrl,
   extensionFromContentType,
   ensureExtension,
 };
+
+/* -------------------------------------------------------------------------- */
+/* Default export                                                             */
+/* -------------------------------------------------------------------------- */
 
 export default {
   handleDownload,
