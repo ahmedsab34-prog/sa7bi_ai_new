@@ -1,7 +1,39 @@
 // backend/src/index.js
 // Sa7bi AI Backend
-// Final Modular Integration
+// FINAL MODULAR INTEGRATION
 // Version 6.3.0
+//
+// FINAL ARCHITECTURE
+// ------------------
+// Flutter
+//    ↓
+// Cloudflare Worker
+//    ├── AI Router
+//    │     ├── Gemini (Primary)
+//    │     └── Workers AI (Fallback)
+//    │
+//    ├── Credits
+//    │     └── SQLite Durable Object
+//    │
+//    ├── AdMob SSV
+//    │     └── Verified Rewards
+//    │
+//    ├── News
+//    ├── Quran
+//    ├── Hadith
+//    ├── Tafsir
+//    ├── Religious Content
+//    ├── Audio
+//    ├── Radio
+//    ├── Podcasts
+//    ├── Shorts
+//    └── Downloads
+//
+// IMPORTANT
+// ---------
+// API keys never belong in Flutter.
+// API keys never belong in this file.
+// API keys remain Cloudflare Secrets.
 
 /* =========================================================
    CORE / UTILS
@@ -46,7 +78,7 @@ import {
 } from "./credits-router.js";
 
 /* =========================================================
-   ADMOB REWARDED ADS - SERVER SIDE VERIFICATION
+   ADMOB REWARDED ADS
    ========================================================= */
 
 import {
@@ -127,7 +159,8 @@ import {
    CONSTANTS
    ========================================================= */
 
-const BACKEND_VERSION = "6.3.0";
+const BACKEND_VERSION =
+  "6.3.0";
 
 const DOWNLOAD_URL =
   "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk";
@@ -157,7 +190,7 @@ ${serviceContext || "مساعد عام"}
 - كن واضحًا ومباشرًا.
 - لا تكرر كلام المستخدم بلا فائدة.
 - لا تدّعي تنفيذ شيء لم تنفذه.
-- إذا كانت المعلومة غير مؤكدة وضّح ذلك.
+- إذا كانت المعلومة غير مؤكدة وضح ذلك.
 - إذا أرسل المستخدم صورًا فحلل ما يظهر فعليًا فقط.
 - لا تخمن تفاصيل غير ظاهرة في الصور.
 - إذا طلب المستخدم تعديل أو إنشاء صورة، تعامل مع الطلب كطلب إبداعي واضح.
@@ -169,15 +202,18 @@ ${serviceContext || "مساعد عام"}
 }
 
 /* =========================================================
-   CREDIT ERROR HELPER
+   CREDIT ERROR RESPONSE
    ========================================================= */
 
-function creditErrorResponse(result) {
+function creditErrorResponse(
+  result,
+) {
   if (!result) {
     return json(
       {
         ok: false,
-        error: "CREDIT_SYSTEM_ERROR",
+        error:
+          "CREDIT_SYSTEM_ERROR",
       },
       500,
     );
@@ -185,7 +221,9 @@ function creditErrorResponse(result) {
 
   let status = 500;
 
-  switch (result.error) {
+  switch (
+    result.error
+  ) {
     case "DEVICE_ID_REQUIRED":
       status = 400;
       break;
@@ -241,7 +279,9 @@ function creditErrorResponse(result) {
         result.available,
 
       credits:
-        getSafeCreditSummary(result),
+        getSafeCreditSummary(
+          result,
+        ),
 
       requestId:
         result.requestId ||
@@ -264,59 +304,101 @@ function creditErrorResponse(result) {
    CHAT
    ========================================================= */
 
-async function handleChat(request, env) {
+async function handleChat(
+  request,
+  env,
+) {
   const body =
-    await readJsonBody(request);
+    await readJsonBody(
+      request,
+    );
 
   const messages =
-    cleanMessages(body.messages);
+    cleanMessages(
+      body.messages,
+    );
 
-  const imageDataUrls = [];
+  const imageDataUrls =
+    [];
 
-  /* ---------- Single image ---------- */
+  /* -------------------------------------------------------
+     SINGLE IMAGE
+     ------------------------------------------------------- */
 
   const singleImage =
-    typeof body.imageDataUrl === "string"
+    typeof body.imageDataUrl ===
+      "string"
       ? body.imageDataUrl.trim()
       : "";
 
   if (singleImage) {
-    imageDataUrls.push(singleImage);
+    imageDataUrls.push(
+      singleImage,
+    );
   }
 
-  /* ---------- Multiple images ---------- */
+  /* -------------------------------------------------------
+     MULTIPLE IMAGES
+     ------------------------------------------------------- */
 
-  if (Array.isArray(body.imageDataUrls)) {
-    for (const item of body.imageDataUrls) {
+  if (
+    Array.isArray(
+      body.imageDataUrls,
+    )
+  ) {
+    for (
+      const item of
+        body.imageDataUrls
+    ) {
       if (
-        typeof item === "string" &&
+        typeof item ===
+          "string" &&
         item.trim() &&
-        !imageDataUrls.includes(item.trim())
+        !imageDataUrls.includes(
+          item.trim(),
+        )
       ) {
-        imageDataUrls.push(item.trim());
+        imageDataUrls.push(
+          item.trim(),
+        );
       }
 
-      if (imageDataUrls.length >= MAX_IMAGES) {
+      if (
+        imageDataUrls.length >=
+        MAX_IMAGES
+      ) {
         break;
       }
     }
   }
 
-  /* ---------- Validate images ---------- */
+  /* -------------------------------------------------------
+     IMAGE VALIDATION
+     ------------------------------------------------------- */
 
-  for (const image of imageDataUrls) {
-    if (!isValidImageDataUrl(image)) {
+  for (
+    const image of
+      imageDataUrls
+  ) {
+    if (
+      !isValidImageDataUrl(
+        image,
+      )
+    ) {
       return json(
         {
           ok: false,
-          error: "INVALID_IMAGE",
+          error:
+            "INVALID_IMAGE",
         },
         400,
       );
     }
   }
 
-  /* ---------- Empty request ---------- */
+  /* -------------------------------------------------------
+     EMPTY REQUEST
+     ------------------------------------------------------- */
 
   if (
     !messages.length &&
@@ -325,36 +407,53 @@ async function handleChat(request, env) {
     return json(
       {
         ok: false,
-        error: "EMPTY_MESSAGE",
+        error:
+          "EMPTY_MESSAGE",
       },
       400,
     );
   }
 
-  /* ---------- Service context ---------- */
+  /* -------------------------------------------------------
+     SERVICE CONTEXT
+     ------------------------------------------------------- */
 
   const serviceTitle =
-    typeof body.serviceTitle === "string"
+    typeof body.serviceTitle ===
+      "string"
       ? body.serviceTitle
           .trim()
-          .substring(0, 200)
+          .substring(
+            0,
+            200,
+          )
       : "صاحبي AI";
 
   const serviceContext =
-    typeof body.serviceContext === "string"
+    typeof body.serviceContext ===
+      "string"
       ? body.serviceContext
           .trim()
-          .substring(0, 1500)
+          .substring(
+            0,
+            1500,
+          )
       : "";
 
-  /* ---------- Vision prompt ---------- */
+  /* -------------------------------------------------------
+     VISION PROMPT
+     ------------------------------------------------------- */
 
   const imagePrompt =
-    typeof body.imagePrompt === "string" &&
+    typeof body.imagePrompt ===
+      "string" &&
     body.imagePrompt.trim()
       ? body.imagePrompt
           .trim()
-          .substring(0, 4000)
+          .substring(
+            0,
+            4000,
+          )
       : "حلل الصور المرفقة بدقة، واقرأ أي نص واضح فيها، واشرح الأشياء المهمة الظاهرة.";
 
   /* =======================================================
@@ -412,7 +511,9 @@ async function handleChat(request, env) {
       },
     );
 
-  if (!creditReservation.ok) {
+  if (
+    !creditReservation.ok
+  ) {
     return creditErrorResponse(
       creditReservation,
     );
@@ -440,23 +541,34 @@ async function handleChat(request, env) {
 
   try {
     result =
-      await runTextOrVisionWithFallback({
-        request,
-        env,
-        messages,
-        instructions,
-        imageDataUrls,
-        imagePrompt,
-        maxOutputTokens:
-          Number(body.maxOutputTokens) ||
-          1200,
-      });
+      await runTextOrVisionWithFallback(
+        {
+          request,
+          env,
+          messages,
+          instructions,
+          imageDataUrls,
+          imagePrompt,
+
+          maxOutputTokens:
+            Number(
+              body.maxOutputTokens,
+            ) || 1200,
+        },
+      );
   } catch (error) {
+    /*
+     * AI failed.
+     *
+     * Release the reservation so the user does not
+     * permanently lose credits for a failed request.
+     */
     await releaseAIRequestCredits(
       request,
       env,
       {
         body,
+
         requestId:
           reservationRequestId,
       },
@@ -471,7 +583,8 @@ async function handleChat(request, env) {
 
   if (
     !result ||
-    typeof result.answer !== "string" ||
+    typeof result.answer !==
+      "string" ||
     !result.answer.trim()
   ) {
     await releaseAIRequestCredits(
@@ -479,6 +592,7 @@ async function handleChat(request, env) {
       env,
       {
         body,
+
         requestId:
           reservationRequestId,
       },
@@ -487,7 +601,8 @@ async function handleChat(request, env) {
     return json(
       {
         ok: false,
-        error: "EMPTY_AI_RESPONSE",
+        error:
+          "EMPTY_AI_RESPONSE",
       },
       502,
     );
@@ -503,12 +618,15 @@ async function handleChat(request, env) {
       env,
       {
         body,
+
         requestId:
           reservationRequestId,
       },
     );
 
-  if (!creditCommit.ok) {
+  if (
+    !creditCommit.ok
+  ) {
     return json(
       {
         ok: false,
@@ -541,10 +659,13 @@ async function handleChat(request, env) {
       result.provider || null,
 
     fallback:
-      Boolean(result.fallback),
+      Boolean(
+        result.fallback,
+      ),
 
     fallbackReason:
-      result.fallbackReason || null,
+      result.fallbackReason ||
+      null,
 
     model:
       result.model || null,
@@ -578,10 +699,13 @@ async function handleImageGeneration(
   env,
 ) {
   const body =
-    await readJsonBody(request);
+    await readJsonBody(
+      request,
+    );
 
   const prompt =
-    typeof body.prompt === "string"
+    typeof body.prompt ===
+      "string"
       ? body.prompt.trim()
       : "";
 
@@ -589,18 +713,23 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
-        error: "EMPTY_PROMPT",
+        error:
+          "EMPTY_PROMPT",
       },
       400,
     );
   }
 
-  const imageDataUrls = [];
+  const imageDataUrls =
+    [];
 
-  /* ---------- Single image ---------- */
+  /* -------------------------------------------------------
+     SINGLE IMAGE
+     ------------------------------------------------------- */
 
   if (
-    typeof body.imageDataUrl === "string" &&
+    typeof body.imageDataUrl ===
+      "string" &&
     body.imageDataUrl.trim()
   ) {
     imageDataUrls.push(
@@ -608,32 +737,59 @@ async function handleImageGeneration(
     );
   }
 
-  /* ---------- Multiple images ---------- */
+  /* -------------------------------------------------------
+     MULTIPLE IMAGES
+     ------------------------------------------------------- */
 
-  if (Array.isArray(body.imageDataUrls)) {
-    for (const item of body.imageDataUrls) {
+  if (
+    Array.isArray(
+      body.imageDataUrls,
+    )
+  ) {
+    for (
+      const item of
+        body.imageDataUrls
+    ) {
       if (
-        typeof item === "string" &&
+        typeof item ===
+          "string" &&
         item.trim() &&
-        !imageDataUrls.includes(item.trim())
+        !imageDataUrls.includes(
+          item.trim(),
+        )
       ) {
-        imageDataUrls.push(item.trim());
+        imageDataUrls.push(
+          item.trim(),
+        );
       }
 
-      if (imageDataUrls.length >= MAX_IMAGES) {
+      if (
+        imageDataUrls.length >=
+        MAX_IMAGES
+      ) {
         break;
       }
     }
   }
 
-  /* ---------- Validate images ---------- */
+  /* -------------------------------------------------------
+     IMAGE VALIDATION
+     ------------------------------------------------------- */
 
-  for (const image of imageDataUrls) {
-    if (!isValidImageDataUrl(image)) {
+  for (
+    const image of
+      imageDataUrls
+  ) {
+    if (
+      !isValidImageDataUrl(
+        image,
+      )
+    ) {
       return json(
         {
           ok: false,
-          error: "INVALID_IMAGE",
+          error:
+            "INVALID_IMAGE",
         },
         400,
       );
@@ -641,14 +797,16 @@ async function handleImageGeneration(
   }
 
   const aspectRatio =
-    typeof body.aspectRatio === "string" &&
-    body.aspectRatio.trim()
+    typeof body.aspectRatio ===
+        "string" &&
+      body.aspectRatio.trim()
       ? body.aspectRatio.trim()
       : "1:1";
 
   const imageSize =
-    typeof body.imageSize === "string" &&
-    body.imageSize.trim()
+    typeof body.imageSize ===
+        "string" &&
+      body.imageSize.trim()
       ? body.imageSize.trim()
       : "1K";
 
@@ -706,7 +864,9 @@ async function handleImageGeneration(
       },
     );
 
-  if (!creditReservation.ok) {
+  if (
+    !creditReservation.ok
+  ) {
     return creditErrorResponse(
       creditReservation,
     );
@@ -724,28 +884,31 @@ async function handleImageGeneration(
 
   try {
     result =
-      await runImageWithFallback({
-        request,
-        env,
+      await runImageWithFallback(
+        {
+          request,
+          env,
 
-        prompt:
-          prompt.substring(
-            0,
-            6000,
-          ),
+          prompt:
+            prompt.substring(
+              0,
+              6000,
+            ),
 
-        imageDataUrls,
+          imageDataUrls,
 
-        aspectRatio,
+          aspectRatio,
 
-        imageSize,
-      });
+          imageSize,
+        },
+      );
   } catch (error) {
     await releaseAIRequestCredits(
       request,
       env,
       {
         body,
+
         requestId:
           reservationRequestId,
       },
@@ -769,6 +932,7 @@ async function handleImageGeneration(
       env,
       {
         body,
+
         requestId:
           reservationRequestId,
       },
@@ -777,6 +941,7 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
+
         error:
           "EMPTY_IMAGE_RESPONSE",
       },
@@ -800,7 +965,9 @@ async function handleImageGeneration(
       },
     );
 
-  if (!creditCommit.ok) {
+  if (
+    !creditCommit.ok
+  ) {
     return json(
       {
         ok: false,
@@ -836,7 +1003,9 @@ async function handleImageGeneration(
       null,
 
     fallback:
-      Boolean(result.fallback),
+      Boolean(
+        result.fallback,
+      ),
 
     fallbackReason:
       result.fallbackReason ||
@@ -909,6 +1078,7 @@ async function handleCredits(
       return json(
         {
           ok: false,
+
           error:
             "DEVICE_ID_REQUIRED",
         },
@@ -923,7 +1093,9 @@ async function handleCredits(
       return json(
         {
           ok: false,
-          error: message,
+
+          error:
+            message,
         },
         500,
       );
@@ -932,7 +1104,9 @@ async function handleCredits(
     return json(
       {
         ok: false,
-        error: message,
+
+        error:
+          message,
       },
       500,
     );
@@ -943,7 +1117,9 @@ async function handleCredits(
    ROOT
    ========================================================= */
 
-function handleRoot(env) {
+function handleRoot(
+  env,
+) {
   return json({
     ok: true,
 
@@ -1021,7 +1197,9 @@ function handleRoot(env) {
     },
 
     rewardedAds:
-      getAdMobSSVStatus(env),
+      getAdMobSSVStatus(
+        env,
+      ),
 
     endpoints: {
       chat:
@@ -1166,7 +1344,9 @@ export default {
           "GET" &&
         path === "/"
       ) {
-        return handleRoot(env);
+        return handleRoot(
+          env,
+        );
       }
 
       /* =====================================================
@@ -1178,7 +1358,9 @@ export default {
           "GET" &&
         path === "/health"
       ) {
-        return handleHealth(env);
+        return handleHealth(
+          env,
+        );
       }
 
       /* =====================================================
@@ -1188,9 +1370,12 @@ export default {
       if (
         request.method ===
           "GET" &&
-        path === "/v1/diagnostics"
+        path ===
+          "/v1/diagnostics"
       ) {
-        return handleDiagnostics(env);
+        return handleDiagnostics(
+          env,
+        );
       }
 
       /* =====================================================
@@ -1200,9 +1385,12 @@ export default {
       if (
         request.method ===
           "GET" &&
-        path === "/v1/service-status"
+        path ===
+          "/v1/service-status"
       ) {
-        return handleServiceStatus(env);
+        return handleServiceStatus(
+          env,
+        );
       }
 
       /* =====================================================
@@ -1212,7 +1400,8 @@ export default {
       if (
         request.method ===
           "GET" &&
-        path === "/v1/credits"
+        path ===
+          "/v1/credits"
       ) {
         return handleCredits(
           request,
@@ -1222,24 +1411,6 @@ export default {
 
       /* =====================================================
          ADMOB REWARDED ADS SSV
-
-         AdMob calls this endpoint directly.
-
-         Flutter NEVER receives permission to grant
-         credits locally.
-
-         Verification is handled inside admob-ssv.js:
-         - Google signature
-         - key_id
-         - timestamp
-         - reward amount
-         - reward item
-         - configured ad unit
-         - transaction_id
-         - custom_data / device ID
-
-         Only a verified callback can reach the
-         Durable Object reward ledger.
          ===================================================== */
 
       if (
@@ -1271,7 +1442,8 @@ export default {
       if (
         request.method ===
           "GET" &&
-        path === "/download/health"
+        path ===
+          "/download/health"
       ) {
         return handleDownloadHealth();
       }
