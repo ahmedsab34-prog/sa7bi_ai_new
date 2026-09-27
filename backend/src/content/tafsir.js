@@ -1,6 +1,26 @@
 // backend/src/content/tafsir.js
-// Sa7bi AI Backend - Tafsir Module
-// Version: 6.0.0
+// Sa7bi AI Backend
+//
+// Tafsir content + audio module.
+//
+// Source:
+// MP3Quran public API
+//
+// Endpoints used:
+// GET /v1/tafsir/books
+// GET /v1/tafsir?tafsir=1&sura=114
+// GET /v1/tafsir/audio?tafsir=1&sura=114
+//
+// MP3Quran provides:
+// - available Tafsir editions
+// - Tafsir Surah data
+// - Tafsir audio URLs
+//
+// No API keys are required here.
+
+/* =========================================================
+   IMPORTS
+   ========================================================= */
 
 import {
   json,
@@ -8,16 +28,396 @@ import {
   fetchJson,
 } from "../utils.js";
 
-const BACKEND_VERSION = "6.0.0";
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
+
+const BACKEND_VERSION =
+  "6.3.0";
 
 const MP3QURAN_BASE =
   "https://www.mp3quran.net/api/v3";
 
+const MAX_SURAS =
+  114;
+
+const MAX_BOOKS =
+  200;
+
+const MAX_RESULTS =
+  300;
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
 /**
- * Get available Tafsir editions.
+ * Normalize and validate a Tafsir ID.
+ */
+function normalizeTafsirId(
+  value
+) {
+  const id =
+    Number(value);
+
+  if (
+    !Number.isInteger(id) ||
+    id <= 0
+  ) {
+    return 0;
+  }
+
+  return id;
+}
+
+/**
+ * Normalize and validate a Surah number.
+ */
+function normalizeSurahId(
+  value
+) {
+  const id =
+    Number(value);
+
+  if (
+    !Number.isInteger(id) ||
+    id < 1 ||
+    id > MAX_SURAS
+  ) {
+    return 0;
+  }
+
+  return id;
+}
+
+/**
+ * Normalize a public HTTP/HTTPS URL.
  *
- * Example:
- * /v1/tafsir/books
+ * Tafsir audio is returned by MP3Quran,
+ * so only normal public HTTP(S) URLs are accepted.
+ */
+function normalizePublicUrl(
+  value
+) {
+  if (
+    typeof value !==
+      "string"
+  ) {
+    return "";
+  }
+
+  const raw =
+    value.trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const url =
+      new URL(raw);
+
+    if (
+      url.protocol !==
+        "http:" &&
+      url.protocol !==
+        "https:"
+    ) {
+      return "";
+    }
+
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Normalize the Tafsir editions list.
+ */
+function normalizeTafsirBooks(
+  data
+) {
+  const raw =
+    Array.isArray(
+      data?.tafasir
+    )
+      ? data.tafasir
+      : [];
+
+  return raw
+    .slice(
+      0,
+      MAX_BOOKS
+    )
+    .map(
+      (
+        item,
+        index
+      ) => {
+        const id =
+          normalizeTafsirId(
+            item?.id
+          );
+
+        const name =
+          typeof item?.name ===
+            "string" &&
+          item.name.trim()
+            ? item.name.trim()
+            : `تفسير ${index + 1}`;
+
+        const url =
+          normalizePublicUrl(
+            item?.url
+          );
+
+        return {
+          id:
+            id ||
+            index + 1,
+
+          name,
+
+          url,
+
+          language:
+            "ar",
+
+          source:
+            "MP3Quran",
+
+          type:
+            "tafsir",
+        };
+      }
+    )
+    .filter(
+      (
+        item
+      ) =>
+        item.id > 0
+    );
+}
+
+/**
+ * Normalize one Tafsir entry.
+ */
+function normalizeTafsirEntry(
+  entry,
+  suraKey,
+  tafsirName
+) {
+  if (
+    !entry ||
+    typeof entry !==
+      "object"
+  ) {
+    return null;
+  }
+
+  const sura =
+    normalizeSurahId(
+      entry?.sura_id ??
+        suraKey
+    );
+
+  if (!sura) {
+    return null;
+  }
+
+  const title =
+    typeof entry?.name ===
+      "string" &&
+    entry.name.trim()
+      ? entry.name.trim()
+      : `سورة رقم ${sura}`;
+
+  const audioUrl =
+    normalizePublicUrl(
+      entry?.url
+    );
+
+  const id =
+    entry?.id ??
+    null;
+
+  const tafsirId =
+    normalizeTafsirId(
+      entry?.tafsir_id
+    ) ||
+    null;
+
+  return {
+    id,
+
+    tafsirId,
+
+    tafsirName:
+      tafsirName ||
+      "",
+
+    sura,
+
+    suraName:
+      title,
+
+    audioUrl:
+      audioUrl ||
+      null,
+
+    source:
+      "MP3Quran",
+
+    language:
+      "ar",
+
+    type:
+      "tafsir",
+  };
+}
+
+/**
+ * Normalize the Tafsir response returned by
+ * MP3Quran /api/v3/tafsir.
+ *
+ * Current response structure:
+ *
+ * {
+ *   tafasir: {
+ *     name: "...",
+ *     sora: {
+ *       "114": [
+ *         {
+ *           id: 114,
+ *           tafsir_id: 1,
+ *           name: "...",
+ *           url: "...",
+ *           sura_id: 114
+ *         }
+ *       ]
+ *     }
+ *   }
+ * }
+ */
+function normalizeTafsirResponse(
+  data,
+  query = ""
+) {
+  if (
+    !data ||
+    typeof data !==
+      "object"
+  ) {
+    return [];
+  }
+
+  const tafsirName =
+    typeof data?.name ===
+      "string"
+      ? data.name.trim()
+      : "";
+
+  const sora =
+    data?.sora;
+
+  if (
+    !sora ||
+    typeof sora !==
+      "object"
+  ) {
+    return [];
+  }
+
+  const normalizedQuery =
+    normalizeArabic(
+      query
+    );
+
+  const results = [];
+
+  for (
+    const [
+      suraKey,
+      entries
+    ] of Object.entries(
+      sora
+    )
+  ) {
+    if (
+      !Array.isArray(
+        entries
+      )
+    ) {
+      continue;
+    }
+
+    for (
+      const entry
+      of entries
+    ) {
+      const normalized =
+        normalizeTafsirEntry(
+          entry,
+          suraKey,
+          tafsirName
+        );
+
+      if (!normalized) {
+        continue;
+      }
+
+      if (
+        normalizedQuery
+      ) {
+        const searchableText =
+          normalizeArabic(
+            [
+              normalized.suraName,
+              normalized.tafsirName,
+              String(
+                normalized.sura
+              ),
+            ]
+              .filter(
+                Boolean
+              )
+              .join(" ")
+          );
+
+        if (
+          !searchableText.includes(
+            normalizedQuery
+          )
+        ) {
+          continue;
+        }
+      }
+
+      results.push(
+        normalized
+      );
+
+      if (
+        results.length >=
+        MAX_RESULTS
+      ) {
+        return results;
+      }
+    }
+  }
+
+  return results;
+}
+
+/* =========================================================
+   TAFSIR BOOKS
+   ========================================================= */
+
+/**
+ * Get all available Tafsir editions.
+ *
+ * GET /v1/tafsir/books
  */
 export async function handleTafsirBooks() {
   try {
@@ -25,33 +425,14 @@ export async function handleTafsirBooks() {
       `${MP3QURAN_BASE}/tafasir?language=ar`;
 
     const data =
-      await fetchJson(endpoint);
-
-    const raw =
-      Array.isArray(data?.tafasir)
-        ? data.tafasir
-        : [];
+      await fetchJson(
+        endpoint
+      );
 
     const items =
-      raw.map((item, index) => ({
-        id:
-          item.id ??
-          index + 1,
-
-        name:
-          item.name ||
-          `تفسير ${index + 1}`,
-
-        url:
-          item.url ||
-          null,
-
-        language:
-          "ar",
-
-        source:
-          "MP3Quran",
-      }));
+      normalizeTafsirBooks(
+        data
+      );
 
     return json({
       ok: true,
@@ -75,14 +456,17 @@ export async function handleTafsirBooks() {
         type:
           "tafsir-books",
 
+        count:
+          0,
+
         items: [],
 
         error:
-          "Unable to load Tafsir books",
+          "TAFSIR_BOOKS_FAILED",
 
         message:
           error?.message ||
-          "Unknown error",
+          "تعذر تحميل قائمة التفاسير.",
 
         backendVersion:
           BACKEND_VERSION,
@@ -92,23 +476,36 @@ export async function handleTafsirBooks() {
   }
 }
 
+/* =========================================================
+   TAFSIR SEARCH / CONTENT
+   ========================================================= */
+
 /**
- * Get Tafsir for a specific Tafsir edition
- * and optionally a specific Surah.
+ * Get Tafsir content.
+ *
+ * Required:
+ *   tafsir
+ *
+ * Optional:
+ *   sura
+ *   q
  *
  * Examples:
  *
  * /v1/tafsir?tafsir=1
- * /v1/tafsir?tafsir=1&sura=2
+ * /v1/tafsir?tafsir=1&sura=114
+ * /v1/tafsir?tafsir=1&q=الناس
  */
 export async function handleTafsirSearch(
   request
 ) {
   try {
     const url =
-      new URL(request.url);
+      new URL(
+        request.url
+      );
 
-    const tafsirId =
+    const tafsirRaw =
       url.searchParams.get(
         "tafsir"
       );
@@ -119,13 +516,20 @@ export async function handleTafsirSearch(
       );
 
     const query =
-      normalizeArabic(
-        url.searchParams.get(
-          "q"
-        ) || ""
+      typeof url.searchParams.get(
+        "q"
+      ) === "string"
+        ? url.searchParams
+            .get("q")
+            .trim()
+        : "";
+
+    const tafsir =
+      normalizeTafsirId(
+        tafsirRaw
       );
 
-    if (!tafsirId) {
+    if (!tafsir) {
       return json(
         {
           ok: false,
@@ -143,42 +547,19 @@ export async function handleTafsirSearch(
       );
     }
 
-    const tafsirNumber =
-      Number(tafsirId);
+    let sura =
+      null;
 
     if (
-      !Number.isInteger(
-        tafsirNumber
-      ) ||
-      tafsirNumber <= 0
+      suraRaw !== null &&
+      suraRaw !== ""
     ) {
-      return json(
-        {
-          ok: false,
+      const normalized =
+        normalizeSurahId(
+          suraRaw
+        );
 
-          error:
-            "Invalid Tafsir ID",
-
-          backendVersion:
-            BACKEND_VERSION,
-        },
-        400
-      );
-    }
-
-    let sura = null;
-
-    if (suraRaw) {
-      const parsedSura =
-        Number(suraRaw);
-
-      if (
-        !Number.isInteger(
-          parsedSura
-        ) ||
-        parsedSura < 1 ||
-        parsedSura > 114
-      ) {
+      if (!normalized) {
         return json(
           {
             ok: false,
@@ -194,7 +575,7 @@ export async function handleTafsirSearch(
       }
 
       sura =
-        parsedSura;
+        normalized;
     }
 
     const params =
@@ -202,7 +583,7 @@ export async function handleTafsirSearch(
 
     params.set(
       "tafsir",
-      String(tafsirNumber)
+      String(tafsir)
     );
 
     params.set(
@@ -210,7 +591,9 @@ export async function handleTafsirSearch(
       "ar"
     );
 
-    if (sura !== null) {
+    if (
+      sura !== null
+    ) {
       params.set(
         "sura",
         String(sura)
@@ -221,14 +604,13 @@ export async function handleTafsirSearch(
       `${MP3QURAN_BASE}/tafsir?${params.toString()}`;
 
     const data =
-      await fetchJson(endpoint);
-
-    const raw =
-      data?.tafasir;
+      await fetchJson(
+        endpoint
+      );
 
     const items =
       normalizeTafsirResponse(
-        raw,
+        data?.tafasir,
         query
       );
 
@@ -238,8 +620,7 @@ export async function handleTafsirSearch(
       type:
         "tafsir",
 
-      tafsir:
-        tafsirNumber,
+      tafsir,
 
       sura,
 
@@ -264,11 +645,11 @@ export async function handleTafsirSearch(
         items: [],
 
         error:
-          "Tafsir service unavailable",
+          "TAFSIR_SEARCH_FAILED",
 
         message:
           error?.message ||
-          "Unknown error",
+          "تعذر تحميل التفسير.",
 
         backendVersion:
           BACKEND_VERSION,
@@ -278,157 +659,44 @@ export async function handleTafsirSearch(
   }
 }
 
-/**
- * Normalize MP3Quran Tafsir response.
- *
- * Their response groups Tafsir entries under
- * a "sora" object keyed by Surah number.
- */
-function normalizeTafsirResponse(
-  data,
-  query = ""
-) {
-  if (
-    !data ||
-    typeof data !== "object"
-  ) {
-    return [];
-  }
-
-  const results = [];
-
-  const tafsirName =
-    data.name ||
-    "";
-
-  const sora =
-    data.sora;
-
-  if (
-    !sora ||
-    typeof sora !== "object"
-  ) {
-    return [];
-  }
-
-  for (
-    const [suraKey, entries]
-    of Object.entries(sora)
-  ) {
-    if (
-      !Array.isArray(entries)
-    ) {
-      continue;
-    }
-
-    for (
-      const entry of entries
-    ) {
-      if (
-        !entry ||
-        typeof entry !== "object"
-      ) {
-        continue;
-      }
-
-      const title =
-        entry.name ||
-        "";
-
-      const normalizedTitle =
-        normalizeArabic(
-          title
-        );
-
-      const normalizedTafsirName =
-        normalizeArabic(
-          tafsirName
-        );
-
-      if (
-        query &&
-        !normalizedTitle.includes(
-          query
-        ) &&
-        !normalizedTafsirName.includes(
-          query
-        )
-      ) {
-        continue;
-      }
-
-      results.push({
-        id:
-          entry.id ??
-          null,
-
-        tafsirId:
-          entry.tafsir_id ??
-          null,
-
-        tafsirName,
-
-        sura:
-          Number(
-            entry.sura_id ??
-            suraKey
-          ) || null,
-
-        suraName:
-          title,
-
-        audioUrl:
-          entry.url ||
-          null,
-
-        source:
-          "MP3Quran",
-
-        type:
-          "tafsir",
-      });
-    }
-  }
-
-  return results;
-}
+/* =========================================================
+   TAFSIR AUDIO
+   ========================================================= */
 
 /**
- * Get Tafsir audio for one Surah.
+ * Get the Tafsir audio URL for one Tafsir
+ * and one Surah.
  *
- * This is useful for the application's audio
- * player and background playback system.
+ * GET /v1/tafsir/audio?tafsir=1&sura=114
  *
- * Example:
- * /v1/tafsir/audio?tafsir=1&sura=114
+ * MP3Quran supplies the actual audio URL in
+ * the Tafsir response. We do not construct or
+ * invent an audio URL ourselves.
  */
 export async function handleTafsirAudio(
   request
 ) {
   try {
     const url =
-      new URL(request.url);
+      new URL(
+        request.url
+      );
 
-    const tafsirId =
-      Number(
+    const tafsir =
+      normalizeTafsirId(
         url.searchParams.get(
           "tafsir"
         )
       );
 
     const sura =
-      Number(
+      normalizeSurahId(
         url.searchParams.get(
           "sura"
         )
       );
 
-    if (
-      !Number.isInteger(
-        tafsirId
-      ) ||
-      tafsirId <= 0
-    ) {
+    if (!tafsir) {
       return json(
         {
           ok: false,
@@ -443,13 +711,7 @@ export async function handleTafsirAudio(
       );
     }
 
-    if (
-      !Number.isInteger(
-        sura
-      ) ||
-      sura < 1 ||
-      sura > 114
-    ) {
+    if (!sura) {
       return json(
         {
           ok: false,
@@ -469,7 +731,7 @@ export async function handleTafsirAudio(
 
     params.set(
       "tafsir",
-      String(tafsirId)
+      String(tafsir)
     );
 
     params.set(
@@ -486,20 +748,27 @@ export async function handleTafsirAudio(
       `${MP3QURAN_BASE}/tafsir?${params.toString()}`;
 
     const data =
-      await fetchJson(endpoint);
+      await fetchJson(
+        endpoint
+      );
 
     const items =
       normalizeTafsirResponse(
         data?.tafasir
       );
 
-    const audio =
+    const audioItem =
       items.find(
-        (item) =>
+        (
+          item
+        ) =>
+          item.sura ===
+            sura &&
           Boolean(
             item.audioUrl
           )
-      ) || null;
+      ) ||
+      null;
 
     return json({
       ok: true,
@@ -507,17 +776,21 @@ export async function handleTafsirAudio(
       type:
         "tafsir-audio",
 
-      tafsir:
-        tafsirId,
+      tafsir,
 
       sura,
 
+      available:
+        Boolean(
+          audioItem?.audioUrl
+        ),
+
       audioUrl:
-        audio?.audioUrl ||
+        audioItem?.audioUrl ||
         null,
 
       item:
-        audio,
+        audioItem,
 
       backendVersion:
         BACKEND_VERSION,
@@ -530,15 +803,21 @@ export async function handleTafsirAudio(
         type:
           "tafsir-audio",
 
+        available:
+          false,
+
         audioUrl:
           null,
 
+        item:
+          null,
+
         error:
-          "Unable to load Tafsir audio",
+          "TAFSIR_AUDIO_FAILED",
 
         message:
           error?.message ||
-          "Unknown error",
+          "تعذر تحميل صوت التفسير.",
 
         backendVersion:
           BACKEND_VERSION,
@@ -547,6 +826,10 @@ export async function handleTafsirAudio(
     );
   }
 }
+
+/* =========================================================
+   EXPORTS
+   ========================================================= */
 
 export default {
   handleTafsirBooks,
