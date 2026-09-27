@@ -2,16 +2,23 @@ name = "sa7bi-ai-new"
 main = "src/index.js"
 compatibility_date = "2026-09-18"
 
+# ============================================================
+# AI MODELS
+# ============================================================
+
 [vars]
+
+# Gemini - Primary AI
 GEMINI_TEXT_MODEL = "gemini-3.8-flash"
 GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image"
 
+# Cloudflare Workers AI - Automatic Fallback
 WORKERS_TEXT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 WORKERS_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
 WORKERS_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 
 # ============================================================
-# CLOUDFLARE WORKERS AI
+# CLOUDFLARE WORKERS AI BINDING
 # ============================================================
 
 [ai]
@@ -20,14 +27,50 @@ binding = "AI"
 # ============================================================
 # SERVER-AUTHORITATIVE CREDITS
 # ============================================================
+#
+# Every user's credits are stored server-side inside a
+# SQLite-backed Durable Object.
+#
+# Flutter NEVER becomes the source of truth for credits.
+#
+# AI request:
+#   Flutter
+#      ↓
+#   Worker
+#      ↓
+#   Sa7biCredits
+#      ↓
+#   reserve
+#      ↓
+#   AI
+#      ↓
+#   commit / release
+#
+# Rewarded ad:
+#   AdMob
+#      ↓
+#   Google SSV
+#      ↓
+#   admob-ssv.js
+#      ↓
+#   Sa7biCredits
+#
+# ============================================================
 
 [[durable_objects.bindings]]
 name = "SA7BI_CREDITS"
 class_name = "Sa7biCredits"
 
 # ============================================================
-# DURABLE OBJECT LIFECYCLE
-# SQLite-backed Durable Object
+# DURABLE OBJECT CLASS
+# ============================================================
+#
+# SQLite is the current recommended storage backend for new
+# Durable Objects.
+#
+# This uses the modern declarative `exports` configuration.
+# Do NOT add a [[migrations]] section alongside this.
+#
 # ============================================================
 
 [exports.Sa7biCredits]
@@ -36,6 +79,16 @@ storage = "sqlite"
 
 # ============================================================
 # SECRETS
+# ============================================================
+#
+# The actual secret value is stored inside Cloudflare.
+# It is NOT stored in this file.
+#
+# Required:
+#   GEMINI_API_KEY
+#
+# Never put the actual API key here.
+#
 # ============================================================
 
 [secrets]
