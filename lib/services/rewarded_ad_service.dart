@@ -1,19 +1,16 @@
+import 'dart:async';
+
 import '../services/ads_service.dart';
 import '../services/credits_service.dart';
 
 /// مدير الإعلانات المكافِئة والـCredits في صاحبي AI.
 ///
-/// المسؤول عن:
-/// - التحقق من أهلية المستخدم.
-/// - التحقق من الحد اليومي.
-/// - بدء حالة الإعلان.
-/// - عرض Rewarded Ad الحقيقي.
-/// - إضافة Credits فقط بعد callback حقيقي من AdMob.
-/// - إلغاء العملية عند الخطأ أو عدم إكمال الإعلان.
-///
-/// مهم جدًا:
-/// مجرد فتح الإعلان لا يمنح Credits.
-/// المكافأة لا تُسجل إلا بعد onUserEarnedReward.
+/// IMPORTANT:
+/// - التطبيق لا يمنح Credits بنفسه.
+/// - onUserEarnedReward من AdMob ليس مصدر السلطة للرصيد.
+/// - المكافأة الحقيقية تأتي من AdMob SSV → Cloudflare Worker.
+/// - بعد مشاهدة الإعلان ننتظر تأكيد السيرفر ثم نعمل refresh للرصيد.
+/// - إذا تأخر SSV، نظل نتحقق لفترة محدودة بدل إعطاء Credits وهمية.
 class RewardedAdService {
   RewardedAdService._();
 
@@ -29,8 +26,22 @@ class RewardedAdService {
   bool _initialized = false;
   bool _isShowing = false;
 
+  /// عملية التحقق الحالية من مكافأة SSV.
+  Future<RewardedAdResult>? _pendingRewardVerification;
+
+  /// آخر عداد Rewarded Ads معروف قبل عرض الإعلان.
+  int? _rewardedAdsCountBeforeShow;
+
+  /// أقصى مدة ننتظر خلالها وصول SSV.
+  static const Duration _verificationTimeout =
+      Duration(seconds: 30);
+
+  /// الفاصل بين محاولات قراءة الرصيد.
+  static const Duration _verificationInterval =
+      Duration(seconds: 2);
+
   // ============================================================
-  // Getters
+  // GETTERS
   // ============================================================
 
   bool get isShowing => _isShowing;
@@ -48,7 +59,7 @@ class RewardedAdService {
       _ads.isRewardedLoaded;
 
   // ============================================================
-  // Initialization
+  // INITIALIZATION
   // ============================================================
 
   Future<void> initialize() async {
@@ -69,17 +80,12 @@ class RewardedAdService {
   }
 
   // ============================================================
-  // Eligibility
+  // ELIGIBILITY
   // ============================================================
 
-  /// هل المستخدم مؤهل للحصول على Rewarded Ad؟
+  /// هل المستخدم مؤهل لعرض إعلان مكافأة؟
   ///
-  /// التحقق هنا يشمل:
-  /// - عدم وجود إعلان آخر قيد العرض.
-  /// - عدم تجاوز الحد اليومي.
-  /// - السماح بالمكافآت.
-  ///
-  /// لا يعني ذلك أن الإعلان نفسه محمّل.
+  /// التحقق من الحد اليومي يتم من السيرفر.
   Future<bool> canShowRewarded() async {
     await _ensureInitialized();
 
@@ -98,12 +104,10 @@ class RewardedAdService {
   }
 
   // ============================================================
-  // Loading
+  // PRELOAD
   // ============================================================
 
-  /// تجهيز الإعلان المكافأة مسبقًا.
-  ///
-  /// ترجع true إذا كان الإعلان متاحًا/تم تحميله.
+  /// تجهيز الإعلان مسبقًا.
   Future<bool> preloadRewardedAd() async {
     await _ensureInitialized();
 
@@ -115,14 +119,12 @@ class RewardedAdService {
   }
 
   // ============================================================
-  // Begin
+  // BEGIN
   // ============================================================
 
-  /// بداية محاولة عرض الإعلان.
+  /// بداية محاولة عرض إعلان.
   ///
-  /// لا تضيف أي Credits.
-  ///
-  /// تستخدم قبل استدعاء [showRewardedAd].
+  /// لا تمنح أي Credits.
   Future<bool> beginRewardedAd() async {
     await _ensureInitialized();
 
@@ -137,24 +139,39 @@ class RewardedAdService {
       return false;
     }
 
+    // ----------------------------------------------------------
+    // نأخذ snapshot للعداد قبل الإعلان.
+    //
+    // بعد SSV نتأكد أن العداد زاد.
+    // ----------------------------------------------------------
+
+    await _credits.refresh();
+
+    _rewardedAdsCountBeforeShow =
+        _credits.rewardedAdsToday;
+
     _isShowing = true;
 
     return true;
   }
 
   // ============================================================
-  // Show real AdMob Rewarded Ad
+  // SHOW REWARDED
   // ============================================================
 
   /// عرض الإعلان المكافأة الحقيقي.
   ///
-  /// هذه هي الدالة الرئيسية التي ستستخدمها واجهة التطبيق.
+  /// النجاح النهائي لا يعتمد على onUserEarnedReward وحده.
   ///
-  /// النتيجة:
-  /// - success = true إذا حصل المستخدم فعلًا على المكافأة.
-  /// - success = false إذا لم تكتمل المكافأة.
+  /// التسلسل:
   ///
-  /// يمكن تمرير callback اختياري بعد إضافة الـCredits بنجاح.
+  /// 1. المستخدم يشاهد الإعلان.
+  /// 2. AdMob يطلق onUserEarnedReward.
+  /// 3. AdMob يرسل SSV إلى Worker.
+  /// 4. Worker يتحقق من Google signature.
+  /// 5. Durable Object يضيف Credits.
+  /// 6. التطبيق يقرأ الرصيد من السيرفر.
+  /// 7. إذا زاد عداد المكافآت → نجاح.
   Future<RewardedAdResult> showRewardedAd() async {
     await _ensureInitialized();
 
@@ -173,24 +190,23 @@ class RewardedAdService {
       );
     }
 
-    try {
-      RewardedAdResult? completedResult;
+    _pendingRewardVerification = null;
 
+    try {
       final shown =
           await _ads.showRewarded(
-        onRewardEarned: (amount) async {
+        onRewardEarned: (amount) {
           // ----------------------------------------------------
-          // مهم جدًا:
+          // مهم:
           //
-          // هذا callback يتم استدعاؤه فقط بعد أن تؤكد AdMob
-          // أن المستخدم حصل على Reward.
+          // لا نضيف Credits هنا.
           //
-          // هنا فقط نطلب إضافة Credits.
+          // فقط نبدأ عملية انتظار تأكيد SSV.
           // ----------------------------------------------------
 
-          completedResult =
-              await completeReward(
-            rewardedAmount: amount,
+          _pendingRewardVerification =
+              _verifyRewardFromServer(
+            expectedRewardAmount: amount,
           );
         },
       );
@@ -204,146 +220,226 @@ class RewardedAdService {
       }
 
       // --------------------------------------------------------
-      // showRewarded ينتظر حتى إغلاق الإعلان.
-      //
-      // إذا حصل المستخدم على Reward سيكون
-      // completedResult موجودًا.
+      // لو onUserEarnedReward لم يحدث:
+      // الإعلان أُغلق بدون مكافأة.
       // --------------------------------------------------------
 
-      if (completedResult != null) {
-        return completedResult!;
+      final verification =
+          _pendingRewardVerification;
+
+      if (verification == null) {
+        await cancelRewardedAd();
+
+        return const RewardedAdResult.failure(
+          'تم إغلاق الإعلان قبل الحصول على المكافأة.',
+        );
       }
 
-      // الإعلان أُغلق بدون Reward.
-      await cancelRewardedAd();
+      // --------------------------------------------------------
+      // ننتظر تأكيد SSV الحقيقي.
+      // --------------------------------------------------------
 
-      return const RewardedAdResult.failure(
-        'تم إغلاق الإعلان قبل الحصول على المكافأة.',
-      );
+      final result =
+          await verification;
+
+      _isShowing = false;
+      _pendingRewardVerification = null;
+
+      return result;
     } catch (_) {
       await cancelRewardedAd();
 
       return const RewardedAdResult.failure(
-        'حصل خطأ أثناء تشغيل الإعلان.',
+        'حصل خطأ أثناء تشغيل أو تأكيد مكافأة الإعلان.',
       );
     }
   }
 
   // ============================================================
-  // Complete Reward
+  // SERVER VERIFICATION
   // ============================================================
 
-  /// تسجيل مشاهدة إعلان مكافأة ناجحة.
+  /// انتظار وصول مكافأة AdMob SSV إلى السيرفر.
   ///
-  /// هذه هي النقطة الوحيدة التي تمنح Credits.
+  /// لا يوجد هنا أي endpoint لمنح Credits.
   ///
-  /// يجب استدعاؤها فقط من callback:
-  /// onUserEarnedReward
+  /// نحن فقط نقرأ الرصيد من السيرفر وننتظر أن يتغير
+  /// العداد اليومي بعد أن يقوم Google SSV بتأكيد المكافأة.
+  Future<RewardedAdResult> _verifyRewardFromServer({
+    required int expectedRewardAmount,
+  }) async {
+    final before =
+        _rewardedAdsCountBeforeShow ??
+            _credits.rewardedAdsToday;
+
+    final started =
+        DateTime.now();
+
+    while (DateTime.now()
+            .difference(started) <
+        _verificationTimeout) {
+      try {
+        await _credits.refresh();
+
+        final current =
+            _credits.rewardedAdsToday;
+
+        // ------------------------------------------------------
+        // أهم شرط:
+        //
+        // لا نعتبر المكافأة ناجحة إلا إذا زاد عداد
+        // الإعلانات المكافِئة القادم من السيرفر.
+        // ------------------------------------------------------
+
+        if (current > before) {
+          return RewardedAdResult.success(
+            rewardCredits:
+                _credits.rewardedAdCredits,
+            remainingCredits:
+                _credits.credits,
+            remainingAdsToday:
+                _credits.remainingRewardedAdsToday,
+          );
+        }
+
+        // ------------------------------------------------------
+        // لو السيرفر أكد أننا وصلنا للحد اليومي بدون زيادة
+        // فهذا يعني أن المكافأة الحالية لم تُقبل.
+        // ------------------------------------------------------
+
+        if (current >=
+            _credits.rewardedAdDailyLimit) {
+          return const RewardedAdResult.failure(
+            'لم يتم تأكيد مكافأة الإعلان من السيرفر.',
+          );
+        }
+      } catch (_) {
+        // ------------------------------------------------------
+        // فشل قراءة مؤقت.
+        //
+        // نستمر في المحاولة حتى انتهاء المهلة.
+        // لا نمنح Credits محليًا.
+        // ------------------------------------------------------
+      }
+
+      await Future<void>.delayed(
+        _verificationInterval,
+      );
+    }
+
+    // ----------------------------------------------------------
+    // انتهت المهلة.
+    //
+    // لا نعطي المستخدم Credits من التطبيق.
+    // يمكن للـSSV أن يصل متأخرًا، وعندها refresh لاحق
+    // سيظهر الرصيد الصحيح.
+    // ----------------------------------------------------------
+
+    try {
+      await _credits.refresh();
+    } catch (_) {}
+
+    final current =
+        _credits.rewardedAdsToday;
+
+    if (current > before) {
+      return RewardedAdResult.success(
+        rewardCredits:
+            _credits.rewardedAdCredits,
+        remainingCredits:
+            _credits.credits,
+        remainingAdsToday:
+            _credits.remainingRewardedAdsToday,
+      );
+    }
+
+    return RewardedAdResult.pending(
+      rewardCredits:
+          expectedRewardAmount > 0
+              ? expectedRewardAmount
+              : _credits.rewardedAdCredits,
+      remainingCredits:
+          _credits.credits,
+      remainingAdsToday:
+          _credits.remainingRewardedAdsToday,
+    );
+  }
+
+  // ============================================================
+  // LEGACY-SAFE COMPLETE
+  // ============================================================
+
+  /// توافق مع أي جزء قديم من التطبيق يستدعي completeReward().
+  ///
+  /// مهم:
+  /// هذه الدالة لا تضيف Credits.
+  ///
+  /// إذا تم استدعاؤها أثناء مشاهدة Rewarded Ad،
+  /// فهي تنتظر تأكيد SSV فقط.
   Future<RewardedAdResult> completeReward({
     int? rewardedAmount,
   }) async {
     await _ensureInitialized();
 
-    if (!_isShowing) {
-      return const RewardedAdResult.failure(
-        'لا توجد مشاهدة إعلان مكافأة قيد التنفيذ.',
-      );
+    final pending =
+        _pendingRewardVerification;
+
+    if (pending != null) {
+      return pending;
     }
 
-    try {
-      // --------------------------------------------------------
-      // فحص الحد اليومي مرة أخرى قبل إضافة المكافأة.
-      // --------------------------------------------------------
-
-      final canClaim =
-          await _credits.canClaimRewardedAd();
-
-      if (!canClaim) {
-        _isShowing = false;
-
-        return const RewardedAdResult.failure(
-          'وصلت للحد اليومي للإعلانات المكافِئة.',
-        );
-      }
-
-      // --------------------------------------------------------
-      // إضافة المكافأة عن طريق CreditsService.
-      // --------------------------------------------------------
-
-      final claimed =
-          await _credits.claimRewardedAd();
-
-      _isShowing = false;
-
-      if (!claimed) {
-        return const RewardedAdResult.failure(
-          'تعذر إضافة مكافأة الإعلان.',
-        );
-      }
-
-      // --------------------------------------------------------
-      // نستخدم قيمة Credits الخاصة بالتطبيق،
-      // وليس قيمة عشوائية ترسلها شبكة الإعلان.
-      // --------------------------------------------------------
-
-      final actualReward =
-          _ads.rewardedCredits;
-
-      return RewardedAdResult.success(
-        rewardCredits: actualReward,
-        remainingCredits: _credits.credits,
-        remainingAdsToday:
-            _credits.remainingRewardedAdsToday,
-      );
-    } catch (_) {
-      _isShowing = false;
-
-      return const RewardedAdResult.failure(
-        'حصل خطأ أثناء تسجيل مكافأة الإعلان.',
-      );
-    }
+    return const RewardedAdResult.failure(
+      'لم يتم بدء عملية تحقق من مكافأة الإعلان.',
+    );
   }
 
   // ============================================================
-  // Cancel
+  // CANCEL
   // ============================================================
 
-  /// إلغاء حالة الإعلان بدون مكافأة.
-  ///
-  /// تستخدم عندما:
-  /// - الإعلان فشل في التشغيل.
-  /// - المستخدم أغلق الإعلان بدون Reward.
-  /// - حدث خطأ.
+  /// إلغاء حالة الإعلان بدون منح Credits.
   Future<void> cancelRewardedAd() async {
     _isShowing = false;
+    _pendingRewardVerification = null;
+    _rewardedAdsCountBeforeShow = null;
   }
 
   // ============================================================
-  // Reset
+  // RESET
   // ============================================================
 
-  /// إعادة ضبط الحالة عند مغادرة الشاشة.
   Future<void> reset() async {
     _isShowing = false;
+    _pendingRewardVerification = null;
+    _rewardedAdsCountBeforeShow = null;
   }
 }
+
+// ================================================================
+// RESULT
+// ================================================================
 
 /// نتيجة عملية الإعلان المكافأة.
 class RewardedAdResult {
   final bool success;
+
+  /// true عندما الإعلان نجح لكن SSV لم يتأكد خلال المهلة.
+  final bool pending;
+
   final String? error;
 
-  /// عدد Credits التي تمت إضافتها.
+  /// عدد Credits المرتبط بالمكافأة.
   final int rewardCredits;
 
-  /// إجمالي Credits المتبقية للمستخدم.
+  /// إجمالي Credits الحالية من السيرفر.
   final int remainingCredits;
 
-  /// عدد الإعلانات المكافِئة المتبقية اليوم.
+  /// عدد الإعلانات المتبقية اليوم.
   final int remainingAdsToday;
 
   const RewardedAdResult._({
     required this.success,
+    required this.pending,
     this.error,
     this.rewardCredits = 0,
     this.remainingCredits = 0,
@@ -356,6 +452,21 @@ class RewardedAdResult {
     required int remainingAdsToday,
   }) : this._(
           success: true,
+          pending: false,
+          rewardCredits: rewardCredits,
+          remainingCredits: remainingCredits,
+          remainingAdsToday: remainingAdsToday,
+        );
+
+  const RewardedAdResult.pending({
+    required int rewardCredits,
+    required int remainingCredits,
+    required int remainingAdsToday,
+  }) : this._(
+          success: false,
+          pending: true,
+          error:
+              'تمت مشاهدة الإعلان، وجاري تأكيد المكافأة من السيرفر.',
           rewardCredits: rewardCredits,
           remainingCredits: remainingCredits,
           remainingAdsToday: remainingAdsToday,
@@ -365,6 +476,7 @@ class RewardedAdResult {
     String message,
   ) : this._(
           success: false,
+          pending: false,
           error: message,
         );
 }
