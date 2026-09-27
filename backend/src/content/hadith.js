@@ -1,6 +1,24 @@
 // backend/src/content/hadith.js
-// Sa7bi AI Backend - Hadith Module
-// Version: 6.0.0
+// Sa7bi AI Backend
+//
+// Hadith content module.
+//
+// Source:
+// Hadith API
+//
+// Endpoints:
+// GET /v1/hadith
+// GET /v1/hadith/books
+//
+// Notes:
+// - No API key is stored here.
+// - The public API is accessed only by the Worker.
+// - A failure in one book does not terminate the whole search.
+// - The response contract remains compatible with the Flutter app.
+
+/* =========================================================
+   IMPORTS
+   ========================================================= */
 
 import {
   json,
@@ -8,68 +26,254 @@ import {
   fetchJson,
 } from "../utils.js";
 
-const BACKEND_VERSION = "6.0.0";
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
+
+const BACKEND_VERSION =
+  "6.3.0";
 
 const HADITH_API =
   "https://api.hadith.gading.dev/books";
 
-/**
- * Supported books from the public Hadith API.
- */
+const DEFAULT_LIMIT = 20;
+
+const MAX_LIMIT = 50;
+
+/* =========================================================
+   BOOKS
+   ========================================================= */
+
 const BOOKS = [
   {
-    id: "bukhari",
-    name: "صحيح البخاري",
+    id:
+      "bukhari",
+
+    name:
+      "صحيح البخاري",
   },
+
   {
-    id: "muslim",
-    name: "صحيح مسلم",
+    id:
+      "muslim",
+
+    name:
+      "صحيح مسلم",
   },
+
   {
-    id: "abudawud",
-    name: "سنن أبي داود",
+    id:
+      "abudawud",
+
+    name:
+      "سنن أبي داود",
   },
+
   {
-    id: "tirmidzi",
-    name: "جامع الترمذي",
+    id:
+      "tirmidzi",
+
+    name:
+      "جامع الترمذي",
   },
+
   {
-    id: "nasai",
-    name: "سنن النسائي",
+    id:
+      "nasai",
+
+    name:
+      "سنن النسائي",
   },
+
   {
-    id: "ibnu-majah",
-    name: "سنن ابن ماجه",
+    id:
+      "ibnu-majah",
+
+    name:
+      "سنن ابن ماجه",
   },
+
   {
-    id: "ahmad",
-    name: "مسند أحمد",
+    id:
+      "ahmad",
+
+    name:
+      "مسند أحمد",
   },
 ];
 
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
 /**
- * Search hadith.
+ * Normalize the requested result limit.
+ */
+function normalizeLimit(
+  value
+) {
+  const parsed =
+    Number(value);
+
+  if (
+    !Number.isFinite(
+      parsed
+    )
+  ) {
+    return DEFAULT_LIMIT;
+  }
+
+  return Math.min(
+    Math.max(
+      Math.floor(parsed),
+      1
+    ),
+    MAX_LIMIT
+  );
+}
+
+/**
+ * Find a supported book.
+ */
+function findBook(
+  id
+) {
+  return BOOKS.find(
+    (book) =>
+      book.id === id
+  );
+}
+
+/**
+ * Extract the Arabic hadith text from an API item.
+ */
+function getHadithText(
+  hadith
+) {
+  if (
+    typeof hadith?.arab ===
+      "string"
+  ) {
+    return hadith.arab.trim();
+  }
+
+  if (
+    typeof hadith?.text ===
+      "string"
+  ) {
+    return hadith.text.trim();
+  }
+
+  return "";
+}
+
+/**
+ * Fetch one Hadith book safely.
  *
- * Supported:
+ * Returns [] instead of throwing so one unavailable
+ * book does not break a multi-book search.
+ */
+async function fetchBookHadiths(
+  book
+) {
+  const endpoint =
+    `${HADITH_API}/${encodeURIComponent(book.id)}`;
+
+  try {
+    const data =
+      await fetchJson(
+        endpoint
+      );
+
+    const hadiths =
+      Array.isArray(
+        data?.data?.hadiths
+      )
+        ? data.data.hadiths
+        : [];
+
+    return hadiths;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Convert an API hadith into the stable response
+ * format used by Sa7bi AI.
+ */
+function normalizeHadith(
+  hadith,
+  book,
+  fallbackNumber
+) {
+  const text =
+    getHadithText(
+      hadith
+    );
+
+  if (!text) {
+    return null;
+  }
+
+  const number =
+    hadith?.number ??
+    fallbackNumber ??
+    null;
+
+  return {
+    id:
+      `${book.id}-${number || fallbackNumber}`,
+
+    number,
+
+    book:
+      book.id,
+
+    bookName:
+      book.name,
+
+    text,
+
+    source:
+      "Hadith API",
+
+    type:
+      "hadith",
+  };
+}
+
+/* =========================================================
+   SEARCH
+   ========================================================= */
+
+/**
+ * Search Hadith.
+ *
+ * Examples:
  *
  * /v1/hadith?q=الصلاة
  * /v1/hadith?book=bukhari
  * /v1/hadith?book=muslim&q=الإيمان
+ * /v1/hadith?limit=20
  */
 export async function handleHadithSearch(
   request
 ) {
   try {
     const url =
-      new URL(request.url);
+      new URL(
+        request.url
+      );
 
     const query =
       normalizeArabic(
-        url.searchParams.get("q") ||
-        ""
+        url.searchParams.get(
+          "q"
+        ) || ""
       );
 
-    const book =
+    const bookId =
       (
         url.searchParams.get(
           "book"
@@ -78,35 +282,33 @@ export async function handleHadithSearch(
         .trim()
         .toLowerCase();
 
-    const limitRaw =
-      Number(
+    const limit =
+      normalizeLimit(
         url.searchParams.get(
           "limit"
-        ) || 20
+        )
       );
 
-    const limit =
-      Math.min(
-        Math.max(
-          limitRaw,
-          1
-        ),
-        50
-      );
+    /* -----------------------------------------------------
+       BOOK VALIDATION
+       ----------------------------------------------------- */
 
     if (
-      book &&
-      !BOOKS.some(
-        (item) =>
-          item.id === book
+      bookId &&
+      !findBook(
+        bookId
       )
     ) {
       return json(
         {
-          ok: false,
+          ok:
+            false,
 
           error:
-            "Unsupported hadith book",
+            "UNSUPPORTED_HADITH_BOOK",
+
+          message:
+            "كتاب الحديث المطلوب غير مدعوم.",
 
           books:
             BOOKS,
@@ -119,22 +321,24 @@ export async function handleHadithSearch(
     }
 
     const selectedBooks =
-      book
-        ? BOOKS.filter(
-            (item) =>
-              item.id === book
-          )
+      bookId
+        ? [
+            findBook(
+              bookId
+            ),
+          ]
         : BOOKS;
 
-    const results = [];
+    const results =
+      [];
 
-    /**
-     * Fetch only a limited number of books so the
-     * Worker does not make an unnecessarily large
-     * number of external requests.
-     */
+    /* -----------------------------------------------------
+       SEARCH SELECTED BOOKS
+       ----------------------------------------------------- */
+
     for (
-      const selectedBook of selectedBooks
+      const book of
+        selectedBooks
     ) {
       if (
         results.length >=
@@ -143,83 +347,77 @@ export async function handleHadithSearch(
         break;
       }
 
-      try {
-        const endpoint =
-          `${HADITH_API}/${encodeURIComponent(selectedBook.id)}`;
+      const hadiths =
+        await fetchBookHadiths(
+          book
+        );
 
-        const data =
-          await fetchJson(
-            endpoint
+      let fallbackNumber =
+        1;
+
+      for (
+        const hadith of
+          hadiths
+      ) {
+        if (
+          results.length >=
+          limit
+        ) {
+          break;
+        }
+
+        const text =
+          getHadithText(
+            hadith
           );
 
-        const hadiths =
-          Array.isArray(
-            data?.data?.hadiths
-          )
-            ? data.data.hadiths
-            : [];
+        if (!text) {
+          fallbackNumber +=
+            1;
 
-        for (
-          const hadith of hadiths
-        ) {
-          if (
-            results.length >=
-            limit
-          ) {
-            break;
-          }
-
-          const text =
-            hadith?.arab ||
-            hadith?.text ||
-            "";
-
-          if (!text) {
-            continue;
-          }
-
-          const normalizedText =
-            normalizeArabic(
-              text
-            );
-
-          if (
-            query &&
-            !normalizedText.includes(
-              query
-            )
-          ) {
-            continue;
-          }
-
-          results.push({
-            id:
-              `${selectedBook.id}-${hadith.number || results.length + 1}`,
-
-            number:
-              hadith.number ||
-              null,
-
-            book:
-              selectedBook.id,
-
-            bookName:
-              selectedBook.name,
-
-            text,
-
-            source:
-              "Hadith API",
-          });
+          continue;
         }
-      } catch (_) {
-        // If one book fails, continue with the
-        // remaining books.
+
+        /*
+         * Arabic normalization is used only for
+         * comparison. The original hadith text is
+         * returned unchanged.
+         */
+        if (
+          query &&
+          !normalizeArabic(
+            text
+          ).includes(
+            query
+          )
+        ) {
+          fallbackNumber +=
+            1;
+
+          continue;
+        }
+
+        const item =
+          normalizeHadith(
+            hadith,
+            book,
+            fallbackNumber
+          );
+
+        if (item) {
+          results.push(
+            item
+          );
+        }
+
+        fallbackNumber +=
+          1;
       }
     }
 
     return json({
-      ok: true,
+      ok:
+        true,
 
       type:
         "hadith",
@@ -227,7 +425,7 @@ export async function handleHadithSearch(
       query,
 
       book:
-        book || null,
+        bookId || null,
 
       count:
         results.length,
@@ -244,19 +442,23 @@ export async function handleHadithSearch(
   } catch (error) {
     return json(
       {
-        ok: false,
+        ok:
+          false,
 
         type:
           "hadith",
 
         items: [],
 
+        books:
+          BOOKS,
+
         error:
-          "Hadith service unavailable",
+          "HADITH_SERVICE_UNAVAILABLE",
 
         message:
           error?.message ||
-          "Unknown error",
+          "تعذر تحميل الأحاديث.",
 
         backendVersion:
           BACKEND_VERSION,
@@ -266,12 +468,19 @@ export async function handleHadithSearch(
   }
 }
 
+/* =========================================================
+   BOOK CATALOG
+   ========================================================= */
+
 /**
  * Return the supported Hadith books.
+ *
+ * GET /v1/hadith/books
  */
 export async function handleHadithBooks() {
   return json({
-    ok: true,
+    ok:
+      true,
 
     type:
       "hadith-books",
@@ -286,6 +495,14 @@ export async function handleHadithBooks() {
       BACKEND_VERSION,
   });
 }
+
+/* =========================================================
+   EXPORTS
+   ========================================================= */
+
+export {
+  BOOKS,
+};
 
 export default {
   handleHadithSearch,
