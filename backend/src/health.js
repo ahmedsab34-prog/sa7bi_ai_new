@@ -1,6 +1,6 @@
 // backend/src/health.js
-// Sa7bi AI Backend - Health & Diagnostics Module
-// Version: 6.0.0
+// Sa7bi AI Backend - Health & Diagnostics
+// Final Backend Version: 6.3.0
 
 import {
   json,
@@ -10,15 +10,26 @@ import {
   getAIStatus,
 } from "./ai/ai-router.js";
 
-const BACKEND_VERSION = "6.0.0";
+const BACKEND_VERSION = "6.3.0";
+
+/* -------------------------------------------------------------------------- */
+/* Health check                                                               */
+/* -------------------------------------------------------------------------- */
 
 /**
- * Basic Worker health check.
+ * Basic public Worker health check.
+ *
+ * This endpoint:
+ * - confirms that the Worker is running
+ * - reports the backend version
+ * - reports safe AI provider status
+ *
+ * It NEVER exposes secrets.
  */
 export async function handleHealth(
   env
 ) {
-  let aiStatus = null;
+  let aiStatus;
 
   try {
     aiStatus =
@@ -51,17 +62,27 @@ export async function handleHealth(
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Detailed diagnostics                                                       */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Detailed diagnostics endpoint.
+ * Detailed diagnostics for backend testing.
  *
- * This endpoint must NEVER return secret values.
- * It only reports whether required services/configuration
- * are present and which provider is configured.
+ * IMPORTANT:
+ * This endpoint reports configuration state only.
+ * It NEVER returns:
+ * - Gemini API keys
+ * - OpenAI API keys
+ * - AdMob secrets
+ * - Durable Object data
+ * - request data
+ * - user data
  */
 export async function handleDiagnostics(
   env
 ) {
-  let aiStatus = null;
+  let aiStatus;
 
   try {
     aiStatus =
@@ -86,7 +107,14 @@ export async function handleDiagnostics(
 
   const workersAIConfigured =
     Boolean(
-      env?.AI
+      env?.AI &&
+      typeof env.AI.run ===
+        "function"
+    );
+
+  const creditsConfigured =
+    Boolean(
+      env?.SA7BI_CREDITS
     );
 
   return json({
@@ -105,11 +133,14 @@ export async function handleDiagnostics(
       platform:
         "Cloudflare Workers",
 
+      environment:
+        "production",
+
       aiBinding:
         workersAIConfigured,
 
-      environment:
-        "production",
+      creditsBinding:
+        creditsConfigured,
     },
 
     providers: {
@@ -156,16 +187,23 @@ export async function handleDiagnostics(
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Public service status                                                      */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Public-safe service status.
+ * Small public-safe status endpoint.
  *
- * This is intentionally smaller than diagnostics and
- * does not expose provider configuration details.
+ * The Flutter app can use this to determine whether
+ * the backend services are available.
+ *
+ * No provider secrets or internal configuration
+ * are returned here.
  */
 export async function handleServiceStatus(
   env
 ) {
-  let aiStatus = null;
+  let aiStatus;
 
   try {
     aiStatus =
@@ -175,6 +213,11 @@ export async function handleServiceStatus(
       ok: false,
     };
   }
+
+  const aiAvailable =
+    Boolean(
+      aiStatus?.ok
+    );
 
   return json({
     ok: true,
@@ -187,15 +230,17 @@ export async function handleServiceStatus(
 
     services: {
       ai:
-        Boolean(
-          aiStatus?.ok
-        ),
+        aiAvailable,
 
       news: true,
 
       audio: true,
 
       quran: true,
+
+      hadith: true,
+
+      tafsir: true,
 
       radio: true,
 
@@ -204,12 +249,24 @@ export async function handleServiceStatus(
       shorts: true,
 
       downloads: true,
+
+      credits: true,
+
+      rewardedAds: true,
     },
 
     timestamp:
       new Date().toISOString(),
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* Exports                                                                    */
+/* -------------------------------------------------------------------------- */
+
+export {
+  BACKEND_VERSION,
+};
 
 export default {
   handleHealth,
