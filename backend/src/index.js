@@ -131,6 +131,7 @@ import {
   handleRadioSearch,
   handleRadioCountries,
   handleRadioByCountry,
+  handleRadioStationClick,
   handleRadioHealth,
 } from "./media/radio.js";
 
@@ -321,10 +322,6 @@ async function handleChat(
   const imageDataUrls =
     [];
 
-  /* -------------------------------------------------------
-     SINGLE IMAGE
-     ------------------------------------------------------- */
-
   const singleImage =
     typeof body.imageDataUrl ===
       "string"
@@ -336,10 +333,6 @@ async function handleChat(
       singleImage,
     );
   }
-
-  /* -------------------------------------------------------
-     MULTIPLE IMAGES
-     ------------------------------------------------------- */
 
   if (
     Array.isArray(
@@ -372,10 +365,6 @@ async function handleChat(
     }
   }
 
-  /* -------------------------------------------------------
-     IMAGE VALIDATION
-     ------------------------------------------------------- */
-
   for (
     const image of
       imageDataUrls
@@ -396,10 +385,6 @@ async function handleChat(
     }
   }
 
-  /* -------------------------------------------------------
-     EMPTY REQUEST
-     ------------------------------------------------------- */
-
   if (
     !messages.length &&
     !imageDataUrls.length
@@ -413,10 +398,6 @@ async function handleChat(
       400,
     );
   }
-
-  /* -------------------------------------------------------
-     SERVICE CONTEXT
-     ------------------------------------------------------- */
 
   const serviceTitle =
     typeof body.serviceTitle ===
@@ -440,10 +421,6 @@ async function handleChat(
           )
       : "";
 
-  /* -------------------------------------------------------
-     VISION PROMPT
-     ------------------------------------------------------- */
-
   const imagePrompt =
     typeof body.imagePrompt ===
       "string" &&
@@ -455,10 +432,6 @@ async function handleChat(
             4000,
           )
       : "حلل الصور المرفقة بدقة، واقرأ أي نص واضح فيها، واشرح الأشياء المهمة الظاهرة.";
-
-  /* =======================================================
-     CREDIT PREPARATION
-     ======================================================= */
 
   const creditOperation =
     getChatCreditOperation(
@@ -493,10 +466,6 @@ async function handleChat(
     );
   }
 
-  /* =======================================================
-     RESERVE CREDITS
-     ======================================================= */
-
   const creditReservation =
     await reserveAIRequestCredits(
       request,
@@ -523,19 +492,11 @@ async function handleChat(
     creditReservation.requestId ||
     requestId;
 
-  /* =======================================================
-     AI INSTRUCTIONS
-     ======================================================= */
-
   const instructions =
     buildAIInstructions({
       serviceTitle,
       serviceContext,
     });
-
-  /* =======================================================
-     AI EXECUTION
-     ======================================================= */
 
   let result;
 
@@ -557,12 +518,6 @@ async function handleChat(
         },
       );
   } catch (error) {
-    /*
-     * AI failed.
-     *
-     * Release the reservation so the user does not
-     * permanently lose credits for a failed request.
-     */
     await releaseAIRequestCredits(
       request,
       env,
@@ -576,10 +531,6 @@ async function handleChat(
 
     throw error;
   }
-
-  /* =======================================================
-     EMPTY AI RESULT
-     ======================================================= */
 
   if (
     !result ||
@@ -607,10 +558,6 @@ async function handleChat(
       502,
     );
   }
-
-  /* =======================================================
-     COMMIT CREDITS
-     ======================================================= */
 
   const creditCommit =
     await commitAIRequestCredits(
@@ -644,10 +591,6 @@ async function handleChat(
       500,
     );
   }
-
-  /* =======================================================
-     SUCCESS
-     ======================================================= */
 
   return json({
     ok: true,
@@ -723,10 +666,6 @@ async function handleImageGeneration(
   const imageDataUrls =
     [];
 
-  /* -------------------------------------------------------
-     SINGLE IMAGE
-     ------------------------------------------------------- */
-
   if (
     typeof body.imageDataUrl ===
       "string" &&
@@ -736,10 +675,6 @@ async function handleImageGeneration(
       body.imageDataUrl.trim(),
     );
   }
-
-  /* -------------------------------------------------------
-     MULTIPLE IMAGES
-     ------------------------------------------------------- */
 
   if (
     Array.isArray(
@@ -771,10 +706,6 @@ async function handleImageGeneration(
       }
     }
   }
-
-  /* -------------------------------------------------------
-     IMAGE VALIDATION
-     ------------------------------------------------------- */
 
   for (
     const image of
@@ -810,10 +741,6 @@ async function handleImageGeneration(
       ? body.imageSize.trim()
       : "1K";
 
-  /* =======================================================
-     CREDIT PREPARATION
-     ======================================================= */
-
   const creditOperation =
     getImageCreditOperation(
       imageDataUrls,
@@ -846,10 +773,6 @@ async function handleImageGeneration(
     );
   }
 
-  /* =======================================================
-     RESERVE CREDITS
-     ======================================================= */
-
   const creditReservation =
     await reserveAIRequestCredits(
       request,
@@ -875,10 +798,6 @@ async function handleImageGeneration(
   const reservationRequestId =
     creditReservation.requestId ||
     requestId;
-
-  /* =======================================================
-     AI IMAGE EXECUTION
-     ======================================================= */
 
   let result;
 
@@ -917,10 +836,6 @@ async function handleImageGeneration(
     throw error;
   }
 
-  /* =======================================================
-     EMPTY IMAGE RESULT
-     ======================================================= */
-
   if (
     !result ||
     typeof result.imageDataUrl !==
@@ -948,10 +863,6 @@ async function handleImageGeneration(
       502,
     );
   }
-
-  /* =======================================================
-     COMMIT CREDITS
-     ======================================================= */
 
   const creditCommit =
     await commitAIRequestCredits(
@@ -982,10 +893,6 @@ async function handleImageGeneration(
       500,
     );
   }
-
-  /* =======================================================
-     SUCCESS
-     ======================================================= */
 
   return json({
     ok: true,
@@ -1256,6 +1163,9 @@ function handleRoot(
       radioStations:
         "/v1/radio/stations?country=EG",
 
+      radioStation:
+        "/v1/radio/station?stationUuid=...",
+
       radioHealth:
         "/v1/radio/health",
 
@@ -1305,10 +1215,6 @@ export default {
     env,
   ) {
     try {
-      /* =====================================================
-         CORS PREFLIGHT
-         ===================================================== */
-
       if (
         request.method ===
         "OPTIONS"
@@ -1335,10 +1241,6 @@ export default {
           "",
         ) || "/";
 
-      /* =====================================================
-         ROOT
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1349,10 +1251,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         HEALTH
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1362,10 +1260,6 @@ export default {
           env,
         );
       }
-
-      /* =====================================================
-         DIAGNOSTICS
-         ===================================================== */
 
       if (
         request.method ===
@@ -1378,10 +1272,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         SERVICE STATUS
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1392,10 +1282,6 @@ export default {
           env,
         );
       }
-
-      /* =====================================================
-         CREDITS
-         ===================================================== */
 
       if (
         request.method ===
@@ -1409,10 +1295,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         ADMOB REWARDED ADS SSV
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1424,10 +1306,6 @@ export default {
           env,
         );
       }
-
-      /* =====================================================
-         DOWNLOAD
-         ===================================================== */
 
       if (
         request.method ===
@@ -1448,10 +1326,6 @@ export default {
         return handleDownloadHealth();
       }
 
-      /* =====================================================
-         NEWS
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1459,10 +1333,6 @@ export default {
       ) {
         return handleNews();
       }
-
-      /* =====================================================
-         AUDIO SEARCH
-         ===================================================== */
 
       if (
         request.method ===
@@ -1479,10 +1349,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         QURAN
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1491,10 +1357,6 @@ export default {
       ) {
         return handleQuranCatalog();
       }
-
-      /* =====================================================
-         HADITH
-         ===================================================== */
 
       if (
         request.method ===
@@ -1515,10 +1377,6 @@ export default {
       ) {
         return handleHadithBooks();
       }
-
-      /* =====================================================
-         TAFSIR
-         ===================================================== */
 
       if (
         request.method ===
@@ -1550,10 +1408,6 @@ export default {
           request,
         );
       }
-
-      /* =====================================================
-         RELIGIOUS CONTENT
-         ===================================================== */
 
       if (
         request.method ===
@@ -1628,6 +1482,30 @@ export default {
       }
 
       /* =====================================================
+         RADIO STATION START / CURRENT STREAM
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/radio/station"
+      ) {
+        const stationUuid =
+          url.searchParams.get(
+            "stationUuid",
+          ) ||
+          url.searchParams.get(
+            "stationuuid",
+          ) ||
+          "";
+
+        return handleRadioStationClick(
+          stationUuid,
+        );
+      }
+
+      /* =====================================================
          RADIO LEGACY STATIONS
          ===================================================== */
 
@@ -1655,10 +1533,6 @@ export default {
         return handleRadioHealth();
       }
 
-      /* =====================================================
-         PODCAST SEARCH
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1669,10 +1543,6 @@ export default {
           request,
         );
       }
-
-      /* =====================================================
-         PODCAST LOOKUP
-         ===================================================== */
 
       if (
         request.method ===
@@ -1685,10 +1555,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         PODCAST EPISODES
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1700,10 +1566,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         SHORTS
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1712,10 +1574,6 @@ export default {
       ) {
         return handleShorts();
       }
-
-      /* =====================================================
-         CHAT
-         ===================================================== */
 
       if (
         request.method ===
@@ -1729,10 +1587,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         IMAGE
-         ===================================================== */
-
       if (
         request.method ===
           "POST" &&
@@ -1744,10 +1598,6 @@ export default {
           env,
         );
       }
-
-      /* =====================================================
-         404
-         ===================================================== */
 
       return json(
         {
@@ -1767,10 +1617,6 @@ export default {
       const message =
         error?.message ||
         "INTERNAL_ERROR";
-
-      /* =====================================================
-         REQUEST ERRORS
-         ===================================================== */
 
       if (
         message ===
@@ -1798,10 +1644,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         CREDIT ERRORS
-         ===================================================== */
-
       if (
         message ===
         "SA7BI_CREDITS_BINDING_MISSING"
@@ -1814,10 +1656,6 @@ export default {
           500,
         );
       }
-
-      /* =====================================================
-         AI CONFIG ERRORS
-         ===================================================== */
 
       if (
         message ===
@@ -1858,10 +1696,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         AI PROVIDER FAILURES
-         ===================================================== */
-
       if (
         message ===
           "ALL_AI_PROVIDERS_FAILED" ||
@@ -1883,10 +1717,6 @@ export default {
           502,
         );
       }
-
-      /* =====================================================
-         GENERIC ERROR
-         ===================================================== */
 
       return json(
         {
