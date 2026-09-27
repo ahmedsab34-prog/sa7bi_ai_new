@@ -19,6 +19,12 @@ import '../config/app_config.dart';
 ///
 /// مهم جدًا:
 /// لا يوجد أي OpenAI API Key داخل التطبيق.
+///
+/// ملاحظة مهمة:
+/// لا نعتمد على checkBackend() كشرط قبل إرسال الطلب.
+/// السبب أن فحص GET منفصل لا يجب أن يمنع POST الحقيقي.
+/// إذا كان هناك خطأ في الـWorker أو OpenAI، يجب أن يصلنا
+/// رد الطلب الحقيقي حتى نعرف السبب الفعلي.
 class AiRequestService {
   AiRequestService._();
 
@@ -70,12 +76,14 @@ class AiRequestService {
   );
 
   // ============================================================
-  // BACKEND CONNECTION
+  // BACKEND CONNECTION / DIAGNOSTICS
   // ============================================================
 
   /// فحص اتصال التطبيق بالـWorker.
   ///
-  /// لا يتم إرسال أي API Key من الهاتف.
+  /// هذه الدالة للتشخيص فقط.
+  ///
+  /// لا يتم استدعاؤها كشرط لمنع طلبات Chat أو Image.
   static Future<BackendConnectionResult>
       checkBackend() async {
     try {
@@ -96,6 +104,7 @@ class AiRequestService {
           response.statusCode >= 300) {
         return BackendConnectionResult.failure(
           'الخادم رجع حالة HTTP ${response.statusCode}.',
+          statusCode: response.statusCode,
         );
       }
 
@@ -109,6 +118,7 @@ class AiRequestService {
         return BackendConnectionResult.failure(
           data['error']?.toString() ??
               'الخادم غير جاهز حاليًا.',
+          statusCode: response.statusCode,
         );
       }
 
@@ -136,6 +146,11 @@ class AiRequestService {
   // ============================================================
 
   /// إرسال رسالة نصية إلى صاحبي AI.
+  ///
+  /// مهم:
+  /// لا يوجد checkBackend() هنا.
+  ///
+  /// يتم إرسال POST الحقيقي مباشرة إلى /v1/chat.
   static Future<String> getResponse({
     required String prompt,
     String? serviceContext,
@@ -154,16 +169,6 @@ class AiRequestService {
         AppConfig.maximumMessageCharacters) {
       throw const AiRequestException(
         'الرسالة طويلة جدًا. حاول تقسيمها إلى أكثر من رسالة.',
-      );
-    }
-
-    final backend =
-        await checkBackend();
-
-    if (!backend.isAvailable) {
-      throw AiRequestException(
-        backend.error ??
-            'خدمة صاحبي غير متاحة حاليًا.',
       );
     }
 
@@ -222,6 +227,7 @@ class AiRequestService {
       serviceContext: serviceContext,
     );
 
+    // إرسال الطلب الحقيقي مباشرة.
     final response =
         await _postWithRetry(
       chatEndpoint,
@@ -397,16 +403,10 @@ class AiRequestService {
       serviceContext: null,
     );
 
-    final backend =
-        await checkBackend();
-
-    if (!backend.isAvailable) {
-      throw AiRequestException(
-        backend.error ??
-            'خدمة تحليل الصور غير متاحة حاليًا.',
-      );
-    }
-
+    // لا يوجد checkBackend هنا.
+    //
+    // إذا كان هناك خطأ، نريد أن نعرف نتيجة POST
+    // الحقيقية من /v1/chat.
     final response =
         await _postWithRetry(
       chatEndpoint,
@@ -445,16 +445,9 @@ class AiRequestService {
       );
     }
 
-    final backend =
-        await checkBackend();
-
-    if (!backend.isAvailable) {
-      throw AiRequestException(
-        backend.error ??
-            'خدمة صاحبي غير متاحة حاليًا.',
-      );
-    }
-
+    // لا يوجد checkBackend هنا.
+    //
+    // يتم إرسال POST مباشرة إلى /v1/image.
     final body =
         <String, dynamic>{
       'prompt': cleanPrompt,
@@ -582,8 +575,11 @@ class AiRequestService {
     }
 
     if (data == null) {
-      throw const AiRequestException(
-        'رد خادم الذكاء الاصطناعي غير مفهوم.',
+      throw AiRequestException(
+        'رد خادم الذكاء الاصطناعي غير مفهوم '
+        '(HTTP ${response.statusCode}).',
+        statusCode:
+            response.statusCode,
       );
     }
 
@@ -606,8 +602,11 @@ class AiRequestService {
 
     if (answer == null ||
         answer.isEmpty) {
-      throw const AiRequestException(
-        'الذكاء الاصطناعي لم يرجع نتيجة.',
+      throw AiRequestException(
+        'الذكاء الاصطناعي لم يرجع نتيجة '
+        '(HTTP ${response.statusCode}).',
+        statusCode:
+            response.statusCode,
       );
     }
 
@@ -830,7 +829,7 @@ class AiRequestService {
         return 'الخدمة استغرقت وقتًا أطول من اللازم.';
 
       default:
-        return 'حصل خطأ في الاتصال بالخادم.';
+        return 'حصل خطأ في الاتصال بالخادم (HTTP $statusCode).';
     }
   }
 
@@ -884,6 +883,8 @@ class AiRequestService {
           return 'حصل خطأ غير معروف.';
         }
 
+        // أثناء التشخيص نُبقي رسالة السيرفر كما هي
+        // بدل إخفائها خلف رسالة عامة.
         return error;
     }
   }
@@ -905,7 +906,7 @@ class AiRequestService {
       return 'تأكد من اتصال الإنترنت وحاول مرة أخرى.';
     }
 
-    return 'تعذر الاتصال بخدمة صاحبي حاليًا.';
+    return 'تعذر الاتصال بخدمة صاحبي حاليًا: $error';
   }
 }
 
@@ -917,25 +918,31 @@ class BackendConnectionResult {
   final bool isAvailable;
   final String? error;
   final String? version;
+  final int? statusCode;
 
   const BackendConnectionResult._({
     required this.isAvailable,
     this.error,
     this.version,
+    this.statusCode,
   });
 
   const BackendConnectionResult.success({
     String? version,
+    int? statusCode,
   }) : this._(
           isAvailable: true,
           version: version,
+          statusCode: statusCode,
         );
 
   const BackendConnectionResult.failure(
-    String error,
-  ) : this._(
+    String error, {
+    int? statusCode,
+  }) : this._(
           isAvailable: false,
           error: error,
+          statusCode: statusCode,
         );
 }
 
