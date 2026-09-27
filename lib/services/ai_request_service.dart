@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 
@@ -15,16 +17,18 @@ import '../config/app_config.dart';
 ///      ↓
 /// Cloudflare Worker
 ///      ↓
-/// OpenAI
+/// Gemini
+///      ↓
+/// Workers AI كـ Fallback
 ///
 /// مهم جدًا:
-/// لا يوجد أي OpenAI API Key داخل التطبيق.
+/// لا يوجد أي API Key داخل التطبيق.
 ///
-/// ملاحظة مهمة:
-/// لا نعتمد على checkBackend() كشرط قبل إرسال الطلب.
-/// السبب أن فحص GET منفصل لا يجب أن يمنع POST الحقيقي.
-/// إذا كان هناك خطأ في الـWorker أو OpenAI، يجب أن يصلنا
-/// رد الطلب الحقيقي حتى نعرف السبب الفعلي.
+/// بالإضافة إلى ذلك:
+/// - Device ID ثابت لكل تثبيت للتطبيق.
+/// - Request ID مختلف لكل طلب.
+/// - الـBackend هو المسؤول عن حساب وحجز الـCredits.
+/// - التطبيق لا يقرر بنفسه هل الطلب مسموح أم لا.
 class AiRequestService {
   AiRequestService._();
 
@@ -32,14 +36,35 @@ class AiRequestService {
   // BACKEND
   // ============================================================
 
-  static const String base =
-      AppConfig.backendBaseUrl;
+  static const String base = AppConfig.backendBaseUrl;
 
   static const String chatEndpoint =
       AppConfig.aiChatEndpoint;
 
   static const String imageEndpoint =
       AppConfig.imageGenerationEndpoint;
+
+  static const String creditsEndpoint =
+      '$base/v1/credits';
+
+  // ============================================================
+  // CREDIT HEADERS
+  // ============================================================
+
+  /// يجب أن يطابق الاسم الموجود في backend/src/credits-router.js
+  static const String deviceIdHeader =
+      'X-Sa7bi-Device-Id';
+
+  /// يجب أن يطابق الاسم الموجود في backend/src/credits-router.js
+  static const String requestIdHeader =
+      'X-Sa7bi-Request-Id';
+
+  /// المفتاح المحلي الذي نحفظ تحته Device ID.
+  static const String _deviceIdStorageKey =
+      'sa7bi_ai_device_id';
+
+  /// يتم إنشاؤه مرة واحدة لكل تثبيت للتطبيق.
+  static Future<String>? _deviceIdFuture;
 
   // ============================================================
   // LIMITS
@@ -76,6 +101,94 @@ class AiRequestService {
   );
 
   // ============================================================
+  // DEVICE ID
+  // ============================================================
+
+  /// يرجع Device ID ثابتًا لهذا التثبيت من التطبيق.
+  ///
+  /// لا نستخدم Android hardware ID أو أي معلومة حساسة.
+  /// يتم إنشاء معرف عشوائي مرة واحدة وحفظه محليًا.
+  static Future<String> getDeviceId() async {
+    final existingFuture = _deviceIdFuture;
+
+    if (existingFuture != null) {
+      return existingFuture;
+    }
+
+    final future = _loadOrCreateDeviceId();
+
+    _deviceIdFuture = future;
+
+    try {
+      return await future;
+    } catch (_) {
+      // في حالة فشل SharedPreferences، نسمح بمحاولة جديدة
+      // بدل الاحتفاظ بـ Future فاشل.
+      _deviceIdFuture = null;
+      rethrow;
+    }
+  }
+
+  static Future<String> _loadOrCreateDeviceId() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    final existing =
+        prefs.getString(
+      _deviceIdStorageKey,
+    );
+
+    if (existing != null &&
+        existing.trim().isNotEmpty) {
+      return existing.trim();
+    }
+
+    final generated =
+        _generateId(
+      prefix: 'sa7bi_device',
+    );
+
+    await prefs.setString(
+      _deviceIdStorageKey,
+      generated,
+    );
+
+    return generated;
+  }
+
+  /// ينشئ معرفًا عشوائيًا بدون إضافة Package جديدة.
+  static String _generateId({
+    required String prefix,
+  }) {
+    final random =
+        Random.secure();
+
+    final timestamp =
+        DateTime.now()
+            .toUtc()
+            .microsecondsSinceEpoch
+            .toRadixString(16);
+
+    final randomPart =
+        List<String>.generate(
+      5,
+      (_) => random
+          .nextInt(0x1000000)
+          .toRadixString(16)
+          .padLeft(6, '0'),
+    ).join();
+
+    return '$prefix-$timestamp-$randomPart';
+  }
+
+  /// معرف جديد لكل طلب AI.
+  static String _newRequestId() {
+    return _generateId(
+      prefix: 'sa7bi_request',
+    );
+  }
+
+  // ============================================================
   // BACKEND CONNECTION / DIAGNOSTICS
   // ============================================================
 
@@ -83,7 +196,7 @@ class AiRequestService {
   ///
   /// هذه الدالة للتشخيص فقط.
   ///
-  /// لا يتم استدعاؤها كشرط لمنع طلبات Chat أو Image.
+  /// لا يتم استدعاؤها كشرط لمنع Chat أو Image.
   static Future<BackendConnectionResult>
       checkBackend() async {
     try {
@@ -142,15 +255,117 @@ class AiRequestService {
   }
 
   // ============================================================
+  // SERVER CREDITS
+  // ============================================================
+
+  /// قراءة الرصيد من الـBackend.
+  ///
+  /// مهم:
+  /// هذا ليس مصدر الرصيد المحلي.
+  /// المصدر الحقيقي هو Cloudflare Durable Object.
+  static Future<ServerCreditsResult>
+      getCredits() async {
+    final deviceId =
+        await getDeviceId();
+
+    try {
+      final response = await http
+          .get(
+            Uri.parse(creditsEndpoint),
+            headers: {
+              'Accept': 'application/json',
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+              deviceIdHeader: deviceId,
+            },
+          )
+          .timeout(connectionTimeout);
+
+      final data =
+          _decodeMap(response.body);
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        throw AiRequestException(
+          _serverError(
+            response.statusCode,
+            data,
+          ),
+          statusCode:
+              response.statusCode,
+        );
+      }
+
+      if (data == null) {
+        throw const AiRequestException(
+          'رد خدمة الرصيد غير مفهوم.',
+        );
+      }
+
+      if (data['ok'] != true) {
+        throw AiRequestException(
+          _errorFromData(
+            data,
+            fallback:
+                'تعذر قراءة رصيد صاحبي حاليًا.',
+          ),
+          statusCode:
+              response.statusCode,
+        );
+      }
+
+      final credits =
+          _extractCreditMap(data);
+
+      return ServerCreditsResult.fromMap(
+        credits,
+        deviceId: deviceId,
+      );
+    } on AiRequestException {
+      rethrow;
+    } on TimeoutException {
+      throw const AiRequestException(
+        'الاتصال بخدمة الرصيد استغرق وقتًا أطول من اللازم.',
+      );
+    } on http.ClientException catch (error) {
+      throw AiRequestException(
+        'تعذر الاتصال بخدمة الرصيد: ${error.message}',
+      );
+    } catch (error) {
+      throw AiRequestException(
+        _connectionError(error),
+      );
+    }
+  }
+
+  static Map<String, dynamic>
+      _extractCreditMap(
+    Map<String, dynamic> data,
+  ) {
+    final direct =
+        data['credits'];
+
+    if (direct is Map) {
+      return Map<String, dynamic>.from(
+        direct,
+      );
+    }
+
+    return data;
+  }
+
+  // ============================================================
   // TEXT CHAT
   // ============================================================
 
   /// إرسال رسالة نصية إلى صاحبي AI.
   ///
-  /// مهم:
-  /// لا يوجد checkBackend() هنا.
-  ///
-  /// يتم إرسال POST الحقيقي مباشرة إلى /v1/chat.
+  /// الـBackend هو الذي:
+  /// 1. يتأكد من هوية الجهاز.
+  /// 2. يحجز الـCredits.
+  /// 3. ينفذ Gemini.
+  /// 4. يستخدم Workers AI كـFallback عند الحاجة.
+  /// 5. يثبت خصم الرصيد بعد نجاح النتيجة.
   static Future<String> getResponse({
     required String prompt,
     String? serviceContext,
@@ -227,7 +442,6 @@ class AiRequestService {
       serviceContext: serviceContext,
     );
 
-    // إرسال الطلب الحقيقي مباشرة.
     final response =
         await _postWithRetry(
       chatEndpoint,
@@ -403,10 +617,6 @@ class AiRequestService {
       serviceContext: null,
     );
 
-    // لا يوجد checkBackend هنا.
-    //
-    // إذا كان هناك خطأ، نريد أن نعرف نتيجة POST
-    // الحقيقية من /v1/chat.
     final response =
         await _postWithRetry(
       chatEndpoint,
@@ -421,9 +631,10 @@ class AiRequestService {
   // IMAGE GENERATION
   // ============================================================
 
-  /// يطلب إنشاء صورة من الـWorker.
+  /// يطلب إنشاء أو تعديل صورة من الـWorker.
   ///
-  /// النتيجة تكون Data URL أو رابط صورة.
+  /// نوع العملية يتم تحديده في الـBackend:
+  /// image_generation أو image_edit.
   static Future<String>
       generateImage({
     required String prompt,
@@ -445,9 +656,6 @@ class AiRequestService {
       );
     }
 
-    // لا يوجد checkBackend هنا.
-    //
-    // يتم إرسال POST مباشرة إلى /v1/image.
     final body =
         <String, dynamic>{
       'prompt': cleanPrompt,
@@ -704,16 +912,28 @@ class AiRequestService {
     required Duration timeout,
   }) async {
     try {
+      final deviceId =
+          await getDeviceId();
+
+      final requestId =
+          _newRequestId();
+
       return await http
           .post(
             Uri.parse(endpoint),
-            headers: const {
+            headers: {
               'Content-Type':
+                  'application/json',
+              'Accept':
                   'application/json',
               'Cache-Control':
                   'no-cache',
               'Pragma':
                   'no-cache',
+              deviceIdHeader:
+                  deviceId,
+              requestIdHeader:
+                  requestId,
             },
             body:
                 jsonEncode(body),
@@ -878,6 +1098,28 @@ class AiRequestService {
       case 'IMAGE_GENERATION_FAILED':
         return 'تعذر إنشاء الصورة حاليًا.';
 
+      case 'DEVICE_ID_REQUIRED':
+        return 'تعذر التعرف على جهازك. اقفل التطبيق وافتحه مرة أخرى.';
+
+      case 'REQUEST_ID_REQUIRED':
+        return 'تعذر تجهيز الطلب. حاول مرة أخرى.';
+
+      case 'INSUFFICIENT_CREDITS':
+      case 'INSUFFICIENT_QUOTA':
+        return 'رصيد الذكاء الاصطناعي خلص. يمكنك الحصول على رصيد إضافي من الإعلانات لاحقًا.';
+
+      case 'CREDITS_REQUIRED':
+        return 'لا يوجد رصيد كافٍ لتنفيذ طلب الذكاء الاصطناعي.';
+
+      case 'CREDIT_RESERVATION_FAILED':
+        return 'تعذر حجز رصيد الطلب. حاول مرة أخرى.';
+
+      case 'CREDIT_COMMIT_FAILED':
+        return 'تم تنفيذ الطلب، لكن تعذر تحديث الرصيد بشكل صحيح.';
+
+      case 'SA7BI_CREDITS_BINDING_MISSING':
+        return 'خدمة الرصيد غير متاحة حاليًا.';
+
       default:
         if (error.isEmpty) {
           return 'حصل خطأ غير معروف.';
@@ -907,6 +1149,168 @@ class AiRequestService {
     }
 
     return 'تعذر الاتصال بخدمة صاحبي حاليًا: $error';
+  }
+}
+
+// ============================================================
+// SERVER CREDITS RESULT
+// ============================================================
+
+/// نتيجة قراءة الرصيد من السيرفر.
+///
+/// هذه الكلاس مجرد تمثيل للبيانات القادمة من الـBackend.
+/// لا يتم استخدامها كمصدر سلطة مستقل عن السيرفر.
+class ServerCreditsResult {
+  final String deviceId;
+
+  final int balance;
+
+  final int initialCredits;
+
+  final int rewardedAdCredits;
+
+  final int dailyRewardedAds;
+
+  final int dailyRewardedAdsLimit;
+
+  final int? textCost;
+
+  final int? imageAnalysisCost;
+
+  final int? videoAnalysisCost;
+
+  final int? imageGenerationCost;
+
+  final int? imageEditCost;
+
+  final Map<String, dynamic> raw;
+
+  const ServerCreditsResult({
+    required this.deviceId,
+    required this.balance,
+    required this.initialCredits,
+    required this.rewardedAdCredits,
+    required this.dailyRewardedAds,
+    required this.dailyRewardedAdsLimit,
+    required this.textCost,
+    required this.imageAnalysisCost,
+    required this.videoAnalysisCost,
+    required this.imageGenerationCost,
+    required this.imageEditCost,
+    required this.raw,
+  });
+
+  factory ServerCreditsResult.fromMap(
+    Map<String, dynamic> map, {
+    required String deviceId,
+  }) {
+    final costs =
+        map['costs'] is Map
+            ? Map<String, dynamic>.from(
+                map['costs'] as Map,
+              )
+            : <String, dynamic>{};
+
+    final rewarded =
+        map['rewardedAds'] is Map
+            ? Map<String, dynamic>.from(
+                map['rewardedAds'] as Map,
+              )
+            : <String, dynamic>{};
+
+    return ServerCreditsResult(
+      deviceId: deviceId,
+      balance:
+          _readInt(
+            map['balance'] ??
+                map['credits'] ??
+                map['remaining'],
+          ),
+      initialCredits:
+          _readInt(
+            map['initialCredits'],
+          ),
+      rewardedAdCredits:
+          _readInt(
+            map['rewardedAdCredits'] ??
+                map['reward'],
+          ),
+      dailyRewardedAds:
+          _readInt(
+            rewarded['used'] ??
+                map['dailyRewardedAds'],
+          ),
+      dailyRewardedAdsLimit:
+          _readInt(
+            rewarded['limit'] ??
+                map['dailyRewardedAdsLimit'],
+          ),
+      textCost:
+          _readNullableInt(
+            costs['text'] ??
+                map['textCost'],
+          ),
+      imageAnalysisCost:
+          _readNullableInt(
+            costs['image_analysis'] ??
+                map['imageAnalysisCost'],
+          ),
+      videoAnalysisCost:
+          _readNullableInt(
+            costs['video_analysis'] ??
+                map['videoAnalysisCost'],
+          ),
+      imageGenerationCost:
+          _readNullableInt(
+            costs['image_generation'] ??
+                map['imageGenerationCost'],
+          ),
+      imageEditCost:
+          _readNullableInt(
+            costs['image_edit'] ??
+                map['imageEditCost'],
+          ),
+      raw: Map<String, dynamic>.from(
+        map,
+      ),
+    );
+  }
+
+  static int _readInt(
+    dynamic value,
+  ) {
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
+  }
+
+  static int? _readNullableInt(
+    dynamic value,
+  ) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+      value.toString(),
+    );
   }
 }
 
