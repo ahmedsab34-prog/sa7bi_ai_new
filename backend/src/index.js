@@ -1,6 +1,7 @@
 // backend/src/index.js
 // Sa7bi AI Backend
-// Modular Integration - Version 6.2.0
+// Final Modular Integration
+// Version 6.3.0
 
 /* =========================================================
    CORE / UTILS
@@ -126,8 +127,7 @@ import {
    CONSTANTS
    ========================================================= */
 
-const BACKEND_VERSION =
-  "6.2.0";
+const BACKEND_VERSION = "6.3.0";
 
 const DOWNLOAD_URL =
   "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk";
@@ -172,15 +172,12 @@ ${serviceContext || "مساعد عام"}
    CREDIT ERROR HELPER
    ========================================================= */
 
-function creditErrorResponse(
-  result,
-) {
+function creditErrorResponse(result) {
   if (!result) {
     return json(
       {
         ok: false,
-        error:
-          "CREDIT_SYSTEM_ERROR",
+        error: "CREDIT_SYSTEM_ERROR",
       },
       500,
     );
@@ -188,9 +185,7 @@ function creditErrorResponse(
 
   let status = 500;
 
-  switch (
-    result.error
-  ) {
+  switch (result.error) {
     case "DEVICE_ID_REQUIRED":
       status = 400;
       break;
@@ -246,9 +241,7 @@ function creditErrorResponse(
         result.available,
 
       credits:
-        getSafeCreditSummary(
-          result,
-        ),
+        getSafeCreditSummary(result),
 
       requestId:
         result.requestId ||
@@ -271,63 +264,39 @@ function creditErrorResponse(
    CHAT
    ========================================================= */
 
-async function handleChat(
-  request,
-  env,
-) {
+async function handleChat(request, env) {
   const body =
-    await readJsonBody(
-      request,
-    );
+    await readJsonBody(request);
 
   const messages =
-    cleanMessages(
-      body.messages,
-    );
+    cleanMessages(body.messages);
 
   const imageDataUrls = [];
 
   /* ---------- Single image ---------- */
 
   const singleImage =
-    typeof body.imageDataUrl ===
-    "string"
+    typeof body.imageDataUrl === "string"
       ? body.imageDataUrl.trim()
       : "";
 
   if (singleImage) {
-    imageDataUrls.push(
-      singleImage,
-    );
+    imageDataUrls.push(singleImage);
   }
 
   /* ---------- Multiple images ---------- */
 
-  if (
-    Array.isArray(
-      body.imageDataUrls,
-    )
-  ) {
-    for (
-      const item of
-        body.imageDataUrls
-    ) {
+  if (Array.isArray(body.imageDataUrls)) {
+    for (const item of body.imageDataUrls) {
       if (
         typeof item === "string" &&
         item.trim() &&
-        !imageDataUrls.includes(
-          item.trim(),
-        )
+        !imageDataUrls.includes(item.trim())
       ) {
-        imageDataUrls.push(
-          item.trim(),
-        );
+        imageDataUrls.push(item.trim());
       }
 
-      if (
-        imageDataUrls.length >=
-        MAX_IMAGES
-      ) {
+      if (imageDataUrls.length >= MAX_IMAGES) {
         break;
       }
     }
@@ -335,20 +304,12 @@ async function handleChat(
 
   /* ---------- Validate images ---------- */
 
-  for (
-    const image of
-      imageDataUrls
-  ) {
-    if (
-      !isValidImageDataUrl(
-        image,
-      )
-    ) {
+  for (const image of imageDataUrls) {
+    if (!isValidImageDataUrl(image)) {
       return json(
         {
           ok: false,
-          error:
-            "INVALID_IMAGE",
+          error: "INVALID_IMAGE",
         },
         400,
       );
@@ -364,8 +325,7 @@ async function handleChat(
     return json(
       {
         ok: false,
-        error:
-          "EMPTY_MESSAGE",
+        error: "EMPTY_MESSAGE",
       },
       400,
     );
@@ -374,16 +334,14 @@ async function handleChat(
   /* ---------- Service context ---------- */
 
   const serviceTitle =
-    typeof body.serviceTitle ===
-    "string"
+    typeof body.serviceTitle === "string"
       ? body.serviceTitle
           .trim()
           .substring(0, 200)
       : "صاحبي AI";
 
   const serviceContext =
-    typeof body.serviceContext ===
-    "string"
+    typeof body.serviceContext === "string"
       ? body.serviceContext
           .trim()
           .substring(0, 1500)
@@ -392,9 +350,8 @@ async function handleChat(
   /* ---------- Vision prompt ---------- */
 
   const imagePrompt =
-    typeof body.imagePrompt ===
-        "string" &&
-      body.imagePrompt.trim()
+    typeof body.imagePrompt === "string" &&
+    body.imagePrompt.trim()
       ? body.imagePrompt
           .trim()
           .substring(0, 4000)
@@ -455,9 +412,7 @@ async function handleChat(
       },
     );
 
-  if (
-    !creditReservation.ok
-  ) {
+  if (!creditReservation.ok) {
     return creditErrorResponse(
       creditReservation,
     );
@@ -485,20 +440,17 @@ async function handleChat(
 
   try {
     result =
-      await runTextOrVisionWithFallback(
-        {
-          request,
-          env,
-          messages,
-          instructions,
-          imageDataUrls,
-          imagePrompt,
-          maxOutputTokens:
-            Number(
-              body.maxOutputTokens,
-            ) || 1200,
-        },
-      );
+      await runTextOrVisionWithFallback({
+        request,
+        env,
+        messages,
+        instructions,
+        imageDataUrls,
+        imagePrompt,
+        maxOutputTokens:
+          Number(body.maxOutputTokens) ||
+          1200,
+      });
   } catch (error) {
     await releaseAIRequestCredits(
       request,
@@ -519,8 +471,7 @@ async function handleChat(
 
   if (
     !result ||
-    typeof result.answer !==
-      "string" ||
+    typeof result.answer !== "string" ||
     !result.answer.trim()
   ) {
     await releaseAIRequestCredits(
@@ -536,9 +487,7 @@ async function handleChat(
     return json(
       {
         ok: false,
-
-        error:
-          "EMPTY_AI_RESPONSE",
+        error: "EMPTY_AI_RESPONSE",
       },
       502,
     );
@@ -554,15 +503,12 @@ async function handleChat(
       env,
       {
         body,
-
         requestId:
           reservationRequestId,
       },
     );
 
-  if (
-    !creditCommit.ok
-  ) {
+  if (!creditCommit.ok) {
     return json(
       {
         ok: false,
@@ -595,13 +541,10 @@ async function handleChat(
       result.provider || null,
 
     fallback:
-      Boolean(
-        result.fallback,
-      ),
+      Boolean(result.fallback),
 
     fallbackReason:
-      result.fallbackReason ||
-      null,
+      result.fallbackReason || null,
 
     model:
       result.model || null,
@@ -635,13 +578,10 @@ async function handleImageGeneration(
   env,
 ) {
   const body =
-    await readJsonBody(
-      request,
-    );
+    await readJsonBody(request);
 
   const prompt =
-    typeof body.prompt ===
-    "string"
+    typeof body.prompt === "string"
       ? body.prompt.trim()
       : "";
 
@@ -649,8 +589,7 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
-        error:
-          "EMPTY_PROMPT",
+        error: "EMPTY_PROMPT",
       },
       400,
     );
@@ -661,8 +600,7 @@ async function handleImageGeneration(
   /* ---------- Single image ---------- */
 
   if (
-    typeof body.imageDataUrl ===
-      "string" &&
+    typeof body.imageDataUrl === "string" &&
     body.imageDataUrl.trim()
   ) {
     imageDataUrls.push(
@@ -672,31 +610,17 @@ async function handleImageGeneration(
 
   /* ---------- Multiple images ---------- */
 
-  if (
-    Array.isArray(
-      body.imageDataUrls,
-    )
-  ) {
-    for (
-      const item of
-        body.imageDataUrls
-    ) {
+  if (Array.isArray(body.imageDataUrls)) {
+    for (const item of body.imageDataUrls) {
       if (
         typeof item === "string" &&
         item.trim() &&
-        !imageDataUrls.includes(
-          item.trim(),
-        )
+        !imageDataUrls.includes(item.trim())
       ) {
-        imageDataUrls.push(
-          item.trim(),
-        );
+        imageDataUrls.push(item.trim());
       }
 
-      if (
-        imageDataUrls.length >=
-        MAX_IMAGES
-      ) {
+      if (imageDataUrls.length >= MAX_IMAGES) {
         break;
       }
     }
@@ -704,20 +628,12 @@ async function handleImageGeneration(
 
   /* ---------- Validate images ---------- */
 
-  for (
-    const image of
-      imageDataUrls
-  ) {
-    if (
-      !isValidImageDataUrl(
-        image,
-      )
-    ) {
+  for (const image of imageDataUrls) {
+    if (!isValidImageDataUrl(image)) {
       return json(
         {
           ok: false,
-          error:
-            "INVALID_IMAGE",
+          error: "INVALID_IMAGE",
         },
         400,
       );
@@ -725,16 +641,14 @@ async function handleImageGeneration(
   }
 
   const aspectRatio =
-    typeof body.aspectRatio ===
-        "string" &&
-      body.aspectRatio.trim()
+    typeof body.aspectRatio === "string" &&
+    body.aspectRatio.trim()
       ? body.aspectRatio.trim()
       : "1:1";
 
   const imageSize =
-    typeof body.imageSize ===
-        "string" &&
-      body.imageSize.trim()
+    typeof body.imageSize === "string" &&
+    body.imageSize.trim()
       ? body.imageSize.trim()
       : "1K";
 
@@ -792,9 +706,7 @@ async function handleImageGeneration(
       },
     );
 
-  if (
-    !creditReservation.ok
-  ) {
+  if (!creditReservation.ok) {
     return creditErrorResponse(
       creditReservation,
     );
@@ -812,24 +724,22 @@ async function handleImageGeneration(
 
   try {
     result =
-      await runImageWithFallback(
-        {
-          request,
-          env,
+      await runImageWithFallback({
+        request,
+        env,
 
-          prompt:
-            prompt.substring(
-              0,
-              6000,
-            ),
+        prompt:
+          prompt.substring(
+            0,
+            6000,
+          ),
 
-          imageDataUrls,
+        imageDataUrls,
 
-          aspectRatio,
+        aspectRatio,
 
-          imageSize,
-        },
-      );
+        imageSize,
+      });
   } catch (error) {
     await releaseAIRequestCredits(
       request,
@@ -867,7 +777,6 @@ async function handleImageGeneration(
     return json(
       {
         ok: false,
-
         error:
           "EMPTY_IMAGE_RESPONSE",
       },
@@ -891,9 +800,7 @@ async function handleImageGeneration(
       },
     );
 
-  if (
-    !creditCommit.ok
-  ) {
+  if (!creditCommit.ok) {
     return json(
       {
         ok: false,
@@ -929,9 +836,7 @@ async function handleImageGeneration(
       null,
 
     fallback:
-      Boolean(
-        result.fallback,
-      ),
+      Boolean(result.fallback),
 
     fallbackReason:
       result.fallbackReason ||
@@ -986,14 +891,12 @@ async function handleCredits(
       );
     }
 
-    return json(
-      {
-        ...result,
+    return json({
+      ...result,
 
-        backendVersion:
-          BACKEND_VERSION,
-      },
-    );
+      backendVersion:
+        BACKEND_VERSION,
+    });
   } catch (error) {
     const message =
       error?.message ||
@@ -1006,7 +909,6 @@ async function handleCredits(
       return json(
         {
           ok: false,
-
           error:
             "DEVICE_ID_REQUIRED",
         },
@@ -1021,9 +923,7 @@ async function handleCredits(
       return json(
         {
           ok: false,
-
-          error:
-            message,
+          error: message,
         },
         500,
       );
@@ -1032,9 +932,7 @@ async function handleCredits(
     return json(
       {
         ok: false,
-
-        error:
-          message,
+        error: message,
       },
       500,
     );
@@ -1045,9 +943,7 @@ async function handleCredits(
    ROOT
    ========================================================= */
 
-function handleRoot(
-  env,
-) {
+function handleRoot(env) {
   return json({
     ok: true,
 
@@ -1070,14 +966,11 @@ function handleRoot(
 
       multiImageVision: true,
 
-      videoFrameAnalysis:
-        true,
+      videoFrameAnalysis: true,
 
-      imageGeneration:
-        true,
+      imageGeneration: true,
 
-      imageEditing:
-        true,
+      imageEditing: true,
 
       news: true,
 
@@ -1099,8 +992,7 @@ function handleRoot(
 
       credits: true,
 
-      rewardedAds:
-        true,
+      rewardedAds: true,
     },
 
     ai: {
@@ -1129,9 +1021,7 @@ function handleRoot(
     },
 
     rewardedAds:
-      getAdMobSSVStatus(
-        env,
-      ),
+      getAdMobSSVStatus(env),
 
     endpoints: {
       chat:
@@ -1276,9 +1166,7 @@ export default {
           "GET" &&
         path === "/"
       ) {
-        return handleRoot(
-          env,
-        );
+        return handleRoot(env);
       }
 
       /* =====================================================
@@ -1290,9 +1178,7 @@ export default {
           "GET" &&
         path === "/health"
       ) {
-        return handleHealth(
-          env,
-        );
+        return handleHealth(env);
       }
 
       /* =====================================================
@@ -1302,12 +1188,9 @@ export default {
       if (
         request.method ===
           "GET" &&
-        path ===
-          "/v1/diagnostics"
+        path === "/v1/diagnostics"
       ) {
-        return handleDiagnostics(
-          env,
-        );
+        return handleDiagnostics(env);
       }
 
       /* =====================================================
@@ -1317,12 +1200,9 @@ export default {
       if (
         request.method ===
           "GET" &&
-        path ===
-          "/v1/service-status"
+        path === "/v1/service-status"
       ) {
-        return handleServiceStatus(
-          env,
-        );
+        return handleServiceStatus(env);
       }
 
       /* =====================================================
@@ -1332,8 +1212,7 @@ export default {
       if (
         request.method ===
           "GET" &&
-        path ===
-          "/v1/credits"
+        path === "/v1/credits"
       ) {
         return handleCredits(
           request,
@@ -1343,22 +1222,24 @@ export default {
 
       /* =====================================================
          ADMOB REWARDED ADS SSV
-         
-         IMPORTANT:
-         This endpoint is called by AdMob, NOT Flutter.
-         
-         The module verifies:
+
+         AdMob calls this endpoint directly.
+
+         Flutter NEVER receives permission to grant
+         credits locally.
+
+         Verification is handled inside admob-ssv.js:
          - Google signature
          - key_id
          - timestamp
          - reward amount
          - reward item
-         - ad unit when configured
+         - configured ad unit
          - transaction_id
-         - custom_data/device ID
-         
-         Only after successful verification are credits
-         sent to the Durable Object.
+         - custom_data / device ID
+
+         Only a verified callback can reach the
+         Durable Object reward ledger.
          ===================================================== */
 
       if (
@@ -1390,8 +1271,7 @@ export default {
       if (
         request.method ===
           "GET" &&
-        path ===
-          "/download/health"
+        path === "/download/health"
       ) {
         return handleDownloadHealth();
       }
@@ -1500,7 +1380,7 @@ export default {
       }
 
       /* =====================================================
-         RELIGIOUS CONTENT AGGREGATOR
+         RELIGIOUS CONTENT
          ===================================================== */
 
       if (
@@ -1524,7 +1404,7 @@ export default {
       }
 
       /* =====================================================
-         RADIO - GENERAL SEARCH
+         RADIO
          ===================================================== */
 
       if (
@@ -1538,10 +1418,6 @@ export default {
         );
       }
 
-      /* =====================================================
-         RADIO - COUNTRIES
-         ===================================================== */
-
       if (
         request.method ===
           "GET" &&
@@ -1550,10 +1426,6 @@ export default {
       ) {
         return handleRadioCountries();
       }
-
-      /* =====================================================
-         RADIO - COUNTRY
-         ===================================================== */
 
       if (
         request.method ===
@@ -1584,7 +1456,7 @@ export default {
       }
 
       /* =====================================================
-         RADIO - LEGACY STATIONS
+         RADIO LEGACY STATIONS
          ===================================================== */
 
       if (
@@ -1755,7 +1627,7 @@ export default {
       }
 
       /* =====================================================
-         CREDIT CONFIG ERRORS
+         CREDIT ERRORS
          ===================================================== */
 
       if (
