@@ -19,16 +19,14 @@ import '../config/app_config.dart';
 ///      ↓
 /// Gemini
 ///      ↓
-/// Workers AI كـ Fallback
+/// Workers AI كـFallback
 ///
 /// مهم جدًا:
-/// لا يوجد أي API Key داخل التطبيق.
-///
-/// بالإضافة إلى ذلك:
-/// - Device ID ثابت لكل تثبيت للتطبيق.
+/// - لا يوجد أي API Key داخل التطبيق.
+/// - Device ID ثابت لكل تثبيت.
 /// - Request ID مختلف لكل طلب.
-/// - الـBackend هو المسؤول عن حساب وحجز الـCredits.
-/// - التطبيق لا يقرر بنفسه هل الطلب مسموح أم لا.
+/// - الـBackend هو مصدر السلطة للـCredits.
+/// - التطبيق لا يقرر وحده السماح النهائي بالطلب.
 class AiRequestService {
   AiRequestService._();
 
@@ -36,7 +34,8 @@ class AiRequestService {
   // BACKEND
   // ============================================================
 
-  static const String base = AppConfig.backendBaseUrl;
+  static const String base =
+      AppConfig.backendBaseUrl;
 
   static const String chatEndpoint =
       AppConfig.aiChatEndpoint;
@@ -51,19 +50,15 @@ class AiRequestService {
   // CREDIT HEADERS
   // ============================================================
 
-  /// يجب أن يطابق الاسم الموجود في backend/src/credits-router.js
   static const String deviceIdHeader =
       'X-Sa7bi-Device-Id';
 
-  /// يجب أن يطابق الاسم الموجود في backend/src/credits-router.js
   static const String requestIdHeader =
       'X-Sa7bi-Request-Id';
 
-  /// المفتاح المحلي الذي نحفظ تحته Device ID.
   static const String _deviceIdStorageKey =
       'sa7bi_ai_device_id';
 
-  /// يتم إنشاؤه مرة واحدة لكل تثبيت للتطبيق.
   static Future<String>? _deviceIdFuture;
 
   // ============================================================
@@ -73,11 +68,10 @@ class AiRequestService {
   static const int maxHistory =
       AppConfig.maximumContextMessages;
 
-  static const int maxAttempts =
-      AppConfig.maximumNetworkAttempts;
-
   static const int maxImageBytes =
-      AppConfig.maximumImageSizeMb * 1024 * 1024;
+      AppConfig.maximumImageSizeMb *
+          1024 *
+          1024;
 
   static const int maxVideoFrames =
       AppConfig.maximumVideoFrames;
@@ -104,34 +98,35 @@ class AiRequestService {
   // DEVICE ID
   // ============================================================
 
-  /// يرجع Device ID ثابتًا لهذا التثبيت من التطبيق.
+  /// يرجع Device ID ثابتًا لهذا التثبيت.
   ///
   /// لا نستخدم Android hardware ID أو أي معلومة حساسة.
-  /// يتم إنشاء معرف عشوائي مرة واحدة وحفظه محليًا.
   static Future<String> getDeviceId() async {
-    final existingFuture = _deviceIdFuture;
+    final existingFuture =
+        _deviceIdFuture;
 
     if (existingFuture != null) {
       return existingFuture;
     }
 
-    final future = _loadOrCreateDeviceId();
+    final future =
+        _loadOrCreateDeviceId();
 
     _deviceIdFuture = future;
 
     try {
       return await future;
     } catch (_) {
-      // في حالة فشل SharedPreferences، نسمح بمحاولة جديدة
-      // بدل الاحتفاظ بـ Future فاشل.
       _deviceIdFuture = null;
       rethrow;
     }
   }
 
-  static Future<String> _loadOrCreateDeviceId() async {
+  static Future<String>
+      _loadOrCreateDeviceId() async {
     final prefs =
-        await SharedPreferences.getInstance();
+        await SharedPreferences
+            .getInstance();
 
     final existing =
         prefs.getString(
@@ -156,7 +151,7 @@ class AiRequestService {
     return generated;
   }
 
-  /// ينشئ معرفًا عشوائيًا بدون إضافة Package جديدة.
+  /// ينشئ معرفًا عشوائيًا بدون Package إضافية.
   static String _generateId({
     required String prefix,
   }) {
@@ -181,7 +176,7 @@ class AiRequestService {
     return '$prefix-$timestamp-$randomPart';
   }
 
-  /// معرف جديد لكل طلب AI.
+  /// Request ID جديد لكل طلب AI.
   static String _newRequestId() {
     return _generateId(
       prefix: 'sa7bi_request',
@@ -189,66 +184,84 @@ class AiRequestService {
   }
 
   // ============================================================
-  // BACKEND CONNECTION / DIAGNOSTICS
+  // BACKEND CONNECTION
   // ============================================================
 
   /// فحص اتصال التطبيق بالـWorker.
   ///
-  /// هذه الدالة للتشخيص فقط.
-  ///
-  /// لا يتم استدعاؤها كشرط لمنع Chat أو Image.
+  /// للتشخيص فقط ولا يمنع Chat أو Image.
   static Future<BackendConnectionResult>
       checkBackend() async {
     try {
-      final response = await http
-          .get(
-            Uri.parse(base),
-            headers: const {
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache',
-            },
-          )
-          .timeout(connectionTimeout);
+      final response =
+          await http
+              .get(
+                Uri.parse(base),
+                headers: const {
+                  'Cache-Control':
+                      'no-cache',
+                  'Pragma':
+                      'no-cache',
+                },
+              )
+              .timeout(
+                connectionTimeout,
+              );
 
       final data =
-          _decodeMap(response.body);
+          _decodeMap(
+        response.body,
+      );
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
-        return BackendConnectionResult.failure(
-          'الخادم رجع حالة HTTP ${response.statusCode}.',
-          statusCode: response.statusCode,
+        return BackendConnectionResult
+            .failure(
+          'الخادم رجع حالة HTTP '
+          '${response.statusCode}.',
+          statusCode:
+              response.statusCode,
         );
       }
 
       if (data == null) {
-        return const BackendConnectionResult.failure(
+        return const BackendConnectionResult
+            .failure(
           'الخادم رجع ردًا غير مفهوم.',
         );
       }
 
       if (data['ok'] != true) {
-        return BackendConnectionResult.failure(
+        return BackendConnectionResult
+            .failure(
           data['error']?.toString() ??
               'الخادم غير جاهز حاليًا.',
-          statusCode: response.statusCode,
+          statusCode:
+              response.statusCode,
         );
       }
 
-      return BackendConnectionResult.success(
+      return BackendConnectionResult
+          .success(
         version:
-            data['backendVersion']?.toString(),
+            data['backendVersion']
+                ?.toString(),
       );
     } on TimeoutException {
-      return const BackendConnectionResult.failure(
+      return const BackendConnectionResult
+          .failure(
         'الاتصال بخادم صاحبي استغرق وقتًا أطول من اللازم.',
       );
-    } on http.ClientException catch (error) {
-      return BackendConnectionResult.failure(
-        'تعذر الاتصال بخادم صاحبي: ${error.message}',
+    } on http.ClientException catch (
+        error) {
+      return BackendConnectionResult
+          .failure(
+        'تعذر الاتصال بخادم صاحبي: '
+        '${error.message}',
       );
     } catch (error) {
-      return BackendConnectionResult.failure(
+      return BackendConnectionResult
+          .failure(
         _connectionError(error),
       );
     }
@@ -258,31 +271,38 @@ class AiRequestService {
   // SERVER CREDITS
   // ============================================================
 
-  /// قراءة الرصيد من الـBackend.
-  ///
-  /// مهم:
-  /// هذا ليس مصدر الرصيد المحلي.
-  /// المصدر الحقيقي هو Cloudflare Durable Object.
+  /// قراءة الرصيد الحقيقي من الـBackend.
   static Future<ServerCreditsResult>
       getCredits() async {
     final deviceId =
         await getDeviceId();
 
     try {
-      final response = await http
-          .get(
-            Uri.parse(creditsEndpoint),
-            headers: {
-              'Accept': 'application/json',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache',
-              deviceIdHeader: deviceId,
-            },
-          )
-          .timeout(connectionTimeout);
+      final response =
+          await http
+              .get(
+                Uri.parse(
+                  creditsEndpoint,
+                ),
+                headers: {
+                  'Accept':
+                      'application/json',
+                  'Cache-Control':
+                      'no-cache',
+                  'Pragma':
+                      'no-cache',
+                  deviceIdHeader:
+                      deviceId,
+                },
+              )
+              .timeout(
+                connectionTimeout,
+              );
 
       final data =
-          _decodeMap(response.body);
+          _decodeMap(
+        response.body,
+      );
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
@@ -317,9 +337,11 @@ class AiRequestService {
       final credits =
           _extractCreditMap(data);
 
-      return ServerCreditsResult.fromMap(
+      return ServerCreditsResult
+          .fromMap(
         credits,
-        deviceId: deviceId,
+        deviceId:
+            deviceId,
       );
     } on AiRequestException {
       rethrow;
@@ -327,9 +349,11 @@ class AiRequestService {
       throw const AiRequestException(
         'الاتصال بخدمة الرصيد استغرق وقتًا أطول من اللازم.',
       );
-    } on http.ClientException catch (error) {
+    } on http.ClientException catch (
+        error) {
       throw AiRequestException(
-        'تعذر الاتصال بخدمة الرصيد: ${error.message}',
+        'تعذر الاتصال بخدمة الرصيد: '
+        '${error.message}',
       );
     } catch (error) {
       throw AiRequestException(
@@ -358,20 +382,12 @@ class AiRequestService {
   // TEXT CHAT
   // ============================================================
 
-  /// إرسال رسالة نصية إلى صاحبي AI.
-  ///
-  /// الـBackend هو الذي:
-  /// 1. يتأكد من هوية الجهاز.
-  /// 2. يحجز الـCredits.
-  /// 3. ينفذ Gemini.
-  /// 4. يستخدم Workers AI كـFallback عند الحاجة.
-  /// 5. يثبت خصم الرصيد بعد نجاح النتيجة.
   static Future<String> getResponse({
     required String prompt,
     String? serviceContext,
     String? serviceTitle,
-    List<Map<String, String>> history =
-        const [],
+    List<Map<String, String>>
+        history = const [],
   }) async {
     final text =
         prompt.trim();
@@ -381,38 +397,47 @@ class AiRequestService {
     }
 
     if (text.length >
-        AppConfig.maximumMessageCharacters) {
+        AppConfig
+            .maximumMessageCharacters) {
       throw const AiRequestException(
         'الرسالة طويلة جدًا. حاول تقسيمها إلى أكثر من رسالة.',
       );
     }
 
-    final validHistory = history
-        .where(
-          (item) =>
-              (item['role'] == 'user' ||
-                  item['role'] == 'assistant') &&
-              (item['content'] ?? '')
-                  .trim()
-                  .isNotEmpty,
-        )
-        .toList();
+    final validHistory =
+        history
+            .where(
+              (item) =>
+                  (item['role'] ==
+                          'user' ||
+                      item['role'] ==
+                          'assistant') &&
+                  (item['content'] ??
+                          '')
+                      .trim()
+                      .isNotEmpty,
+            )
+            .toList();
 
     final start =
-        validHistory.length > maxHistory
-            ? validHistory.length - maxHistory
+        validHistory.length >
+                maxHistory
+            ? validHistory.length -
+                maxHistory
             : 0;
 
     final messages =
         <Map<String, String>>[];
 
     for (final item
-        in validHistory.sublist(start)) {
+        in validHistory
+            .sublist(start)) {
       final role =
           item['role'];
 
       final content =
-          item['content']?.trim();
+          item['content']
+              ?.trim();
 
       if (role == null ||
           content == null ||
@@ -438,25 +463,31 @@ class AiRequestService {
 
     _addServiceData(
       body,
-      serviceTitle: serviceTitle,
-      serviceContext: serviceContext,
+      serviceTitle:
+          serviceTitle,
+      serviceContext:
+          serviceContext,
     );
 
     final response =
-        await _postWithRetry(
+        await _post(
       chatEndpoint,
       body: body,
-      timeout: chatTimeout,
+      timeout:
+          chatTimeout,
     );
 
-    return _readAnswer(response);
+    return _readAnswer(
+      response,
+    );
   }
 
   // ============================================================
   // IMAGE - XFILE
   // ============================================================
 
-  static Future<String> analyzeImage({
+  static Future<String>
+      analyzeImage({
     required XFile file,
     String prompt =
         'حلل الصورة المرسلة بدقة وباختصار، '
@@ -473,7 +504,8 @@ class AiRequestService {
       );
     }
 
-    if (bytes.length > maxImageBytes) {
+    if (bytes.length >
+        maxImageBytes) {
       throw const AiRequestException(
         'الصورة كبيرة جدًا. ابعت صورة أصغر من 5 ميجابايت.',
       );
@@ -481,9 +513,12 @@ class AiRequestService {
 
     return analyzeImageBytes(
       bytes,
-      prompt: prompt,
-      serviceContext: serviceContext,
-      serviceTitle: serviceTitle,
+      prompt:
+          prompt,
+      serviceContext:
+          serviceContext,
+      serviceTitle:
+          serviceTitle,
     );
   }
 
@@ -491,7 +526,8 @@ class AiRequestService {
   // IMAGE - BYTES
   // ============================================================
 
-  static Future<String> analyzeImageBytes(
+  static Future<String>
+      analyzeImageBytes(
     Uint8List bytes, {
     String prompt =
         'حلل الصورة المرسلة بدقة وباختصار.',
@@ -504,17 +540,23 @@ class AiRequestService {
       );
     }
 
-    if (bytes.length > maxImageBytes) {
+    if (bytes.length >
+        maxImageBytes) {
       throw const AiRequestException(
         'الصورة كبيرة جدًا.',
       );
     }
 
     return analyzeImages(
-      <Uint8List>[bytes],
-      prompt: prompt,
-      serviceContext: serviceContext,
-      serviceTitle: serviceTitle,
+      <Uint8List>[
+        bytes,
+      ],
+      prompt:
+          prompt,
+      serviceContext:
+          serviceContext,
+      serviceTitle:
+          serviceTitle,
     );
   }
 
@@ -522,7 +564,8 @@ class AiRequestService {
   // MULTI IMAGE / VIDEO FRAMES
   // ============================================================
 
-  static Future<String> analyzeImages(
+  static Future<String>
+      analyzeImages(
     List<Uint8List> images, {
     String prompt =
         'حلل الصور المرفقة معًا باعتبارها لقطات '
@@ -539,12 +582,16 @@ class AiRequestService {
       );
     }
 
-    final selected = images
-        .where(
-          (image) => image.isNotEmpty,
-        )
-        .take(maxVideoFrames)
-        .toList();
+    final selected =
+        images
+            .where(
+              (image) =>
+                  image.isNotEmpty,
+            )
+            .take(
+              maxVideoFrames,
+            )
+            .toList();
 
     if (selected.isEmpty) {
       throw const AiRequestException(
@@ -554,14 +601,15 @@ class AiRequestService {
 
     var totalBytes = 0;
 
-    for (final image in selected) {
-      totalBytes += image.length;
+    for (final image
+        in selected) {
+      totalBytes +=
+          image.length;
 
       if (totalBytes >
           maxVideoTotalBytes) {
         throw const AiRequestException(
-          'حجم لقطات الفيديو كبير جدًا. '
-          'حاول إرسال فيديو أقصر أو بجودة أقل.',
+          'حجم لقطات الفيديو كبير جدًا. حاول إرسال فيديو أقصر أو بجودة أقل.',
         );
       }
     }
@@ -569,7 +617,8 @@ class AiRequestService {
     final imageDataUrls =
         <String>[];
 
-    for (final image in selected) {
+    for (final image
+        in selected) {
       imageDataUrls.add(
         'data:image/jpeg;base64,'
         '${base64Encode(image)}',
@@ -590,8 +639,11 @@ class AiRequestService {
           'حلل الصور المرفقة بدقة.';
     }
 
-    if (serviceContext != null &&
-        serviceContext.trim().isNotEmpty) {
+    if (serviceContext !=
+            null &&
+        serviceContext
+            .trim()
+            .isNotEmpty) {
       finalPrompt =
           'سياق الخدمة:\n'
           '${serviceContext.trim()}\n\n'
@@ -604,7 +656,8 @@ class AiRequestService {
       'messages': [
         {
           'role': 'user',
-          'content': finalPrompt,
+          'content':
+              finalPrompt,
         },
       ],
       'imageDataUrls':
@@ -613,33 +666,44 @@ class AiRequestService {
 
     _addServiceData(
       body,
-      serviceTitle: serviceTitle,
-      serviceContext: null,
+      serviceTitle:
+          serviceTitle,
+      serviceContext:
+          null,
     );
 
     final response =
-        await _postWithRetry(
+        await _post(
       chatEndpoint,
       body: body,
-      timeout: imageTimeout,
+      timeout:
+          imageTimeout,
     );
 
-    return _readAnswer(response);
+    return _readAnswer(
+      response,
+    );
   }
 
   // ============================================================
-  // IMAGE GENERATION
+  // IMAGE GENERATION / EDITING
   // ============================================================
 
-  /// يطلب إنشاء أو تعديل صورة من الـWorker.
+  /// إنشاء صورة أو تعديل صورة.
   ///
-  /// نوع العملية يتم تحديده في الـBackend:
+  /// نوع العملية يحدده الـBackend:
   /// image_generation أو image_edit.
   static Future<String>
       generateImage({
     required String prompt,
     String? serviceContext,
     String? serviceTitle,
+    List<Uint8List> images =
+        const [],
+    String aspectRatio =
+        '1:1',
+    String imageSize =
+        '1K',
   }) async {
     final cleanPrompt =
         prompt.trim();
@@ -650,7 +714,8 @@ class AiRequestService {
       );
     }
 
-    if (cleanPrompt.length > 6000) {
+    if (cleanPrompt.length >
+        6000) {
       throw const AiRequestException(
         'وصف الصورة طويل جدًا.',
       );
@@ -658,27 +723,68 @@ class AiRequestService {
 
     final body =
         <String, dynamic>{
-      'prompt': cleanPrompt,
+      'prompt':
+          cleanPrompt,
+      'aspectRatio':
+          aspectRatio,
+      'imageSize':
+          imageSize,
     };
+
+    final imageDataUrls =
+        <String>[];
+
+    for (final image
+        in images
+            .where(
+              (item) =>
+                  item.isNotEmpty,
+            )
+            .take(4)) {
+      if (image.length >
+          maxImageBytes) {
+        throw const AiRequestException(
+          'إحدى الصور كبيرة جدًا.',
+        );
+      }
+
+      imageDataUrls.add(
+        'data:image/jpeg;base64,'
+        '${base64Encode(image)}',
+      );
+    }
+
+    if (imageDataUrls
+        .isNotEmpty) {
+      body['imageDataUrls'] =
+          imageDataUrls;
+    }
 
     _addServiceData(
       body,
-      serviceTitle: serviceTitle,
-      serviceContext: serviceContext,
+      serviceTitle:
+          serviceTitle,
+      serviceContext:
+          serviceContext,
     );
 
     final response =
-        await _postWithRetry(
+        await _post(
       imageEndpoint,
       body: body,
-      timeout: imageTimeout,
+      timeout:
+          imageTimeout,
     );
 
     final data =
-        _decodeMap(response.body);
+        _decodeMap(
+      response.body,
+    );
 
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
+    if (response.statusCode <
+            200 ||
+        response.statusCode >=
+            300) {
       throw AiRequestException(
         _serverError(
           response.statusCode,
@@ -712,7 +818,8 @@ class AiRequestService {
             ?.toString()
             .trim();
 
-    if (imageDataUrl != null &&
+    if (imageDataUrl !=
+            null &&
         imageDataUrl.isNotEmpty) {
       return imageDataUrl;
     }
@@ -768,10 +875,14 @@ class AiRequestService {
     http.Response response,
   ) {
     final data =
-        _decodeMap(response.body);
+        _decodeMap(
+      response.body,
+    );
 
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
+    if (response.statusCode <
+            200 ||
+        response.statusCode >=
+            300) {
       throw AiRequestException(
         _serverError(
           response.statusCode,
@@ -822,90 +933,20 @@ class AiRequestService {
   }
 
   // ============================================================
-  // HTTP RETRY
+  // HTTP POST
   // ============================================================
 
-  static Future<http.Response>
-      _postWithRetry(
-    String endpoint, {
-    required Map<String, dynamic> body,
-    required Duration timeout,
-  }) async {
-    Object? lastError;
-
-    for (
-      var attempt = 1;
-      attempt <= maxAttempts;
-      attempt++
-    ) {
-      try {
-        final response =
-            await _post(
-          endpoint,
-          body: body,
-          timeout: timeout,
-        );
-
-        if (!_shouldRetry(
-          response.statusCode,
-        )) {
-          return response;
-        }
-
-        if (attempt >= maxAttempts) {
-          return response;
-        }
-
-        await Future<void>.delayed(
-          Duration(
-            seconds: attempt * 2,
-          ),
-        );
-      } catch (error) {
-        lastError = error;
-
-        if (attempt >= maxAttempts) {
-          if (error
-              is AiRequestException) {
-            rethrow;
-          }
-
-          throw AiRequestException(
-            _connectionError(error),
-          );
-        }
-
-        await Future<void>.delayed(
-          Duration(
-            seconds: attempt * 2,
-          ),
-        );
-      }
-    }
-
-    throw AiRequestException(
-      _connectionError(
-        lastError ?? 'Unknown error',
-      ),
-    );
-  }
-
-  static bool _shouldRetry(
-    int statusCode,
-  ) {
-    return statusCode == 408 ||
-        statusCode == 425 ||
-        statusCode == 429 ||
-        statusCode == 500 ||
-        statusCode == 502 ||
-        statusCode == 503 ||
-        statusCode == 504;
-  }
-
-  // ============================================================
-  // POST
-  // ============================================================
-
+  /// تنفيذ POST واحد فقط لكل طلب AI.
+  ///
+  /// السبب:
+  /// طلبات Chat/Image ليست GET idempotent.
+  ///
+  /// لو أرسلنا POST ثم نفذ الـWorker الطلب بالفعل
+  /// ولكن انقطعت الاستجابة، إعادة إرسال نفس POST
+  /// قد تؤدي إلى تنفيذ AI مرتين.
+  ///
+  /// الـRequest ID يحمي سجل الـCredits من التكرار،
+  /// لكنه لا يمنع تنفيذ نموذج AI مرتين.
   static Future<http.Response> _post(
     String endpoint, {
     required Map<String, dynamic> body,
@@ -938,14 +979,18 @@ class AiRequestService {
             body:
                 jsonEncode(body),
           )
-          .timeout(timeout);
+          .timeout(
+            timeout,
+          );
     } on TimeoutException {
       throw const AiRequestException(
-        'الاتصال بالخادم استغرق وقتًا أطول من اللازم.',
+        'الاتصال بالخادم استغرق وقتًا أطول من اللازم. لا تعيد الطلب تلقائيًا؛ تحقق من حالة الخدمة أولًا.',
       );
-    } on http.ClientException catch (error) {
+    } on http.ClientException catch (
+        error) {
       throw AiRequestException(
-        'تعذر الاتصال بالخادم: ${error.message}',
+        'تعذر الاتصال بالخادم: '
+        '${error.message}',
       );
     } on FormatException {
       throw const AiRequestException(
@@ -997,7 +1042,9 @@ class AiRequestService {
 
     if (error != null &&
         error.isNotEmpty) {
-      return _friendlyError(error);
+      return _friendlyError(
+        error,
+      );
     }
 
     return fallback;
@@ -1049,7 +1096,8 @@ class AiRequestService {
         return 'الخدمة استغرقت وقتًا أطول من اللازم.';
 
       default:
-        return 'حصل خطأ في الاتصال بالخادم (HTTP $statusCode).';
+        return 'حصل خطأ في الاتصال بالخادم '
+            '(HTTP $statusCode).';
     }
   }
 
@@ -1060,6 +1108,9 @@ class AiRequestService {
         value.trim();
 
     switch (error) {
+      case 'GEMINI_API_KEY_MISSING':
+        return 'خدمة الذكاء الاصطناعي غير مُعدة حاليًا.';
+
       case 'OPENAI_API_KEY_MISSING':
         return 'خدمة الذكاء الاصطناعي غير مُعدة حاليًا.';
 
@@ -1081,12 +1132,14 @@ class AiRequestService {
         return 'البيانات المرسلة كبيرة جدًا.';
 
       case 'INVALID_JSON':
+      case 'INVALID_JSON_BODY':
         return 'البيانات المرسلة غير صحيحة.';
 
       case 'NOT_FOUND':
         return 'خدمة الذكاء الاصطناعي غير موجودة حاليًا.';
 
       case 'NO_IMAGE_RESULT':
+      case 'EMPTY_IMAGE_RESPONSE':
         return 'خدمة الصور لم ترجع نتيجة.';
 
       case 'IMAGE_FORMAT_NOT_SUPPORTED':
@@ -1096,7 +1149,11 @@ class AiRequestService {
         return 'اكتب وصف الصورة أولًا.';
 
       case 'IMAGE_GENERATION_FAILED':
+      case 'ALL_IMAGE_PROVIDERS_FAILED':
         return 'تعذر إنشاء الصورة حاليًا.';
+
+      case 'ALL_AI_PROVIDERS_FAILED':
+        return 'تعذر تشغيل الذكاء الاصطناعي حاليًا. حاول مرة أخرى.';
 
       case 'DEVICE_ID_REQUIRED':
         return 'تعذر التعرف على جهازك. اقفل التطبيق وافتحه مرة أخرى.';
@@ -1125,8 +1182,6 @@ class AiRequestService {
           return 'حصل خطأ غير معروف.';
         }
 
-        // أثناء التشخيص نُبقي رسالة السيرفر كما هي
-        // بدل إخفائها خلف رسالة عامة.
         return error;
     }
   }
@@ -1148,7 +1203,8 @@ class AiRequestService {
       return 'تأكد من اتصال الإنترنت وحاول مرة أخرى.';
     }
 
-    return 'تعذر الاتصال بخدمة صاحبي حاليًا: $error';
+    return 'تعذر الاتصال بخدمة صاحبي حاليًا: '
+        '$error';
   }
 }
 
@@ -1157,9 +1213,6 @@ class AiRequestService {
 // ============================================================
 
 /// نتيجة قراءة الرصيد من السيرفر.
-///
-/// هذه الكلاس مجرد تمثيل للبيانات القادمة من الـBackend.
-/// لا يتم استخدامها كمصدر سلطة مستقل عن السيرفر.
 class ServerCreditsResult {
   final String deviceId;
 
@@ -1219,58 +1272,60 @@ class ServerCreditsResult {
             : <String, dynamic>{};
 
     return ServerCreditsResult(
-      deviceId: deviceId,
+      deviceId:
+          deviceId,
       balance:
           _readInt(
-            map['balance'] ??
-                map['credits'] ??
-                map['remaining'],
-          ),
+        map['balance'] ??
+            map['credits'] ??
+            map['remaining'],
+      ),
       initialCredits:
           _readInt(
-            map['initialCredits'],
-          ),
+        map['initialCredits'],
+      ),
       rewardedAdCredits:
           _readInt(
-            map['rewardedAdCredits'] ??
-                map['reward'],
-          ),
+        map['rewardedAdCredits'] ??
+            map['reward'],
+      ),
       dailyRewardedAds:
           _readInt(
-            rewarded['used'] ??
-                map['dailyRewardedAds'],
-          ),
+        rewarded['used'] ??
+            map['dailyRewardedAds'],
+      ),
       dailyRewardedAdsLimit:
           _readInt(
-            rewarded['limit'] ??
-                map['dailyRewardedAdsLimit'],
-          ),
+        rewarded['limit'] ??
+            map['dailyRewardedAdsLimit'],
+      ),
       textCost:
           _readNullableInt(
-            costs['text'] ??
-                map['textCost'],
-          ),
+        costs['text'] ??
+            map['textCost'],
+      ),
       imageAnalysisCost:
           _readNullableInt(
-            costs['image_analysis'] ??
-                map['imageAnalysisCost'],
-          ),
+        costs['image_analysis'] ??
+            map['imageAnalysisCost'],
+      ),
       videoAnalysisCost:
           _readNullableInt(
-            costs['video_analysis'] ??
-                map['videoAnalysisCost'],
-          ),
+        costs['video_analysis'] ??
+            map['videoAnalysisCost'],
+      ),
       imageGenerationCost:
           _readNullableInt(
-            costs['image_generation'] ??
-                map['imageGenerationCost'],
-          ),
+        costs['image_generation'] ??
+            map['imageGenerationCost'],
+      ),
       imageEditCost:
           _readNullableInt(
-            costs['image_edit'] ??
-                map['imageEditCost'],
-          ),
-      raw: Map<String, dynamic>.from(
+        costs['image_edit'] ??
+            map['imageEditCost'],
+      ),
+      raw:
+          Map<String, dynamic>.from(
         map,
       ),
     );
@@ -1288,7 +1343,8 @@ class ServerCreditsResult {
     }
 
     return int.tryParse(
-          value?.toString() ?? '',
+          value?.toString() ??
+              '',
         ) ??
         0;
   }
@@ -1335,18 +1391,24 @@ class BackendConnectionResult {
     String? version,
     int? statusCode,
   }) : this._(
-          isAvailable: true,
-          version: version,
-          statusCode: statusCode,
+          isAvailable:
+              true,
+          version:
+              version,
+          statusCode:
+              statusCode,
         );
 
   const BackendConnectionResult.failure(
     String error, {
     int? statusCode,
   }) : this._(
-          isAvailable: false,
-          error: error,
-          statusCode: statusCode,
+          isAvailable:
+              false,
+          error:
+              error,
+          statusCode:
+              statusCode,
         );
 }
 
