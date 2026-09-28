@@ -116,9 +116,7 @@ class ChatStatusHeader extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 3),
-                    _buildStatus(
-                      safeTopic,
-                    ),
+                    _buildStatus(safeTopic),
                   ],
                 ),
               ),
@@ -143,8 +141,7 @@ class ChatStatusHeader extends StatelessWidget {
             height: 12,
             child: CircularProgressIndicator(
               strokeWidth: 1.5,
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(
+              valueColor: AlwaysStoppedAnimation<Color>(
                 theme.secondary,
               ),
             ),
