@@ -4,7 +4,7 @@ import '../services/chat_theme_service.dart';
 
 /// اقتراحات سريعة تظهر داخل المحادثة.
 ///
-/// الملف مسؤول عن الواجهة فقط.
+/// مسؤولية هذا الملف هي الواجهة فقط.
 /// تنفيذ الرسالة نفسها يظل داخل ChatScreen.
 class ChatQuickSuggestions extends StatelessWidget {
   final ChatThemeData theme;
@@ -12,7 +12,7 @@ class ChatQuickSuggestions extends StatelessWidget {
   /// الاقتراحات التي سيتم عرضها.
   final List<String> suggestions;
 
-  /// عند اختيار اقتراح.
+  /// يتم استدعاؤه عند اختيار اقتراح.
   final ValueChanged<String>? onSelected;
 
   /// الحد الأقصى للاقتراحات المعروضة.
@@ -21,19 +21,19 @@ class ChatQuickSuggestions extends StatelessWidget {
   const ChatQuickSuggestions({
     super.key,
     required this.theme,
-    this.suggestions = const [],
+    this.suggestions = const <String>[],
     this.onSelected,
     this.maxItems = 4,
   });
 
   @override
   Widget build(BuildContext context) {
+    final safeMaxItems = maxItems < 1 ? 1 : maxItems;
+
     final items = suggestions
-        .where(
-          (item) => item.trim().isNotEmpty,
-        )
         .map((item) => item.trim())
-        .take(maxItems)
+        .where((item) => item.isNotEmpty)
+        .take(safeMaxItems)
         .toList();
 
     if (items.isEmpty) {
@@ -102,19 +102,13 @@ class _Suggestion extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                theme.primary.withValues(
-                  alpha: 0.16,
-                ),
-                theme.secondary.withValues(
-                  alpha: 0.08,
-                ),
+                theme.primary.withValues(alpha: 0.16),
+                theme.secondary.withValues(alpha: 0.08),
               ],
             ),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: theme.primary.withValues(
-                alpha: 0.22,
-              ),
+              color: theme.primary.withValues(alpha: 0.22),
             ),
           ),
           child: Row(
