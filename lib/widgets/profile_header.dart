@@ -22,12 +22,16 @@ class ProfileHeader extends StatefulWidget {
   });
 
   @override
-  State<ProfileHeader> createState() => _ProfileHeaderState();
+  State<ProfileHeader> createState() =>
+      _ProfileHeaderState();
 }
 
-class _ProfileHeaderState extends State<ProfileHeader> {
+class _ProfileHeaderState
+    extends State<ProfileHeader> {
   final ImagePicker _picker = ImagePicker();
-  final ProfileService _profileService = ProfileService.instance;
+
+  final ProfileService _profileService =
+      ProfileService.instance;
 
   late final TextEditingController _nameController;
 
@@ -39,22 +43,29 @@ class _ProfileHeaderState extends State<ProfileHeader> {
   void initState() {
     super.initState();
 
-    _nameController = TextEditingController(
-      text: widget.displayName == ProfileService.defaultProfileName
-          ? ''
-          : widget.displayName,
+    _nameController =
+        TextEditingController(
+      text:
+          widget.displayName ==
+                  ProfileService.defaultProfileName
+              ? ''
+              : widget.displayName,
     );
   }
 
   @override
-  void didUpdateWidget(covariant ProfileHeader oldWidget) {
+  void didUpdateWidget(
+    covariant ProfileHeader oldWidget,
+  ) {
     super.didUpdateWidget(oldWidget);
 
     if (_savingName) return;
 
-    final newName = widget.displayName;
+    final newName =
+        widget.displayName;
 
-    if (newName == ProfileService.defaultProfileName) {
+    if (newName ==
+        ProfileService.defaultProfileName) {
       if (_nameController.text.isNotEmpty) {
         _nameController.clear();
       }
@@ -63,6 +74,11 @@ class _ProfileHeaderState extends State<ProfileHeader> {
 
     if (_nameController.text != newName) {
       _nameController.text = newName;
+      _nameController.selection =
+          TextSelection.collapsed(
+        offset:
+            _nameController.text.length,
+      );
     }
   }
 
@@ -76,7 +92,8 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     if (_savingPhoto) return;
 
     try {
-      final file = await _picker.pickImage(
+      final file =
+          await _picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 70,
         maxWidth: 900,
@@ -84,18 +101,25 @@ class _ProfileHeaderState extends State<ProfileHeader> {
 
       if (file == null) return;
 
-      final bytes = await file.readAsBytes();
+      final bytes =
+          await file.readAsBytes();
 
       if (bytes.isEmpty) {
-        widget.onMessage('الصورة فارغة');
+        widget.onMessage(
+          'الصورة فارغة.',
+        );
         return;
       }
+
+      if (!mounted) return;
 
       setState(() {
         _savingPhoto = true;
       });
 
-      final saved = await _profileService.savePhotoBytes(bytes);
+      final saved =
+          await _profileService
+              .savePhotoBytes(bytes);
 
       if (!mounted) return;
 
@@ -104,12 +128,17 @@ class _ProfileHeaderState extends State<ProfileHeader> {
       });
 
       if (!saved) {
-        widget.onMessage('لم يتم حفظ الصورة');
+        widget.onMessage(
+          'لم يتم حفظ صورة الحساب.',
+        );
         return;
       }
 
       widget.onChanged();
-      widget.onMessage('تم حفظ صورة الحساب');
+
+      widget.onMessage(
+        'تم حفظ صورة الحساب ✅',
+      );
     } catch (_) {
       if (!mounted) return;
 
@@ -117,7 +146,9 @@ class _ProfileHeaderState extends State<ProfileHeader> {
         _savingPhoto = false;
       });
 
-      widget.onMessage('حدث خطأ أثناء اختيار الصورة');
+      widget.onMessage(
+        'حدث خطأ أثناء اختيار الصورة.',
+      );
     }
   }
 
@@ -125,18 +156,24 @@ class _ProfileHeaderState extends State<ProfileHeader> {
     if (_savingReel) return;
 
     try {
-      final file = await _picker.pickVideo(
+      final file =
+          await _picker.pickVideo(
         source: ImageSource.gallery,
-        maxDuration: const Duration(minutes: 2),
+        maxDuration:
+            const Duration(minutes: 2),
       );
 
       if (file == null) return;
+
+      if (!mounted) return;
 
       setState(() {
         _savingReel = true;
       });
 
-      final saved = await _profileService.saveReelName(file.name);
+      final saved =
+          await _profileService
+              .saveReelName(file.name);
 
       if (!mounted) return;
 
@@ -145,12 +182,17 @@ class _ProfileHeaderState extends State<ProfileHeader> {
       });
 
       if (!saved) {
-        widget.onMessage('لم يتم حفظ الريلز');
+        widget.onMessage(
+          'لم يتم حفظ الـ Reel.',
+        );
         return;
       }
 
       widget.onChanged();
-      widget.onMessage('تم حفظ الريلز');
+
+      widget.onMessage(
+        'تم حفظ الـ Reel ✅',
+      );
     } catch (_) {
       if (!mounted) return;
 
@@ -158,7 +200,9 @@ class _ProfileHeaderState extends State<ProfileHeader> {
         _savingReel = false;
       });
 
-      widget.onMessage('حدث خطأ أثناء اختيار الريلز');
+      widget.onMessage(
+        'حدث خطأ أثناء اختيار الـ Reel.',
+      );
     }
   }
 
@@ -169,30 +213,59 @@ class _ProfileHeaderState extends State<ProfileHeader> {
       _savingReel = true;
     });
 
-    final saved = await _profileService.clearReel();
+    try {
+      final saved =
+          await _profileService
+              .clearReel();
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _savingReel = false;
-    });
+      setState(() {
+        _savingReel = false;
+      });
 
-    if (!saved) {
-      widget.onMessage('لم يتم حذف الريلز');
-      return;
+      if (!saved) {
+        widget.onMessage(
+          'لم يتم حذف الـ Reel.',
+        );
+        return;
+      }
+
+      widget.onChanged();
+
+      widget.onMessage(
+        'تم حذف الـ Reel.',
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _savingReel = false;
+      });
+
+      widget.onMessage(
+        'حدث خطأ أثناء حذف الـ Reel.',
+      );
     }
-
-    widget.onChanged();
-    widget.onMessage('تم حذف الريلز');
   }
 
   Future<void> _saveName() async {
     if (_savingName) return;
 
-    final name = _nameController.text.trim();
+    final name =
+        _nameController.text.trim();
 
     if (name.isEmpty) {
-      widget.onMessage('اكتب اسمك أولًا');
+      widget.onMessage(
+        'اكتب اسمك أولًا.',
+      );
+      return;
+    }
+
+    if (name.length > 40) {
+      widget.onMessage(
+        'الاسم يجب ألا يتجاوز 40 حرفًا.',
+      );
       return;
     }
 
@@ -202,24 +275,46 @@ class _ProfileHeaderState extends State<ProfileHeader> {
       _savingName = true;
     });
 
-    final saved = await _profileService.saveName(name);
+    try {
+      final saved =
+          await _profileService
+              .saveName(name);
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    setState(() {
-      _savingName = false;
-    });
+      setState(() {
+        _savingName = false;
+      });
 
-    if (!saved) {
-      widget.onMessage('لم يتم حفظ الاسم');
-      return;
+      if (!saved) {
+        widget.onMessage(
+          'لم يتم حفظ الاسم.',
+        );
+        return;
+      }
+
+      widget.onChanged();
+
+      widget.onMessage(
+        'تم حفظ الاسم ✅',
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _savingName = false;
+      });
+
+      widget.onMessage(
+        'حدث خطأ أثناء حفظ الاسم.',
+      );
     }
-
-    widget.onChanged();
-    widget.onMessage('تم حفظ الاسم');
   }
 
-  Widget _buildProfileImage(bool hasPhoto, bool hasReel) {
+  Widget _buildProfileImage(
+    bool hasPhoto,
+    bool hasReel,
+  ) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -228,8 +323,10 @@ class _ProfileHeaderState extends State<ProfileHeader> {
           child: Container(
             width: 92,
             height: 92,
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
+            padding:
+                const EdgeInsets.all(3),
+            decoration:
+                BoxDecoration(
               shape: BoxShape.circle,
               gradient: hasReel
                   ? const SweepGradient(
@@ -249,61 +346,88 @@ class _ProfileHeaderState extends State<ProfileHeader> {
                     ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFFD76A).withValues(alpha: 0.15),
+                  color:
+                      const Color(
+                    0xFFFFD76A,
+                  ).withValues(
+                    alpha: 0.15,
+                  ),
                   blurRadius: 18,
                 ),
               ],
             ),
             child: ClipOval(
               child: Container(
-                color: const Color(0xFF0C0F17),
+                color:
+                    const Color(0xFF0C0F17),
                 child: hasPhoto
                     ? Image.memory(
                         widget.photo!,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) {
+                        errorBuilder:
+                            (
+                          _,
+                          __,
+                          ___,
+                        ) {
                           return const Icon(
                             Icons.person_rounded,
                             size: 44,
-                            color: Color(0xFFFFD76A),
+                            color:
+                                Color(
+                              0xFFFFD76A,
+                            ),
                           );
                         },
                       )
                     : const Icon(
                         Icons.person_rounded,
                         size: 44,
-                        color: Color(0xFFFFD76A),
+                        color:
+                            Color(0xFFFFD76A),
                       ),
               ),
             ),
           ),
         ),
+
         Positioned(
           bottom: -1,
           right: -1,
           child: Container(
             width: 30,
             height: 30,
-            decoration: BoxDecoration(
-              color: const Color(0xFF181C28),
+            decoration:
+                BoxDecoration(
+              color:
+                  const Color(0xFF181C28),
               shape: BoxShape.circle,
               border: Border.all(
-                color: const Color(0xFFFFD76A),
+                color:
+                    const Color(
+                  0xFFFFD76A,
+                ),
                 width: 1.4,
               ),
             ),
             child: _savingPhoto
                 ? const Padding(
-                    padding: EdgeInsets.all(7),
-                    child: CircularProgressIndicator(
+                    padding:
+                        EdgeInsets.all(7),
+                    child:
+                        CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Color(0xFFFFD76A),
+                      color:
+                          Color(
+                        0xFFFFD76A,
+                      ),
                     ),
                   )
                 : const Icon(
                     Icons.camera_alt_rounded,
                     size: 15,
-                    color: Color(0xFFFFD76A),
+                    color:
+                        Color(0xFFFFD76A),
                   ),
           ),
         ),
@@ -312,67 +436,123 @@ class _ProfileHeaderState extends State<ProfileHeader> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final hasPhoto =
-        widget.photo != null && widget.photo!.isNotEmpty;
+        widget.photo != null &&
+        widget.photo!.isNotEmpty;
 
     final hasReel =
         widget.reelName != null &&
-        widget.reelName!.trim().isNotEmpty;
+        widget.reelName!
+            .trim()
+            .isNotEmpty;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 7),
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: const Color(0xFF131620),
-        borderRadius: BorderRadius.circular(20),
+      margin:
+          const EdgeInsets.fromLTRB(
+        8,
+        0,
+        8,
+        7,
+      ),
+      padding:
+          const EdgeInsets.all(13),
+      decoration:
+          BoxDecoration(
+        color:
+            const Color(0xFF131620),
+        borderRadius:
+            BorderRadius.circular(20),
         border: Border.all(
-          color: const Color(0x33FFD76A),
+          color:
+              const Color(0x33FFD76A),
         ),
       ),
       child: Column(
         children: [
-          _buildProfileImage(hasPhoto, hasReel),
+          _buildProfileImage(
+            hasPhoto,
+            hasReel,
+          ),
 
           const SizedBox(height: 9),
 
           Text(
             widget.displayName,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.center,
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.center,
             maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            overflow:
+                TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 19,
-              fontWeight: FontWeight.w900,
+              fontWeight:
+                  FontWeight.w900,
             ),
           ),
 
           const SizedBox(height: 10),
 
           TextField(
-            controller: _nameController,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
+            controller:
+                _nameController,
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.right,
             maxLength: 40,
-            decoration: InputDecoration(
+            textInputAction:
+                TextInputAction.done,
+            onSubmitted: (_) {
+              if (!_savingName) {
+                _saveName();
+              }
+            },
+            decoration:
+                InputDecoration(
               labelText: 'اسمك',
               hintText: 'اكتب اسمك',
-              prefixIcon: const Icon(
-                Icons.person_outline_rounded,
+              prefixIcon:
+                  const Icon(
+                Icons
+                    .person_outline_rounded,
                 size: 20,
               ),
               filled: true,
-              fillColor: const Color(0xFF0C0F17),
+              fillColor:
+                  const Color(0xFF0C0F17),
               counterText: '',
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(
+              contentPadding:
+                  const EdgeInsets
+                      .symmetric(
                 horizontal: 12,
                 vertical: 12,
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
+              border:
+                  OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(
+                  14,
+                ),
+                borderSide:
+                    BorderSide.none,
+              ),
+              focusedBorder:
+                  OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(
+                  14,
+                ),
+                borderSide:
+                    const BorderSide(
+                  color:
+                      Color(0x44FFD76A),
+                ),
               ),
             ),
           ),
@@ -381,35 +561,54 @@ class _ProfileHeaderState extends State<ProfileHeader> {
 
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _savingName ? null : _saveName,
+            child:
+                ElevatedButton.icon(
+              onPressed:
+                  _savingName
+                      ? null
+                      : _saveName,
               icon: _savingName
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: CircularProgressIndicator(
+                      child:
+                          CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.black,
+                        color:
+                            Colors.black,
                       ),
                     )
                   : const Icon(
                       Icons.save_rounded,
                       size: 18,
                     ),
-              label: const Text(
+              label:
+                  const Text(
                 'حفظ الاسم',
                 style: TextStyle(
-                  fontWeight: FontWeight.w900,
+                  fontWeight:
+                      FontWeight.w900,
                 ),
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD76A),
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(
+              style:
+                  ElevatedButton.styleFrom(
+                backgroundColor:
+                    const Color(
+                  0xFFFFD76A,
+                ),
+                foregroundColor:
+                    Colors.black,
+                padding:
+                    const EdgeInsets
+                        .symmetric(
                   vertical: 11,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(
+                    13,
+                  ),
                 ),
               ),
             ),
@@ -420,56 +619,104 @@ class _ProfileHeaderState extends State<ProfileHeader> {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _savingPhoto ? null : _choosePhoto,
-                  icon: const Icon(
-                    Icons.photo_camera_rounded,
+                child:
+                    OutlinedButton.icon(
+                  onPressed:
+                      _savingPhoto
+                          ? null
+                          : _choosePhoto,
+                  icon:
+                      const Icon(
+                    Icons
+                        .photo_camera_rounded,
                     size: 18,
                   ),
-                  label: const Text(
+                  label:
+                      const Text(
                     'الصورة',
                     style: TextStyle(
-                      fontWeight: FontWeight.w800,
+                      fontWeight:
+                          FontWeight.w800,
                     ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF63E6FF),
-                    side: const BorderSide(
-                      color: Color(0x4463E6FF),
+                  style:
+                      OutlinedButton.styleFrom(
+                    foregroundColor:
+                        const Color(
+                      0xFF63E6FF,
                     ),
-                    padding: const EdgeInsets.symmetric(
+                    side:
+                        const BorderSide(
+                      color:
+                          Color(
+                        0x4463E6FF,
+                      ),
+                    ),
+                    padding:
+                        const EdgeInsets
+                            .symmetric(
                       vertical: 10,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(13),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                        13,
+                      ),
                     ),
                   ),
                 ),
               ),
+
               const SizedBox(width: 7),
+
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _savingReel ? null : _chooseReel,
-                  icon: const Icon(
-                    Icons.video_library_rounded,
+                child:
+                    OutlinedButton.icon(
+                  onPressed:
+                      _savingReel
+                          ? null
+                          : _chooseReel,
+                  icon:
+                      const Icon(
+                    Icons
+                        .video_library_rounded,
                     size: 18,
                   ),
                   label: Text(
-                    hasReel ? 'تغيير Reel' : 'إضافة Reel',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
+                    hasReel
+                        ? 'تغيير Reel'
+                        : 'إضافة Reel',
+                    style:
+                        const TextStyle(
+                      fontWeight:
+                          FontWeight.w800,
                     ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFFF4D8D),
-                    side: const BorderSide(
-                      color: Color(0x44FF4D8D),
+                  style:
+                      OutlinedButton.styleFrom(
+                    foregroundColor:
+                        const Color(
+                      0xFFFF4D8D,
                     ),
-                    padding: const EdgeInsets.symmetric(
+                    side:
+                        const BorderSide(
+                      color:
+                          Color(
+                        0x44FF4D8D,
+                      ),
+                    ),
+                    padding:
+                        const EdgeInsets
+                            .symmetric(
                       vertical: 10,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(13),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                        13,
+                      ),
                     ),
                   ),
                 ),
@@ -479,49 +726,82 @@ class _ProfileHeaderState extends State<ProfileHeader> {
 
           if (hasReel) ...[
             const SizedBox(height: 8),
+
             Container(
-              padding: const EdgeInsets.symmetric(
+              padding:
+                  const EdgeInsets
+                      .symmetric(
                 horizontal: 8,
                 vertical: 5,
               ),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0C0F17),
-                borderRadius: BorderRadius.circular(12),
+              decoration:
+                  BoxDecoration(
+                color:
+                    const Color(0xFF0C0F17),
+                borderRadius:
+                    BorderRadius.circular(
+                  12,
+                ),
               ),
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: _savingReel ? null : _clearReel,
-                    icon: const Icon(
-                      Icons.delete_outline_rounded,
-                      color: Colors.redAccent,
+                    onPressed:
+                        _savingReel
+                            ? null
+                            : _clearReel,
+                    icon:
+                        const Icon(
+                      Icons
+                          .delete_outline_rounded,
+                      color:
+                          Colors.redAccent,
                       size: 19,
                     ),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
+                    visualDensity:
+                        VisualDensity
+                            .compact,
+                    padding:
+                        EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(
                       minWidth: 34,
                       minHeight: 34,
                     ),
                   ),
-                  const SizedBox(width: 5),
+
+                  const SizedBox(
+                    width: 5,
+                  ),
+
                   Expanded(
                     child: Text(
                       widget.reelName!,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textDirection: TextDirection.rtl,
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      textDirection:
+                          TextDirection.rtl,
+                      textAlign:
+                          TextAlign.right,
+                      style:
+                          const TextStyle(
+                        color:
+                            Colors.white70,
                         fontSize: 11,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+
+                  const SizedBox(
+                    width: 6,
+                  ),
+
                   const Icon(
-                    Icons.play_circle_fill_rounded,
-                    color: Color(0xFFFF4D8D),
+                    Icons
+                        .play_circle_fill_rounded,
+                    color:
+                        Color(0xFFFF4D8D),
                     size: 22,
                   ),
                 ],
