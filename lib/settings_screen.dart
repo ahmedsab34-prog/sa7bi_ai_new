@@ -38,7 +38,11 @@ class _SettingsScreenState
             _profileService.aiConnected;
       });
     } catch (_) {
-      // لو التخزين لم يُقرأ، نترك الحالة غير مختبرة.
+      if (!mounted) return;
+
+      setState(() {
+        _isConnected = null;
+      });
     }
   }
 
@@ -50,36 +54,42 @@ class _SettingsScreenState
       _isConnected = null;
     });
 
-    final connected =
-        await AiService.checkConnection();
+    try {
+      final connected =
+          await AiService.checkConnection();
 
-    // حفظ النتيجة بشكل دائم.
-    await _profileService.saveAiConnection(
-      connected,
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      _isChecking = false;
-      _isConnected = connected;
-    });
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            connected
-                ? 'صاحبي AI متصل ويعمل بشكل صحيح ✅'
-                : 'تعذر التأكد من جاهزية الذكاء الاصطناعي. تأكد من الإنترنت وإعداد الخادم.',
-            textDirection:
-                TextDirection.rtl,
-          ),
-          behavior:
-              SnackBarBehavior.floating,
-        ),
+      await _profileService.saveAiConnection(
+        connected,
       );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isChecking = false;
+        _isConnected = connected;
+      });
+
+      _showMessage(
+        connected
+            ? 'صاحبي AI متصل ويعمل بشكل صحيح ✅'
+            : 'تعذر الاتصال بخدمة الذكاء الاصطناعي. تأكد من الإنترنت والخادم.',
+      );
+    } catch (_) {
+      await _profileService.saveAiConnection(
+        false,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isChecking = false;
+        _isConnected = false;
+      });
+
+      _showMessage(
+        'حدث خطأ أثناء اختبار اتصال الذكاء الاصطناعي.',
+      );
+    }
   }
 
   @override
@@ -205,7 +215,7 @@ class _SettingsScreenState
               Alignment.bottomLeft,
           colors: [
             const Color(0xFFFFD54F)
-                .withOpacity(0.16),
+                .withValues(alpha: 0.16),
             const Color(0xFF161923),
             const Color(0xFF10121A),
           ],
@@ -217,7 +227,9 @@ class _SettingsScreenState
         boxShadow: [
           BoxShadow(
             color:
-                Colors.black.withOpacity(0.25),
+                Colors.black.withValues(
+              alpha: 0.25,
+            ),
             blurRadius: 18,
             offset:
                 const Offset(0, 8),
@@ -232,26 +244,17 @@ class _SettingsScreenState
                 width: 58,
                 height: 58,
                 decoration:
-                    BoxDecoration(
+                    const BoxDecoration(
                   shape:
                       BoxShape.circle,
                   gradient:
-                      const LinearGradient(
+                      LinearGradient(
                     colors: [
                       Color(0xFFFFD54F),
                       Color(0xFFFFA726),
                       Color(0xFFB45CFF),
                     ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          const Color(
-                        0xFFFFD54F,
-                      ).withOpacity(0.20),
-                      blurRadius: 18,
-                    ),
-                  ],
                 ),
                 child: const Icon(
                   Icons.auto_awesome,
@@ -498,7 +501,10 @@ class _SettingsScreenState
   void _showMessage(
     String message,
   ) {
-    if (!mounted) return;
+    if (!mounted ||
+        message.trim().isEmpty) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
