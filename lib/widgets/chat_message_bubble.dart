@@ -7,8 +7,14 @@ import 'chat_ai_avatar.dart';
 
 /// فقاعة رسالة واحدة داخل المحادثة.
 ///
-/// هذا الـWidget مسؤول عن الشكل فقط.
-/// منطق إرسال واستقبال الرسائل يظل داخل ChatScreen.
+/// مسؤول عن عرض:
+/// - رسائل المستخدم.
+/// - رسائل الذكاء الاصطناعي.
+/// - الصور المرفقة.
+/// - حالة التحميل.
+/// - هوية المستخدم والـAI.
+///
+/// لا يحتوي على أي منطق لإرسال الرسائل أو الاتصال بالـBackend.
 class ChatMessageBubble extends StatelessWidget {
   final String text;
   final bool isUser;
@@ -23,13 +29,13 @@ class ChatMessageBubble extends StatelessWidget {
   /// صورة مرفقة بالرسالة إن وجدت.
   final Uint8List? imageBytes;
 
-  /// اسم الـAI الظاهر للمستخدم.
+  /// اسم الذكاء الاصطناعي الظاهر للمستخدم.
   final String aiName;
 
-  /// هل الرسالة قيد الإرسال/المعالجة؟
+  /// هل الرسالة قيد المعالجة؟
   final bool isLoading;
 
-  /// حجم الأيقونة.
+  /// حجم صورة الحساب / أيقونة الـAI.
   final double avatarSize;
 
   const ChatMessageBubble({
@@ -69,7 +75,6 @@ class ChatMessageBubble extends StatelessWidget {
           ],
           Flexible(
             child: _buildBubble(
-              context,
               safeText,
             ),
           ),
@@ -86,10 +91,7 @@ class ChatMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildBubble(
-    BuildContext context,
-    String safeText,
-  ) {
+  Widget _buildBubble(String safeText) {
     final bubbleColor =
         isUser ? theme.userBubble : theme.aiBubble;
 
@@ -110,8 +112,12 @@ class ChatMessageBubble extends StatelessWidget {
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(20),
           topRight: const Radius.circular(20),
-          bottomLeft: Radius.circular(isUser ? 20 : 5),
-          bottomRight: Radius.circular(isUser ? 5 : 20),
+          bottomLeft: Radius.circular(
+            isUser ? 20 : 5,
+          ),
+          bottomRight: Radius.circular(
+            isUser ? 5 : 20,
+          ),
         ),
         border: Border.all(
           color: borderColor,
@@ -149,8 +155,12 @@ class ChatMessageBubble extends StatelessWidget {
 
   Widget _buildHeader() {
     final name = isUser
-        ? (userName.trim().isEmpty ? 'صاحبي' : userName.trim())
-        : aiName;
+        ? (userName.trim().isEmpty
+            ? 'صاحبي'
+            : userName.trim())
+        : aiName.trim().isEmpty
+            ? 'خلصانة AI'
+            : aiName.trim();
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -199,14 +209,25 @@ class ChatMessageBubble extends StatelessWidget {
   }
 
   Widget _buildImage() {
+    final bytes = imageBytes;
+
+    if (bytes == null || bytes.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Image.memory(
-        imageBytes!,
+        bytes,
         width: double.infinity,
         height: 210,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
+        gaplessPlayback: true,
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
           return Container(
             height: 120,
             alignment: Alignment.center,
@@ -253,10 +274,7 @@ class ChatMessageBubble extends StatelessWidget {
   }
 }
 
-/// نسخة مستقلة من صورة المستخدم داخل الفقاعة.
-///
-/// نستخدم الصورة المحفوظة مباشرة هنا لضمان ظهورها حتى لو
-/// لم يتم تحميل Widget البروفايل الرئيسي.
+/// صورة المستخدم داخل فقاعة الرسالة.
 class _UserAvatar extends StatelessWidget {
   final double size;
   final Uint8List? photoBytes;
@@ -270,7 +288,9 @@ class _UserAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (photoBytes != null && photoBytes!.isNotEmpty) {
+    final bytes = photoBytes;
+
+    if (bytes != null && bytes.isNotEmpty) {
       return Container(
         width: size,
         height: size,
@@ -289,9 +309,14 @@ class _UserAvatar extends StatelessWidget {
         ),
         child: ClipOval(
           child: Image.memory(
-            photoBytes!,
+            bytes,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
+            gaplessPlayback: true,
+            errorBuilder: (
+              context,
+              error,
+              stackTrace,
+            ) {
               return _fallback();
             },
           ),
@@ -303,6 +328,10 @@ class _UserAvatar extends StatelessWidget {
   }
 
   Widget _fallback() {
+    final initial = name.trim().isEmpty
+        ? 'ص'
+        : name.trim().characters.first;
+
     return Container(
       width: size,
       height: size,
@@ -317,10 +346,15 @@ class _UserAvatar extends StatelessWidget {
           ],
         ),
       ),
-      child: Icon(
-        Icons.person_rounded,
-        color: Colors.white,
-        size: size * 0.52,
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        textDirection: TextDirection.rtl,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size * 0.40,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
