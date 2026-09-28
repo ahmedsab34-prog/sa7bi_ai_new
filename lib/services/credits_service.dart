@@ -235,24 +235,43 @@ class CreditsService {
   // SERVER CREDIT COSTS
   // ============================================================
 
-  /// تكلفة النص.
+  /// تكلفة الرسالة النصية.
   ///
-  /// هذه القيم تأتي من Backend عندما تكون متاحة.
-  /// يتم استخدام القيم الافتراضية كـFallback للواجهة فقط.
+  /// متوافقة مع CreditsConfig وBackend:
+  /// text = 1
   int get textCost =>
-      CreditsConfig.textCost;
+      CreditsConfig.textMessageCost;
 
+  /// تكلفة تحليل صورة.
+  ///
+  /// متوافقة مع CreditsConfig وBackend:
+  /// image_analysis = 3
   int get imageAnalysisCost =>
       CreditsConfig.imageAnalysisCost;
 
+  /// تكلفة تحليل فيديو.
+  ///
+  /// متوافقة مع CreditsConfig وBackend:
+  /// video_analysis = 5
   int get videoAnalysisCost =>
       CreditsConfig.videoAnalysisCost;
 
+  /// تكلفة إنشاء صورة.
+  ///
+  /// متوافقة مع CreditsConfig وBackend:
+  /// image_generation = 10
   int get imageGenerationCost =>
       CreditsConfig.imageGenerationCost;
 
+  /// تكلفة تعديل صورة.
+  ///
+  /// الـBackend يستخدم حاليًا نفس تكلفة إنشاء الصورة:
+  /// image_edit = 10
+  ///
+  /// لا نضيف قيمة ثانية إلى CreditsConfig حتى لا
+  /// يكون لدينا مصدران مختلفان للأسعار.
   int get imageEditCost =>
-      CreditsConfig.imageEditCost;
+      CreditsConfig.imageGenerationCost;
 
   // ============================================================
   // SPEND
@@ -328,7 +347,7 @@ class CreditsService {
   /// هل يمكن للمستخدم طلب إعلان مكافأة؟
   ///
   /// هذا فحص للواجهة فقط.
-  /// التحقق النهائي يجب أن يحدث على السيرفر
+  /// التحقق النهائي يحدث على السيرفر
   /// بعد إثبات مشاهدة الإعلان.
   Future<bool> canClaimRewardedAd() async {
     await _ensureInitialized();
@@ -347,9 +366,9 @@ class CreditsService {
   /// IMPORTANT:
   /// لا نضيف Credits محليًا هنا.
   ///
-  /// نظام المكافآت الحقيقي سيتم ربطه لاحقًا
-  /// بـAdMob Server-Side Verification (SSV)
-  /// ثم السيرفر هو الذي يضيف Credits.
+  /// نظام المكافآت الحقيقي يتم من خلال:
+  ///
+  /// AdMob → SSV → Cloudflare Worker → Durable Object
   ///
   /// لذلك هذه الدالة لا تمنح Credits بنفسها.
   Future<bool> claimRewardedAd() async {
@@ -362,8 +381,8 @@ class CreditsService {
      *
      * لأن ذلك يسمح بالتلاعب بالرصيد من التطبيق.
      *
-     * الملف التالي الخاص بالإعلانات سيقوم بتغيير
-     * هذا المسار وربطه بالتحقق من السيرفر.
+     * AdMob SSV هو المسؤول عن إثبات المشاهدة،
+     * والـBackend هو المسؤول عن إضافة Credits.
      */
 
     await refresh();
