@@ -1,12 +1,15 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../services/chat_theme_service.dart';
 
 /// أيقونة الذكاء الاصطناعي داخل المحادثة.
 ///
-/// تتغير ألوانها وشكل الإضاءة حسب ChatThemeData.
-/// لا تعتمد على شعار صاحبي AI ولا تغيّره؛
-/// دي أيقونة خاصة بالـAI داخل المحادثة فقط.
+/// هذه الأيقونة خاصة بالـAI داخل شاشة المحادثة فقط.
+/// لا تستخدم شعار صاحبي AI ولا تغيّره.
+///
+/// تعتمد الألوان والأيقونة على ChatThemeData.
 class ChatAiAvatar extends StatelessWidget {
   final ChatThemeData theme;
   final double size;
@@ -50,8 +53,7 @@ class _AnimatedAiAvatar extends StatefulWidget {
       _AnimatedAiAvatarState();
 }
 
-class _AnimatedAiAvatarState
-    extends State<_AnimatedAiAvatar>
+class _AnimatedAiAvatarState extends State<_AnimatedAiAvatar>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
@@ -64,9 +66,7 @@ class _AnimatedAiAvatarState
       duration: const Duration(seconds: 4),
     );
 
-    if (widget.animated) {
-      _controller.repeat();
-    }
+    _syncAnimation();
   }
 
   @override
@@ -75,10 +75,17 @@ class _AnimatedAiAvatarState
   ) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.animated && !_controller.isAnimating) {
+    if (oldWidget.animated != widget.animated) {
+      _syncAnimation();
+    }
+  }
+
+  void _syncAnimation() {
+    if (widget.animated) {
       _controller.repeat();
-    } else if (!widget.animated && _controller.isAnimating) {
+    } else {
       _controller.stop();
+      _controller.value = 0;
     }
   }
 
@@ -95,15 +102,19 @@ class _AnimatedAiAvatarState
       builder: (context, child) {
         final progress = _controller.value;
 
-        final rotation =
-            progress * 0.18;
+        final pulse = widget.animated
+            ? 1.0 +
+                0.025 *
+                    ((math.sin(
+                              progress * math.pi * 2,
+                            ) +
+                            1) /
+                        2)
+            : 1.0;
 
-        final pulse =
-            1.0 +
-            (0.025 *
-                (0.5 +
-                    0.5 *
-                        _sin(progress * 6.28318)));
+        final rotation = widget.animated
+            ? progress * math.pi * 0.18
+            : 0.0;
 
         return Transform.scale(
           scale: pulse,
@@ -116,8 +127,9 @@ class _AnimatedAiAvatarState
       child: _buildAvatar(),
     );
 
-    if (widget.label == null ||
-        widget.label!.trim().isEmpty) {
+    final labelText = widget.label?.trim();
+
+    if (labelText == null || labelText.isEmpty) {
       return avatar;
     }
 
@@ -127,9 +139,10 @@ class _AnimatedAiAvatarState
         avatar,
         const SizedBox(height: 4),
         Text(
-          widget.label!,
+          labelText,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.82),
             fontSize: 10,
@@ -143,13 +156,21 @@ class _AnimatedAiAvatarState
   Widget _buildAvatar() {
     final outerSize = widget.size;
 
+    final innerSize = math.max(
+      1.0,
+      outerSize - 5,
+    );
+
     return SizedBox(
       width: outerSize,
       height: outerSize,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // الهالة الخارجية
+          // ======================================================
+          // OUTER GLOW
+          // ======================================================
+
           Container(
             width: outerSize,
             height: outerSize,
@@ -174,30 +195,41 @@ class _AnimatedAiAvatarState
             ),
           ),
 
-          // الحلقة المتدرجة
-          Container(
-            width: outerSize,
-            height: outerSize,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: SweepGradient(
-                transform: GradientRotation(
-                  _controller.value * 6.28318,
+          // ======================================================
+          // GRADIENT RING
+          // ======================================================
+
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return Container(
+                width: outerSize,
+                height: outerSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: SweepGradient(
+                    transform: GradientRotation(
+                      _controller.value * math.pi * 2,
+                    ),
+                    colors: [
+                      widget.theme.primary,
+                      widget.theme.secondary,
+                      widget.theme.glow,
+                      widget.theme.primary,
+                    ],
+                  ),
                 ),
-                colors: [
-                  widget.theme.primary,
-                  widget.theme.secondary,
-                  widget.theme.glow,
-                  widget.theme.primary,
-                ],
-              ),
-            ),
+              );
+            },
           ),
 
-          // الجسم الداخلي
+          // ======================================================
+          // INNER GLASS BODY
+          // ======================================================
+
           Container(
-            width: outerSize - 5,
-            height: outerSize - 5,
+            width: innerSize,
+            height: innerSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
@@ -214,11 +246,50 @@ class _AnimatedAiAvatarState
                 ),
                 width: 1,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: widget.theme.glow.withValues(
+                    alpha: 0.10,
+                  ),
+                  blurRadius: outerSize * 0.20,
+                ),
+              ],
             ),
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // نقطة ضوء داخلية
+                // ==================================================
+                // TOP REFLECTION
+                // ==================================================
+
+                Positioned(
+                  top: outerSize * 0.14,
+                  left: outerSize * 0.18,
+                  child: Container(
+                    width: outerSize * 0.25,
+                    height: outerSize * 0.10,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                        outerSize,
+                      ),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.white.withValues(
+                            alpha: 0.16,
+                          ),
+                          Colors.white.withValues(
+                            alpha: 0.0,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ==================================================
+                // INNER LIGHT POINT
+                // ==================================================
+
                 Positioned(
                   top: outerSize * 0.16,
                   right: outerSize * 0.20,
@@ -227,12 +298,14 @@ class _AnimatedAiAvatarState
                     height: outerSize * 0.12,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: widget.theme.secondary
-                          .withValues(alpha: 0.85),
+                      color: widget.theme.secondary.withValues(
+                        alpha: 0.88,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: widget.theme.secondary
-                              .withValues(alpha: 0.55),
+                          color: widget.theme.secondary.withValues(
+                            alpha: 0.55,
+                          ),
                           blurRadius: outerSize * 0.18,
                         ),
                       ],
@@ -240,13 +313,20 @@ class _AnimatedAiAvatarState
                   ),
                 ),
 
+                // ==================================================
+                // AI ICON
+                // ==================================================
+
                 Icon(
                   widget.theme.aiIcon,
                   size: outerSize * 0.46,
                   color: Colors.white,
                 ),
 
-                // لمعة صغيرة
+                // ==================================================
+                // SMALL BOTTOM LIGHT
+                // ==================================================
+
                 Positioned(
                   bottom: outerSize * 0.16,
                   left: outerSize * 0.20,
@@ -256,6 +336,14 @@ class _AnimatedAiAvatarState
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: widget.theme.primary,
+                      boxShadow: [
+                        BoxShadow(
+                          color: widget.theme.primary.withValues(
+                            alpha: 0.45,
+                          ),
+                          blurRadius: outerSize * 0.10,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -265,30 +353,5 @@ class _AnimatedAiAvatarState
         ],
       ),
     );
-  }
-
-  double _sin(double value) {
-    // تقريب بسيط للحركة الدورية بدون إضافة dependency.
-    return _wave(value);
-  }
-
-  double _wave(double value) {
-    final normalized =
-        value % 6.28318;
-
-    if (normalized < 1.570795) {
-      return normalized / 1.570795;
-    }
-
-    if (normalized < 4.712385) {
-      return 1 -
-          ((normalized - 1.570795) /
-              1.570795 *
-              2);
-    }
-
-    return -1 +
-        ((normalized - 4.712385) /
-            1.570795);
   }
 }
