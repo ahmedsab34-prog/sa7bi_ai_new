@@ -8,15 +8,15 @@ import '../services/profile_service.dart';
 
 /// الهيدر الرئيسي لتطبيق صاحبي AI.
 ///
-/// الترتيب ثابت:
+/// الترتيب:
 /// الشعار → الترحيب → الصوت → البروفايل
 ///
-/// مهم:
-/// - دائرة الصوت الخارجية ثابتة تمامًا.
-/// - لا تكبر ولا تصغر ولا تهتز.
+/// زر الصوت:
+/// - حجمه ثابت.
+/// - الدائرة الخارجية ثابتة.
 /// - الحركة داخل الدائرة فقط.
-/// - عند تشغيل الصوت تظهر حركة داخلية تشبه المطر/الموجات الصوتية.
-/// - عند توقف الصوت يظل شكل هادئ وثابت.
+/// - عند التشغيل تظهر موجات/مطر صوتي.
+/// - عند التوقف يظل شكل هادئ.
 class AppHeader extends StatelessWidget {
   final VoidCallback? onProfileTap;
   final VoidCallback? onAudioTap;
@@ -33,21 +33,15 @@ class AppHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const Sa7biLogo(),
-
         const SizedBox(width: 9),
-
         const Expanded(
           child: _HeaderWelcome(),
         ),
-
         const SizedBox(width: 7),
-
         _HeaderAudioButton(
           onTap: onAudioTap,
         ),
-
         const SizedBox(width: 7),
-
         _HeaderProfileButton(
           onTap: onProfileTap,
         ),
@@ -64,34 +58,33 @@ class _HeaderWelcome extends StatefulWidget {
   const _HeaderWelcome();
 
   @override
-  State<_HeaderWelcome> createState() =>
-      _HeaderWelcomeState();
+  State<_HeaderWelcome> createState() => _HeaderWelcomeState();
 }
 
 class _HeaderWelcomeState extends State<_HeaderWelcome>
     with SingleTickerProviderStateMixin {
-  late final AnimationController controller;
-  Timer? timer;
+  late final AnimationController _controller;
+  Timer? _timer;
 
-  final List<String> messages = const [
+  static const List<String> _messages = [
     'أهلاً يا صاحبي 👋',
     'أنا معاك في كل حاجة 🤖',
     'قول اللي في بالك 💙',
     'خلينا ننجزها سوا 🚀',
   ];
 
-  int index = 0;
+  int _index = 0;
 
   @override
   void initState() {
     super.initState();
 
-    controller = AnimationController(
+    _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
 
-    timer = Timer.periodic(
+    _timer = Timer.periodic(
       const Duration(seconds: 4),
       (_) {
         if (!mounted) {
@@ -99,7 +92,7 @@ class _HeaderWelcomeState extends State<_HeaderWelcome>
         }
 
         setState(() {
-          index = (index + 1) % messages.length;
+          _index = (_index + 1) % _messages.length;
         });
       },
     );
@@ -107,18 +100,17 @@ class _HeaderWelcomeState extends State<_HeaderWelcome>
 
   @override
   void dispose() {
-    timer?.cancel();
-    controller.dispose();
+    _timer?.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
-      builder: (_, __) {
-        final glow =
-            0.06 + controller.value * 0.08;
+      animation: _controller,
+      builder: (context, child) {
+        final glow = 0.06 + (_controller.value * 0.08);
 
         return Container(
           constraints: const BoxConstraints(
@@ -129,8 +121,7 @@ class _HeaderWelcomeState extends State<_HeaderWelcome>
             vertical: 8,
           ),
           decoration: BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(18),
             gradient: const LinearGradient(
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
@@ -140,50 +131,42 @@ class _HeaderWelcomeState extends State<_HeaderWelcome>
               ],
             ),
             border: Border.all(
-              color: const Color(0x44FFD76A),
+              color: Color(0x44FFD76A),
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFFFD76A)
-                    .withOpacity(glow),
+                color: const Color(0xFFFFD76A).withValues(
+                  alpha: glow,
+                ),
                 blurRadius: 16,
               ),
             ],
           ),
           child: Column(
-            mainAxisAlignment:
-                MainAxisAlignment.center,
-            crossAxisAlignment:
-                CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               AnimatedSwitcher(
-                duration:
-                    const Duration(milliseconds: 350),
+                duration: const Duration(milliseconds: 350),
                 child: Text(
-                  messages[index],
-                  key: ValueKey(index),
+                  _messages[_index],
+                  key: ValueKey<int>(_index),
                   maxLines: 1,
-                  overflow:
-                      TextOverflow.ellipsis,
-                  textDirection:
-                      TextDirection.rtl,
-                  textAlign:
-                      TextAlign.right,
+                  overflow: TextOverflow.ellipsis,
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.right,
                   style: const TextStyle(
                     fontSize: 14,
-                    fontWeight:
-                        FontWeight.w900,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
               const SizedBox(height: 2),
               const Text(
                 'صاحبي AI معاك كل يوم',
-                textDirection:
-                    TextDirection.rtl,
+                textDirection: TextDirection.rtl,
                 maxLines: 1,
-                overflow:
-                    TextOverflow.ellipsis,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: Colors.white54,
                   fontSize: 9,
@@ -211,13 +194,8 @@ class _HeaderAudioButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
-      valueListenable:
-          AudioController.isPlayingNotifier,
-      builder: (
-        context,
-        isPlaying,
-        _,
-      ) {
+      valueListenable: AudioController.isPlayingNotifier,
+      builder: (context, isPlaying, child) {
         return _PulsingAudioButton(
           isPlaying: isPlaying,
           onTap: onTap,
@@ -227,15 +205,7 @@ class _HeaderAudioButton extends StatelessWidget {
   }
 }
 
-// ============================================================
-// AUDIO BUTTON
-//
-// الدائرة الخارجية ثابتة تمامًا.
-// الحركة داخلها فقط.
-// ============================================================
-
-class _PulsingAudioButton
-    extends StatefulWidget {
+class _PulsingAudioButton extends StatefulWidget {
   final bool isPlaying;
   final VoidCallback? onTap;
 
@@ -249,19 +219,17 @@ class _PulsingAudioButton
       _PulsingAudioButtonState();
 }
 
-class _PulsingAudioButtonState
-    extends State<_PulsingAudioButton>
+class _PulsingAudioButtonState extends State<_PulsingAudioButton>
     with SingleTickerProviderStateMixin {
-  late final AnimationController controller;
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
 
-    controller = AnimationController(
+    _controller = AnimationController(
       vsync: this,
-      duration:
-          const Duration(milliseconds: 1250),
+      duration: const Duration(milliseconds: 1250),
     );
 
     _syncAnimation();
@@ -273,24 +241,23 @@ class _PulsingAudioButtonState
   ) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.isPlaying !=
-        widget.isPlaying) {
+    if (oldWidget.isPlaying != widget.isPlaying) {
       _syncAnimation();
     }
   }
 
   void _syncAnimation() {
     if (widget.isPlaying) {
-      controller.repeat();
+      _controller.repeat();
     } else {
-      controller.stop();
-      controller.value = 0;
+      _controller.stop();
+      _controller.value = 0;
     }
   }
 
   @override
   void dispose() {
-    controller.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -299,84 +266,140 @@ class _PulsingAudioButtonState
     return GestureDetector(
       onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
-      child: SizedBox(
+      child: const SizedBox(
         width: 52,
         height: 52,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // ==================================================
-            // الدائرة الخارجية
-            //
-            // ثابتة 100%.
-            // لا Rotation.
-            // لا Scale.
-            // لا Pulse.
-            // ==================================================
-
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color:
-                    const Color(0xFF10131C),
-                border: Border.all(
-                  color:
-                      const Color(0xFF63E6FF),
-                  width: 1.8,
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x1F63E6FF),
-                    blurRadius: 12,
-                    spreadRadius: 0,
-                  ),
-                ],
-              ),
-            ),
-
-            // ==================================================
-            // RAIN AUDIO VISUALIZER
-            //
-            // الحركة داخل الدائرة فقط.
-            // ==================================================
-
-            SizedBox(
-              width: 36,
-              height: 32,
-              child: AnimatedBuilder(
-                animation: controller,
-                builder: (_, __) {
-                  return CustomPaint(
-                    painter:
-                        _AudioRainPainter(
-                      progress:
-                          widget.isPlaying
-                              ? controller.value
-                              : 0,
-                      isPlaying:
-                          widget.isPlaying,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+        child: _AudioButtonContents(),
       ),
+    );
+  }
+}
+
+class _AudioButtonContents extends StatefulWidget {
+  const _AudioButtonContents();
+
+  @override
+  State<_AudioButtonContents> createState() =>
+      _AudioButtonContentsState();
+}
+
+class _AudioButtonContentsState extends State<_AudioButtonContents> {
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AudioController.isPlayingNotifier,
+      builder: (context, isPlaying, child) {
+        return _AudioIndicator(
+          isPlaying: isPlaying,
+        );
+      },
+    );
+  }
+}
+
+class _AudioIndicator extends StatefulWidget {
+  final bool isPlaying;
+
+  const _AudioIndicator({
+    required this.isPlaying,
+  });
+
+  @override
+  State<_AudioIndicator> createState() => _AudioIndicatorState();
+}
+
+class _AudioIndicatorState extends State<_AudioIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1250),
+    );
+
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(
+    covariant _AudioIndicator oldWidget,
+  ) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.isPlaying != widget.isPlaying) {
+      _sync();
+    }
+  }
+
+  void _sync() {
+    if (widget.isPlaying) {
+      _controller.repeat();
+    } else {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF10131C),
+            border: Border.all(
+              color: const Color(0xFF63E6FF),
+              width: 1.8,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x1F63E6FF),
+                blurRadius: 12,
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          width: 36,
+          height: 32,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return CustomPaint(
+                painter: _AudioRainPainter(
+                  progress: widget.isPlaying
+                      ? _controller.value
+                      : 0,
+                  isPlaying: widget.isPlaying,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
 
 // ============================================================
 // AUDIO RAIN PAINTER
-//
-// شكل داخلي يشبه المطر/الموجة الصوتية.
 // ============================================================
 
-class _AudioRainPainter
-    extends CustomPainter {
+class _AudioRainPainter extends CustomPainter {
   final double progress;
   final bool isPlaying;
 
@@ -423,53 +446,33 @@ class _AudioRainPainter
       0.48,
     ];
 
-    for (int i = 0;
-        i < columnCount;
-        i++) {
-      final x =
-          2.5 +
-          i *
-              ((size.width - 5.0) /
-                  (columnCount - 1));
+    for (var i = 0; i < columnCount; i++) {
+      final x = 2.5 +
+          i * ((size.width - 5.0) / (columnCount - 1));
 
       final phase =
-          progress * math.pi * 2 +
-              phaseOffsets[i];
+          progress * math.pi * 2 + phaseOffsets[i];
 
-      double length;
+      final wave = isPlaying
+          ? (math.sin(phase) + 1) / 2
+          : 0.0;
 
-      if (isPlaying) {
-        final wave =
-            (math.sin(phase) + 1) / 2;
+      final length = isPlaying
+          ? 7.0 + wave * 14.0 * heightFactors[i]
+          : 5.0 + heightFactors[i] * 2.0;
 
-        length =
-            7.0 +
-            wave *
-                14.0 *
-                heightFactors[i];
-      } else {
-        length =
-            5.0 +
-            heightFactors[i] * 2.0;
-      }
-
-      final top =
-          centerY - length / 2;
-
-      final bottom =
-          centerY + length / 2;
+      final top = centerY - length / 2;
+      final bottom = centerY + length / 2;
 
       final opacity = isPlaying
-          ? 0.48 +
-              ((math.sin(phase) + 1) / 2) *
-                  0.52
+          ? 0.48 + wave * 0.52
           : 0.48;
 
       linePaint
-        ..color = const Color(0xFF63E6FF)
-            .withOpacity(opacity)
-        ..strokeWidth =
-            i.isEven ? 2.1 : 1.7;
+        ..color = const Color(0xFF63E6FF).withValues(
+          alpha: opacity,
+        )
+        ..strokeWidth = i.isEven ? 2.1 : 1.7;
 
       canvas.drawLine(
         Offset(x, top),
@@ -478,23 +481,17 @@ class _AudioRainPainter
       );
     }
 
-    // خط ضوء أفقي خفيف في المنتصف.
     final glowPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 1.2
-      ..color = const Color(0xFFFFD76A)
-          .withOpacity(
-        isPlaying ? 0.45 : 0.25,
+      ..color = const Color(0xFFFFD76A).withValues(
+        alpha: isPlaying ? 0.45 : 0.25,
       );
 
-    final centerWave =
-        isPlaying
-            ? math.sin(
-                  progress * math.pi * 2,
-                ) *
-                2.0
-            : 0.0;
+    final centerWave = isPlaying
+        ? math.sin(progress * math.pi * 2) * 2.0
+        : 0.0;
 
     canvas.drawLine(
       Offset(
@@ -511,13 +508,10 @@ class _AudioRainPainter
 
   @override
   bool shouldRepaint(
-    covariant _AudioRainPainter
-        oldDelegate,
+    covariant _AudioRainPainter oldDelegate,
   ) {
-    return oldDelegate.progress !=
-            progress ||
-        oldDelegate.isPlaying !=
-            isPlaying;
+    return oldDelegate.progress != progress ||
+        oldDelegate.isPlaying != isPlaying;
   }
 }
 
@@ -525,8 +519,7 @@ class _AudioRainPainter
 // PROFILE BUTTON
 // ============================================================
 
-class _HeaderProfileButton
-    extends StatelessWidget {
+class _HeaderProfileButton extends StatelessWidget {
   final VoidCallback? onTap;
 
   const _HeaderProfileButton({
@@ -535,20 +528,19 @@ class _HeaderProfileButton
 
   @override
   Widget build(BuildContext context) {
-    final profile =
-        ProfileService.instance;
+    final profile = ProfileService.instance;
 
     return AnimatedBuilder(
       animation: profile.changes,
-      builder: (context, _) {
+      builder: (context, child) {
         return GestureDetector(
           onTap: onTap,
+          behavior: HitTestBehavior.opaque,
           child: SizedBox(
             width: 56,
             height: 67,
             child: Column(
-              mainAxisAlignment:
-                  MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _ProfileAvatar(
                   profile: profile,
@@ -559,18 +551,13 @@ class _HeaderProfileButton
                   child: Text(
                     profile.displayName,
                     maxLines: 1,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    textAlign:
-                        TextAlign.center,
-                    textDirection:
-                        TextDirection.rtl,
-                    style:
-                        const TextStyle(
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    textDirection: TextDirection.rtl,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 8.5,
-                      fontWeight:
-                          FontWeight.w800,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -587,8 +574,7 @@ class _HeaderProfileButton
 // PROFILE AVATAR
 // ============================================================
 
-class _ProfileAvatar
-    extends StatelessWidget {
+class _ProfileAvatar extends StatelessWidget {
   final ProfileService profile;
 
   const _ProfileAvatar({
@@ -597,17 +583,13 @@ class _ProfileAvatar
 
   @override
   Widget build(BuildContext context) {
-    final photo =
-        profile.photoBytes;
-
-    final hasReel =
-        profile.hasReel;
+    final photo = profile.photoBytes;
+    final hasReel = profile.hasReel;
 
     final avatar = Container(
       width: 43,
       height: 43,
-      padding:
-          const EdgeInsets.all(2.2),
+      padding: const EdgeInsets.all(2.2),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: hasReel
@@ -629,46 +611,38 @@ class _ProfileAvatar
         boxShadow: [
           BoxShadow(
             color: hasReel
-                ? const Color(
-                    0xFFB45CFF,
-                  ).withOpacity(0.35)
-                : const Color(
-                    0xFFFFD76A,
-                  ).withOpacity(0.18),
-            blurRadius:
-                hasReel ? 15 : 11,
-            spreadRadius:
-                hasReel ? 1 : 0,
+                ? const Color(0xFFB45CFF).withValues(
+                    alpha: 0.35,
+                  )
+                : const Color(0xFFFFD76A).withValues(
+                    alpha: 0.18,
+                  ),
+            blurRadius: hasReel ? 15 : 11,
+            spreadRadius: hasReel ? 1 : 0,
           ),
         ],
       ),
       child: Container(
-        decoration:
-            const BoxDecoration(
+        decoration: const BoxDecoration(
           shape: BoxShape.circle,
-          color:
-              Color(0xFF10131C),
+          color: Color(0xFF10131C),
         ),
         child: ClipOval(
-          child: photo != null &&
-                  photo.isNotEmpty
+          child: photo != null && photo.isNotEmpty
               ? Image.memory(
                   photo,
                   fit: BoxFit.cover,
-                  errorBuilder:
-                      (_, __, ___) {
+                  errorBuilder: (context, error, stackTrace) {
                     return const Icon(
                       Icons.person_rounded,
-                      color:
-                          Color(0xFFFFD76A),
+                      color: Color(0xFFFFD76A),
                       size: 22,
                     );
                   },
                 )
               : const Icon(
                   Icons.person_rounded,
-                  color:
-                      Color(0xFFFFD76A),
+                  color: Color(0xFFFFD76A),
                   size: 22,
                 ),
         ),
@@ -680,8 +654,7 @@ class _ProfileAvatar
     }
 
     return Stack(
-      clipBehavior:
-          Clip.none,
+      clipBehavior: Clip.none,
       children: [
         avatar,
         Positioned(
@@ -690,27 +663,17 @@ class _ProfileAvatar
           child: Container(
             width: 12,
             height: 12,
-            decoration:
-                BoxDecoration(
-              shape:
-                  BoxShape.circle,
-              color:
-                  const Color(
-                0xFF10131C,
-              ),
-              border:
-                  Border.all(
-                color:
-                    const Color(
-                  0xFFFFD76A,
-                ),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF10131C),
+              border: Border.all(
+                color: const Color(0xFFFFD76A),
                 width: 1.1,
               ),
             ),
             child: const Icon(
               Icons.play_arrow_rounded,
-              color:
-                  Color(0xFFFF4D8D),
+              color: Color(0xFFFF4D8D),
               size: 7,
             ),
           ),
@@ -724,147 +687,98 @@ class _ProfileAvatar
 // SA7BI LOGO
 // ============================================================
 
-class Sa7biLogo
-    extends StatefulWidget {
+class Sa7biLogo extends StatefulWidget {
   const Sa7biLogo({
     super.key,
   });
 
   @override
-  State<Sa7biLogo> createState() =>
-      _Sa7biLogoState();
+  State<Sa7biLogo> createState() => _Sa7biLogoState();
 }
 
-class _Sa7biLogoState
-    extends State<Sa7biLogo>
+class _Sa7biLogoState extends State<Sa7biLogo>
     with SingleTickerProviderStateMixin {
-  late final AnimationController controller;
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
 
-    controller =
-        AnimationController(
+    _controller = AnimationController(
       vsync: this,
-      duration:
-          const Duration(seconds: 9),
+      duration: const Duration(seconds: 9),
     )..repeat();
   }
 
   @override
   void dispose() {
-    controller.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
-      builder: (_, __) {
-        final rotation =
-            controller.value *
-                math.pi *
-                2;
+      animation: _controller,
+      builder: (context, child) {
+        final rotation = _controller.value * math.pi * 2;
 
         return SizedBox(
           width: 62,
           height: 62,
           child: Stack(
-            alignment:
-                Alignment.center,
+            alignment: Alignment.center,
             children: [
               Container(
                 width: 59,
                 height: 59,
-                decoration:
-                    const BoxDecoration(
-                  shape:
-                      BoxShape.circle,
-                ),
-                child:
-                    DecoratedBox(
-                  decoration:
-                      BoxDecoration(
-                    shape:
-                        BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color:
-                            const Color(
-                          0xFF132A55,
-                        ).withOpacity(
-                          0.18,
-                        ),
-                        blurRadius: 18,
-                        spreadRadius: 2,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF132A55).withValues(
+                        alpha: 0.18,
                       ),
-                      BoxShadow(
-                        color:
-                            const Color(
-                          0xFF651B32,
-                        ).withOpacity(
-                          0.16,
-                        ),
-                        blurRadius: 20,
-                        spreadRadius: 1,
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFF651B32).withValues(
+                        alpha: 0.16,
                       ),
-                    ],
-                  ),
+                      blurRadius: 20,
+                      spreadRadius: 1,
+                    ),
+                  ],
                 ),
               ),
-
               Transform.rotate(
                 angle: rotation,
                 child: Container(
                   width: 58,
                   height: 58,
-                  decoration:
-                      const BoxDecoration(
-                    shape:
-                        BoxShape.circle,
-                    gradient:
-                        SweepGradient(
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: SweepGradient(
                       colors: [
-                        Color(
-                          0xFF8A1834,
-                        ),
-                        Color(
-                          0xFF183D72,
-                        ),
-                        Color(
-                          0xFF254F82,
-                        ),
-                        Color(
-                          0xFF5C1630,
-                        ),
-                        Color(
-                          0xFF8A1834,
-                        ),
+                        Color(0xFF8A1834),
+                        Color(0xFF183D72),
+                        Color(0xFF254F82),
+                        Color(0xFF5C1630),
+                        Color(0xFF8A1834),
                       ],
                     ),
                   ),
                 ),
               ),
-
               Container(
                 width: 51,
                 height: 51,
-                decoration:
-                    BoxDecoration(
-                  shape:
-                      BoxShape.circle,
-                  color:
-                      const Color(
-                    0xFF070A12,
-                  ),
-                  border:
-                      Border.all(
-                    color:
-                        const Color(
-                      0xFF315277,
-                    ),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF070A12),
+                  border: Border.all(
+                    color: const Color(0xFF315277),
                     width: 2.2,
                   ),
                 ),
@@ -872,15 +786,11 @@ class _Sa7biLogoState
                   child: Image.asset(
                     'app_icon.png',
                     fit: BoxFit.cover,
-                    errorBuilder:
-                        (_, __, ___) {
+                    errorBuilder: (context, error, stackTrace) {
                       return const Icon(
-                        Icons
-                            .auto_awesome_rounded,
-                        color:
-                            Color(
-                          0xFFFFD76A,
-                        ),
+                        Icons.auto_awesome_rounded,
+                        color: Color(0xFFFFD76A),
+                        size: 22,
                       );
                     },
                   ),
