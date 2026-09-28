@@ -2,6 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'chat_toolbar.dart';
 
+/// شريط كتابة المحادثة وأدواتها.
+///
+/// مسؤول عن:
+/// - إدخال النص.
+/// - زر الإرسال.
+/// - الكاميرا.
+/// - المعرض.
+/// - الفيديو.
+/// - تشغيل/إيقاف الصوت.
+/// - تحويل الكلام إلى نص.
+/// - توليد الصور.
+///
+/// لا يحتوي على منطق AI نفسه؛
+/// ChatScreen والخدمات هي المسؤولة عن التنفيذ.
 class ChatComposer extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -38,8 +52,7 @@ class ChatComposer extends StatefulWidget {
   });
 
   @override
-  State<ChatComposer> createState() =>
-      _ChatComposerState();
+  State<ChatComposer> createState() => _ChatComposerState();
 }
 
 class _ChatComposerState extends State<ChatComposer> {
@@ -49,37 +62,30 @@ class _ChatComposerState extends State<ChatComposer> {
   void initState() {
     super.initState();
 
-    widget.controller.addListener(
-      _onTextChanged,
-    );
-
-    _hasText =
-        widget.controller.text.trim().isNotEmpty;
+    widget.controller.addListener(_onTextChanged);
+    _hasText = widget.controller.text.trim().isNotEmpty;
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(
-      _onTextChanged,
-    );
-
+    widget.controller.removeListener(_onTextChanged);
     super.dispose();
   }
 
   void _onTextChanged() {
-    final hasText =
-        widget.controller.text.trim().isNotEmpty;
+    final hasText = widget.controller.text.trim().isNotEmpty;
 
-    if (hasText != _hasText && mounted) {
-      setState(() {
-        _hasText = hasText;
-      });
+    if (hasText == _hasText || !mounted) {
+      return;
     }
+
+    setState(() {
+      _hasText = hasText;
+    });
   }
 
   void _send() {
-    if (widget.isLoading ||
-        widget.isGeneratingImage) {
+    if (widget.isLoading || widget.isGeneratingImage) {
       return;
     }
 
@@ -93,8 +99,7 @@ class _ChatComposerState extends State<ChatComposer> {
   @override
   Widget build(BuildContext context) {
     final disabled =
-        widget.isLoading ||
-        widget.isGeneratingImage;
+        widget.isLoading || widget.isGeneratingImage;
 
     return SafeArea(
       top: false,
@@ -106,10 +111,10 @@ class _ChatComposerState extends State<ChatComposer> {
           8,
         ),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.25),
+          color: Colors.black.withValues(alpha: 0.25),
           border: Border(
             top: BorderSide(
-              color: Colors.white.withOpacity(0.10),
+              color: Colors.white.withValues(alpha: 0.10),
               width: 1,
             ),
           ),
@@ -122,29 +127,18 @@ class _ChatComposerState extends State<ChatComposer> {
             // =====================================================
 
             ChatToolbar(
-              onCamera:
-                  disabled ? null : widget.onCamera,
-              onGallery:
-                  disabled ? null : widget.onGallery,
-              onVideo:
-                  disabled ? null : widget.onVideo,
-              onVoice:
-                  disabled ? null : widget.onVoice,
-              onText:
-                  disabled ? null : widget.onText,
+              onCamera: disabled ? null : widget.onCamera,
+              onGallery: disabled ? null : widget.onGallery,
+              onVideo: disabled ? null : widget.onVideo,
+              onVoice: disabled ? null : widget.onVoice,
+              onText: disabled ? null : widget.onText,
               onSpeechToText:
-                  disabled
-                      ? null
-                      : widget.onSpeechToText,
+                  disabled ? null : widget.onSpeechToText,
               onImageGeneration:
-                  disabled
-                      ? null
-                      : widget.onImageGeneration,
+                  disabled ? null : widget.onImageGeneration,
               enabled: !disabled,
-              isListening:
-                  widget.isListening,
-              isGeneratingImage:
-                  widget.isGeneratingImage,
+              isListening: widget.isListening,
+              isGeneratingImage: widget.isGeneratingImage,
             ),
 
             const SizedBox(height: 5),
@@ -154,43 +148,29 @@ class _ChatComposerState extends State<ChatComposer> {
             // =====================================================
 
             Row(
-              crossAxisAlignment:
-                  CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
                   child: AnimatedContainer(
-                    duration:
-                        const Duration(
-                      milliseconds: 180,
-                    ),
-                    constraints:
-                        const BoxConstraints(
+                    duration: const Duration(milliseconds: 180),
+                    constraints: const BoxConstraints(
                       minHeight: 50,
                       maxHeight: 135,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(
-                        0.095,
-                      ),
-                      borderRadius:
-                          BorderRadius.circular(25),
+                      color: Colors.white.withValues(alpha: 0.095),
+                      borderRadius: BorderRadius.circular(25),
                       border: Border.all(
                         color: _hasText
-                            ? Colors.white.withOpacity(
-                                0.24,
-                              )
-                            : Colors.white.withOpacity(
-                                0.13,
-                              ),
+                            ? Colors.white.withValues(alpha: 0.24)
+                            : Colors.white.withValues(alpha: 0.13),
                         width: 1,
                       ),
                       boxShadow: _hasText
                           ? [
                               BoxShadow(
-                                color:
-                                    Colors.white
-                                        .withOpacity(
-                                  0.05,
+                                color: Colors.white.withValues(
+                                  alpha: 0.05,
                                 ),
                                 blurRadius: 12,
                                 spreadRadius: 1,
@@ -199,55 +179,39 @@ class _ChatComposerState extends State<ChatComposer> {
                           : null,
                     ),
                     child: TextField(
-                      controller:
-                          widget.controller,
-                      focusNode:
-                          widget.focusNode,
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
                       enabled: !disabled,
                       minLines: 1,
                       maxLines: 5,
-                      textInputAction:
-                          TextInputAction.newline,
-                      keyboardType:
-                          TextInputType.multiline,
-                      textDirection:
-                          TextDirection.rtl,
-                      textAlign:
-                          TextAlign.right,
-                      style:
-                          const TextStyle(
+                      textInputAction: TextInputAction.newline,
+                      keyboardType: TextInputType.multiline,
+                      textDirection: TextDirection.rtl,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         height: 1.35,
                       ),
-                      cursorColor:
-                          Colors.white,
-                      decoration:
-                          InputDecoration(
-                        hintText:
-                            widget.isListening
-                                ? 'جاري الاستماع...'
-                                : 'اكتب رسالتك لصاحبي...',
-                        hintTextDirection:
-                            TextDirection.rtl,
-                        hintStyle:
-                            TextStyle(
-                          color: Colors.white
-                              .withOpacity(0.48),
+                      cursorColor: Colors.white,
+                      decoration: InputDecoration(
+                        hintText: widget.isListening
+                            ? 'جاري الاستماع...'
+                            : 'اكتب رسالتك لصاحبي...',
+                        hintTextDirection: TextDirection.rtl,
+                        hintStyle: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.48),
                           fontSize: 15,
                         ),
-                        border:
-                            InputBorder.none,
+                        border: InputBorder.none,
                         contentPadding:
-                            const EdgeInsets
-                                .symmetric(
+                            const EdgeInsets.symmetric(
                           horizontal: 18,
                           vertical: 13,
                         ),
                       ),
                       onSubmitted: (_) {
-                        if (!disabled &&
-                            _hasText) {
+                        if (!disabled && _hasText) {
                           _send();
                         }
                       },
@@ -264,115 +228,67 @@ class _ChatComposerState extends State<ChatComposer> {
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap:
-                        disabled || !_hasText
-                            ? null
-                            : _send,
-                    borderRadius:
-                        BorderRadius.circular(25),
-                    child:
-                        AnimatedContainer(
-                      duration:
-                          const Duration(
-                        milliseconds: 200,
-                      ),
+                    onTap: disabled || !_hasText ? null : _send,
+                    borderRadius: BorderRadius.circular(25),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
                       width: 50,
                       height: 50,
-                      decoration:
-                          BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient:
-                            _hasText && !disabled
-                                ? const LinearGradient(
-                                    begin:
-                                        Alignment
-                                            .topLeft,
-                                    end:
-                                        Alignment
-                                            .bottomRight,
-                                    colors: [
-                                      Color(
-                                        0xFFFFE08A,
-                                      ),
-                                      Color(
-                                        0xFFFFB347,
-                                      ),
-                                    ],
-                                  )
-                                : LinearGradient(
-                                    begin:
-                                        Alignment
-                                            .topLeft,
-                                    end:
-                                        Alignment
-                                            .bottomRight,
-                                    colors: [
-                                      Color(
-                                        0x22FFFFFF,
-                                      ),
-                                      Color(
-                                        0x0FFFFFFF,
-                                      ),
-                                    ],
-                                  ),
+                        gradient: _hasText && !disabled
+                            ? const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFFFFE08A),
+                                  Color(0xFFFFB347),
+                                ],
+                              )
+                            : const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0x22FFFFFF),
+                                  Color(0x0FFFFFFF),
+                                ],
+                              ),
                         border: Border.all(
-                          color:
-                              _hasText && !disabled
-                                  ? Colors.white
-                                      .withOpacity(
-                                      0.28,
-                                    )
-                                  : Colors.white
-                                      .withOpacity(
-                                      0.08,
-                                    ),
+                          color: _hasText && !disabled
+                              ? Colors.white.withValues(alpha: 0.28)
+                              : Colors.white.withValues(alpha: 0.08),
                         ),
-                        boxShadow:
-                            _hasText && !disabled
-                                ? [
-                                    BoxShadow(
-                                      color:
-                                          const Color(
-                                        0xFFFFD76A,
-                                      ).withOpacity(
-                                        0.30,
-                                      ),
-                                      blurRadius: 14,
-                                      spreadRadius: 1,
-                                    ),
-                                  ]
-                                : null,
-                      ),
-                      child:
-                          widget.isLoading
-                              ? const Padding(
-                                  padding:
-                                      EdgeInsets.all(
-                                    14,
-                                  ),
-                                  child:
-                                      CircularProgressIndicator(
-                                    strokeWidth: 2.2,
-                                    valueColor:
-                                        AlwaysStoppedAnimation<
-                                            Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : Icon(
-                                  Icons
-                                      .arrow_upward_rounded,
-                                  color:
-                                      _hasText &&
-                                              !disabled
-                                          ? Colors.black
-                                          : Colors.white
-                                              .withOpacity(
-                                            0.30,
-                                          ),
-                                  size: 26,
+                        boxShadow: _hasText && !disabled
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFFFFD76A)
+                                      .withValues(alpha: 0.30),
+                                  blurRadius: 14,
+                                  spreadRadius: 1,
                                 ),
+                              ]
+                            : null,
+                      ),
+                      child: widget.isLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(14),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              Icons.arrow_upward_rounded,
+                              color: _hasText && !disabled
+                                  ? Colors.black
+                                  : Colors.white.withValues(
+                                      alpha: 0.30,
+                                    ),
+                              size: 26,
+                            ),
                     ),
                   ),
                 ),
