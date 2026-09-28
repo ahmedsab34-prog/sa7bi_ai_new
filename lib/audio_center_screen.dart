@@ -88,6 +88,18 @@ class _AudioCenterScreenState
   RadioCountry? _country;
   List<RadioStation> _stations = [];
 
+  // ============================================================
+  // PODCAST STATE
+  // ============================================================
+
+  List<PodcastItem> _podcasts = [];
+
+  PodcastItem? _selectedPodcast;
+
+  List<PodcastEpisode> _podcastEpisodes = [];
+
+  bool _loadingPodcastEpisodes = false;
+
   @override
   void initState() {
     super.initState();
@@ -149,6 +161,11 @@ class _AudioCenterScreenState
       _tafsirItems = [];
       _stations = [];
       _searchController.clear();
+
+      _podcasts = [];
+      _selectedPodcast = null;
+      _podcastEpisodes = [];
+      _loadingPodcastEpisodes = false;
     });
 
     await _loadCategory();
@@ -205,6 +222,10 @@ class _AudioCenterScreenState
       }
     }
   }
+
+  // ============================================================
+  // AUDIO PLAYBACK
+  // ============================================================
 
   Future<void> _playUrl(
     String url,
@@ -363,6 +384,10 @@ class _AudioCenterScreenState
       ),
     );
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(
@@ -581,13 +606,7 @@ class _AudioCenterScreenState
         );
 
       case 4:
-        return _searchableList(
-          title: 'البودكاست',
-          items: _audioItems,
-          empty: _error.isNotEmpty
-              ? _error
-              : 'ابحث عن بودكاست.',
-        );
+        return _podcastView();
 
       case 5:
         return _radioView();
@@ -596,6 +615,10 @@ class _AudioCenterScreenState
         return const SizedBox.shrink();
     }
   }
+
+  // ============================================================
+  // COMMON UI
+  // ============================================================
 
   Widget _dropdown<T>({
     required T? value,
@@ -1291,12 +1314,12 @@ class _AudioCenterScreenState
     final query =
         _searchController.text.trim();
 
-    final items =
-        await AiService.searchAudio(
-      query.isEmpty
+    final podcasts =
+        await AiService.searchPodcasts(
+      query: query.isEmpty
           ? 'Arabic podcast'
           : query,
-      type: 'podcast',
+      limit: 30,
     );
 
     if (!mounted) {
@@ -1304,11 +1327,606 @@ class _AudioCenterScreenState
     }
 
     setState(() {
-      _audioItems = items;
-      _error = items.isEmpty
+      _podcasts = podcasts;
+      _selectedPodcast = null;
+      _podcastEpisodes = [];
+      _loadingPodcastEpisodes = false;
+
+      _error = podcasts.isEmpty
           ? 'لم يتم العثور على بودكاست متاح حاليًا.'
           : '';
     });
+  }
+
+  Future<void> _openPodcast(
+    PodcastItem podcast,
+  ) async {
+    final feedUrl =
+        podcast.feedUrl.trim();
+
+    if (feedUrl.isEmpty) {
+      _message(
+        'هذا البودكاست لا يوفر رابط الحلقات حاليًا.',
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedPodcast = podcast;
+      _podcastEpisodes = [];
+      _loadingPodcastEpisodes = true;
+      _error = '';
+    });
+
+    try {
+      final episodes =
+          await AiService.getPodcastEpisodes(
+        feedUrl: feedUrl,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _podcastEpisodes = episodes;
+        _loadingPodcastEpisodes = false;
+
+        _error = episodes.isEmpty
+            ? 'لم يتم العثور على حلقات متاحة لهذا البودكاست حاليًا.'
+            : '';
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _podcastEpisodes = [];
+        _loadingPodcastEpisodes = false;
+        _error =
+            'تعذر تحميل حلقات البودكاست حاليًا.';
+      });
+    }
+  }
+
+  void _closePodcastEpisodes() {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _selectedPodcast = null;
+      _podcastEpisodes = [];
+      _loadingPodcastEpisodes = false;
+      _error = '';
+    });
+  }
+
+  Widget _podcastView() {
+    final selected =
+        _selectedPodcast;
+
+    if (selected != null) {
+      return _podcastEpisodesView(
+        selected,
+      );
+    }
+
+    return ListView(
+      physics:
+          const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        14,
+        8,
+        14,
+        30,
+      ),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _sectionTitle(
+                'البودكاست',
+              ),
+            ),
+            IconButton(
+              tooltip: 'تحديث',
+              onPressed:
+                  _loading
+                      ? null
+                      : _search,
+              icon: Icon(
+                Icons.refresh_rounded,
+                color: _gold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _searchBox(),
+        const SizedBox(height: 12),
+        if (_podcasts.isEmpty)
+          _emptyText(
+            _error.isNotEmpty
+                ? _error
+                : 'ابحث عن بودكاست.',
+          ),
+        ..._podcasts.map(
+          (podcast) =>
+              _podcastCard(podcast),
+        ),
+      ],
+    );
+  }
+
+  Widget _podcastCard(
+    PodcastItem podcast,
+  ) {
+    final artwork =
+        podcast.artwork.trim();
+
+    final author =
+        podcast.author.trim().isNotEmpty
+            ? podcast.author.trim()
+            : podcast.artist.trim();
+
+    return Container(
+      margin:
+          const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius:
+            BorderRadius.circular(17),
+        border: Border.all(
+          color:
+              _gold.withValues(alpha: 0.12),
+        ),
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 7,
+        ),
+        leading: Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            borderRadius:
+                BorderRadius.circular(13),
+            color:
+                _goldDark.withValues(
+              alpha: 0.22,
+            ),
+            image: artwork.isEmpty
+                ? null
+                : DecorationImage(
+                    image:
+                        NetworkImage(
+                      artwork,
+                    ),
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          child: artwork.isEmpty
+              ? const Icon(
+                  Icons.podcasts_rounded,
+                  color: _gold,
+                  size: 30,
+                )
+              : null,
+        ),
+        title: Text(
+          podcast.title,
+          maxLines: 2,
+          overflow:
+              TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Padding(
+          padding:
+              const EdgeInsets.only(top: 4),
+          child: Text(
+            [
+              if (author.isNotEmpty)
+                author,
+              if (podcast.episodeCount > 0)
+                '${podcast.episodeCount} حلقة',
+            ].join(' • '),
+            maxLines: 2,
+            overflow:
+                TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+            ),
+          ),
+        ),
+        trailing: Icon(
+          Icons.arrow_back_ios_new_rounded,
+          color: _gold,
+          size: 18,
+        ),
+        onTap:
+            _loadingPodcastEpisodes
+                ? null
+                : () =>
+                    _openPodcast(
+                      podcast,
+                    ),
+      ),
+    );
+  }
+
+  Widget _podcastEpisodesView(
+    PodcastItem podcast,
+  ) {
+    final artwork =
+        podcast.artwork.trim();
+
+    return ListView(
+      physics:
+          const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        14,
+        8,
+        14,
+        30,
+      ),
+      children: [
+        Row(
+          children: [
+            IconButton(
+              tooltip: 'رجوع للبودكاست',
+              onPressed:
+                  _loadingPodcastEpisodes
+                      ? null
+                      : _closePodcastEpisodes,
+              icon: Icon(
+                Icons.arrow_forward_rounded,
+                color: _gold,
+              ),
+            ),
+            Expanded(
+              child: _sectionTitle(
+                podcast.title,
+              ),
+            ),
+            IconButton(
+              tooltip: 'تحديث الحلقات',
+              onPressed:
+                  _loadingPodcastEpisodes
+                      ? null
+                      : () =>
+                          _openPodcast(
+                            podcast,
+                          ),
+              icon: Icon(
+                Icons.refresh_rounded,
+                color: _gold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding:
+              const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius:
+                BorderRadius.circular(17),
+            border: Border.all(
+              color:
+                  _gold.withValues(alpha: 0.14),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  borderRadius:
+                      BorderRadius.circular(15),
+                  color:
+                      _goldDark.withValues(
+                    alpha: 0.22,
+                  ),
+                  image: artwork.isEmpty
+                      ? null
+                      : DecorationImage(
+                          image:
+                              NetworkImage(
+                            artwork,
+                          ),
+                          fit: BoxFit.cover,
+                        ),
+                ),
+                child: artwork.isEmpty
+                    ? const Icon(
+                        Icons.podcasts_rounded,
+                        color: _gold,
+                        size: 34,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      podcast.title,
+                      maxLines: 2,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style:
+                          const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight:
+                            FontWeight.w900,
+                      ),
+                    ),
+                    if (podcast.author
+                        .trim()
+                        .isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        podcast.author.trim(),
+                        maxLines: 1,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    if (podcast.description
+                        .trim()
+                        .isNotEmpty) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        podcast.description.trim(),
+                        maxLines: 3,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (_loadingPodcastEpisodes)
+          const Padding(
+            padding:
+                EdgeInsets.symmetric(
+              vertical: 50,
+            ),
+            child: Center(
+              child:
+                  CircularProgressIndicator(),
+            ),
+          )
+        else ...[
+          Text(
+            'الحلقات',
+            style: TextStyle(
+              color: _gold,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (_podcastEpisodes.isEmpty)
+            _emptyText(
+              _error.isNotEmpty
+                  ? _error
+                  : 'لا توجد حلقات متاحة حاليًا.',
+            ),
+          ..._podcastEpisodes.map(
+            (episode) =>
+                _podcastEpisodeCard(
+              episode,
+              podcast,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _podcastEpisodeCard(
+    PodcastEpisode episode,
+    PodcastItem podcast,
+  ) {
+    final audioUrl =
+        episode.audioUrl.trim();
+
+    final image =
+        episode.image.trim().isNotEmpty
+            ? episode.image.trim()
+            : podcast.artwork.trim();
+
+    final hasAudio =
+        audioUrl.isNotEmpty;
+
+    final metadata = <String>[];
+
+    if (episode.publishedAt
+        .trim()
+        .isNotEmpty) {
+      metadata.add(
+        episode.publishedAt.trim(),
+      );
+    }
+
+    if (episode.duration
+        .trim()
+        .isNotEmpty) {
+      metadata.add(
+        episode.duration.trim(),
+      );
+    }
+
+    if (episode.season > 0) {
+      metadata.add(
+        'الموسم ${episode.season}',
+      );
+    }
+
+    if (episode.episode > 0) {
+      metadata.add(
+        'الحلقة ${episode.episode}',
+      );
+    }
+
+    if (episode.explicit) {
+      metadata.add('محتوى صريح');
+    }
+
+    return Container(
+      margin:
+          const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius:
+            BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: ListTile(
+        contentPadding:
+            const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 7,
+        ),
+        leading: Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            borderRadius:
+                BorderRadius.circular(12),
+            color:
+                _goldDark.withValues(
+              alpha: 0.20,
+            ),
+            image: image.isEmpty
+                ? null
+                : DecorationImage(
+                    image:
+                        NetworkImage(
+                      image,
+                    ),
+                    fit: BoxFit.cover,
+                  ),
+          ),
+          child: image.isEmpty
+              ? const Icon(
+                  Icons.headphones_rounded,
+                  color: _gold,
+                )
+              : null,
+        ),
+        title: Text(
+          episode.title,
+          maxLines: 2,
+          overflow:
+              TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Padding(
+          padding:
+              const EdgeInsets.only(top: 4),
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              if (metadata.isNotEmpty)
+                Text(
+                  metadata.join(' • '),
+                  maxLines: 2,
+                  overflow:
+                      TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                  ),
+                ),
+              if (episode.description
+                  .trim()
+                  .isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(
+                  episode.description.trim(),
+                  maxLines: 2,
+                  overflow:
+                      TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        trailing: IconButton(
+          tooltip:
+              hasAudio
+                  ? 'تشغيل الحلقة'
+                  : 'الصوت غير متاح',
+          onPressed:
+              !hasAudio ||
+                      _switchingAudio
+                  ? null
+                  : () => _playUrl(
+                        audioUrl,
+                        episode.title,
+                        artist:
+                            podcast.title,
+                        artwork:
+                            image.isEmpty
+                                ? null
+                                : image,
+                      ),
+          icon: Icon(
+            hasAudio
+                ? Icons.play_circle_fill_rounded
+                : Icons.volume_off_rounded,
+            color:
+                hasAudio
+                    ? _gold
+                    : Colors.white24,
+            size: 38,
+          ),
+        ),
+      ),
+    );
   }
 
   // ============================================================
