@@ -2,8 +2,17 @@ import 'package:flutter/material.dart';
 
 /// شريط أدوات المحادثة.
 ///
-/// كل الأدوات تظهر في نفس الشاشة بدون تمرير أفقي.
+/// الأدوات:
+/// - الكاميرا
+/// - المعرض
+/// - الفيديو
+/// - الصوت
+/// - الكتابة
+/// - تحويل الكلام إلى نص
+/// - توليد الصور
+///
 /// المنطق الحقيقي للأدوات موجود داخل ChatScreen والخدمات.
+/// هذا الملف مسؤول عن الواجهة والاستدعاءات فقط.
 class ChatToolbar extends StatelessWidget {
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
@@ -47,15 +56,15 @@ class ChatToolbar extends StatelessWidget {
           vertical: 6,
         ),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.075),
+          color: Colors.white.withValues(alpha: 0.075),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: Colors.white.withOpacity(0.13),
+            color: Colors.white.withValues(alpha: 0.13),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.20),
+              color: Colors.black.withValues(alpha: 0.20),
               blurRadius: 18,
               offset: const Offset(0, 7),
             ),
@@ -67,29 +76,23 @@ class ChatToolbar extends StatelessWidget {
               child: _ToolButton(
                 icon: Icons.camera_alt_rounded,
                 tooltip: 'الكاميرا',
-                onPressed:
-                    enabled ? onCamera : null,
+                onPressed: enabled ? onCamera : null,
               ),
             ),
-
             Expanded(
               child: _ToolButton(
                 icon: Icons.photo_library_rounded,
                 tooltip: 'الصور والمعرض',
-                onPressed:
-                    enabled ? onGallery : null,
+                onPressed: enabled ? onGallery : null,
               ),
             ),
-
             Expanded(
               child: _ToolButton(
                 icon: Icons.videocam_rounded,
                 tooltip: 'فيديو',
-                onPressed:
-                    enabled ? onVideo : null,
+                onPressed: enabled ? onVideo : null,
               ),
             ),
-
             Expanded(
               child: _ToolButton(
                 icon: Icons.mic_rounded,
@@ -97,20 +100,16 @@ class ChatToolbar extends StatelessWidget {
                     ? 'إيقاف التسجيل'
                     : 'صوت',
                 active: isListening,
-                onPressed:
-                    enabled ? onVoice : null,
+                onPressed: enabled ? onVoice : null,
               ),
             ),
-
             Expanded(
               child: _ToolButton(
                 icon: Icons.keyboard_rounded,
                 tooltip: 'كتابة',
-                onPressed:
-                    enabled ? onText : null,
+                onPressed: enabled ? onText : null,
               ),
             ),
-
             Expanded(
               child: _ToolButton(
                 icon: isListening
@@ -124,7 +123,6 @@ class ChatToolbar extends StatelessWidget {
                     enabled ? onSpeechToText : null,
               ),
             ),
-
             Expanded(
               child: _ToolButton(
                 icon: isGeneratingImage
@@ -152,7 +150,6 @@ class _ToolButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback? onPressed;
-
   final bool active;
   final bool emphasized;
 
@@ -175,43 +172,40 @@ class _ToolButton extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            borderRadius:
-                BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20),
             child: AnimatedContainer(
-              duration:
-                  const Duration(milliseconds: 180),
+              duration: const Duration(milliseconds: 180),
               width: 40,
               height: 40,
               decoration: BoxDecoration(
                 color: active
-                    ? Colors.white.withOpacity(0.18)
+                    ? Colors.white.withValues(alpha: 0.18)
                     : emphasized
-                        ? Colors.amber.withOpacity(0.13)
-                        : Colors.white.withOpacity(0.045),
+                        ? Colors.amber.withValues(alpha: 0.13)
+                        : Colors.white.withValues(alpha: 0.045),
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: active
-                      ? Colors.white.withOpacity(0.32)
+                      ? Colors.white.withValues(alpha: 0.32)
                       : emphasized
-                          ? Colors.amber.withOpacity(0.30)
-                          : Colors.white.withOpacity(0.08),
+                          ? Colors.amber.withValues(alpha: 0.30)
+                          : Colors.white.withValues(alpha: 0.08),
                   width: 1,
                 ),
                 boxShadow: active
                     ? [
                         BoxShadow(
-                          color: Colors.white
-                              .withOpacity(0.12),
+                          color:
+                              Colors.white.withValues(alpha: 0.12),
                           blurRadius: 8,
                           spreadRadius: 1,
                         ),
                       ]
-                    : emphasized &&
-                            !disabled
+                    : emphasized && !disabled
                         ? [
                             BoxShadow(
-                              color: Colors.amber
-                                  .withOpacity(0.12),
+                              color:
+                                  Colors.amber.withValues(alpha: 0.12),
                               blurRadius: 8,
                               spreadRadius: 1,
                             ),
@@ -222,12 +216,12 @@ class _ToolButton extends StatelessWidget {
                 icon,
                 size: 19,
                 color: disabled
-                    ? Colors.white.withOpacity(0.25)
+                    ? Colors.white.withValues(alpha: 0.25)
                     : active
                         ? Colors.white
                         : emphasized
                             ? Colors.amber.shade200
-                            : Colors.white.withOpacity(0.84),
+                            : Colors.white.withValues(alpha: 0.84),
               ),
             ),
           ),
