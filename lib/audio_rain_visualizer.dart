@@ -1,39 +1,38 @@
-part of 'audio_center_screen.dart';
-
 // ============================================================
-// AUDIO RAIN VISUALIZER
+// FILE: lib/audio_rain_visualizer.dart
+// ============================================================
+//
+// مستقل عن AudioCenterScreen.
+// يعرض مؤشر موجات/مطر صوتي صغير أثناء تشغيل الصوت.
 // ============================================================
 
-class _AudioRainVisualizer
-    extends StatefulWidget {
-  const _AudioRainVisualizer();
+import 'package:flutter/material.dart';
+
+class AudioRainVisualizer extends StatefulWidget {
+  const AudioRainVisualizer({
+    super.key,
+  });
 
   @override
-  State<_AudioRainVisualizer>
-      createState() =>
-          _AudioRainVisualizerState();
+  State<AudioRainVisualizer> createState() =>
+      _AudioRainVisualizerState();
 }
 
 class _AudioRainVisualizerState
-    extends State<
-        _AudioRainVisualizer>
-    with
-        SingleTickerProviderStateMixin {
+    extends State<AudioRainVisualizer>
+    with SingleTickerProviderStateMixin {
   static const Color _gold =
       Color(0xFFE6C875);
 
-  late final AnimationController
-      _controller;
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
 
-    _controller =
-        AnimationController(
+    _controller = AnimationController(
       vsync: this,
-      duration:
-          const Duration(
+      duration: const Duration(
         milliseconds: 1100,
       ),
     )..repeat();
@@ -54,17 +53,13 @@ class _AudioRainVisualizerState
       height: 34,
       child: AnimatedBuilder(
         animation: _controller,
-        builder:
-            (context, child) {
+        builder: (context, child) {
           return Row(
             mainAxisAlignment:
-                MainAxisAlignment
-                    .spaceEvenly,
+                MainAxisAlignment.spaceEvenly,
             crossAxisAlignment:
-                CrossAxisAlignment
-                    .end,
-            children:
-                List.generate(
+                CrossAxisAlignment.end,
+            children: List.generate(
               7,
               (index) {
                 final phase =
@@ -73,24 +68,19 @@ class _AudioRainVisualizerState
                         1.0;
 
                 final height =
-                    7.0 +
-                        (phase * 20.0);
+                    7.0 + (phase * 20.0);
 
                 return Container(
                   width: 3,
                   height: height,
-                  decoration:
-                      BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Color.lerp(
                       Colors.white54,
                       _gold,
                       phase,
                     ),
                     borderRadius:
-                        BorderRadius
-                            .circular(
-                      8,
-                    ),
+                        BorderRadius.circular(8),
                   ),
                 );
               },
