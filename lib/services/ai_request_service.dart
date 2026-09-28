@@ -67,14 +67,33 @@ class AiRequestService {
   static const int maxHistory =
       AppConfig.maximumContextMessages;
 
+  /// أقصى حجم للصورة الواحدة.
   static const int maxImageBytes =
       AppConfig.maximumImageSizeMb * 1024 * 1024;
 
+  /// أقصى عدد Frames أو صور في طلب التحليل.
   static const int maxVideoFrames =
       AppConfig.maximumVideoFrames;
 
+  /// أقصى حجم إجمالي لبيانات تحليل الصور/الفيديو.
+  ///
+  /// تم إبقاؤه أقل من حد جسم طلب الـWorker حتى يكون هناك
+  /// مساحة كافية لـBase64 والـJSON وباقي بيانات الطلب.
   static const int maxVideoTotalBytes =
       5 * 1024 * 1024;
+
+  /// أقصى حجم إجمالي للصور المرسلة إلى توليد/تعديل الصور.
+  ///
+  /// السبب:
+  /// صورة 5MB تتحول إلى Base64 بحجم أكبر من حجمها الأصلي،
+  /// وإرسال 4 صور × 5MB قد يتجاوز حد جسم طلب الـWorker.
+  ///
+  /// لذلك نضع حدًا إجماليًا آمنًا للصور الداخلة في طلب الصورة.
+  static const int maxImageGenerationTotalBytes =
+      6 * 1024 * 1024;
+
+  /// أقصى عدد صور يمكن إرفاقها بتوليد/تعديل الصورة.
+  static const int maxImageGenerationImages = 4;
 
   static const Duration connectionTimeout =
       Duration(
@@ -719,15 +738,26 @@ class AiRequestService {
     final imageDataUrls =
         <String>[];
 
+    var totalImageBytes = 0;
+
     for (final image
         in images
             .where(
               (item) => item.isNotEmpty,
             )
-            .take(4)) {
+            .take(maxImageGenerationImages)) {
       if (image.length > maxImageBytes) {
         throw const AiRequestException(
-          'إحدى الصور كبيرة جدًا.',
+          'إحدى الصور كبيرة جدًا. الحد الأقصى للصورة الواحدة هو 5 ميجابايت.',
+        );
+      }
+
+      totalImageBytes += image.length;
+
+      if (totalImageBytes >
+          maxImageGenerationTotalBytes) {
+        throw const AiRequestException(
+          'إجمالي حجم الصور كبير جدًا. حاول استخدام صور أقل أو صورًا بحجم أصغر.',
         );
       }
 
