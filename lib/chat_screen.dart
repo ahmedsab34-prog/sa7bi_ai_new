@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import 'config/app_config.dart';
 import 'config/credits_config.dart';
 import 'config/service_keys.dart';
 import 'models/chat_message.dart';
@@ -34,8 +35,7 @@ class ChatScreen extends StatefulWidget {
       _ChatScreenState();
 }
 
-class _ChatScreenState
-    extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> {
   late final ChatController _chatController;
   late final ProfileService _profileService;
 
@@ -176,8 +176,7 @@ class _ChatScreenState
   void initState() {
     super.initState();
 
-    _chatController =
-        ChatController(
+    _chatController = ChatController(
       serviceKey: _serviceKey,
     );
 
@@ -292,24 +291,21 @@ class _ChatScreenState
         );
 
         if (mounted) {
-          await _chatController
-              .addTextMessage(
+          await _chatController.addTextMessage(
             text: reply,
             isUser: false,
           );
         }
       } on AiRequestException catch (error) {
         if (mounted) {
-          await _chatController
-              .addTextMessage(
+          await _chatController.addTextMessage(
             text: error.message,
             isUser: false,
           );
         }
       } catch (_) {
         if (mounted) {
-          await _chatController
-              .addTextMessage(
+          await _chatController.addTextMessage(
             text:
                 'حصلت مشكلة مؤقتة في الاتصال بصاحبي. حاول مرة تانية.',
             isUser: false,
@@ -330,19 +326,15 @@ class _ChatScreenState
     return _chatController.messages
         .where(
           (message) =>
-              message.text
-                  .trim()
-                  .isNotEmpty &&
+              message.text.trim().isNotEmpty &&
               message.image == null &&
               !message.isVideo,
         )
         .map(
-          (message) =>
-              <String, String>{
-            'role':
-                message.isUser
-                    ? 'user'
-                    : 'assistant',
+          (message) => <String, String>{
+            'role': message.isUser
+                ? 'user'
+                : 'assistant',
             'content':
                 message.text.trim(),
           },
@@ -355,7 +347,8 @@ class _ChatScreenState
   // ============================================================
 
   Future<void> _takePhoto() async {
-    if (_chatController.isLoading) {
+    if (_chatController.isLoading ||
+        _generatingImage) {
       return;
     }
 
@@ -380,13 +373,24 @@ class _ChatScreenState
       return;
     }
 
+    if (bytes.length >
+        AppConfig.maximumImageSizeMb *
+            1024 *
+            1024) {
+      _showMessage(
+        'الصورة كبيرة جدًا. الحد الأقصى هو 5 ميجابايت.',
+      );
+      return;
+    }
+
     await _handleSelectedImages([
       bytes,
     ]);
   }
 
   Future<void> _pickImage() async {
-    if (_chatController.isLoading) {
+    if (_chatController.isLoading ||
+        _generatingImage) {
       return;
     }
 
@@ -406,6 +410,11 @@ class _ChatScreenState
       final images =
           <Uint8List>[];
 
+      final maximumImageBytes =
+          AppConfig.maximumImageSizeMb *
+              1024 *
+              1024;
+
       for (final file in files.take(4)) {
         final bytes =
             await file.readAsBytes();
@@ -415,8 +424,7 @@ class _ChatScreenState
         }
 
         if (bytes.length >
-            CreditsConfig.maximumLocalCredits *
-                1024) {
+            maximumImageBytes) {
           continue;
         }
 
@@ -425,7 +433,7 @@ class _ChatScreenState
 
       if (images.isEmpty) {
         _showMessage(
-          'تعذر قراءة الصور المختارة.',
+          'الصور المختارة أكبر من الحد المسموح أو تعذر قراءتها.',
         );
         return;
       }
@@ -444,7 +452,8 @@ class _ChatScreenState
     List<Uint8List> images,
   ) async {
     if (images.isEmpty ||
-        _chatController.isLoading) {
+        _chatController.isLoading ||
+        _generatingImage) {
       return;
     }
 
@@ -637,24 +646,21 @@ class _ChatScreenState
       );
 
       if (mounted) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text: reply,
           isUser: false,
         );
       }
     } on AiRequestException catch (error) {
       if (mounted) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text: error.message,
           isUser: false,
         );
       }
     } catch (_) {
       if (mounted) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text:
               'تعذر تحليل الصور حاليًا.',
           isUser: false,
@@ -672,7 +678,8 @@ class _ChatScreenState
   // ============================================================
 
   Future<void> _pickVideo() async {
-    if (_chatController.isLoading) {
+    if (_chatController.isLoading ||
+        _generatingImage) {
       return;
     }
 
@@ -724,8 +731,7 @@ class _ChatScreenState
       }
 
       final reply =
-          await AiRequestService
-              .analyzeVideoFrames(
+          await AiRequestService.analyzeVideoFrames(
         frames,
         serviceTitle: _title,
         serviceContext:
@@ -733,24 +739,21 @@ class _ChatScreenState
       );
 
       if (mounted) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text: reply,
           isUser: false,
         );
       }
     } on AiRequestException catch (error) {
       if (mounted) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text: error.message,
           isUser: false,
         );
       }
     } catch (_) {
       if (mounted) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text:
               'حصل خطأ أثناء تحليل الفيديو. حاول بفيديو أقصر.',
           isUser: false,
@@ -768,7 +771,8 @@ class _ChatScreenState
   // ============================================================
 
   Future<void> _toggleSpeechToText() async {
-    if (_chatController.isLoading) {
+    if (_chatController.isLoading ||
+        _generatingImage) {
       return;
     }
 
@@ -932,9 +936,8 @@ class _ChatScreenState
       return;
     }
 
-    final cost = isEditing
-        ? CreditsConfig.imageGenerationCost
-        : CreditsConfig.imageGenerationCost;
+    final cost =
+        CreditsConfig.imageGenerationCost;
 
     final canAfford =
         await _creditsService.canAfford(
@@ -980,8 +983,7 @@ class _ChatScreenState
       }
 
       if (!result.isSuccess) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text:
               result.error ??
                   'تعذر تنفيذ طلب الصورة حاليًا.',
@@ -992,8 +994,7 @@ class _ChatScreenState
 
       if (result.bytes != null &&
           result.bytes!.isNotEmpty) {
-        await _chatController
-            .addImageMessage(
+        await _chatController.addImageMessage(
           text: isEditing
               ? 'تم تعديل الصورة بالذكاء الاصطناعي.'
               : 'تم إنشاء الصورة.',
@@ -1001,11 +1002,8 @@ class _ChatScreenState
           image: result.bytes!,
         );
       } else if (result.imageUrl != null &&
-          result.imageUrl!
-              .trim()
-              .isNotEmpty) {
-        await _chatController
-            .addTextMessage(
+          result.imageUrl!.trim().isNotEmpty) {
+        await _chatController.addTextMessage(
           text:
               '${isEditing ? 'تم تعديل الصورة' : 'تم إنشاء الصورة'}:\n'
               '${result.imageUrl}',
@@ -1014,16 +1012,14 @@ class _ChatScreenState
       }
     } on AiRequestException catch (error) {
       if (mounted) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text: error.message,
           isUser: false,
         );
       }
     } catch (_) {
       if (mounted) {
-        await _chatController
-            .addTextMessage(
+        await _chatController.addTextMessage(
           text:
               'حصل خطأ أثناء تنفيذ طلب الصورة. حاول مرة أخرى.',
           isUser: false,
@@ -1070,8 +1066,7 @@ class _ChatScreenState
             autofocus: true,
             textDirection:
                 TextDirection.rtl,
-            textAlign:
-                TextAlign.right,
+            textAlign: TextAlign.right,
             style:
                 const TextStyle(
               color: Colors.white,
@@ -1088,9 +1083,7 @@ class _ChatScreenState
               border:
                   OutlineInputBorder(
                 borderRadius:
-                    BorderRadius.circular(
-                  16,
-                ),
+                    BorderRadius.circular(16),
                 borderSide:
                     BorderSide.none,
               ),
@@ -1126,7 +1119,8 @@ class _ChatScreenState
 
   Future<void> _showImageGenerator() async {
     if (_chatController.isLoading ||
-        _generatingImage) {
+        _generatingImage ||
+        _sending) {
       return;
     }
 
@@ -1178,9 +1172,7 @@ class _ChatScreenState
               border:
                   OutlineInputBorder(
                 borderRadius:
-                    BorderRadius.circular(
-                  16,
-                ),
+                    BorderRadius.circular(16),
                 borderSide:
                     BorderSide.none,
               ),
@@ -1227,7 +1219,8 @@ class _ChatScreenState
 
   Future<void> _clearChat() async {
     if (_chatController.isLoading ||
-        _sending) {
+        _sending ||
+        _generatingImage) {
       return;
     }
 
@@ -1307,9 +1300,7 @@ class _ChatScreenState
       }
 
       final max =
-          _scrollController
-              .position
-              .maxScrollExtent;
+          _scrollController.position.maxScrollExtent;
 
       _scrollController.animateTo(
         max,
@@ -1505,7 +1496,8 @@ class _ChatScreenState
                     : widget.serviceContext,
             enabled:
                 !_chatController.isLoading &&
-                !_sending,
+                !_sending &&
+                !_generatingImage,
             isListening:
                 _listening,
             isGeneratingImage:
