@@ -4,23 +4,28 @@ import 'package:flutter/material.dart';
 
 /// بوابة خلصانة AI.
 ///
-/// - أيقونة فقط بدون كلمة "صاحبي".
-/// - لا تستخدم رمز اللوجو الرئيسي.
-/// - لا توجد نقاط داخل الأيقونة.
-/// - AI أعلى كلمة خلصانة.
-/// - الحركة داخلية فقط.
-/// - الإطار الخارجي يدور بألوان زجاجية فاخرة.
-/// - الضغط يفتح ChatScreen مباشرة من MainContainerScreen.
+/// هذه هي الأيقونة العائمة التي تفتح شاشة خلصانة AI.
+///
+/// التصميم:
+/// - أيقونة مستقلة بدون كلمة "صاحبي".
+/// - لا تستخدم رمز اللوجو الرئيسي للتطبيق.
+/// - بدون نقاط داخل الأيقونة.
+/// - كلمة AI أعلى "خلصانة".
+/// - إطار زجاجي ملون متحرك.
+/// - إضاءة داخلية متحركة.
+/// - لا توجد عناصر فوق الزر تمنع الضغط.
+/// - الضغط يستدعي onTap فقط.
 class KhalasanaPortal extends StatefulWidget {
-  final VoidCallback onTap;
-
   const KhalasanaPortal({
     super.key,
     required this.onTap,
   });
 
+  final VoidCallback onTap;
+
   @override
-  State<KhalasanaPortal> createState() => _KhalasanaPortalState();
+  State<KhalasanaPortal> createState() =>
+      _KhalasanaPortalState();
 }
 
 class _KhalasanaPortalState extends State<KhalasanaPortal>
@@ -57,7 +62,8 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
             final progress = _controller.value;
             final angle = progress * math.pi * 2;
 
-            final wave = (math.sin(angle) + 1) / 2;
+            final wave =
+                (math.sin(angle) + 1) / 2;
 
             final borderColors = <Color>[
               const Color(0xFFFFD76A),
@@ -80,26 +86,33 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // =================================================
-                  // SOFT EXTERNAL GLOW
-                  // =================================================
+                  // ==================================================
+                  // EXTERNAL GLOW
+                  // ==================================================
 
                   Container(
                     width: 56,
                     height: 56,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius:
+                          BorderRadius.circular(18),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFFD76A).withOpacity(
-                            0.12 + wave * 0.10,
+                          color: const Color(
+                            0xFFFFD76A,
+                          ).withValues(
+                            alpha:
+                                0.12 + wave * 0.10,
                           ),
                           blurRadius: 18,
                           spreadRadius: 1,
                         ),
                         BoxShadow(
-                          color: const Color(0xFF63E6FF).withOpacity(
-                            0.04 + wave * 0.05,
+                          color: const Color(
+                            0xFF63E6FF,
+                          ).withValues(
+                            alpha:
+                                0.04 + wave * 0.05,
                           ),
                           blurRadius: 18,
                         ),
@@ -107,9 +120,9 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     ),
                   ),
 
-                  // =================================================
+                  // ==================================================
                   // ROTATING COLOR FRAME
-                  // =================================================
+                  // ==================================================
 
                   Transform.rotate(
                     angle: angle,
@@ -117,7 +130,8 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                       width: 56,
                       height: 56,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(17),
+                        borderRadius:
+                            BorderRadius.circular(17),
                         gradient: SweepGradient(
                           colors: borderColors,
                         ),
@@ -125,16 +139,18 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     ),
                   ),
 
-                  // =================================================
+                  // ==================================================
                   // INNER GLASS
-                  // =================================================
+                  // ==================================================
 
                   Container(
                     width: 49,
                     height: 49,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(14),
-                      gradient: const LinearGradient(
+                      borderRadius:
+                          BorderRadius.circular(14),
+                      gradient:
+                          const LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
@@ -144,7 +160,9 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                         ],
                       ),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.18),
+                        color: Colors.white.withValues(
+                          alpha: 0.18,
+                        ),
                         width: 1,
                       ),
                       boxShadow: const [
@@ -157,9 +175,9 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     ),
                   ),
 
-                  // =================================================
+                  // ==================================================
                   // INTERNAL GLASS ORBIT
-                  // =================================================
+                  // ==================================================
 
                   Transform.rotate(
                     angle: -angle * 0.65,
@@ -167,10 +185,13 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                       width: 38,
                       height: 27,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(50),
+                        borderRadius:
+                            BorderRadius.circular(50),
                         border: Border.all(
-                          color: innerLight.withOpacity(
-                            0.22 + wave * 0.12,
+                          color:
+                              innerLight.withValues(
+                            alpha:
+                                0.22 + wave * 0.12,
                           ),
                           width: 1,
                         ),
@@ -178,25 +199,40 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     ),
                   ),
 
-                  // =================================================
+                  // ==================================================
                   // MOVING GLASS REFLECTION
-                  // =================================================
+                  // ==================================================
 
                   Positioned(
                     left: 7 + progress * 34,
-                    top: 10 + math.sin(angle) * 3,
+                    top:
+                        10 + math.sin(angle) * 3,
                     child: Transform.rotate(
                       angle: -0.35,
                       child: Container(
                         width: 18,
                         height: 5,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                          gradient: LinearGradient(
+                        decoration:
+                            BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(
+                            20,
+                          ),
+                          gradient:
+                              LinearGradient(
                             colors: [
-                              Colors.white.withOpacity(0.0),
-                              Colors.white.withOpacity(0.17),
-                              Colors.white.withOpacity(0.0),
+                              Colors.white
+                                  .withValues(
+                                alpha: 0.0,
+                              ),
+                              Colors.white
+                                  .withValues(
+                                alpha: 0.17,
+                              ),
+                              Colors.white
+                                  .withValues(
+                                alpha: 0.0,
+                              ),
                             ],
                           ),
                         ),
@@ -204,25 +240,38 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     ),
                   ),
 
-                  // =================================================
+                  // ==================================================
                   // SECOND GLASS REFLECTION
-                  // =================================================
+                  // ==================================================
 
                   Positioned(
-                    right: 8 + (1 - progress) * 20,
-                    bottom: 9 + math.cos(angle) * 2,
+                    right:
+                        8 + (1 - progress) * 20,
+                    bottom:
+                        9 + math.cos(angle) * 2,
                     child: Transform.rotate(
                       angle: 0.35,
                       child: Container(
                         width: 13,
                         height: 3,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
-                          gradient: LinearGradient(
+                        decoration:
+                            BoxDecoration(
+                          borderRadius:
+                              BorderRadius.circular(
+                            20,
+                          ),
+                          gradient:
+                              LinearGradient(
                             colors: [
-                              innerLight.withOpacity(0.0),
-                              innerLight.withOpacity(0.20),
-                              innerLight.withOpacity(0.0),
+                              innerLight.withValues(
+                                alpha: 0.0,
+                              ),
+                              innerLight.withValues(
+                                alpha: 0.20,
+                              ),
+                              innerLight.withValues(
+                                alpha: 0.0,
+                              ),
                             ],
                           ),
                         ),
@@ -230,9 +279,9 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     ),
                   ),
 
-                  // =================================================
+                  // ==================================================
                   // AI
-                  // =================================================
+                  // ==================================================
 
                   Positioned(
                     top: 7,
@@ -251,14 +300,21 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 9.5,
-                          fontWeight: FontWeight.w900,
+                          fontWeight:
+                              FontWeight.w900,
                           letterSpacing: 1.1,
                           shadows: [
                             Shadow(
-                              color: const Color(0xFFFFD76A).withOpacity(
-                                0.35 + wave * 0.20,
+                              color:
+                                  const Color(
+                                0xFFFFD76A,
+                              ).withValues(
+                                alpha:
+                                    0.35 +
+                                        wave * 0.20,
                               ),
-                              blurRadius: 6 + wave * 3,
+                              blurRadius:
+                                  6 + wave * 3,
                             ),
                           ],
                         ),
@@ -266,17 +322,19 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     ),
                   ),
 
-                  // =================================================
+                  // ==================================================
                   // خلصانة
-                  // =================================================
+                  // ==================================================
 
                   Positioned(
                     top: 21,
                     child: ShaderMask(
                       shaderCallback: (bounds) {
                         return const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+                          begin:
+                              Alignment.topCenter,
+                          end:
+                              Alignment.bottomCenter,
                           colors: [
                             Color(0xFFFFF5C5),
                             Color(0xFFFFD76A),
@@ -293,18 +351,26 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                       },
                       child: Text(
                         'خلصانة',
-                        textDirection: TextDirection.rtl,
+                        textDirection:
+                            TextDirection.rtl,
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 11.5,
-                          fontWeight: FontWeight.w900,
+                          fontWeight:
+                              FontWeight.w900,
                           letterSpacing: -0.5,
                           shadows: [
                             Shadow(
-                              color: const Color(0xFFFFD76A).withOpacity(
-                                0.25 + wave * 0.18,
+                              color:
+                                  const Color(
+                                0xFFFFD76A,
+                              ).withValues(
+                                alpha:
+                                    0.25 +
+                                        wave * 0.18,
                               ),
-                              blurRadius: 6 + wave * 3,
+                              blurRadius:
+                                  6 + wave * 3,
                             ),
                           ],
                         ),
@@ -312,21 +378,30 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     ),
                   ),
 
-                  // =================================================
+                  // ==================================================
                   // SOFT LIGHT STREAK
-                  // =================================================
+                  // ==================================================
 
                   Transform.rotate(
                     angle: angle * 0.75,
                     child: Container(
                       width: 30,
                       height: 1.5,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        gradient: LinearGradient(
+                      decoration:
+                          BoxDecoration(
+                        borderRadius:
+                            BorderRadius.circular(
+                          20,
+                        ),
+                        gradient:
+                            LinearGradient(
                           colors: [
                             Colors.transparent,
-                            innerLight.withOpacity(0.28 + wave * 0.18),
+                            innerLight.withValues(
+                              alpha:
+                                  0.28 +
+                                      wave * 0.18,
+                            ),
                             Colors.transparent,
                           ],
                         ),
