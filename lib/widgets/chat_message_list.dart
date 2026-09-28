@@ -9,7 +9,7 @@ import 'chat_message_bubble.dart';
 /// قائمة رسائل المحادثة.
 ///
 /// مسؤوليتها عرض الرسائل فقط.
-/// الإرسال والحفظ والذكاء الاصطناعي تظل خارج هذا الملف.
+/// منطق الإرسال والـAI والحفظ يظل خارج هذا الملف.
 class ChatMessageList extends StatelessWidget {
   final List<ChatMessage> messages;
   final ChatThemeData theme;
@@ -26,7 +26,7 @@ class ChatMessageList extends StatelessWidget {
   /// هل يوجد رد قيد المعالجة؟
   final bool isLoading;
 
-  /// ScrollController الخاص بالشاشة.
+  /// ScrollController الخاص بشاشة المحادثة.
   final ScrollController? controller;
 
   const ChatMessageList({
@@ -57,8 +57,10 @@ class ChatMessageList extends StatelessWidget {
       ),
       keyboardDismissBehavior:
           ScrollViewKeyboardDismissBehavior.onDrag,
+      physics: const BouncingScrollPhysics(),
       itemCount: itemCount,
       itemBuilder: (context, index) {
+        // آخر عنصر يظهر أثناء انتظار رد الـAI.
         if (index >= messages.length) {
           return ChatMessageBubble(
             text: '',
