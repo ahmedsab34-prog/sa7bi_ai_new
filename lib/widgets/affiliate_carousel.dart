@@ -49,10 +49,6 @@ class AffiliateCarousel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // ========================================================
-        // TITLE
-        // ========================================================
-
         Row(
           textDirection: TextDirection.rtl,
           children: [
@@ -95,29 +91,17 @@ class AffiliateCarousel extends StatelessWidget {
             ),
           ],
         ),
-
         const SizedBox(height: 11),
-
-        // ========================================================
-        // STORES
-        // ========================================================
-
         SizedBox(
           height: 126,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             reverse: true,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 2,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 2),
             physics: const BouncingScrollPhysics(),
             itemCount: stores.length,
-            separatorBuilder: (_, __) =>
-                const SizedBox(width: 10),
-            itemBuilder: (
-              context,
-              index,
-            ) {
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
               return _AffiliateStoreCard(
                 store: stores[index],
               );
@@ -128,10 +112,6 @@ class AffiliateCarousel extends StatelessWidget {
     );
   }
 }
-
-// ================================================================
-// STORE MODEL
-// ================================================================
 
 class _AffiliateStore {
   final String title;
@@ -149,10 +129,6 @@ class _AffiliateStore {
   });
 }
 
-// ================================================================
-// STORE CARD
-// ================================================================
-
 class _AffiliateStoreCard extends StatelessWidget {
   final _AffiliateStore store;
 
@@ -160,9 +136,7 @@ class _AffiliateStoreCard extends StatelessWidget {
     required this.store,
   });
 
-  Future<void> _openStore(
-    BuildContext context,
-  ) async {
+  Future<void> _openStore(BuildContext context) async {
     final cleanUrl = store.url.trim();
 
     if (cleanUrl.isEmpty) {
@@ -174,8 +148,7 @@ class _AffiliateStoreCard extends StatelessWidget {
 
     if (uri == null ||
         !uri.hasScheme ||
-        (uri.scheme != 'http' &&
-            uri.scheme != 'https')) {
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
       _showUnavailable(context);
       return;
     }
@@ -194,9 +167,7 @@ class _AffiliateStoreCard extends StatelessWidget {
     }
   }
 
-  void _showUnavailable(
-    BuildContext context,
-  ) {
+  void _showUnavailable(BuildContext context) {
     if (!context.mounted) {
       return;
     }
@@ -209,9 +180,7 @@ class _AffiliateStoreCard extends StatelessWidget {
             'رابط ${store.title} غير متاح حاليًا',
             textDirection: TextDirection.rtl,
           ),
-          duration: const Duration(
-            seconds: 2,
-          ),
+          duration: const Duration(seconds: 2),
         ),
       );
   }
@@ -223,9 +192,7 @@ class _AffiliateStoreCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
-            _openStore(context);
-          },
+          onTap: () => _openStore(context),
           borderRadius: BorderRadius.circular(21),
           child: Ink(
             decoration: BoxDecoration(
@@ -234,18 +201,18 @@ class _AffiliateStoreCard extends StatelessWidget {
                 begin: Alignment.topRight,
                 end: Alignment.bottomLeft,
                 colors: [
-                  store.accent.withOpacity(0.25),
+                  store.accent.withValues(alpha: 0.25),
                   const Color(0xFF11151F),
                   const Color(0xFF0B0E15),
                 ],
               ),
               border: Border.all(
-                color: store.accent.withOpacity(0.35),
+                color: store.accent.withValues(alpha: 0.35),
                 width: 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: store.accent.withOpacity(0.08),
+                  color: store.accent.withValues(alpha: 0.08),
                   blurRadius: 16,
                   spreadRadius: 1,
                 ),
@@ -254,13 +221,8 @@ class _AffiliateStoreCard extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // ------------------------------------------------
-                  // ICON + ARROW
-                  // ------------------------------------------------
-
                   Row(
                     textDirection: TextDirection.rtl,
                     children: [
@@ -274,12 +236,12 @@ class _AffiliateStoreCard extends StatelessWidget {
                             end: Alignment.bottomLeft,
                             colors: [
                               store.accent,
-                              store.accent.withOpacity(0.35),
+                              store.accent.withValues(alpha: 0.35),
                             ],
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: store.accent.withOpacity(0.20),
+                              color: store.accent.withValues(alpha: 0.20),
                               blurRadius: 10,
                               spreadRadius: 1,
                             ),
@@ -291,9 +253,7 @@ class _AffiliateStoreCard extends StatelessWidget {
                           size: 23,
                         ),
                       ),
-
                       const Spacer(),
-
                       const Icon(
                         Icons.arrow_back_ios_new_rounded,
                         color: Colors.white38,
@@ -301,13 +261,7 @@ class _AffiliateStoreCard extends StatelessWidget {
                       ),
                     ],
                   ),
-
                   const Spacer(),
-
-                  // ------------------------------------------------
-                  // STORE NAME
-                  // ------------------------------------------------
-
                   Text(
                     store.title,
                     textDirection: TextDirection.rtl,
@@ -320,9 +274,7 @@ class _AffiliateStoreCard extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-
                   const SizedBox(height: 2),
-
                   Text(
                     store.subtitle,
                     textDirection: TextDirection.rtl,
