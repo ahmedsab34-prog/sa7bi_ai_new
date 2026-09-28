@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../config/app_config.dart';
 import '../config/credits_config.dart';
 import 'ai_request_service.dart';
 import 'credits_service.dart';
@@ -11,6 +12,7 @@ import 'credits_service.dart';
 /// التطبيق هنا:
 /// - يعرض الرصيد المتاح.
 /// - يفحص الرصيد محليًا قبل إرسال الطلب.
+/// - يجهز الصور ضمن الحدود الآمنة.
 /// - يرسل الطلب إلى AiRequestService.
 /// - الـBackend هو الذي يحجز ويخصم Credits.
 /// - بعد انتهاء الطلب يتم تحديث الرصيد من السيرفر.
@@ -41,6 +43,20 @@ class ChatImageService {
   /// آخر رصيد معروف.
   int get credits =>
       _credits.credits;
+
+  /// أقصى حجم للصورة الواحدة قبل إرسالها للـBackend.
+  static const int maximumImageBytes =
+      AppConfig.maximumImageSizeMb * 1024 * 1024;
+
+  /// أقصى حجم إجمالي للصور في عملية واحدة.
+  ///
+  /// الهدف منع تكوين JSON ضخم بعد تحويل الصور إلى Base64.
+  /// الـBackend يضع حدًا خاصًا به أيضًا.
+  static const int maximumTotalImageBytes =
+      5 * 1024 * 1024;
+
+  /// أقصى عدد صور في عملية إنشاء/تعديل واحدة.
+  static const int maximumImages = 4;
 
   // ============================================================
   // CREDIT CHECK
@@ -107,14 +123,21 @@ class ChatImageService {
     // PREPARE IMAGES
     // ----------------------------------------------------------
 
-    final usableImages = images
-        .where(
-          (image) => image.isNotEmpty,
-        )
-        .take(4)
-        .toList();
+    final prepared =
+        _prepareImages(images);
 
-    final isEditing = usableImages.isNotEmpty;
+    if (!prepared.isValid) {
+      return ChatImageGenerationResult.failure(
+        prepared.error ??
+            'تعذر تجهيز الصور.',
+      );
+    }
+
+    final usableImages =
+        prepared.images;
+
+    final isEditing =
+        usableImages.isNotEmpty;
 
     final cost = isEditing
         ? imageEditCost
@@ -133,7 +156,8 @@ class ChatImageService {
     if (!canAfford) {
       return ChatImageGenerationResult
           .insufficientCredits(
-        currentCredits: _credits.credits,
+        currentCredits:
+            _credits.credits,
         requiredCredits: cost,
       );
     }
@@ -161,7 +185,8 @@ class ChatImageService {
 
         return ChatImageGenerationResult.failure(
           'خدمة الصور لم ترجع صورة.',
-          remainingCredits: _credits.credits,
+          remainingCredits:
+              _credits.credits,
         );
       }
 
@@ -172,14 +197,17 @@ class ChatImageService {
       if (_isDataImageUrl(cleanResult)) {
         try {
           final bytes =
-              _decodeDataImage(cleanResult);
+              _decodeDataImage(
+            cleanResult,
+          );
 
           if (bytes.isEmpty) {
             await _refreshCreditsSafely();
 
             return ChatImageGenerationResult.failure(
               'الصورة التي رجعتها الخدمة فارغة.',
-              remainingCredits: _credits.credits,
+              remainingCredits:
+                  _credits.credits,
             );
           }
 
@@ -188,14 +216,16 @@ class ChatImageService {
           return ChatImageGenerationResult.success(
             bytes: bytes,
             creditsUsed: cost,
-            remainingCredits: _credits.credits,
+            remainingCredits:
+                _credits.credits,
           );
         } catch (_) {
           await _refreshCreditsSafely();
 
           return ChatImageGenerationResult.failure(
             'تعذر قراءة الصورة التي رجعتها الخدمة.',
-            remainingCredits: _credits.credits,
+            remainingCredits:
+                _credits.credits,
           );
         }
       }
@@ -210,7 +240,8 @@ class ChatImageService {
         return ChatImageGenerationResult.success(
           imageUrl: cleanResult,
           creditsUsed: cost,
-          remainingCredits: _credits.credits,
+          remainingCredits:
+              _credits.credits,
         );
       }
 
@@ -222,7 +253,8 @@ class ChatImageService {
 
       return ChatImageGenerationResult.failure(
         'خدمة الصور رجعت نتيجة غير مفهومة.',
-        remainingCredits: _credits.credits,
+        remainingCredits:
+            _credits.credits,
       );
     } on AiRequestException catch (error) {
       // مهم:
@@ -235,16 +267,69 @@ class ChatImageService {
 
       return ChatImageGenerationResult.failure(
         error.message,
-        remainingCredits: _credits.credits,
+        remainingCredits:
+            _credits.credits,
       );
     } catch (_) {
       await _refreshCreditsSafely();
 
       return ChatImageGenerationResult.failure(
         'حصل خطأ أثناء إنشاء الصورة. حاول مرة أخرى.',
-        remainingCredits: _credits.credits,
+        remainingCredits:
+            _credits.credits,
       );
     }
+  }
+
+  // ============================================================
+  // IMAGE PREPARATION
+  // ============================================================
+
+  /// تجهيز الصور قبل إرسالها للـAI.
+  ///
+  /// يمنع:
+  /// - الصور الفارغة.
+  /// - أكثر من 4 صور.
+  /// - صورة أكبر من الحد.
+  /// - إجمالي صور أكبر من الحد الآمن.
+  _PreparedImages _prepareImages(
+    List<Uint8List> images,
+  ) {
+    final usable =
+        <Uint8List>[];
+
+    var totalBytes = 0;
+
+    for (final image
+        in images.take(maximumImages)) {
+      if (image.isEmpty) {
+        continue;
+      }
+
+      if (image.length >
+          maximumImageBytes) {
+        return _PreparedImages.failure(
+          'إحدى الصور كبيرة جدًا. '
+          'الحد الأقصى للصورة الواحدة هو '
+          '${AppConfig.maximumImageSizeMb} ميجابايت.',
+        );
+      }
+
+      if (totalBytes + image.length >
+          maximumTotalImageBytes) {
+        return const _PreparedImages.failure(
+          'إجمالي حجم الصور كبير جدًا. '
+          'اختار صورًا أقل حجمًا وحاول مرة أخرى.',
+        );
+      }
+
+      usable.add(image);
+      totalBytes += image.length;
+    }
+
+    return _PreparedImages.success(
+      usable,
+    );
   }
 
   // ============================================================
@@ -291,19 +376,35 @@ class ChatImageService {
       );
     }
 
+    final header =
+        clean.substring(
+      0,
+      comma,
+    );
+
+    if (!header
+        .toLowerCase()
+        .contains(';base64')) {
+      throw const FormatException(
+        'Image data is not Base64.',
+      );
+    }
+
     final encoded =
         clean.substring(
       comma + 1,
-    );
+    ).trim();
 
-    if (encoded.trim().isEmpty) {
+    if (encoded.isEmpty) {
       throw const FormatException(
         'Empty image data.',
       );
     }
 
     return base64Decode(
-      encoded,
+      base64.normalize(
+        encoded,
+      ),
     );
   }
 
@@ -326,6 +427,36 @@ class ChatImageService {
     return uri.scheme == 'https' ||
         uri.scheme == 'http';
   }
+}
+
+// ============================================================
+// PREPARED IMAGES
+// ============================================================
+
+class _PreparedImages {
+  final List<Uint8List> images;
+  final String? error;
+
+  const _PreparedImages({
+    required this.images,
+    this.error,
+  });
+
+  const _PreparedImages.success(
+    List<Uint8List> images,
+  ) : this(
+          images: images,
+        );
+
+  const _PreparedImages.failure(
+    String error,
+  ) : this(
+          images: const <Uint8List>[],
+          error: error,
+        );
+
+  bool get isValid =>
+      error == null;
 }
 
 // ============================================================
@@ -365,7 +496,8 @@ class ChatImageGenerationResult {
           bytes: bytes,
           imageUrl: imageUrl,
           creditsUsed: creditsUsed,
-          remainingCredits: remainingCredits,
+          remainingCredits:
+              remainingCredits,
         );
 
   // ============================================================
@@ -377,7 +509,8 @@ class ChatImageGenerationResult {
     int remainingCredits = 0,
   }) : this._(
           error: error,
-          remainingCredits: remainingCredits,
+          remainingCredits:
+              remainingCredits,
         );
 
   // ============================================================
@@ -393,8 +526,10 @@ class ChatImageGenerationResult {
               'رصيدك غير كافٍ لتنفيذ العملية. '
               'تحتاج $requiredCredits Credits '
               'ولديك $currentCredits فقط.',
-          remainingCredits: currentCredits,
-          requiredCredits: requiredCredits,
+          remainingCredits:
+              currentCredits,
+          requiredCredits:
+              requiredCredits,
         );
 
   // ============================================================
