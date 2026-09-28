@@ -15,11 +15,14 @@ class ProfileBioStatus extends StatefulWidget {
   });
 
   @override
-  State<ProfileBioStatus> createState() => _ProfileBioStatusState();
+  State<ProfileBioStatus> createState() =>
+      _ProfileBioStatusState();
 }
 
-class _ProfileBioStatusState extends State<ProfileBioStatus> {
-  final ProfileService _profileService = ProfileService.instance;
+class _ProfileBioStatusState
+    extends State<ProfileBioStatus> {
+  final ProfileService _profileService =
+      ProfileService.instance;
 
   late final TextEditingController _bioController;
   late final TextEditingController _statusController;
@@ -41,15 +44,27 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
   }
 
   @override
-  void didUpdateWidget(covariant ProfileBioStatus oldWidget) {
+  void didUpdateWidget(
+    covariant ProfileBioStatus oldWidget,
+  ) {
     super.didUpdateWidget(oldWidget);
 
-    if (!_savingBio && _bioController.text != widget.bio) {
+    if (!_savingBio &&
+        _bioController.text != widget.bio) {
       _bioController.text = widget.bio;
+      _bioController.selection =
+          TextSelection.collapsed(
+        offset: _bioController.text.length,
+      );
     }
 
-    if (!_savingStatus && _statusController.text != widget.status) {
+    if (!_savingStatus &&
+        _statusController.text != widget.status) {
       _statusController.text = widget.status;
+      _statusController.selection =
+          TextSelection.collapsed(
+        offset: _statusController.text.length,
+      );
     }
   }
 
@@ -69,39 +84,36 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
       _savingBio = true;
     });
 
-    final saved = await _profileService.saveBio(
-      _bioController.text.trim(),
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      _savingBio = false;
-    });
-
-    if (!saved) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'لم يتم حفظ النبذة',
-            textDirection: TextDirection.rtl,
-          ),
-        ),
+    try {
+      final saved =
+          await _profileService.saveBio(
+        _bioController.text.trim(),
       );
-      return;
+
+      if (!mounted) return;
+
+      setState(() {
+        _savingBio = false;
+      });
+
+      if (!saved) {
+        _showMessage('لم يتم حفظ النبذة.');
+        return;
+      }
+
+      widget.onProfileChanged();
+      _showMessage('تم حفظ النبذة ✅');
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _savingBio = false;
+      });
+
+      _showMessage(
+        'حدث خطأ أثناء حفظ النبذة.',
+      );
     }
-
-    widget.onProfileChanged();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'تم حفظ النبذة',
-          textDirection: TextDirection.rtl,
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   Future<void> _saveStatus() async {
@@ -113,39 +125,59 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
       _savingStatus = true;
     });
 
-    final saved = await _profileService.saveStatus(
-      _statusController.text.trim(),
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      _savingStatus = false;
-    });
-
-    if (!saved) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'لم يتم حفظ الحالة',
-            textDirection: TextDirection.rtl,
-          ),
-        ),
+    try {
+      final saved =
+          await _profileService.saveStatus(
+        _statusController.text.trim(),
       );
+
+      if (!mounted) return;
+
+      setState(() {
+        _savingStatus = false;
+      });
+
+      if (!saved) {
+        _showMessage('لم يتم حفظ الحالة.');
+        return;
+      }
+
+      widget.onProfileChanged();
+      _showMessage('تم حفظ الحالة ✅');
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _savingStatus = false;
+      });
+
+      _showMessage(
+        'حدث خطأ أثناء حفظ الحالة.',
+      );
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted ||
+        message.trim().isEmpty) {
       return;
     }
 
-    widget.onProfileChanged();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'تم حفظ الحالة',
-          textDirection: TextDirection.rtl,
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            textDirection:
+                TextDirection.rtl,
+          ),
+          behavior:
+              SnackBarBehavior.floating,
+          duration:
+              const Duration(seconds: 2),
         ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
   }
 
   Widget _sectionTitle({
@@ -157,17 +189,21 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
         Icon(
           icon,
           size: 19,
-          color: const Color(0xFFFFD76A),
+          color:
+              const Color(0xFFFFD76A),
         ),
         const SizedBox(width: 7),
         Expanded(
           child: Text(
             title,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.right,
             style: const TextStyle(
               fontSize: 14,
-              fontWeight: FontWeight.w900,
+              fontWeight:
+                  FontWeight.w900,
             ),
           ),
         ),
@@ -175,51 +211,105 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
     );
   }
 
+  InputDecoration _fieldDecoration({
+    required String hintText,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      filled: true,
+      fillColor:
+          const Color(0xFF0C0F17),
+      counterText: '',
+      isDense: true,
+      prefixIcon: Icon(
+        icon,
+        size: 20,
+      ),
+      contentPadding:
+          const EdgeInsets.symmetric(
+        horizontal: 11,
+        vertical: 10,
+      ),
+      border: OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(13),
+        borderSide:
+            BorderSide.none,
+      ),
+      enabledBorder:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(13),
+        borderSide:
+            const BorderSide(
+          color: Color(0x101FFFFFF),
+        ),
+      ),
+      focusedBorder:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(13),
+        borderSide:
+            const BorderSide(
+          color: Color(0x4463E6FF),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(8, 0, 8, 7),
-      padding: const EdgeInsets.all(12),
+      margin:
+          const EdgeInsets.fromLTRB(
+        8,
+        0,
+        8,
+        7,
+      ),
+      padding:
+          const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF131620),
-        borderRadius: BorderRadius.circular(18),
+        color:
+            const Color(0xFF131620),
+        borderRadius:
+            BorderRadius.circular(18),
         border: Border.all(
-          color: const Color(0x22FFD76A),
+          color:
+              const Color(0x22FFD76A),
         ),
       ),
       child: Column(
         children: [
           _sectionTitle(
-            icon: Icons.edit_note_rounded,
-            title: 'نبذة وحالتك',
+            icon:
+                Icons.edit_note_rounded,
+            title:
+                'نبذة وحالتك',
           ),
 
           const SizedBox(height: 9),
 
           TextField(
-            controller: _bioController,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
+            controller:
+                _bioController,
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.right,
             maxLength: 160,
             maxLines: 2,
-            decoration: InputDecoration(
-              hintText: 'اكتب نبذة قصيرة عنك',
-              filled: true,
-              fillColor: const Color(0xFF0C0F17),
-              counterText: '',
-              isDense: true,
-              prefixIcon: const Icon(
-                Icons.notes_rounded,
-                size: 20,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 11,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(13),
-                borderSide: BorderSide.none,
-              ),
+            keyboardType:
+                TextInputType.multiline,
+            textInputAction:
+                TextInputAction.newline,
+            decoration:
+                _fieldDecoration(
+              hintText:
+                  'اكتب نبذة قصيرة عنك',
+              icon:
+                  Icons.notes_rounded,
             ),
           ),
 
@@ -227,13 +317,18 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
 
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _savingBio ? null : _saveBio,
+            child:
+                OutlinedButton.icon(
+              onPressed:
+                  _savingBio
+                      ? null
+                      : _saveBio,
               icon: _savingBio
                   ? const SizedBox(
                       width: 15,
                       height: 15,
-                      child: CircularProgressIndicator(
+                      child:
+                          CircularProgressIndicator(
                         strokeWidth: 2,
                       ),
                     )
@@ -241,22 +336,36 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
                       Icons.save_rounded,
                       size: 17,
                     ),
-              label: const Text(
+              label:
+                  const Text(
                 'حفظ النبذة',
                 style: TextStyle(
-                  fontWeight: FontWeight.w800,
+                  fontWeight:
+                      FontWeight.w800,
                 ),
               ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF63E6FF),
-                side: const BorderSide(
-                  color: Color(0x4463E6FF),
+              style:
+                  OutlinedButton.styleFrom(
+                foregroundColor:
+                    const Color(
+                  0xFF63E6FF,
                 ),
-                padding: const EdgeInsets.symmetric(
+                side:
+                    const BorderSide(
+                  color:
+                      Color(0x4463E6FF),
+                ),
+                padding:
+                    const EdgeInsets
+                        .symmetric(
                   vertical: 9,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(
+                    12,
+                  ),
                 ),
               ),
             ),
@@ -265,43 +374,46 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
           const SizedBox(height: 9),
 
           TextField(
-            controller: _statusController,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
+            controller:
+                _statusController,
+            textDirection:
+                TextDirection.rtl,
+            textAlign:
+                TextAlign.right,
             maxLength: 100,
             maxLines: 1,
-            decoration: InputDecoration(
-              hintText: 'اكتب حالتك الآن',
-              filled: true,
-              fillColor: const Color(0xFF0C0F17),
-              counterText: '',
-              isDense: true,
-              prefixIcon: const Icon(
-                Icons.auto_awesome_rounded,
-                size: 20,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 11,
-                vertical: 10,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(13),
-                borderSide: BorderSide.none,
-              ),
+            textInputAction:
+                TextInputAction.done,
+            decoration:
+                _fieldDecoration(
+              hintText:
+                  'اكتب حالتك الآن',
+              icon:
+                  Icons.auto_awesome_rounded,
             ),
+            onSubmitted: (_) {
+              if (!_savingStatus) {
+                _saveStatus();
+              }
+            },
           ),
 
           const SizedBox(height: 6),
 
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _savingStatus ? null : _saveStatus,
+            child:
+                OutlinedButton.icon(
+              onPressed:
+                  _savingStatus
+                      ? null
+                      : _saveStatus,
               icon: _savingStatus
                   ? const SizedBox(
                       width: 15,
                       height: 15,
-                      child: CircularProgressIndicator(
+                      child:
+                          CircularProgressIndicator(
                         strokeWidth: 2,
                       ),
                     )
@@ -309,22 +421,36 @@ class _ProfileBioStatusState extends State<ProfileBioStatus> {
                       Icons.check_rounded,
                       size: 17,
                     ),
-              label: const Text(
+              label:
+                  const Text(
                 'حفظ الحالة',
                 style: TextStyle(
-                  fontWeight: FontWeight.w800,
+                  fontWeight:
+                      FontWeight.w800,
                 ),
               ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFFFD76A),
-                side: const BorderSide(
-                  color: Color(0x44FFD76A),
+              style:
+                  OutlinedButton.styleFrom(
+                foregroundColor:
+                    const Color(
+                  0xFFFFD76A,
                 ),
-                padding: const EdgeInsets.symmetric(
+                side:
+                    const BorderSide(
+                  color:
+                      Color(0x44FFD76A),
+                ),
+                padding:
+                    const EdgeInsets
+                        .symmetric(
                   vertical: 9,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(
+                    12,
+                  ),
                 ),
               ),
             ),
