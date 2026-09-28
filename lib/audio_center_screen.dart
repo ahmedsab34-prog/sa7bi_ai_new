@@ -10,12 +10,12 @@ import 'package:flutter/material.dart';
 
 import 'ai_service.dart';
 import 'audio_player_service.dart';
+import 'audio_rain_visualizer.dart';
 import 'services/chat_voice_service.dart';
 
 part 'audio_quran_section.dart';
 part 'audio_radio_section.dart';
 part 'audio_search_section.dart';
-part 'audio_rain_visualizer.dart';
 
 class AudioCenterScreen extends StatefulWidget {
   const AudioCenterScreen({
@@ -514,7 +514,7 @@ class _AudioCenterScreenState
       ),
       child: Row(
         children: [
-          const _AudioRainVisualizer(),
+          const AudioRainVisualizer(),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -792,17 +792,6 @@ class _AudioCenterScreenState
       ),
     );
   }
-}
-
-
-// ============================================================
-// FILE: lib/audio_search_section.dart
-// ============================================================
-
-part of 'audio_center_screen.dart';
-
-extension _AudioSearchSection
-    on _AudioCenterScreenState {
 
   // ============================================================
   // HADITH
@@ -940,16 +929,12 @@ extension _AudioSearchSection
                       : _loadHadith,
               icon: Icon(
                 Icons.refresh_rounded,
-                color:
-                    _AudioCenterScreenState
-                        ._gold,
+                color: _gold,
               ),
             ),
           ],
         ),
-
         const SizedBox(height: 8),
-
         if (_hadithBooks.isNotEmpty)
           _dropdown<HadithBook>(
             value: _hadithBook,
@@ -975,26 +960,19 @@ extension _AudioSearchSection
               }
             },
           ),
-
         const SizedBox(height: 10),
-
         _searchBox(),
-
         const SizedBox(height: 12),
-
         ..._hadithItems.map(
           (item) => _hadithCard(item),
         ),
-
         if (_hadithItems.isEmpty)
           _emptyText(
             _error.isNotEmpty
                 ? _error
                 : 'ابحث عن حديث.',
           ),
-
         const SizedBox(height: 10),
-
         _infoCard(
           Icons.record_voice_over_rounded,
           'تشغيل صوتي',
@@ -1013,8 +991,7 @@ extension _AudioSearchSection
       padding:
           const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color:
-            _AudioCenterScreenState._card,
+        color: _card,
         borderRadius:
             BorderRadius.circular(16),
         border: Border.all(
@@ -1030,8 +1007,7 @@ extension _AudioSearchSection
                 ? 'حديث ${item.number}'
                 : '${item.bookName} — حديث ${item.number}',
             style: TextStyle(
-              color:
-                  _AudioCenterScreenState._gold,
+              color: _gold,
               fontWeight:
                   FontWeight.w800,
             ),
@@ -1060,8 +1036,7 @@ extension _AudioSearchSection
                           _playHadith(item),
               icon: Icon(
                 Icons.play_circle_fill_rounded,
-                color:
-                    _AudioCenterScreenState._gold,
+                color: _gold,
                 size: 38,
               ),
             ),
@@ -1163,16 +1138,12 @@ extension _AudioSearchSection
                       : _loadTafsir,
               icon: Icon(
                 Icons.refresh_rounded,
-                color:
-                    _AudioCenterScreenState
-                        ._gold,
+                color: _gold,
               ),
             ),
           ],
         ),
-
         const SizedBox(height: 8),
-
         if (_tafsirBooks.isNotEmpty)
           _dropdown<TafsirBook>(
             value: _tafsirBook,
@@ -1198,17 +1169,12 @@ extension _AudioSearchSection
               }
             },
           ),
-
         const SizedBox(height: 10),
-
         _searchBox(),
-
         const SizedBox(height: 12),
-
         ..._tafsirItems.map(
           (item) => _tafsirCard(item),
         ),
-
         if (_tafsirItems.isEmpty)
           _emptyText(
             _error.isNotEmpty
@@ -1229,8 +1195,7 @@ extension _AudioSearchSection
       margin:
           const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color:
-            _AudioCenterScreenState._card,
+        color: _card,
         borderRadius:
             BorderRadius.circular(16),
         border: Border.all(
@@ -1281,7 +1246,7 @@ extension _AudioSearchSection
                 : Icons.volume_off_rounded,
             color:
                 hasAudio
-                    ? _AudioCenterScreenState._gold
+                    ? _gold
                     : Colors.white24,
             size: 36,
           ),
@@ -1431,19 +1396,14 @@ extension _AudioSearchSection
                       : _search,
               icon: Icon(
                 Icons.refresh_rounded,
-                color:
-                    _AudioCenterScreenState._gold,
+                color: _gold,
               ),
             ),
           ],
         ),
-
         const SizedBox(height: 8),
-
         _searchBox(),
-
         const SizedBox(height: 12),
-
         ...items.map(
           (item) => _audioCard(
             item,
@@ -1466,7 +1426,6 @@ extension _AudioSearchSection
             },
           ),
         ),
-
         if (items.isEmpty)
           _emptyText(empty),
       ],
@@ -1486,8 +1445,7 @@ extension _AudioSearchSection
         bottom: 10,
       ),
       decoration: BoxDecoration(
-        color:
-            _AudioCenterScreenState._card,
+        color: _card,
         borderRadius:
             BorderRadius.circular(16),
         border: Border.all(
@@ -1506,10 +1464,7 @@ extension _AudioSearchSection
           decoration: BoxDecoration(
             borderRadius:
                 BorderRadius.circular(12),
-            color:
-                _AudioCenterScreenState
-                    ._goldDark
-                    .withValues(
+            color: _goldDark.withValues(
               alpha: 0.22,
             ),
             image:
@@ -1533,9 +1488,7 @@ extension _AudioSearchSection
                   ? Icon(
                       Icons
                           .music_note_rounded,
-                      color:
-                          _AudioCenterScreenState
-                              ._gold,
+                      color: _gold,
                     )
                   : null,
         ),
@@ -1589,8 +1542,7 @@ extension _AudioSearchSection
                 : Icons.volume_off_rounded,
             color:
                 hasUrl
-                    ? _AudioCenterScreenState
-                        ._gold
+                    ? _gold
                     : Colors.white24,
             size: 36,
           ),
