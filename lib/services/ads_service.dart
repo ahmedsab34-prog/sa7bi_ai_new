@@ -184,11 +184,9 @@ class AdsService {
   }
 
   Future<void> _ensureInitialized() async {
-    if (_initialized) {
-      return;
+    if (!_initialized) {
+      await initialize();
     }
-
-    await initialize();
   }
 
   // ============================================================
