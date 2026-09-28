@@ -133,9 +133,7 @@ class ChatScreenBody extends StatelessWidget {
                           showRewardButton: false,
                         ),
                       ),
-
                       const SizedBox(width: 8),
-
                       RewardedAdButton(
                         compact: true,
                         onRewarded: () {
