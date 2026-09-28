@@ -47,6 +47,15 @@ class AiService {
   static const String religiousEndpoint =
       '$base/v1/religious';
 
+  static const String podcastsSearchEndpoint =
+      '$base/v1/podcasts/search';
+
+  static const String podcastsLookupEndpoint =
+      '$base/v1/podcasts/lookup';
+
+  static const String podcastsEpisodesEndpoint =
+      '$base/v1/podcasts/episodes';
+
   static const int maxHistory =
       AppConfig.maximumContextMessages;
 
@@ -817,6 +826,350 @@ class AiService {
   }
 
   // ============================================================
+  // PODCASTS
+  // ============================================================
+
+  static Future<List<PodcastItem>> searchPodcasts({
+    String query = '',
+    int limit = 20,
+  }) async {
+    final clean = query.trim();
+
+    try {
+      final uri = Uri.parse(
+        podcastsSearchEndpoint,
+      ).replace(
+        queryParameters: {
+          'q': clean.isEmpty
+              ? 'Arabic podcast'
+              : clean,
+          'limit': limit.clamp(1, 50).toString(),
+        },
+      );
+
+      final response = await http
+          .get(uri)
+          .timeout(
+            const Duration(seconds: 30),
+          );
+
+      final data = _decodeMap(response.body);
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          data == null ||
+          data['items'] is! List) {
+        return [];
+      }
+
+      final result = <PodcastItem>[];
+
+      for (final raw in data['items'] as List) {
+        if (raw is! Map) {
+          continue;
+        }
+
+        final id = (
+          raw['id'] ??
+          raw['collectionId'] ??
+          ''
+        ).toString().trim();
+
+        final title = (
+          raw['title'] ??
+          raw['collectionName'] ??
+          raw['name'] ??
+          ''
+        ).toString().trim();
+
+        if (title.isEmpty) {
+          continue;
+        }
+
+        result.add(
+          PodcastItem(
+            id: id,
+            title: title,
+            artist: (
+              raw['artist'] ??
+              raw['artistName'] ??
+              raw['author'] ??
+              ''
+            ).toString(),
+            author: (
+              raw['author'] ??
+              raw['artist'] ??
+              raw['artistName'] ??
+              ''
+            ).toString(),
+            artwork: (
+              raw['artwork'] ??
+              raw['artworkUrl'] ??
+              raw['artworkUrl600'] ??
+              raw['image'] ??
+              ''
+            ).toString(),
+            feedUrl: (
+              raw['feedUrl'] ??
+              raw['feed_url'] ??
+              ''
+            ).toString(),
+            storeUrl: (
+              raw['storeUrl'] ??
+              raw['collectionViewUrl'] ??
+              raw['trackViewUrl'] ??
+              ''
+            ).toString(),
+            genre:
+                raw['genre']?.toString() ?? '',
+            country:
+                raw['country']?.toString() ?? '',
+            releaseDate:
+                raw['releaseDate']?.toString() ?? '',
+            episodeCount:
+                int.tryParse(
+                      (
+                        raw['episodeCount'] ??
+                        raw['trackCount'] ??
+                        raw['collectionCount'] ??
+                        0
+                      ).toString(),
+                    ) ??
+                    0,
+            description:
+                raw['description']?.toString() ?? '',
+          ),
+        );
+      }
+
+      return result;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<PodcastItem?> getPodcast(
+    String id,
+  ) async {
+    final clean = id.trim();
+
+    if (clean.isEmpty) {
+      return null;
+    }
+
+    try {
+      final uri = Uri.parse(
+        podcastsLookupEndpoint,
+      ).replace(
+        queryParameters: {
+          'id': clean,
+        },
+      );
+
+      final response = await http
+          .get(uri)
+          .timeout(
+            const Duration(seconds: 30),
+          );
+
+      final data = _decodeMap(response.body);
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          data == null) {
+        return null;
+      }
+
+      final raw =
+          data['podcast'] ??
+          data['item'];
+
+      if (raw is! Map) {
+        return null;
+      }
+
+      final title = (
+        raw['title'] ??
+        raw['collectionName'] ??
+        raw['name'] ??
+        ''
+      ).toString().trim();
+
+      if (title.isEmpty) {
+        return null;
+      }
+
+      return PodcastItem(
+        id: (
+          raw['id'] ??
+          raw['collectionId'] ??
+          clean
+        ).toString(),
+        title: title,
+        artist: (
+          raw['artist'] ??
+          raw['artistName'] ??
+          raw['author'] ??
+          ''
+        ).toString(),
+        author: (
+          raw['author'] ??
+          raw['artist'] ??
+          raw['artistName'] ??
+          ''
+        ).toString(),
+        artwork: (
+          raw['artwork'] ??
+          raw['artworkUrl'] ??
+          raw['artworkUrl600'] ??
+          raw['image'] ??
+          ''
+        ).toString(),
+        feedUrl: (
+          raw['feedUrl'] ??
+          raw['feed_url'] ??
+          ''
+        ).toString(),
+        storeUrl: (
+          raw['storeUrl'] ??
+          raw['collectionViewUrl'] ??
+          raw['trackViewUrl'] ??
+          ''
+        ).toString(),
+        genre:
+            raw['genre']?.toString() ?? '',
+        country:
+            raw['country']?.toString() ?? '',
+        releaseDate:
+            raw['releaseDate']?.toString() ?? '',
+        episodeCount:
+            int.tryParse(
+                  (
+                    raw['episodeCount'] ??
+                    raw['trackCount'] ??
+                    raw['collectionCount'] ??
+                    0
+                  ).toString(),
+                ) ??
+                0,
+        description:
+            raw['description']?.toString() ?? '',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<List<PodcastEpisode>>
+      getPodcastEpisodes({
+    required String feedUrl,
+    int limit = 100,
+  }) async {
+    final clean = feedUrl.trim();
+
+    if (clean.isEmpty ||
+        !_isHttpUrl(clean)) {
+      return [];
+    }
+
+    try {
+      final uri = Uri.parse(
+        podcastsEpisodesEndpoint,
+      ).replace(
+        queryParameters: {
+          'feedUrl': clean,
+          'limit': limit.clamp(1, 100).toString(),
+        },
+      );
+
+      final response = await http
+          .get(uri)
+          .timeout(
+            const Duration(seconds: 30),
+          );
+
+      final data = _decodeMap(response.body);
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          data == null ||
+          data['items'] is! List) {
+        return [];
+      }
+
+      final result = <PodcastEpisode>[];
+
+      for (final raw in data['items'] as List) {
+        if (raw is! Map) {
+          continue;
+        }
+
+        final title = (
+          raw['title'] ??
+          raw['name'] ??
+          ''
+        ).toString().trim();
+
+        final audioUrl = (
+          raw['audioUrl'] ??
+          raw['audio_url'] ??
+          raw['url'] ??
+          ''
+        ).toString().trim();
+
+        if (title.isEmpty ||
+            audioUrl.isEmpty ||
+            !_isHttpUrl(audioUrl)) {
+          continue;
+        }
+
+        result.add(
+          PodcastEpisode(
+            id: (
+              raw['id'] ??
+              raw['guid'] ??
+              ''
+            ).toString(),
+            title: title,
+            description:
+                raw['description']?.toString() ?? '',
+            audioUrl: audioUrl,
+            image: (
+              raw['image'] ??
+              raw['artwork'] ??
+              raw['artworkUrl'] ??
+              ''
+            ).toString(),
+            publishedAt: (
+              raw['publishedAt'] ??
+              raw['pubDate'] ??
+              ''
+            ).toString(),
+            duration:
+                raw['duration']?.toString() ?? '',
+            episode:
+                int.tryParse(
+                      raw['episode']?.toString() ?? '',
+                    ) ??
+                    0,
+            season:
+                int.tryParse(
+                      raw['season']?.toString() ?? '',
+                    ) ??
+                    0,
+            explicit:
+                raw['explicit'] == true,
+          ),
+        );
+      }
+
+      return result;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ============================================================
   // QURAN
   // ============================================================
 
@@ -1519,6 +1872,62 @@ class AudioSearchItem {
     this.repeat = '',
     this.collection = '',
     this.feedUrl = '',
+  });
+}
+
+class PodcastItem {
+  final String id;
+  final String title;
+  final String artist;
+  final String author;
+  final String artwork;
+  final String feedUrl;
+  final String storeUrl;
+  final String genre;
+  final String country;
+  final String releaseDate;
+  final int episodeCount;
+  final String description;
+
+  const PodcastItem({
+    this.id = '',
+    required this.title,
+    this.artist = '',
+    this.author = '',
+    this.artwork = '',
+    this.feedUrl = '',
+    this.storeUrl = '',
+    this.genre = '',
+    this.country = '',
+    this.releaseDate = '',
+    this.episodeCount = 0,
+    this.description = '',
+  });
+}
+
+class PodcastEpisode {
+  final String id;
+  final String title;
+  final String description;
+  final String audioUrl;
+  final String image;
+  final String publishedAt;
+  final String duration;
+  final int episode;
+  final int season;
+  final bool explicit;
+
+  const PodcastEpisode({
+    this.id = '',
+    required this.title,
+    required this.audioUrl,
+    this.description = '',
+    this.image = '',
+    this.publishedAt = '',
+    this.duration = '',
+    this.episode = 0,
+    this.season = 0,
+    this.explicit = false,
   });
 }
 
