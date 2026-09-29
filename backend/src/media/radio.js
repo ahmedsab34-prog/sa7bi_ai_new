@@ -57,7 +57,7 @@ function isSafeHttpUrl(value) {
 
 function normalizeStation(
   station,
-  index = 0
+  index = 0,
 ) {
   if (
     !station ||
@@ -88,7 +88,7 @@ function normalizeStation(
     name:
       String(
         station.name ||
-        "Radio Station"
+        "Radio Station",
       ).trim(),
 
     country:
@@ -98,7 +98,7 @@ function normalizeStation(
     countryCode:
       String(
         station.countrycode ||
-        ""
+        "",
       ).toUpperCase(),
 
     state:
@@ -119,12 +119,12 @@ function normalizeStation(
 
     bitrate:
       Number(
-        station.bitrate || 0
+        station.bitrate || 0,
       ),
 
     favicon:
       isSafeHttpUrl(
-        station.favicon
+        station.favicon,
       )
         ? station.favicon
         : null,
@@ -133,7 +133,7 @@ function normalizeStation(
 
     homepage:
       isSafeHttpUrl(
-        station.homepage
+        station.homepage,
       )
         ? station.homepage
         : null,
@@ -144,22 +144,22 @@ function normalizeStation(
 
     votes:
       Number(
-        station.votes || 0
+        station.votes || 0,
       ),
 
     clickCount:
       Number(
-        station.clickcount || 0
+        station.clickcount || 0,
       ),
 
     clickTrend:
       Number(
-        station.clicktrend || 0
+        station.clicktrend || 0,
       ),
 
     lastCheckOk:
       Number(
-        station.lastcheckok || 0
+        station.lastcheckok || 0,
       ) === 1,
 
     lastCheckTime:
@@ -169,7 +169,7 @@ function normalizeStation(
 
     hls:
       Number(
-        station.hls || 0
+        station.hls || 0,
       ) === 1,
 
     source:
@@ -179,7 +179,7 @@ function normalizeStation(
 
 function normalizeLimit(
   value,
-  fallback = 30
+  fallback = 30,
 ) {
   const number =
     Number(value);
@@ -193,14 +193,14 @@ function normalizeLimit(
   return Math.min(
     Math.max(
       Math.floor(number),
-      1
+      1,
     ),
-    MAX_LIMIT
+    MAX_LIMIT,
   );
 }
 
 async function fetchStations(
-  params
+  params,
 ) {
   const endpoint =
     `${RADIO_BASE_URL}/stations/search?${params.toString()}`;
@@ -216,7 +216,7 @@ async function fetchStations(
 function mergeStations(
   first,
   second,
-  limit
+  limit,
 ) {
   const result = [];
   const ids = new Set();
@@ -230,7 +230,7 @@ function mergeStations(
     const normalized =
       normalizeStation(
         station,
-        result.length
+        result.length,
       );
 
     if (!normalized) {
@@ -239,18 +239,18 @@ function mergeStations(
 
     if (
       ids.has(
-        normalized.stationUuid
+        normalized.stationUuid,
       )
     ) {
       continue;
     }
 
     ids.add(
-      normalized.stationUuid
+      normalized.stationUuid,
     );
 
     result.push(
-      normalized
+      normalized,
     );
 
     if (
@@ -272,7 +272,7 @@ function mergeStations(
  * /v1/radio?language=arabic
  */
 export async function handleRadioSearch(
-  request
+  request,
 ) {
   try {
     const url =
@@ -281,25 +281,25 @@ export async function handleRadioSearch(
     const query =
       normalizeArabic(
         url.searchParams.get("q") ||
-        ""
+        "",
       );
 
     const country =
       String(
         url.searchParams.get(
-          "country"
-        ) || ""
+          "country",
+        ) || "",
       ).trim();
 
     const countryCode =
       String(
         url.searchParams.get(
-          "countrycode"
+          "countrycode",
         ) ||
         url.searchParams.get(
-          "countryCode"
+          "countryCode",
         ) ||
-        ""
+        "",
       )
         .trim()
         .toUpperCase();
@@ -307,16 +307,16 @@ export async function handleRadioSearch(
     const language =
       String(
         url.searchParams.get(
-          "language"
-        ) || ""
+          "language",
+        ) || "",
       ).trim();
 
     const limit =
       normalizeLimit(
         url.searchParams.get(
-          "limit"
+          "limit",
         ),
-        30
+        30,
       );
 
     const params =
@@ -324,53 +324,53 @@ export async function handleRadioSearch(
 
     params.set(
       "hidebroken",
-      "true"
+      "true",
     );
 
     params.set(
       "order",
-      "votes"
+      "votes",
     );
 
     params.set(
       "reverse",
-      "true"
+      "true",
     );
 
     params.set(
       "limit",
-      String(limit)
+      String(limit),
     );
 
     if (countryCode) {
       params.set(
         "countrycode",
-        countryCode
+        countryCode,
       );
     } else if (country) {
       params.set(
         "country",
-        country
+        country,
       );
     }
 
     if (language) {
       params.set(
         "language",
-        language
+        language,
       );
     }
 
     if (query) {
       params.set(
         "name",
-        query
+        query,
       );
     }
 
     const primaryRaw =
       await fetchStations(
-        params
+        params,
       );
 
     let stations =
@@ -379,16 +379,11 @@ export async function handleRadioSearch(
           (station, index) =>
             normalizeStation(
               station,
-              index
-            )
+              index,
+            ),
         )
         .filter(Boolean);
 
-    /**
-     * If a name search produces very
-     * few results, perform a second
-     * by-name search and merge results.
-     */
     if (
       query &&
       stations.length < 5 &&
@@ -401,19 +396,19 @@ export async function handleRadioSearch(
 
         const fallbackData =
           await fetchJson(
-            fallbackEndpoint
+            fallbackEndpoint,
           );
 
         if (
           Array.isArray(
-            fallbackData
+            fallbackData,
           )
         ) {
           stations =
             mergeStations(
               stations,
               fallbackData,
-              limit
+              limit,
             );
         }
       } catch (_) {
@@ -424,7 +419,7 @@ export async function handleRadioSearch(
     stations =
       stations.slice(
         0,
-        limit
+        limit,
       );
 
     return json({
@@ -474,16 +469,13 @@ export async function handleRadioSearch(
         source:
           RADIO_SOURCE,
       },
-      502
+      502,
     );
   }
 }
 
 /**
  * Get available radio countries.
- *
- * Radio Browser's /countries endpoint
- * provides country names and station counts.
  */
 export async function handleRadioCountries() {
   try {
@@ -499,18 +491,18 @@ export async function handleRadioCountries() {
             .map((item) => ({
               name:
                 String(
-                  item?.name || ""
+                  item?.name || "",
                 ).trim(),
 
               stationCount:
                 Number(
                   item?.stationcount ||
-                  0
+                  0,
                 ),
             }))
             .filter(
               (item) =>
-                item.name
+                item.name,
             )
         : [];
 
@@ -555,31 +547,28 @@ export async function handleRadioCountries() {
         source:
           RADIO_SOURCE,
       },
-      502
+      502,
     );
   }
 }
 
 /**
  * Get stations for one country.
- *
- * Uses the official country-code
- * endpoint from Radio Browser.
  */
 export async function handleRadioByCountry(
   countryCode,
-  limit = 50
+  limit = 50,
 ) {
   const normalizedCode =
     String(
-      countryCode || ""
+      countryCode || "",
     )
       .trim()
       .toUpperCase();
 
   if (
     !/^[A-Z]{2}$/.test(
-      normalizedCode
+      normalizedCode,
     )
   ) {
     return json(
@@ -592,7 +581,7 @@ export async function handleRadioByCountry(
         backendVersion:
           BACKEND_VERSION,
       },
-      400
+      400,
     );
   }
 
@@ -600,7 +589,7 @@ export async function handleRadioByCountry(
     const safeLimit =
       normalizeLimit(
         limit,
-        50
+        50,
       );
 
     const params =
@@ -608,22 +597,22 @@ export async function handleRadioByCountry(
 
     params.set(
       "hidebroken",
-      "true"
+      "true",
     );
 
     params.set(
       "order",
-      "votes"
+      "votes",
     );
 
     params.set(
       "reverse",
-      "true"
+      "true",
     );
 
     params.set(
       "limit",
-      String(safeLimit)
+      String(safeLimit),
     );
 
     const endpoint =
@@ -631,7 +620,7 @@ export async function handleRadioByCountry(
 
     const data =
       await fetchJson(
-        endpoint
+        endpoint,
       );
 
     const stations =
@@ -641,13 +630,13 @@ export async function handleRadioByCountry(
               (station, index) =>
                 normalizeStation(
                   station,
-                  index
-                )
+                  index,
+                ),
             )
             .filter(Boolean)
             .slice(
               0,
-              safeLimit
+              safeLimit,
             )
         : [];
 
@@ -698,7 +687,7 @@ export async function handleRadioByCountry(
         source:
           RADIO_SOURCE,
       },
-      502
+      502,
     );
   }
 }
@@ -706,16 +695,13 @@ export async function handleRadioByCountry(
 /**
  * Register a station click with Radio Browser
  * and return its current playable URL.
- *
- * This should be called when the user actually
- * starts playing a station.
  */
 export async function handleRadioStationClick(
-  stationUuid
+  stationUuid,
 ) {
   const normalizedUuid =
     String(
-      stationUuid || ""
+      stationUuid || "",
     ).trim();
 
   if (
@@ -731,7 +717,7 @@ export async function handleRadioStationClick(
         backendVersion:
           BACKEND_VERSION,
       },
-      400
+      400,
     );
   }
 
@@ -741,7 +727,7 @@ export async function handleRadioStationClick(
 
     const data =
       await fetchJson(
-        endpoint
+        endpoint,
       );
 
     const streamUrl =
@@ -750,7 +736,7 @@ export async function handleRadioStationClick(
 
     if (
       !isSafeHttpUrl(
-        streamUrl
+        streamUrl,
       )
     ) {
       return json(
@@ -763,7 +749,7 @@ export async function handleRadioStationClick(
           backendVersion:
             BACKEND_VERSION,
         },
-        404
+        404,
       );
     }
 
@@ -812,24 +798,20 @@ export async function handleRadioStationClick(
         source:
           RADIO_SOURCE,
       },
-      502
+      502,
     );
   }
 }
 
 /**
  * Check whether a radio stream URL is reachable.
- *
- * This is a lightweight diagnostic only.
- * A successful check does not guarantee that
- * a live stream will remain available.
  */
 export async function checkRadioStream(
-  streamUrl
+  streamUrl,
 ) {
   if (
     !isSafeHttpUrl(
-      streamUrl
+      streamUrl,
     )
   ) {
     return false;
@@ -849,7 +831,7 @@ export async function checkRadioStream(
             "User-Agent":
               "Sa7bi-AI/6.3.0",
           },
-        }
+        },
       );
 
     if (
@@ -858,11 +840,6 @@ export async function checkRadioStream(
       return true;
     }
 
-    /**
-     * Some live-radio servers do not
-     * support HEAD correctly. Try a tiny
-     * ranged GET before declaring failure.
-     */
     const rangeResponse =
       await fetch(
         streamUrl,
@@ -879,7 +856,7 @@ export async function checkRadioStream(
             "User-Agent":
               "Sa7bi-AI/6.3.0",
           },
-        }
+        },
       );
 
     return (
@@ -901,7 +878,7 @@ export async function handleRadioHealth() {
 
     const data =
       await fetchJson(
-        endpoint
+        endpoint,
       );
 
     return json({
@@ -919,12 +896,12 @@ export async function handleRadioHealth() {
 
       stations:
         Number(
-          data?.stations || 0
+          data?.stations || 0,
         ),
 
       countries:
         Number(
-          data?.countries || 0
+          data?.countries || 0,
         ),
 
       backendVersion:
@@ -951,7 +928,7 @@ export async function handleRadioHealth() {
         backendVersion:
           BACKEND_VERSION,
       },
-      502
+      502,
     );
   }
 }
@@ -964,9 +941,3 @@ export default {
   checkRadioStream,
   handleRadioHealth,
 };
-
-اعمل الآن: استبدل محتوى "backend/src/media/radio.js" بالكامل بالكود ده، ثم Commit.
-
-ملحوظة مهمة: أضفت "handleRadioStationClick()" لأن Radio Browser نفسه يطلب استخدام "/json/url/{stationuuid}" عند بدء تشغيل المحطة، وهذا أيضًا يعيد رابط التشغيل الحالي بدل الاعتماد دائمًا على رابط قديم.
-
-بعد ما تعمل الـCommit وتقول تم، ننتقل للملف اللي بعده.
