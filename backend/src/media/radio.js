@@ -266,10 +266,12 @@ function mergeStations(
 /**
  * Search radio stations.
  *
- * Examples:
- * /v1/radio?q=Egypt
- * /v1/radio?countrycode=EG
- * /v1/radio?language=arabic
+ * Supported:
+ *
+ * /v1/radio/stations?q=Egypt
+ * /v1/radio/stations?country=EG
+ * /v1/radio/stations?countrycode=EG
+ * /v1/radio/stations?language=arabic
  */
 export async function handleRadioSearch(
   request,
@@ -284,14 +286,14 @@ export async function handleRadioSearch(
         "",
       );
 
-    const country =
+    const rawCountry =
       String(
         url.searchParams.get(
           "country",
         ) || "",
       ).trim();
 
-    const countryCode =
+    const explicitCountryCode =
       String(
         url.searchParams.get(
           "countrycode",
@@ -303,6 +305,34 @@ export async function handleRadioSearch(
       )
         .trim()
         .toUpperCase();
+
+    // ----------------------------------------------------------
+    // IMPORTANT:
+    //
+    // Flutter الحالي يرسل:
+    //
+    // ?country=EG
+    //
+    // لذلك إذا كانت country عبارة عن ISO code
+    // نستخدمها كـ countrycode بدل البحث باسم الدولة.
+    // ----------------------------------------------------------
+
+    let country = rawCountry;
+
+    let countryCode =
+      explicitCountryCode;
+
+    if (
+      !countryCode &&
+      /^[A-Z]{2}$/i.test(
+        rawCountry,
+      )
+    ) {
+      countryCode =
+        rawCountry.toUpperCase();
+
+      country = "";
+    }
 
     const language =
       String(
@@ -438,7 +468,15 @@ export async function handleRadioSearch(
       count:
         stations.length,
 
+      // --------------------------------------------------------
+      // Compatibility:
+      // Flutter القديم / الحالي قد يستخدم أيًا من المفتاحين.
+      // --------------------------------------------------------
+
       items:
+        stations,
+
+      stations:
         stations,
 
       backendVersion:
@@ -454,7 +492,11 @@ export async function handleRadioSearch(
 
         type: "radio",
 
+        count: 0,
+
         items: [],
+
+        stations: [],
 
         error:
           "Radio provider unavailable",
@@ -488,18 +530,39 @@ export async function handleRadioCountries() {
     const countries =
       Array.isArray(data)
         ? data
-            .map((item) => ({
-              name:
+            .map((item) => {
+              const iso =
                 String(
-                  item?.name || "",
-                ).trim(),
+                  item?.iso_3166_1 ||
+                  item?.iso_3166_1_code ||
+                  item?.countrycode ||
+                  "",
+                )
+                  .trim()
+                  .toUpperCase();
 
-              stationCount:
-                Number(
-                  item?.stationcount ||
-                  0,
-                ),
-            }))
+              return {
+                name:
+                  String(
+                    item?.name ||
+                    "",
+                  ).trim(),
+
+                iso,
+
+                code:
+                  iso,
+
+                countryCode:
+                  iso,
+
+                stationCount:
+                  Number(
+                    item?.stationcount ||
+                    0,
+                  ),
+              };
+            })
             .filter(
               (item) =>
                 item.name,
@@ -515,7 +578,11 @@ export async function handleRadioCountries() {
       count:
         countries.length,
 
+      // Compatibility with Flutter.
       items:
+        countries,
+
+      countries:
         countries,
 
       backendVersion:
@@ -532,7 +599,11 @@ export async function handleRadioCountries() {
         type:
           "radio-countries",
 
+        count: 0,
+
         items: [],
+
+        countries: [],
 
         error:
           "Unable to load radio countries",
@@ -655,6 +726,9 @@ export async function handleRadioByCountry(
       items:
         stations,
 
+      stations:
+        stations,
+
       backendVersion:
         BACKEND_VERSION,
 
@@ -673,6 +747,8 @@ export async function handleRadioByCountry(
           normalizedCode,
 
         items: [],
+
+        stations: [],
 
         error:
           "Unable to load radio stations",
