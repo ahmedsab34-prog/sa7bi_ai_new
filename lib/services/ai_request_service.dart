@@ -67,32 +67,18 @@ class AiRequestService {
   static const int maxHistory =
       AppConfig.maximumContextMessages;
 
-  /// أقصى حجم للصورة الواحدة.
   static const int maxImageBytes =
       AppConfig.maximumImageSizeMb * 1024 * 1024;
 
-  /// أقصى عدد Frames أو صور في طلب التحليل.
   static const int maxVideoFrames =
       AppConfig.maximumVideoFrames;
 
-  /// أقصى حجم إجمالي لبيانات تحليل الصور/الفيديو.
-  ///
-  /// تم إبقاؤه أقل من حد جسم طلب الـWorker حتى يكون هناك
-  /// مساحة كافية لـBase64 والـJSON وباقي بيانات الطلب.
   static const int maxVideoTotalBytes =
       5 * 1024 * 1024;
 
-  /// أقصى حجم إجمالي للصور المرسلة إلى توليد/تعديل الصور.
-  ///
-  /// السبب:
-  /// صورة 5MB تتحول إلى Base64 بحجم أكبر من حجمها الأصلي،
-  /// وإرسال 4 صور × 5MB قد يتجاوز حد جسم طلب الـWorker.
-  ///
-  /// لذلك نضع حدًا إجماليًا آمنًا للصور الداخلة في طلب الصورة.
   static const int maxImageGenerationTotalBytes =
       6 * 1024 * 1024;
 
-  /// أقصى عدد صور يمكن إرفاقها بتوليد/تعديل الصورة.
   static const int maxImageGenerationImages = 4;
 
   static const Duration connectionTimeout =
@@ -114,9 +100,6 @@ class AiRequestService {
   // DEVICE ID
   // ============================================================
 
-  /// يرجع Device ID ثابتًا لهذا التثبيت.
-  ///
-  /// لا نستخدم Android hardware ID أو أي معلومة حساسة.
   static Future<String> getDeviceId() async {
     final existingFuture = _deviceIdFuture;
 
@@ -162,7 +145,6 @@ class AiRequestService {
     return generated;
   }
 
-  /// ينشئ معرفًا عشوائيًا بدون Package إضافية.
   static String _generateId({
     required String prefix,
   }) {
@@ -186,7 +168,6 @@ class AiRequestService {
     return '$prefix-$timestamp-$randomPart';
   }
 
-  /// Request ID جديد لكل طلب AI.
   static String _newRequestId() {
     return _generateId(
       prefix: 'sa7bi_request',
@@ -197,7 +178,6 @@ class AiRequestService {
   // BACKEND CONNECTION
   // ============================================================
 
-  /// فحص اتصال التطبيق بالـWorker.
   static Future<BackendConnectionResult>
       checkBackend() async {
     try {
@@ -267,7 +247,6 @@ class AiRequestService {
   // SERVER CREDITS
   // ============================================================
 
-  /// قراءة الرصيد الحقيقي من الـBackend.
   static Future<ServerCreditsResult>
       getCredits() async {
     final deviceId = await getDeviceId();
@@ -511,16 +490,6 @@ class AiRequestService {
   // MULTI IMAGE
   // ============================================================
 
-  /// تحليل صورة واحدة أو عدة صور عادية.
-  ///
-  /// هذه العملية تُحسب Server-side كـ:
-  ///
-  /// image_analysis = 3 Credits
-  ///
-  /// إذا كان المحتوى فيديو، استخدم:
-  /// analyzeVideoFrames()
-  ///
-  /// حتى يتم إرسال videoAnalysis=true للـBackend.
   static Future<String> analyzeImages(
     List<Uint8List> images, {
     String prompt =
@@ -544,17 +513,6 @@ class AiRequestService {
   // VIDEO FRAMES
   // ============================================================
 
-  /// تحليل Frames مستخرجة من فيديو.
-  ///
-  /// هذه العملية تُحسب Server-side كـ:
-  ///
-  /// video_analysis = 5 Credits
-  ///
-  /// الفرق عن analyzeImages() هو إرسال:
-  ///
-  /// videoAnalysis: true
-  ///
-  /// والـBackend يعطي أولوية لهذا العلم قبل imageDataUrls.
   static Future<String> analyzeVideoFrames(
     List<Uint8List> frames, {
     String prompt =
@@ -671,11 +629,6 @@ class AiRequestService {
       'imageDataUrls': imageDataUrls,
     };
 
-    // مهم جدًا:
-    // الـBackend يميز الفيديو عن الصور من هذا العلم.
-    //
-    // لا نرسل videoAnalysis مع الصور العادية،
-    // حتى تظل الصورة = image_analysis.
     if (isVideoAnalysis) {
       body['videoAnalysis'] = true;
     }
@@ -699,15 +652,6 @@ class AiRequestService {
   // IMAGE GENERATION / EDITING
   // ============================================================
 
-  /// إنشاء صورة أو تعديل صورة.
-  ///
-  /// نوع العملية يحدده الـBackend:
-  ///
-  /// بدون imageDataUrls:
-  /// image_generation
-  ///
-  /// مع imageDataUrls:
-  /// image_edit
   static Future<String> generateImage({
     required String prompt,
     String? serviceContext,
@@ -932,7 +876,6 @@ class AiRequestService {
   // HTTP POST
   // ============================================================
 
-  /// تنفيذ POST واحد فقط لكل طلب AI.
   static Future<http.Response> _post(
     String endpoint, {
     required Map<String, dynamic> body,
@@ -1194,4 +1137,187 @@ class AiRequestService {
 // SERVER CREDITS RESULT
 // ============================================================
 
-class
+class ServerCreditsResult {
+  final String deviceId;
+  final int balance;
+  final int initialCredits;
+  final int rewardedAdCredits;
+  final int dailyRewardedAds;
+  final int dailyRewardedAdsLimit;
+  final int? textCost;
+  final int? imageAnalysisCost;
+  final int? videoAnalysisCost;
+  final int? imageGenerationCost;
+  final int? imageEditCost;
+  final Map<String, dynamic> raw;
+
+  const ServerCreditsResult({
+    required this.deviceId,
+    required this.balance,
+    required this.initialCredits,
+    required this.rewardedAdCredits,
+    required this.dailyRewardedAds,
+    required this.dailyRewardedAdsLimit,
+    required this.textCost,
+    required this.imageAnalysisCost,
+    required this.videoAnalysisCost,
+    required this.imageGenerationCost,
+    required this.imageEditCost,
+    required this.raw,
+  });
+
+  factory ServerCreditsResult.fromMap(
+    Map<String, dynamic> map, {
+    required String deviceId,
+  }) {
+    final costs =
+        map['costs'] is Map
+            ? Map<String, dynamic>.from(
+                map['costs'] as Map,
+              )
+            : <String, dynamic>{};
+
+    final rewarded =
+        map['rewardedAds'] is Map
+            ? Map<String, dynamic>.from(
+                map['rewardedAds'] as Map,
+              )
+            : <String, dynamic>{};
+
+    return ServerCreditsResult(
+      deviceId: deviceId,
+      balance: _readInt(
+        map['balance'] ??
+            map['credits'] ??
+            map['remaining'],
+      ),
+      initialCredits: _readInt(
+        map['initialCredits'],
+      ),
+      rewardedAdCredits: _readInt(
+        map['rewardedAdCredits'] ??
+            map['reward'],
+      ),
+      dailyRewardedAds: _readInt(
+        rewarded['used'] ??
+            map['dailyRewardedAds'],
+      ),
+      dailyRewardedAdsLimit: _readInt(
+        rewarded['limit'] ??
+            map['dailyRewardedAdsLimit'],
+      ),
+      textCost: _readNullableInt(
+        costs['text'] ??
+            map['textCost'],
+      ),
+      imageAnalysisCost: _readNullableInt(
+        costs['image_analysis'] ??
+            map['imageAnalysisCost'],
+      ),
+      videoAnalysisCost: _readNullableInt(
+        costs['video_analysis'] ??
+            map['videoAnalysisCost'],
+      ),
+      imageGenerationCost: _readNullableInt(
+        costs['image_generation'] ??
+            map['imageGenerationCost'],
+      ),
+      imageEditCost: _readNullableInt(
+        costs['image_edit'] ??
+            map['imageEditCost'],
+      ),
+      raw: Map<String, dynamic>.from(map),
+    );
+  }
+
+  static int _readInt(
+    dynamic value,
+  ) {
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
+  }
+
+  static int? _readNullableInt(
+    dynamic value,
+  ) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    if (value is num) {
+      return value.toInt();
+    }
+
+    return int.tryParse(
+      value.toString(),
+    );
+  }
+}
+
+// ============================================================
+// BACKEND CONNECTION RESULT
+// ============================================================
+
+class BackendConnectionResult {
+  final bool isAvailable;
+  final String? error;
+  final String? version;
+  final int? statusCode;
+
+  const BackendConnectionResult._({
+    required this.isAvailable,
+    this.error,
+    this.version,
+    this.statusCode,
+  });
+
+  const BackendConnectionResult.success({
+    String? version,
+    int? statusCode,
+  }) : this._(
+          isAvailable: true,
+          version: version,
+          statusCode: statusCode,
+        );
+
+  const BackendConnectionResult.failure(
+    String error, {
+    int? statusCode,
+  }) : this._(
+          isAvailable: false,
+          error: error,
+          statusCode: statusCode,
+        );
+}
+
+// ============================================================
+// EXCEPTION
+// ============================================================
+
+class AiRequestException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  const AiRequestException(
+    this.message, {
+    this.statusCode,
+  });
+
+  @override
+  String toString() =>
+      'AiRequestException: $message';
+}
