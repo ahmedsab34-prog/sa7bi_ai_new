@@ -88,8 +88,10 @@ class AiService {
 
       return data != null &&
           data['ok'] == true &&
-          (data['status'] == 'healthy' ||
-              data['status'] == 'online');
+          (
+            data['status'] == 'healthy' ||
+            data['status'] == 'online'
+          );
     } catch (_) {
       return false;
     }
@@ -832,25 +834,21 @@ class AiService {
   // PODCASTS
   // ============================================================
 
-  static Future<List<PodcastItem>>
-      searchPodcasts({
+  static Future<List<PodcastItem>> searchPodcasts({
     String query = '',
     int limit = 20,
   }) async {
     final clean = query.trim();
-
-    if (clean.isEmpty) {
-      return [];
-    }
 
     try {
       final uri = Uri.parse(
         podcastsSearchEndpoint,
       ).replace(
         queryParameters: {
-          'q': clean,
-          'limit':
-              limit.clamp(1, 50).toString(),
+          'q': clean.isEmpty
+              ? 'Arabic podcast'
+              : clean,
+          'limit': limit.clamp(1, 50).toString(),
         },
       );
 
@@ -860,8 +858,7 @@ class AiService {
             const Duration(seconds: 30),
           );
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
@@ -877,13 +874,18 @@ class AiService {
           continue;
         }
 
-        final title =
-            (
-              raw['title'] ??
-              raw['collectionName'] ??
-              raw['name'] ??
-              ''
-            ).toString().trim();
+        final id = (
+          raw['id'] ??
+          raw['collectionId'] ??
+          ''
+        ).toString().trim();
+
+        final title = (
+          raw['title'] ??
+          raw['collectionName'] ??
+          raw['name'] ??
+          ''
+        ).toString().trim();
 
         if (title.isEmpty) {
           continue;
@@ -891,42 +893,38 @@ class AiService {
 
         result.add(
           PodcastItem(
-            id:
-                (
-                  raw['id'] ??
-                  raw['collectionId'] ??
-                  ''
-                ).toString(),
+            id: id,
             title: title,
-            artist:
-                (
-                  raw['artist'] ??
-                  raw['artistName'] ??
-                  ''
-                ).toString(),
-            author:
-                raw['author']?.toString() ?? '',
-            artwork:
-                (
-                  raw['artwork'] ??
-                  raw['artworkUrl'] ??
-                  raw['artworkUrl600'] ??
-                  raw['image'] ??
-                  ''
-                ).toString(),
-            feedUrl:
-                (
-                  raw['feedUrl'] ??
-                  raw['feed_url'] ??
-                  ''
-                ).toString(),
-            storeUrl:
-                (
-                  raw['storeUrl'] ??
-                  raw['collectionViewUrl'] ??
-                  raw['trackViewUrl'] ??
-                  ''
-                ).toString(),
+            artist: (
+              raw['artist'] ??
+              raw['artistName'] ??
+              raw['author'] ??
+              ''
+            ).toString(),
+            author: (
+              raw['author'] ??
+              raw['artist'] ??
+              raw['artistName'] ??
+              ''
+            ).toString(),
+            artwork: (
+              raw['artwork'] ??
+              raw['artworkUrl'] ??
+              raw['artworkUrl600'] ??
+              raw['image'] ??
+              ''
+            ).toString(),
+            feedUrl: (
+              raw['feedUrl'] ??
+              raw['feed_url'] ??
+              ''
+            ).toString(),
+            storeUrl: (
+              raw['storeUrl'] ??
+              raw['collectionViewUrl'] ??
+              raw['trackViewUrl'] ??
+              ''
+            ).toString(),
             genre:
                 raw['genre']?.toString() ?? '',
             country:
@@ -979,8 +977,7 @@ class AiService {
             const Duration(seconds: 30),
           );
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
@@ -996,55 +993,54 @@ class AiService {
         return null;
       }
 
-      final title =
-          (
-            raw['title'] ??
-            raw['collectionName'] ??
-            raw['name'] ??
-            ''
-          ).toString().trim();
+      final title = (
+        raw['title'] ??
+        raw['collectionName'] ??
+        raw['name'] ??
+        ''
+      ).toString().trim();
 
       if (title.isEmpty) {
         return null;
       }
 
       return PodcastItem(
-        id:
-            (
-              raw['id'] ??
-              raw['collectionId'] ??
-              clean
-            ).toString(),
+        id: (
+          raw['id'] ??
+          raw['collectionId'] ??
+          clean
+        ).toString(),
         title: title,
-        artist:
-            (
-              raw['artist'] ??
-              raw['artistName'] ??
-              ''
-            ).toString(),
-        author:
-            raw['author']?.toString() ?? '',
-        artwork:
-            (
-              raw['artwork'] ??
-              raw['artworkUrl'] ??
-              raw['artworkUrl600'] ??
-              raw['image'] ??
-              ''
-            ).toString(),
-        feedUrl:
-            (
-              raw['feedUrl'] ??
-              raw['feed_url'] ??
-              ''
-            ).toString(),
-        storeUrl:
-            (
-              raw['storeUrl'] ??
-              raw['collectionViewUrl'] ??
-              raw['trackViewUrl'] ??
-              ''
-            ).toString(),
+        artist: (
+          raw['artist'] ??
+          raw['artistName'] ??
+          raw['author'] ??
+          ''
+        ).toString(),
+        author: (
+          raw['author'] ??
+          raw['artist'] ??
+          raw['artistName'] ??
+          ''
+        ).toString(),
+        artwork: (
+          raw['artwork'] ??
+          raw['artworkUrl'] ??
+          raw['artworkUrl600'] ??
+          raw['image'] ??
+          ''
+        ).toString(),
+        feedUrl: (
+          raw['feedUrl'] ??
+          raw['feed_url'] ??
+          ''
+        ).toString(),
+        storeUrl: (
+          raw['storeUrl'] ??
+          raw['collectionViewUrl'] ??
+          raw['trackViewUrl'] ??
+          ''
+        ).toString(),
         genre:
             raw['genre']?.toString() ?? '',
         country:
@@ -1076,7 +1072,8 @@ class AiService {
   }) async {
     final clean = feedUrl.trim();
 
-    if (!_isHttpUrl(clean)) {
+    if (clean.isEmpty ||
+        !_isHttpUrl(clean)) {
       return [];
     }
 
@@ -1086,8 +1083,7 @@ class AiService {
       ).replace(
         queryParameters: {
           'feedUrl': clean,
-          'limit':
-              limit.clamp(1, 100).toString(),
+          'limit': limit.clamp(1, 100).toString(),
         },
       );
 
@@ -1097,8 +1093,7 @@ class AiService {
             const Duration(seconds: 30),
           );
 
-      final data =
-          _decodeMap(response.body);
+      final data = _decodeMap(response.body);
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
@@ -1107,56 +1102,54 @@ class AiService {
         return [];
       }
 
-      final result =
-          <PodcastEpisode>[];
+      final result = <PodcastEpisode>[];
 
       for (final raw in data['items'] as List) {
         if (raw is! Map) {
           continue;
         }
 
-        final title =
-            raw['title']?.toString().trim() ?? '';
+        final title = (
+          raw['title'] ??
+          raw['name'] ??
+          ''
+        ).toString().trim();
 
-        final audioUrl =
-            (
-              raw['audioUrl'] ??
-              raw['audio_url'] ??
-              raw['url'] ??
-              ''
-            ).toString().trim();
+        final audioUrl = (
+          raw['audioUrl'] ??
+          raw['audio_url'] ??
+          raw['url'] ??
+          ''
+        ).toString().trim();
 
         if (title.isEmpty ||
+            audioUrl.isEmpty ||
             !_isHttpUrl(audioUrl)) {
           continue;
         }
 
         result.add(
           PodcastEpisode(
-            id:
-                (
-                  raw['id'] ??
-                  raw['guid'] ??
-                  ''
-                ).toString(),
+            id: (
+              raw['id'] ??
+              raw['guid'] ??
+              ''
+            ).toString(),
             title: title,
             description:
-                raw['description']?.toString() ??
-                    '',
+                raw['description']?.toString() ?? '',
             audioUrl: audioUrl,
-            image:
-                (
-                  raw['image'] ??
-                  raw['artwork'] ??
-                  raw['artworkUrl'] ??
-                  ''
-                ).toString(),
-            publishedAt:
-                (
-                  raw['publishedAt'] ??
-                  raw['pubDate'] ??
-                  ''
-                ).toString(),
+            image: (
+              raw['image'] ??
+              raw['artwork'] ??
+              raw['artworkUrl'] ??
+              ''
+            ).toString(),
+            publishedAt: (
+              raw['publishedAt'] ??
+              raw['pubDate'] ??
+              ''
+            ).toString(),
             duration:
                 raw['duration']?.toString() ?? '',
             episode:
@@ -1579,4 +1572,568 @@ class AiService {
       }
 
       final data =
-          _
+          _decodeMap(response.body);
+
+      if (data == null ||
+          data['items'] is! List) {
+        return [];
+      }
+
+      final result =
+          <ShortVideoItem>[];
+
+      for (final raw
+          in data['items']
+              as List) {
+        if (raw is! Map) {
+          continue;
+        }
+
+        final item =
+            ShortVideoItem(
+          id:
+              raw['id']?.toString() ??
+                  '',
+          title:
+              raw['title']?.toString() ??
+                  '',
+          creator:
+              (
+                raw['creator'] ??
+                raw['source'] ??
+                ''
+              ).toString(),
+          videoUrl:
+              (
+                raw['videoUrl'] ??
+                raw['url'] ??
+                ''
+              ).toString(),
+          thumbnail:
+              (
+                raw['thumbnail'] ??
+                raw['image'] ??
+                raw['cover'] ??
+                ''
+              ).toString(),
+          description:
+              raw['description']?.toString() ??
+                  '',
+        );
+
+        if (item.videoUrl.trim().isEmpty &&
+            item.thumbnail.trim().isEmpty) {
+          continue;
+        }
+
+        result.add(item);
+
+        if (result.length >=
+            AppConfig.maximumShortsItems) {
+          break;
+        }
+      }
+
+      return result;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ============================================================
+  // HTTP HELPERS
+  // ============================================================
+
+  static Future<Map<String, dynamic>?>
+      _getMap(
+    String endpoint,
+  ) async {
+    try {
+      final response = await http
+          .get(
+            Uri.parse(endpoint),
+            headers: const {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 30),
+          );
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        return null;
+      }
+
+      return _decodeMap(response.body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static List<Map<String, String>>
+      _limitHistory(
+    List<Map<String, String>>
+        history,
+  ) {
+    final cleaned =
+        history
+            .where(
+              (item) {
+                final role =
+                    item['role']
+                            ?.trim() ??
+                        '';
+                final content =
+                    item['content']
+                            ?.trim() ??
+                        '';
+
+                return (
+                  role == 'user' ||
+                  role == 'assistant'
+                ) &&
+                    content.isNotEmpty;
+              },
+            )
+            .map(
+              (item) =>
+                  <String, String>{
+                'role':
+                    item['role']!.trim(),
+                'content':
+                    item['content']!.trim(),
+              },
+            )
+            .toList();
+
+    if (cleaned.length <= maxHistory) {
+      return cleaned;
+    }
+
+    return cleaned.sublist(
+      cleaned.length - maxHistory,
+    );
+  }
+
+  static bool _isDataImageUrl(
+    String value,
+  ) {
+    return value
+        .trim()
+        .toLowerCase()
+        .startsWith(
+          'data:image/',
+        );
+  }
+
+  static Uint8List _decodeImageData(
+    String value,
+  ) {
+    final clean =
+        value.trim();
+
+    final comma =
+        clean.indexOf(',');
+
+    if (comma == -1) {
+      throw const FormatException(
+        'Invalid image data URL.',
+      );
+    }
+
+    final header =
+        clean.substring(
+      0,
+      comma,
+    );
+
+    if (!header
+        .toLowerCase()
+        .contains(';base64')) {
+      throw const FormatException(
+        'Image data is not Base64.',
+      );
+    }
+
+    final encoded =
+        clean
+            .substring(
+              comma + 1,
+            )
+            .trim();
+
+    if (encoded.isEmpty) {
+      throw const FormatException(
+        'Empty image data.',
+      );
+    }
+
+    return Uint8List.fromList(
+      base64Decode(
+        base64.normalize(
+          encoded,
+        ),
+      ),
+    );
+  }
+
+  static bool _isHttpUrl(
+    String value,
+  ) {
+    final uri =
+        Uri.tryParse(
+      value.trim(),
+    );
+
+    return uri != null &&
+        (
+          uri.scheme == 'http' ||
+          uri.scheme == 'https'
+        );
+  }
+
+  static bool _isPlayableHttpUrl(
+    String value,
+  ) {
+    final uri =
+        Uri.tryParse(
+      value.trim(),
+    );
+
+    return uri != null &&
+        (
+          uri.scheme == 'http' ||
+          uri.scheme == 'https'
+        );
+  }
+
+  static Map<String, dynamic>?
+      _decodeMap(
+    String body,
+  ) {
+    try {
+      final decoded =
+          jsonDecode(body);
+
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(
+          decoded,
+        );
+      }
+
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+// ============================================================
+// MODELS
+// ============================================================
+
+class NewsItem {
+  final String title;
+  final String source;
+  final String link;
+  final String imageUrl;
+  final String description;
+  final String pubDate;
+
+  const NewsItem({
+    required this.title,
+    required this.source,
+    required this.link,
+    this.imageUrl = '',
+    this.description = '',
+    this.pubDate = '',
+  });
+}
+
+class AudioSearchItem {
+  final String id;
+  final String title;
+  final String? artist;
+  final String url;
+  final String type;
+  final String artwork;
+  final String storeUrl;
+  final String text;
+  final String repeat;
+  final String collection;
+  final String feedUrl;
+
+  const AudioSearchItem({
+    this.id = '',
+    required this.title,
+    required this.url,
+    this.artist,
+    required this.type,
+    this.artwork = '',
+    this.storeUrl = '',
+    this.text = '',
+    this.repeat = '',
+    this.collection = '',
+    this.feedUrl = '',
+  });
+}
+
+class PodcastItem {
+  final String id;
+  final String title;
+  final String artist;
+  final String author;
+  final String artwork;
+  final String feedUrl;
+  final String storeUrl;
+  final String genre;
+  final String country;
+  final String releaseDate;
+  final int episodeCount;
+  final String description;
+
+  const PodcastItem({
+    this.id = '',
+    required this.title,
+    this.artist = '',
+    this.author = '',
+    this.artwork = '',
+    this.feedUrl = '',
+    this.storeUrl = '',
+    this.genre = '',
+    this.country = '',
+    this.releaseDate = '',
+    this.episodeCount = 0,
+    this.description = '',
+  });
+}
+
+class PodcastEpisode {
+  final String id;
+  final String title;
+  final String description;
+  final String audioUrl;
+  final String image;
+  final String publishedAt;
+  final String duration;
+  final int episode;
+  final int season;
+  final bool explicit;
+
+  const PodcastEpisode({
+    this.id = '',
+    required this.title,
+    required this.audioUrl,
+    this.description = '',
+    this.image = '',
+    this.publishedAt = '',
+    this.duration = '',
+    this.episode = 0,
+    this.season = 0,
+    this.explicit = false,
+  });
+}
+
+class HadithBook {
+  final String id;
+  final String name;
+
+  const HadithBook({
+    required this.id,
+    required this.name,
+  });
+}
+
+class HadithItem {
+  final String id;
+  final String number;
+  final String book;
+  final String bookName;
+  final String text;
+  final String source;
+
+  const HadithItem({
+    this.id = '',
+    this.number = '',
+    this.book = '',
+    this.bookName = '',
+    required this.text,
+    this.source = '',
+  });
+}
+
+class TafsirBook {
+  final int id;
+  final String name;
+
+  const TafsirBook({
+    required this.id,
+    required this.name,
+  });
+}
+
+class TafsirItem {
+  final String id;
+  final int tafsirId;
+  final String tafsirName;
+  final int sura;
+  final String suraName;
+  final String audioUrl;
+
+  const TafsirItem({
+    this.id = '',
+    required this.tafsirId,
+    required this.tafsirName,
+    required this.sura,
+    required this.suraName,
+    this.audioUrl = '',
+  });
+}
+
+class TafsirAudioResult {
+  final bool available;
+  final String audioUrl;
+
+  const TafsirAudioResult({
+    required this.available,
+    required this.audioUrl,
+  });
+}
+
+class ImageGenerationResult {
+  final Uint8List? bytes;
+  final String? imageUrl;
+  final String? error;
+
+  const ImageGenerationResult._({
+    this.bytes,
+    this.imageUrl,
+    this.error,
+  });
+
+  const ImageGenerationResult.success(
+    Uint8List bytes,
+  ) : this._(
+          bytes: bytes,
+        );
+
+  const ImageGenerationResult.successUrl(
+    String url,
+  ) : this._(
+          imageUrl: url,
+        );
+
+  const ImageGenerationResult.failure(
+    String error,
+  ) : this._(
+          error: error,
+        );
+
+  bool get isSuccess =>
+      (bytes != null &&
+          bytes!.isNotEmpty) ||
+      (imageUrl != null &&
+          imageUrl!.isNotEmpty);
+}
+
+class QuranCatalog {
+  final List<QuranReciter> reciters;
+  final List<QuranSura> suwar;
+
+  const QuranCatalog({
+    required this.reciters,
+    required this.suwar,
+  });
+}
+
+class QuranReciter {
+  final String id;
+  final String name;
+  final List<QuranMoshaf> moshaf;
+
+  const QuranReciter({
+    required this.id,
+    required this.name,
+    required this.moshaf,
+  });
+}
+
+class QuranMoshaf {
+  final String id;
+  final String name;
+  final String server;
+  final int surahTotal;
+  final String surahList;
+
+  const QuranMoshaf({
+    required this.id,
+    required this.name,
+    required this.server,
+    required this.surahTotal,
+    required this.surahList,
+  });
+}
+
+class QuranSura {
+  final int id;
+  final String name;
+
+  const QuranSura({
+    required this.id,
+    required this.name,
+  });
+}
+
+class RadioCountry {
+  final String name;
+  final String code;
+  final int stationCount;
+
+  const RadioCountry({
+    required this.name,
+    required this.code,
+    required this.stationCount,
+  });
+}
+
+class RadioStation {
+  final String id;
+  final String name;
+  final String url;
+  final String homepage;
+  final String favicon;
+  final String tags;
+  final String codec;
+  final int bitrate;
+
+  const RadioStation({
+    this.id = '',
+    required this.name,
+    required this.url,
+    required this.homepage,
+    required this.favicon,
+    required this.tags,
+    required this.codec,
+    required this.bitrate,
+  });
+}
+
+class ShortVideoItem {
+  final String id;
+  final String title;
+  final String creator;
+  final String videoUrl;
+  final String thumbnail;
+  final String description;
+
+  const ShortVideoItem({
+    this.id = '',
+    required this.title,
+    required this.creator,
+    required this.videoUrl,
+    required this.thumbnail,
+    this.description = '',
+  });
+}
