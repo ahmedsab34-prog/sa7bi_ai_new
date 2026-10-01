@@ -2,8 +2,7 @@ name = "sa7bi-ai-new"
 main = "src/index.js"
 compatibility_date = "2026-09-18"
 
-Explicitly enable the public workers.dev endpoint.
-
+# Explicitly enable the public workers.dev endpoint.
 workers_dev = true
 
 [vars]
