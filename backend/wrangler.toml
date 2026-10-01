@@ -2,13 +2,14 @@ name = "sa7bi-ai-new"
 main = "src/index.js"
 compatibility_date = "2026-09-18"
 
-# Keep the public workers.dev endpoint explicitly enabled.
+Explicitly enable the public workers.dev endpoint.
+
 workers_dev = true
 
 [vars]
 
 GEMINI_TEXT_MODEL = "gemini-3.8-flash"
-GEMINI_IMAGE_MODEL = "gemini-3.1-flash"
+GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image"
 
 WORKERS_TEXT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 WORKERS_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
