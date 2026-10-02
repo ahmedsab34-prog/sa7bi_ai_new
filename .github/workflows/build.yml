@@ -7,6 +7,9 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Flutter APK
@@ -58,11 +61,69 @@ jobs:
       - name: Build Release APK
         run: flutter build apk --release
 
+      - name: Verify APK
+        run: |
+          set -e
+
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+
+          if [ ! -s "${APK_PATH}" ]; then
+            echo "ERROR: APK was not created."
+            exit 1
+          fi
+
+          echo "=========================================="
+          echo "APK CREATED SUCCESSFULLY"
+          echo "=========================================="
+          ls -lh "${APK_PATH}"
+          file "${APK_PATH}"
+          echo "=========================================="
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Publish direct APK download
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          RELEASE_TAG="apk-latest"
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+
+          echo "=========================================="
+          echo "PREPARING DIRECT APK RELEASE"
+          echo "=========================================="
+
+          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Creating APK release..."
+
+            gh release create "${RELEASE_TAG}" \
+              --title "Sa7bi AI - Latest APK" \
+              --notes "Latest test APK generated automatically from the main branch." \
+              --latest=false
+          else
+            echo "APK release already exists."
+          fi
+
+          echo "Uploading APK directly..."
+
+          gh release upload \
+            "${RELEASE_TAG}" \
+            "${APK_PATH}" \
+            --clobber
+
+          echo ""
+          echo "=========================================="
+          echo "DIRECT APK READY"
+          echo "=========================================="
+          echo "Release tag: ${RELEASE_TAG}"
+          echo "The APK is available as a direct .apk file."
+          echo "=========================================="
 
   deploy-worker:
     name: Deploy Cloudflare Worker
@@ -92,14 +153,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      # ============================================================
-      # LIVE WORKER SMOKE TEST
-      #
-      # هذا الاختبار لا يغير الـWorker.
-      # فقط يتأكد أن الرابط المنشور قابل للوصول فعليًا
-      # من خارج الهاتف وبعد انتهاء عملية النشر.
-      # ============================================================
-
       - name: Wait for Worker propagation
         run: |
           echo "Waiting for Cloudflare Worker propagation..."
@@ -114,7 +167,6 @@ jobs:
           echo "=========================================="
           echo "Testing live Sa7bi AI Worker"
           echo "=========================================="
-          echo "URL: ${WORKER_URL}/health"
 
           SUCCESS=0
 
@@ -140,6 +192,7 @@ jobs:
               cat /tmp/sa7bi-health.json
               echo ""
               echo "===== WORKER IS REACHABLE ====="
+
               SUCCESS=1
               break
             fi
@@ -153,11 +206,9 @@ jobs:
             echo "=========================================="
             echo "WORKER LIVE HEALTH CHECK FAILED"
             echo "=========================================="
-            echo "Deployment itself succeeded, but the public"
-            echo "workers.dev endpoint did not return HTTP 200."
-            echo ""
-            echo "This points to a routing/edge/public-endpoint"
-            echo "problem rather than a Flutter build problem."
+
+            cat /tmp/sa7bi-health.json 2>/dev/null || true
+
             exit 1
           fi
 
