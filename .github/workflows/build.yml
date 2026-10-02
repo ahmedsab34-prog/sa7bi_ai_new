@@ -75,8 +75,10 @@ jobs:
           echo "=========================================="
           echo "APK CREATED SUCCESSFULLY"
           echo "=========================================="
+
           ls -lh "${APK_PATH}"
           file "${APK_PATH}"
+
           echo "=========================================="
 
       - name: Upload APK Artifact
@@ -84,6 +86,24 @@ jobs:
         with:
           name: release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Prepare stable APK filename
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -e
+
+          cp \
+            "build/app/outputs/flutter-apk/app-release.apk" \
+            "sa7bi-ai.apk"
+
+          if [ ! -s "sa7bi-ai.apk" ]; then
+            echo "ERROR: sa7bi-ai.apk was not created."
+            exit 1
+          fi
+
+          echo "===== DIRECT APK FILE ====="
+          ls -lh "sa7bi-ai.apk"
+          file "sa7bi-ai.apk"
 
       - name: Publish direct APK download
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -93,7 +113,7 @@ jobs:
           set -e
 
           RELEASE_TAG="apk-latest"
-          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          APK_PATH="sa7bi-ai.apk"
 
           echo "=========================================="
           echo "PREPARING DIRECT APK RELEASE"
@@ -104,13 +124,32 @@ jobs:
 
             gh release create "${RELEASE_TAG}" \
               --title "Sa7bi AI - Latest APK" \
-              --notes "Latest test APK generated automatically from the main branch." \
-              --latest=false
+              --notes "Latest Sa7bi AI APK generated automatically from the main branch." \
+              --latest
           else
             echo "APK release already exists."
+
+            echo "Updating release to be the latest release..."
+
+            gh release edit "${RELEASE_TAG}" \
+              --latest
           fi
 
-          echo "Uploading APK directly..."
+          echo "Removing old APK asset if necessary..."
+
+          gh release delete-asset \
+            "${RELEASE_TAG}" \
+            "app-release.apk" \
+            --yes \
+            >/dev/null 2>&1 || true
+
+          gh release delete-asset \
+            "${RELEASE_TAG}" \
+            "sa7bi-ai.apk" \
+            --yes \
+            >/dev/null 2>&1 || true
+
+          echo "Uploading stable APK filename..."
 
           gh release upload \
             "${RELEASE_TAG}" \
@@ -121,9 +160,58 @@ jobs:
           echo "=========================================="
           echo "DIRECT APK READY"
           echo "=========================================="
+
           echo "Release tag: ${RELEASE_TAG}"
-          echo "The APK is available as a direct .apk file."
+          echo "Asset: sa7bi-ai.apk"
+
           echo "=========================================="
+
+      - name: Verify direct APK download URL
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          APK_URL: https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "VERIFYING DIRECT APK DOWNLOAD"
+          echo "=========================================="
+
+          echo "URL:"
+          echo "${APK_URL}"
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --connect-timeout 15 \
+            --max-time 60 \
+            --output /tmp/sa7bi-ai-download.apk \
+            --write-out "%{http_code}" \
+            "${APK_URL}")
+
+          echo "HTTP status: ${HTTP_CODE}"
+
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo ""
+            echo "ERROR: Direct APK download URL failed."
+            exit 1
+          fi
+
+          if [ ! -s "/tmp/sa7bi-ai-download.apk" ]; then
+            echo ""
+            echo "ERROR: APK download returned an empty file."
+            exit 1
+          fi
+
+          echo ""
+          echo "===== DIRECT DOWNLOAD VERIFIED ====="
+
+          ls -lh /tmp/sa7bi-ai-download.apk
+          file /tmp/sa7bi-ai-download.apk
+
+          echo ""
+          echo "Direct APK URL is working."
 
   deploy-worker:
     name: Deploy Cloudflare Worker
