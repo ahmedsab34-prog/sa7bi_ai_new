@@ -91,3 +91,145 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # ============================================================
+      # LIVE WORKER SMOKE TEST
+      #
+      # هذا الاختبار لا يغير الـWorker.
+      # فقط يتأكد أن الرابط المنشور قابل للوصول فعليًا
+      # من خارج الهاتف وبعد انتهاء عملية النشر.
+      # ============================================================
+
+      - name: Wait for Worker propagation
+        run: |
+          echo "Waiting for Cloudflare Worker propagation..."
+          sleep 8
+
+      - name: Test live Worker health endpoint
+        env:
+          WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "Testing live Sa7bi AI Worker"
+          echo "=========================================="
+          echo "URL: ${WORKER_URL}/health"
+
+          SUCCESS=0
+
+          for ATTEMPT in 1 2 3 4 5 6; do
+            echo ""
+            echo "Attempt ${ATTEMPT}/6"
+
+            HTTP_CODE=$(curl \
+              --silent \
+              --show-error \
+              --location \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --output /tmp/sa7bi-health.json \
+              --write-out "%{http_code}" \
+              "${WORKER_URL}/health" || true)
+
+            echo "HTTP status: ${HTTP_CODE}"
+
+            if [ "${HTTP_CODE}" = "200" ]; then
+              echo ""
+              echo "===== WORKER RESPONSE ====="
+              cat /tmp/sa7bi-health.json
+              echo ""
+              echo "===== WORKER IS REACHABLE ====="
+              SUCCESS=1
+              break
+            fi
+
+            echo "Worker is not reachable yet."
+            sleep 5
+          done
+
+          if [ "${SUCCESS}" != "1" ]; then
+            echo ""
+            echo "=========================================="
+            echo "WORKER LIVE HEALTH CHECK FAILED"
+            echo "=========================================="
+            echo "Deployment itself succeeded, but the public"
+            echo "workers.dev endpoint did not return HTTP 200."
+            echo ""
+            echo "This points to a routing/edge/public-endpoint"
+            echo "problem rather than a Flutter build problem."
+            exit 1
+          fi
+
+      - name: Test Worker root endpoint
+        env:
+          WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
+        run: |
+          set -e
+
+          echo "Testing Worker root endpoint..."
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --output /tmp/sa7bi-root.json \
+            --write-out "%{http_code}" \
+            "${WORKER_URL}/" || true)
+
+          echo "HTTP status: ${HTTP_CODE}"
+
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo "Root endpoint failed."
+            cat /tmp/sa7bi-root.json 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "===== ROOT RESPONSE ====="
+          cat /tmp/sa7bi-root.json
+          echo ""
+
+      - name: Test Worker diagnostics endpoint
+        env:
+          WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
+        run: |
+          set -e
+
+          echo "Testing Worker diagnostics endpoint..."
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --output /tmp/sa7bi-diagnostics.json \
+            --write-out "%{http_code}" \
+            "${WORKER_URL}/v1/diagnostics" || true)
+
+          echo "HTTP status: ${HTTP_CODE}"
+
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo "Diagnostics endpoint failed."
+            cat /tmp/sa7bi-diagnostics.json 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "===== DIAGNOSTICS RESPONSE ====="
+          cat /tmp/sa7bi-diagnostics.json
+          echo ""
+
+      - name: Worker deployment verification complete
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "SA7BI AI WORKER VERIFICATION COMPLETE"
+          echo "=========================================="
+          echo "Deployment succeeded."
+          echo "Public endpoint responded successfully."
+          echo "Health endpoint responded."
+          echo "Root endpoint responded."
+          echo "Diagnostics endpoint responded."
+          echo "=========================================="
