@@ -70,6 +70,15 @@ class AppConfig {
   static const String downloadEndpoint =
       '$backendBaseUrl/download';
 
+  /// إعدادات المونيتايزيشن الديناميكية.
+  ///
+  /// تشمل:
+  /// - روابط المتاجر
+  /// - affiliate status
+  /// - sponsored ads
+  static const String monetizationEndpoint =
+      '$backendBaseUrl/v1/monetization';
+
   // ============================================================
   // NETWORK LIMITS
   // ============================================================
