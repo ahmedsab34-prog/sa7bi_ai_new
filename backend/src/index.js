@@ -1,7 +1,7 @@
 // backend/src/index.js
 // Sa7bi AI Backend
 // FINAL MODULAR INTEGRATION
-// Version 6.3.0
+// Version 6.3.1
 //
 // FINAL ARCHITECTURE
 // ------------------
@@ -17,6 +17,10 @@
 //    │
 //    ├── AdMob SSV
 //    │     └── Verified Rewards
+//    │
+//    ├── Dynamic Monetization
+//    │     ├── Affiliate configuration
+//    │     └── Sponsored advertising
 //    │
 //    ├── News
 //    ├── Quran
@@ -85,6 +89,14 @@ import {
   handleAdMobSSV,
   getAdMobSSVStatus,
 } from "./admob-ssv.js";
+
+/* =========================================================
+   MONETIZATION
+   ========================================================= */
+
+import {
+  handleMonetization,
+} from "./monetization.js";
 
 /* =========================================================
    CONTENT
@@ -161,7 +173,7 @@ import {
    ========================================================= */
 
 const BACKEND_VERSION =
-  "6.3.0";
+  "6.3.1";
 
 const DOWNLOAD_URL =
   "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk";
@@ -1076,6 +1088,8 @@ function handleRoot(
       credits: true,
 
       rewardedAds: true,
+
+      monetization: true,
     },
 
     ai: {
@@ -1120,6 +1134,9 @@ function handleRoot(
 
       rewardedAdSSV:
         "/v1/rewards/admob/ssv",
+
+      monetization:
+        "/v1/monetization",
 
       news:
         "/v1/news",
@@ -1303,6 +1320,21 @@ export default {
       ) {
         return handleAdMobSSV(
           request,
+          env,
+        );
+      }
+
+      /* =====================================================
+         DYNAMIC MONETIZATION
+         ===================================================== */
+
+      if (
+        request.method ===
+          "GET" &&
+        path ===
+          "/v1/monetization"
+      ) {
+        return handleMonetization(
           env,
         );
       }
