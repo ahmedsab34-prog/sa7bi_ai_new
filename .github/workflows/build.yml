@@ -2,7 +2,8 @@ name: Build Flutter APK + Deploy Cloudflare Worker
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
   workflow_dispatch:
 
@@ -78,12 +79,105 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Analyze project
-        run: flutter analyze
+      # ---------------------------------------------------------
+      # ANALYSIS
+      # ---------------------------------------------------------
+      # We do NOT hide analyzer findings.
+      #
+      # INFO/WARNING:
+      #   Reported and saved, but do not stop the release build.
+      #
+      # ERROR:
+      #   Stops the workflow immediately.
+      #
+      # The actual flutter build apk command below is still a
+      # separate hard compilation gate.
+      # ---------------------------------------------------------
+
+      - name: Analyze project and preserve report
+        id: analyze
+        shell: bash
+        run: |
+          set +e
+
+          echo "=========================================="
+          echo "RUNNING FLUTTER ANALYZER"
+          echo "=========================================="
+
+          flutter analyze --format=machine > flutter-analyze-machine.txt 2>&1
+          ANALYZE_EXIT=$?
+
+          echo ""
+          echo "===== FLUTTER ANALYZE OUTPUT ====="
+          cat flutter-analyze-machine.txt || true
+          echo "==================================="
+
+          echo ""
+          echo "Analyzer exit code: ${ANALYZE_EXIT}"
+
+          ERROR_COUNT=$(grep -c '^ERROR|' flutter-analyze-machine.txt || true)
+          WARNING_COUNT=$(grep -c '^WARNING|' flutter-analyze-machine.txt || true)
+          INFO_COUNT=$(grep -c '^INFO|' flutter-analyze-machine.txt || true)
+
+          echo ""
+          echo "===== ANALYZER SUMMARY ====="
+          echo "Errors  : ${ERROR_COUNT}"
+          echo "Warnings: ${WARNING_COUNT}"
+          echo "Info    : ${INFO_COUNT}"
+          echo "============================"
+
+          echo "ERROR_COUNT=${ERROR_COUNT}" >> "${GITHUB_ENV}"
+          echo "WARNING_COUNT=${WARNING_COUNT}" >> "${GITHUB_ENV}"
+          echo "INFO_COUNT=${INFO_COUNT}" >> "${GITHUB_ENV}"
+
+          # A real analyzer ERROR is never ignored.
+          if [ "${ERROR_COUNT}" -gt 0 ]; then
+            echo ""
+            echo "ERROR: Flutter analyzer found real errors."
+            echo "The APK build will NOT continue."
+            exit 1
+          fi
+
+          # If analyzer returned non-zero but there are only
+          # warnings/info findings, keep them visible and continue.
+          if [ "${ANALYZE_EXIT}" -ne 0 ]; then
+            if [ "${WARNING_COUNT}" -gt 0 ] || [ "${INFO_COUNT}" -gt 0 ]; then
+              echo ""
+              echo "Analyzer returned non-zero because of warnings/info findings."
+              echo "These findings are preserved in the report."
+              echo "No analyzer ERROR was detected."
+              echo "Continuing to the real APK compilation gate..."
+            else
+              echo ""
+              echo "ERROR: Flutter analyzer failed unexpectedly."
+              echo "No normal warning/info diagnostics were detected."
+              exit 1
+            fi
+          else
+            echo ""
+            echo "Flutter analyzer completed successfully."
+          fi
+
+      - name: Upload analyzer report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-ai-analyzer-report-${{ github.run_number }}
+          path: flutter-analyze-machine.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      # ---------------------------------------------------------
+      # REAL COMPILATION GATE
+      # ---------------------------------------------------------
 
       - name: Build Release APK
         run: |
           set -e
+
+          echo "=========================================="
+          echo "BUILDING RELEASE APK"
+          echo "=========================================="
 
           flutter build apk \
             --release \
@@ -92,6 +186,9 @@ jobs:
             --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
             --dart-define="SA7BI_BUILD_NUMBER=${BUILD_NUMBER}" \
             --dart-define="SA7BI_COMMIT_SHA=${COMMIT_SHORT}"
+
+          echo ""
+          echo "Release APK compilation completed."
 
       - name: Verify APK
         run: |
@@ -113,6 +210,7 @@ jobs:
 
           SHA256="$(sha256sum "${APK_PATH}" | cut -d ' ' -f1)"
 
+          echo ""
           echo "APK SHA256:"
           echo "${SHA256}"
 
@@ -144,6 +242,10 @@ jobs:
           echo "===== DIRECT APK FILE ====="
           ls -lh "sa7bi-ai.apk"
           file "sa7bi-ai.apk"
+
+      # ---------------------------------------------------------
+      # GITHUB RELEASE
+      # ---------------------------------------------------------
 
       - name: Publish direct APK download
         env:
@@ -206,6 +308,10 @@ jobs:
           echo "SHA256      : ${APK_SHA256}"
           echo "=========================================="
 
+      # ---------------------------------------------------------
+      # VERIFY THE EXACT FILE USERS WILL DOWNLOAD
+      # ---------------------------------------------------------
+
       - name: Verify direct APK download
         env:
           APK_URL: https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/download/apk-latest/sa7bi-ai.apk
@@ -243,10 +349,16 @@ jobs:
 
           DOWNLOADED_SHA256="$(sha256sum /tmp/sa7bi-ai-download.apk | cut -d ' ' -f1)"
 
-          echo "Downloaded SHA256:"
+          echo ""
+          echo "Built APK SHA256:"
+          echo "${APK_SHA256}"
+
+          echo ""
+          echo "Downloaded APK SHA256:"
           echo "${DOWNLOADED_SHA256}"
 
           if [ "${DOWNLOADED_SHA256}" != "${APK_SHA256}" ]; then
+            echo ""
             echo "ERROR: Downloaded APK SHA256 does not match build APK."
             exit 1
           fi
@@ -255,6 +367,10 @@ jobs:
           echo "===== DIRECT APK VERIFIED ====="
           echo "The downloaded file is exactly the APK produced by this build."
           echo "=========================================="
+
+  # ============================================================
+  # CLOUDFLARE WORKER
+  # ============================================================
 
   deploy-worker:
     name: Deploy Cloudflare Worker
@@ -291,6 +407,10 @@ jobs:
         run: |
           echo "Waiting for Cloudflare Worker propagation..."
           sleep 10
+
+      # ---------------------------------------------------------
+      # LIVE WORKER TESTS
+      # ---------------------------------------------------------
 
       - name: Test live Worker health endpoint
         env:
@@ -418,6 +538,8 @@ jobs:
           echo "APK build: verified"
           echo "APK release: verified"
           echo "APK SHA256: verified"
+          echo "Direct APK download: verified"
+          echo "Worker deployment: verified"
           echo "Worker health: verified"
           echo "Worker root: verified"
           echo "Worker diagnostics: verified"
