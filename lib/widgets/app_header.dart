@@ -12,9 +12,10 @@ import '../services/profile_service.dart';
 /// الشعار → الترحيب → الصوت → البروفايل
 ///
 /// زر الصوت:
-/// - حجمه ثابت.
-/// - الدائرة الخارجية ثابتة.
-/// - الحركة داخل الدائرة فقط.
+/// - مستطيل بدون زوايا دائرية.
+/// - حجمه ثابت ومناسب للهيدر.
+/// - الإطار الخارجي ثابت.
+/// - الحركة داخل الزر فقط.
 /// - عند التشغيل تظهر موجات/مطر صوتي.
 /// - عند التوقف يظل شكل هادئ.
 class AppHeader extends StatelessWidget {
@@ -267,13 +268,17 @@ class _PulsingAudioButtonState extends State<_PulsingAudioButton>
       onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
       child: const SizedBox(
-        width: 52,
-        height: 52,
+        width: 56,
+        height: 46,
         child: _AudioButtonContents(),
       ),
     );
   }
 }
+
+// ============================================================
+// AUDIO BUTTON CONTENTS
+// ============================================================
 
 class _AudioButtonContents extends StatefulWidget {
   const _AudioButtonContents();
@@ -296,6 +301,10 @@ class _AudioButtonContentsState extends State<_AudioButtonContents> {
     );
   }
 }
+
+// ============================================================
+// AUDIO INDICATOR
+// ============================================================
 
 class _AudioIndicator extends StatefulWidget {
   final bool isPlaying;
@@ -355,11 +364,11 @@ class _AudioIndicatorState extends State<_AudioIndicator>
     return Stack(
       alignment: Alignment.center,
       children: [
+        // المستطيل الخارجي — بدون BorderRadius
         Container(
-          width: 52,
-          height: 52,
+          width: 56,
+          height: 42,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
             color: const Color(0xFF10131C),
             border: Border.all(
               color: const Color(0xFF63E6FF),
@@ -373,8 +382,10 @@ class _AudioIndicatorState extends State<_AudioIndicator>
             ],
           ),
         ),
+
+        // المطر / الموجة الصوتية
         SizedBox(
-          width: 36,
+          width: 42,
           height: 32,
           child: AnimatedBuilder(
             animation: _controller,
