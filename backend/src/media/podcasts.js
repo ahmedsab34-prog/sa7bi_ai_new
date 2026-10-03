@@ -1,31 +1,10 @@
 // backend/src/media/podcasts.js
 // Sa7bi AI Backend
-//
-// Podcasts Module.
-//
-// Flow:
-// Podcast search
-//      ↓
-// Podcast lookup
-//      ↓
-// RSS feed
-//      ↓
-// Episodes
-//      ↓
-// Episode audio URL
-//
-// Providers:
-// - Apple Search / Lookup API
-// - Podcast RSS feeds
-//
-// No private API keys are required.
+// Podcasts Module
 
-/* =========================================================
-   CONSTANTS
-   ========================================================= */
+import { fetchJson } from "../utils.js";
 
-const BACKEND_VERSION =
-  "6.3.0";
+const BACKEND_VERSION = "6.3.1";
 
 const ITUNES_SEARCH_URL =
   "https://itunes.apple.com/search";
@@ -33,63 +12,34 @@ const ITUNES_SEARCH_URL =
 const ITUNES_LOOKUP_URL =
   "https://itunes.apple.com/lookup";
 
-const MAX_SEARCH_LIMIT =
-  50;
+const MAX_SEARCH_LIMIT = 50;
+const MAX_EPISODES = 100;
+const MAX_FEED_URL_LENGTH = 4096;
 
-const MAX_EPISODES =
-  100;
-
-const MAX_FEED_URL_LENGTH =
-  4096;
-
-/* =========================================================
-   URL HELPERS
-   ========================================================= */
-
-/**
- * Normalize a public HTTP/HTTPS URL.
- *
- * This is used for URLs that are returned to the
- * Flutter application and for RSS URLs that the
- * Worker itself will fetch.
- */
-function normalizePublicUrl(
-  value
-) {
-  if (
-    typeof value !==
-      "string"
-  ) {
+function normalizePublicUrl(value) {
+  if (typeof value !== "string") {
     return "";
   }
 
-  const raw =
-    value.trim();
+  const raw = value.trim();
 
   if (
     !raw ||
-    raw.length >
-      MAX_FEED_URL_LENGTH
+    raw.length > MAX_FEED_URL_LENGTH
   ) {
     return "";
   }
 
   try {
-    const parsed =
-      new URL(raw);
+    const parsed = new URL(raw);
 
     if (
-      parsed.protocol !==
-        "http:" &&
-      parsed.protocol !==
-        "https:"
+      parsed.protocol !== "http:" &&
+      parsed.protocol !== "https:"
     ) {
       return "";
     }
 
-    /*
-     * Never accept credentials embedded in a URL.
-     */
     if (
       parsed.username ||
       parsed.password
@@ -97,19 +47,12 @@ function normalizePublicUrl(
       return "";
     }
 
-    /*
-     * Block obvious local/private targets.
-     */
     const hostname =
       parsed.hostname
         .toLowerCase()
         .trim();
 
-    if (
-      isBlockedHostname(
-        hostname
-      )
-    ) {
+    if (isBlockedHostname(hostname)) {
       return "";
     }
 
@@ -119,83 +62,44 @@ function normalizePublicUrl(
   }
 }
 
-/**
- * Block obvious internal/local hostnames.
- *
- * This prevents accidental requests to common private
- * network targets when a user supplies feedUrl.
- */
-function isBlockedHostname(
-  hostname
-) {
+function isBlockedHostname(hostname) {
   if (!hostname) {
     return true;
   }
 
   if (
-    hostname ===
-      "localhost" ||
+    hostname === "localhost" ||
     hostname ===
       "localhost.localdomain" ||
-    hostname ===
-      "0.0.0.0" ||
-    hostname ===
-      "::" ||
-    hostname ===
-      "::1"
+    hostname === "0.0.0.0" ||
+    hostname === "::" ||
+    hostname === "::1"
   ) {
     return true;
   }
 
   if (
-    hostname.endsWith(
-      ".localhost"
-    ) ||
-    hostname.endsWith(
-      ".local"
-    ) ||
-    hostname.endsWith(
-      ".internal"
-    ) ||
-    hostname.endsWith(
-      ".lan"
-    )
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".lan")
   ) {
     return true;
   }
 
-  if (
-    isPrivateIpv4(
-      hostname
-    )
-  ) {
-    return true;
-  }
-
-  return false;
+  return isPrivateIpv4(hostname);
 }
 
-/**
- * Detect common private IPv4 ranges.
- */
-function isPrivateIpv4(
-  hostname
-) {
-  const parts =
-    hostname
-      .split(".")
-      .map(
-        (part) =>
-          Number(part)
-      );
+function isPrivateIpv4(hostname) {
+  const parts = hostname
+    .split(".")
+    .map((part) => Number(part));
 
   if (
     parts.length !== 4 ||
     parts.some(
       (part) =>
-        !Number.isInteger(
-          part
-        ) ||
+        !Number.isInteger(part) ||
         part < 0 ||
         part > 255
     )
@@ -203,20 +107,13 @@ function isPrivateIpv4(
     return false;
   }
 
-  const [
-    a,
-    b,
-  ] = parts;
+  const [a, b] = parts;
 
-  if (
-    a === 10
-  ) {
+  if (a === 10) {
     return true;
   }
 
-  if (
-    a === 127
-  ) {
+  if (a === 127) {
     return true;
   }
 
@@ -245,21 +142,13 @@ function isPrivateIpv4(
   return false;
 }
 
-/* =========================================================
-   APPLE PODCAST NORMALIZATION
-   ========================================================= */
-
-/**
- * Normalize one Apple podcast result.
- */
 function normalizePodcast(
   item,
   index = 0
 ) {
   if (
     !item ||
-    typeof item !==
-      "object"
+    typeof item !== "object"
   ) {
     return null;
   }
@@ -297,36 +186,28 @@ function normalizePodcast(
       "Podcast",
 
     artist:
-      item.artistName ||
-      "",
+      item.artistName || "",
 
     author:
-      item.artistName ||
-      "",
+      item.artistName || "",
 
     artwork:
-      artwork ||
-      null,
+      artwork || null,
 
     feedUrl:
-      feedUrl ||
-      null,
+      feedUrl || null,
 
     storeUrl:
-      storeUrl ||
-      null,
+      storeUrl || null,
 
     genre:
-      item.primaryGenreName ||
-      "",
+      item.primaryGenreName || "",
 
     country:
-      item.country ||
-      "EG",
+      item.country || "EG",
 
     releaseDate:
-      item.releaseDate ||
-      null,
+      item.releaseDate || null,
 
     episodeCount:
       Number(
@@ -337,41 +218,34 @@ function normalizePodcast(
 
     description:
       typeof item.description ===
-        "string"
+      "string"
         ? item.description
         : "",
 
-    type:
-      "podcast",
+    type: "podcast",
 
     source:
       "Apple Podcasts",
   };
 }
 
-/* =========================================================
-   PODCAST SEARCH
-   ========================================================= */
+function normalizeArabicQuery(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
 
-/**
- * Search podcasts.
- *
- * GET /v1/podcasts/search?q=technology
- */
 export async function handlePodcastSearch(
   request
 ) {
   try {
     const url =
-      new URL(
-        request.url
-      );
+      new URL(request.url);
 
     const query =
       normalizeArabicQuery(
-        url.searchParams.get(
-          "q"
-        ) || ""
+        url.searchParams.get("q") ||
+          ""
       );
 
     const limitRaw =
@@ -382,14 +256,10 @@ export async function handlePodcastSearch(
       );
 
     const limit =
-      Number.isFinite(
-        limitRaw
-      )
+      Number.isFinite(limitRaw)
         ? Math.min(
             Math.max(
-              Math.trunc(
-                limitRaw
-              ),
+              Math.trunc(limitRaw),
               1
             ),
             MAX_SEARCH_LIMIT
@@ -401,8 +271,7 @@ export async function handlePodcastSearch(
 
     params.set(
       "term",
-      query ||
-        "podcast"
+      query || "podcast"
     );
 
     params.set(
@@ -429,9 +298,7 @@ export async function handlePodcastSearch(
       `${ITUNES_SEARCH_URL}?${params.toString()}`;
 
     const response =
-      await fetchJson(
-        endpoint
-      );
+      await fetchJson(endpoint);
 
     const results =
       Array.isArray(
@@ -443,24 +310,18 @@ export async function handlePodcastSearch(
     const items =
       results
         .map(
-          (
-            item,
-            index
-          ) =>
+          (item, index) =>
             normalizePodcast(
               item,
               index
             )
         )
-        .filter(
-          Boolean
-        );
+        .filter(Boolean);
 
     return jsonResponse({
       ok: true,
 
-      type:
-        "podcast",
+      type: "podcast",
 
       query,
 
@@ -477,14 +338,11 @@ export async function handlePodcastSearch(
       {
         ok: false,
 
-        type:
-          "podcast",
+        type: "podcast",
 
-        query:
-          "",
+        query: "",
 
-        count:
-          0,
+        count: 0,
 
         items: [],
 
@@ -503,23 +361,12 @@ export async function handlePodcastSearch(
   }
 }
 
-/* =========================================================
-   PODCAST LOOKUP
-   ========================================================= */
-
-/**
- * Lookup a specific podcast by Apple collection ID.
- *
- * GET /v1/podcasts/lookup?id=123456
- */
 export async function handlePodcastLookup(
   request
 ) {
   try {
     const url =
-      new URL(
-        request.url
-      );
+      new URL(request.url);
 
     const id =
       (
@@ -532,10 +379,8 @@ export async function handlePodcastLookup(
       return jsonResponse(
         {
           ok: false,
-
           error:
             "PODCAST_ID_REQUIRED",
-
           backendVersion:
             BACKEND_VERSION,
         },
@@ -543,14 +388,8 @@ export async function handlePodcastLookup(
       );
     }
 
-    /*
-     * Apple IDs are numeric in normal podcast results.
-     * Accept only a reasonable numeric identifier.
-     */
     if (
-      !/^\d{1,20}$/.test(
-        id
-      )
+      !/^\d{1,20}$/.test(id)
     ) {
       return jsonResponse(
         {
@@ -583,9 +422,7 @@ export async function handlePodcastLookup(
       `${ITUNES_LOOKUP_URL}?${params.toString()}`;
 
     const data =
-      await fetchJson(
-        endpoint
-      );
+      await fetchJson(endpoint);
 
     const results =
       Array.isArray(
@@ -594,19 +431,15 @@ export async function handlePodcastLookup(
         ? data.results
         : [];
 
-    if (
-      !results.length
-    ) {
+    if (!results.length) {
       return jsonResponse({
         ok: true,
 
-        type:
-          "podcast",
+        type: "podcast",
 
         id,
 
-        podcast:
-          null,
+        podcast: null,
 
         items: [],
 
@@ -623,8 +456,7 @@ export async function handlePodcastLookup(
     return jsonResponse({
       ok: true,
 
-      type:
-        "podcast",
+      type: "podcast",
 
       id,
 
@@ -643,11 +475,9 @@ export async function handlePodcastLookup(
       {
         ok: false,
 
-        type:
-          "podcast",
+        type: "podcast",
 
-        podcast:
-          null,
+        podcast: null,
 
         items: [],
 
@@ -666,23 +496,12 @@ export async function handlePodcastLookup(
   }
 }
 
-/* =========================================================
-   PODCAST EPISODES
-   ========================================================= */
-
-/**
- * Load actual podcast episodes from the podcast RSS feed.
- *
- * GET /v1/podcasts/episodes?feedUrl=https://...
- */
 export async function handlePodcastEpisodes(
   request
 ) {
   try {
     const url =
-      new URL(
-        request.url
-      );
+      new URL(request.url);
 
     const rawFeedUrl =
       url.searchParams.get(
@@ -716,8 +535,7 @@ export async function handlePodcastEpisodes(
       await fetch(
         feedUrl,
         {
-          method:
-            "GET",
+          method: "GET",
 
           headers: {
             Accept:
@@ -729,10 +547,6 @@ export async function handlePodcastEpisodes(
         }
       );
 
-    /*
-     * Do not automatically follow a user-supplied
-     * RSS redirect. Validate the destination first.
-     */
     if (
       response.status >= 300 &&
       response.status < 400
@@ -777,9 +591,7 @@ export async function handlePodcastEpisodes(
       );
     }
 
-    if (
-      !response.ok
-    ) {
+    if (!response.ok) {
       return jsonResponse(
         {
           ok: false,
@@ -806,9 +618,7 @@ export async function handlePodcastEpisodes(
       await response.text();
 
     const episodes =
-      parseRssEpisodes(
-        xml
-      );
+      parseRssEpisodes(xml);
 
     return jsonResponse({
       ok: true,
@@ -852,10 +662,6 @@ export async function handlePodcastEpisodes(
   }
 }
 
-/**
- * Load an RSS feed after its redirect destination
- * has been validated.
- */
 async function loadPodcastFeed(
   feedUrl
 ) {
@@ -864,22 +670,18 @@ async function loadPodcastFeed(
       await fetch(
         feedUrl,
         {
-          method:
-            "GET",
+          method: "GET",
 
           headers: {
             Accept:
               "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
           },
 
-          redirect:
-            "error",
+          redirect: "error",
         }
       );
 
-    if (
-      !response.ok
-    ) {
+    if (!response.ok) {
       return jsonResponse(
         {
           ok: false,
@@ -906,9 +708,7 @@ async function loadPodcastFeed(
       await response.text();
 
     const episodes =
-      parseRssEpisodes(
-        xml
-      );
+      parseRssEpisodes(xml);
 
     return jsonResponse({
       ok: true,
@@ -952,22 +752,9 @@ async function loadPodcastFeed(
   }
 }
 
-/* =========================================================
-   RSS PARSER
-   ========================================================= */
-
-/**
- * Parse podcast RSS XML.
- *
- * The parser intentionally uses no external XML
- * dependency so it remains Worker-compatible.
- */
-export function parseRssEpisodes(
-  xml
-) {
+export function parseRssEpisodes(xml) {
   if (
-    typeof xml !==
-      "string" ||
+    typeof xml !== "string" ||
     !xml.trim()
   ) {
     return [];
@@ -982,8 +769,7 @@ export function parseRssEpisodes(
 
   for (
     let index = 0;
-    index <
-      matches.length;
+    index < matches.length;
     index++
   ) {
     const block =
@@ -1089,10 +875,6 @@ export function parseRssEpisodes(
         enclosureUrl
       );
 
-    /*
-     * An RSS item without any useful identity,
-     * audio, or page URL is ignored.
-     */
     if (
       !title &&
       !audioUrl &&
@@ -1122,16 +904,13 @@ export function parseRssEpisodes(
         ),
 
       publishedAt:
-        pubDate ||
-        null,
+        pubDate || null,
 
       audioUrl:
-        audioUrl ||
-        null,
+        audioUrl || null,
 
       audioType:
-        enclosureType ||
-        null,
+        enclosureType || null,
 
       audioSize:
         normalizePositiveNumber(
@@ -1139,8 +918,7 @@ export function parseRssEpisodes(
         ),
 
       duration:
-        duration ||
-        null,
+        duration || null,
 
       episode:
         normalizePositiveNumber(
@@ -1158,12 +936,10 @@ export function parseRssEpisodes(
         ),
 
       image:
-        image ||
-        null,
+        image || null,
 
       pageUrl:
-        link ||
-        null,
+        link || null,
 
       type:
         "podcast-episode",
@@ -1183,13 +959,6 @@ export function parseRssEpisodes(
   return items;
 }
 
-/* =========================================================
-   XML HELPERS
-   ========================================================= */
-
-/**
- * Extract XML tag content.
- */
 function extractTag(
   block,
   tag
@@ -1207,9 +976,7 @@ function extractTag(
     );
 
   const match =
-    block.match(
-      pattern
-    );
+    block.match(pattern);
 
   if (!match) {
     return "";
@@ -1222,9 +989,6 @@ function extractTag(
   ).trim();
 }
 
-/**
- * Extract an XML attribute from an opening tag.
- */
 function extractAttribute(
   block,
   tag,
@@ -1243,9 +1007,7 @@ function extractAttribute(
     );
 
   const match =
-    block.match(
-      pattern
-    );
+    block.match(pattern);
 
   if (!match) {
     return "";
@@ -1256,15 +1018,8 @@ function extractAttribute(
   ).trim();
 }
 
-/**
- * Remove CDATA wrapper.
- */
-function stripCdata(
-  value
-) {
-  return String(
-    value || ""
-  )
+function stripCdata(value) {
+  return String(value || "")
     .replace(
       /^\s*<!\[CDATA\[/i,
       ""
@@ -1275,56 +1030,23 @@ function stripCdata(
     );
 }
 
-/**
- * Basic XML entity decoding.
- */
-function decodeXml(
-  value
-) {
-  return String(
-    value || ""
-  )
-    .replace(
-      /&amp;/gi,
-      "&"
-    )
-    .replace(
-      /&lt;/gi,
-      "<"
-    )
-    .replace(
-      /&gt;/gi,
-      ">"
-    )
-    .replace(
-      /&quot;/gi,
-      '"'
-    )
-    .replace(
-      /&apos;/gi,
-      "'"
-    )
-    .replace(
-      /&#39;/gi,
-      "'"
-    )
-    .replace(
-      /&#x27;/gi,
-      "'"
-    )
+function decodeXml(value) {
+  return String(value || "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/gi, "'")
+    .replace(/&#x27;/gi, "'")
     .replace(
       /&#(\d+);/gi,
-      (
-        _match,
-        number
-      ) => {
+      (_match, number) => {
         const code =
           Number(number);
 
         if (
-          !Number.isFinite(
-            code
-          ) ||
+          !Number.isFinite(code) ||
           code < 0 ||
           code > 0x10ffff
         ) {
@@ -1342,10 +1064,7 @@ function decodeXml(
     )
     .replace(
       /&#x([0-9a-f]+);/gi,
-      (
-        _match,
-        hex
-      ) => {
+      (_match, hex) => {
         const code =
           Number.parseInt(
             hex,
@@ -1353,9 +1072,7 @@ function decodeXml(
           );
 
         if (
-          !Number.isFinite(
-            code
-          ) ||
+          !Number.isFinite(code) ||
           code < 0 ||
           code > 0x10ffff
         ) {
@@ -1373,31 +1090,8 @@ function decodeXml(
     );
 }
 
-/* =========================================================
-   VALUE HELPERS
-   ========================================================= */
-
-function normalizeArabicQuery(
-  value
-) {
-  /*
-   * This module intentionally avoids importing
-   * normalizeArabic from utils.js because podcast
-   * search only needs lightweight Arabic normalization.
-   */
-  return String(
-    value || ""
-  )
-    .trim()
-    .toLowerCase();
-}
-
-function cleanText(
-  value
-) {
-  return String(
-    value || ""
-  )
+function cleanText(value) {
+  return String(value || "")
     .replace(
       /<[^>]*>/g,
       " "
@@ -1424,9 +1118,7 @@ function normalizePositiveNumber(
     Number(value);
 
   if (
-    !Number.isFinite(
-      number
-    ) ||
+    !Number.isFinite(number) ||
     number < 0
   ) {
     return null;
@@ -1435,34 +1127,24 @@ function normalizePositiveNumber(
   return number;
 }
 
-function normalizeBoolean(
-  value
-) {
+function normalizeBoolean(value) {
   const normalized =
-    String(
-      value || ""
-    )
+    String(value || "")
       .trim()
       .toLowerCase();
 
   if (
-    normalized ===
-      "yes" ||
-    normalized ===
-      "true" ||
-    normalized ===
-      "explicit"
+    normalized === "yes" ||
+    normalized === "true" ||
+    normalized === "explicit"
   ) {
     return true;
   }
 
   if (
-    normalized ===
-      "no" ||
-    normalized ===
-      "false" ||
-    normalized ===
-      "clean"
+    normalized === "no" ||
+    normalized === "false" ||
+    normalized === "clean"
   ) {
     return false;
   }
@@ -1470,18 +1152,12 @@ function normalizeBoolean(
   return null;
 }
 
-/* =========================================================
-   RESPONSE HELPER
-   ========================================================= */
-
 function jsonResponse(
   body,
   status = 200
 ) {
   return new Response(
-    JSON.stringify(
-      body
-    ),
+    JSON.stringify(body),
     {
       status,
 
@@ -1498,10 +1174,6 @@ function jsonResponse(
     }
   );
 }
-
-/* =========================================================
-   EXPORTS
-   ========================================================= */
 
 export default {
   handlePodcastSearch,
