@@ -1,6 +1,6 @@
 // backend/src/health.js
 // Sa7bi AI Backend - Health & Diagnostics
-// Final Backend Version: 6.3.0
+// Final Backend Version: 6.3.1
 
 import {
   json,
@@ -10,55 +10,31 @@ import {
   getAIStatus,
 } from "./ai/ai-router.js";
 
-const BACKEND_VERSION = "6.3.0";
+const BACKEND_VERSION = "6.3.1";
 
 /* -------------------------------------------------------------------------- */
 /* Health check                                                               */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Basic public Worker health check.
- *
- * This endpoint:
- * - confirms that the Worker is running
- * - reports the backend version
- * - reports safe AI provider status
- *
- * It NEVER exposes secrets.
- */
-export async function handleHealth(
-  env
-) {
+export async function handleHealth(env) {
   let aiStatus;
 
   try {
-    aiStatus =
-      getAIStatus(env);
+    aiStatus = getAIStatus(env);
   } catch (_) {
     aiStatus = {
       ok: false,
-      error:
-        "AI status unavailable",
+      error: "AI status unavailable",
     };
   }
 
   return json({
     ok: true,
-
-    service:
-      "Sa7bi AI Backend",
-
-    status:
-      "healthy",
-
-    backendVersion:
-      BACKEND_VERSION,
-
-    timestamp:
-      new Date().toISOString(),
-
-    ai:
-      aiStatus,
+    service: "Sa7bi AI Backend",
+    status: "healthy",
+    backendVersion: BACKEND_VERSION,
+    timestamp: new Date().toISOString(),
+    ai: aiStatus,
   });
 }
 
@@ -66,97 +42,60 @@ export async function handleHealth(
 /* Detailed diagnostics                                                       */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Detailed diagnostics for backend testing.
- *
- * IMPORTANT:
- * This endpoint reports configuration state only.
- * It NEVER returns:
- * - Gemini API keys
- * - OpenAI API keys
- * - AdMob secrets
- * - Durable Object data
- * - request data
- * - user data
- */
-export async function handleDiagnostics(
-  env
-) {
+export async function handleDiagnostics(env) {
   let aiStatus;
 
   try {
-    aiStatus =
-      getAIStatus(env);
+    aiStatus = getAIStatus(env);
   } catch (_) {
     aiStatus = {
       ok: false,
-      error:
-        "Unable to read AI status",
+      error: "Unable to read AI status",
     };
   }
 
   const geminiConfigured =
-    Boolean(
-      env?.GEMINI_API_KEY
-    );
+    Boolean(env?.GEMINI_API_KEY);
 
   const openAIConfigured =
-    Boolean(
-      env?.OPENAI_API_KEY
-    );
+    Boolean(env?.OPENAI_API_KEY);
 
   const workersAIConfigured =
     Boolean(
       env?.AI &&
-      typeof env.AI.run ===
-        "function"
+      typeof env.AI.run === "function",
     );
 
   const creditsConfigured =
-    Boolean(
-      env?.SA7BI_CREDITS
-    );
+    Boolean(env?.SA7BI_CREDITS);
 
   return json({
     ok: true,
 
-    service:
-      "Sa7bi AI Backend",
+    service: "Sa7bi AI Backend",
 
-    backendVersion:
-      BACKEND_VERSION,
+    backendVersion: BACKEND_VERSION,
 
-    timestamp:
-      new Date().toISOString(),
+    timestamp: new Date().toISOString(),
 
     runtime: {
-      platform:
-        "Cloudflare Workers",
-
-      environment:
-        "production",
-
-      aiBinding:
-        workersAIConfigured,
-
-      creditsBinding:
-        creditsConfigured,
+      platform: "Cloudflare Workers",
+      environment: "production",
+      aiBinding: workersAIConfigured,
+      creditsBinding: creditsConfigured,
     },
 
     providers: {
       gemini: {
-        configured:
-          geminiConfigured,
+        configured: geminiConfigured,
       },
 
       workersAI: {
-        configured:
-          workersAIConfigured,
+        configured: workersAIConfigured,
       },
 
       openAI: {
-        configured:
-          openAIConfigured,
+        configured: openAIConfigured,
       },
     },
 
@@ -182,8 +121,7 @@ export async function handleDiagnostics(
         "@cf/black-forest-labs/flux-1-schnell",
     },
 
-    ai:
-      aiStatus,
+    ai: aiStatus,
   });
 }
 
@@ -191,23 +129,11 @@ export async function handleDiagnostics(
 /* Public service status                                                      */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Small public-safe status endpoint.
- *
- * The Flutter app can use this to determine whether
- * the backend services are available.
- *
- * No provider secrets or internal configuration
- * are returned here.
- */
-export async function handleServiceStatus(
-  env
-) {
+export async function handleServiceStatus(env) {
   let aiStatus;
 
   try {
-    aiStatus =
-      getAIStatus(env);
+    aiStatus = getAIStatus(env);
   } catch (_) {
     aiStatus = {
       ok: false,
@@ -215,54 +141,33 @@ export async function handleServiceStatus(
   }
 
   const aiAvailable =
-    Boolean(
-      aiStatus?.ok
-    );
+    Boolean(aiStatus?.ok);
 
   return json({
     ok: true,
 
-    service:
-      "Sa7bi AI",
+    service: "Sa7bi AI",
 
-    backendVersion:
-      BACKEND_VERSION,
+    backendVersion: BACKEND_VERSION,
 
     services: {
-      ai:
-        aiAvailable,
-
+      ai: aiAvailable,
       news: true,
-
       audio: true,
-
       quran: true,
-
       hadith: true,
-
       tafsir: true,
-
       radio: true,
-
       podcasts: true,
-
       shorts: true,
-
       downloads: true,
-
       credits: true,
-
       rewardedAds: true,
     },
 
-    timestamp:
-      new Date().toISOString(),
+    timestamp: new Date().toISOString(),
   });
 }
-
-/* -------------------------------------------------------------------------- */
-/* Exports                                                                    */
-/* -------------------------------------------------------------------------- */
 
 export {
   BACKEND_VERSION,
