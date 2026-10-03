@@ -127,9 +127,6 @@ jobs:
 
       # ==========================================================
       # 9. ANALYZE
-      #
-      # Real analyzer errors stop the workflow.
-      # Warnings/info are reported but do not block the build.
       # ==========================================================
 
       - name: Flutter analyze
@@ -436,12 +433,6 @@ jobs:
 
       # ==========================================================
       # 18. SETUP NODE FOR CLOUDFLARE
-      #
-      # IMPORTANT:
-      # No npm cache is enabled here because this repository does
-      # not contain backend/package-lock.json.
-      #
-      # npm install below works normally without the cache.
       # ==========================================================
 
       - name: Setup Node.js
@@ -620,15 +611,6 @@ jobs:
 
       # ==========================================================
       # 25. TEST WORKER APK DOWNLOAD
-      #
-      # IMPORTANT:
-      # The Worker exposes GET /download.
-      # Do NOT use HEAD here.
-      #
-      # Expected:
-      # GET /download -> 302
-      # Location      -> exact GitHub release APK
-      # Follow GET    -> 200
       # ==========================================================
 
       - name: Test Worker APK download endpoint
@@ -745,8 +727,6 @@ jobs:
 
       - name: Test Worker content and service endpoints
         shell: bash
-        env:
-          TEST_DEVICE_ID: "github-actions-diagnostic-device"
         run: |
           set -u
           set -o pipefail
@@ -905,7 +885,7 @@ jobs:
 
           test_endpoint \
             "AUDIO SEARCH" \
-            "${BASE}/v1/audio/search-v4?q=قرآن&type=quran" \
+            "${BASE}/v1/audio/search-v4?q=%D9%82%D8%B1%D8%A2%D9%86&type=quran" \
             '"items"' \
             /tmp/sa7bi-audio.json
 
