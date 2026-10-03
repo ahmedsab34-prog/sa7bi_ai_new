@@ -1,29 +1,654 @@
-      - name: Test Worker APK download endpoint
-        env:
-          WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
-          EXPECTED_APK_URL: https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/download/apk-latest/sa7bi-ai.apk
+name: Build Flutter APK + Deploy Cloudflare Worker
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APP_VERSION: "1.0.1"
+  FLUTTER_VERSION: "3.38.1"
+  JAVA_VERSION: "17"
+  GRADLE_VERSION: "8.13"
+  WORKER_URL: "https://sa7bi-ai-new.ahmedsab34.workers.dev"
+  APK_PATH: "build/app/outputs/flutter-apk/app-release.apk"
+  RELEASE_TAG: "apk-latest"
+  RELEASE_APK_NAME: "sa7bi-ai.apk"
+
+jobs:
+  build-and-deploy:
+    name: Build APK + Verify + Deploy Worker
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ==========================================================
+      # 1. CHECKOUT
+      # ==========================================================
+
+      - name: Checkout exact repository commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ==========================================================
+      # 2. JAVA
+      # ==========================================================
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # ==========================================================
+      # 3. FLUTTER
+      # ==========================================================
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # ==========================================================
+      # 4. GRADLE
+      # ==========================================================
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+
+      # ==========================================================
+      # 5. BUILD IDENTITY
+      # ==========================================================
+
+      - name: Set build identity
+        shell: bash
         run: |
+          set -euo pipefail
+
+          COMMIT_SHORT="${GITHUB_SHA:0:7}"
+
+          echo "APP_VERSION=${APP_VERSION}"
+          echo "BUILD_NUMBER=${GITHUB_RUN_NUMBER}"
+          echo "COMMIT_SHORT=${COMMIT_SHORT}"
+          echo "FULL_COMMIT=${GITHUB_SHA}"
+
+          echo "COMMIT_SHORT=${COMMIT_SHORT}" >> "${GITHUB_ENV}"
+
+      # ==========================================================
+      # 6. TOOLCHAIN INFORMATION
+      # ==========================================================
+
+      - name: Show toolchain versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "BUILD TOOLCHAIN"
+          echo "=========================================="
+
+          java -version
+          flutter --version
+          dart --version
+          gradle --version
+
+          echo "=========================================="
+
+      # ==========================================================
+      # 7. CLEAN
+      # ==========================================================
+
+      - name: Flutter clean
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          flutter clean
+
+      # ==========================================================
+      # 8. DEPENDENCIES
+      # ==========================================================
+
+      - name: Flutter pub get
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          flutter pub get
+
+      # ==========================================================
+      # 9. ANALYZE
+      #
+      # Real analyzer errors stop the workflow.
+      # Warnings/info are reported but do not block the build.
+      # ==========================================================
+
+      - name: Flutter analyze
+        shell: bash
+        run: |
+          set -u
+          set -o pipefail
+
+          echo "=========================================="
+          echo "FLUTTER ANALYZE"
+          echo "=========================================="
+
+          set +e
+
+          flutter analyze 2>&1 | tee flutter-analyze-report.txt
+
+          ANALYZE_STATUS=${PIPESTATUS[0]}
+
           set -e
+
+          ERROR_COUNT=$(grep -c "error •" flutter-analyze-report.txt || true)
+          WARNING_COUNT=$(grep -c "warning •" flutter-analyze-report.txt || true)
+          INFO_COUNT=$(grep -c "info •" flutter-analyze-report.txt || true)
+
+          echo ""
+          echo "=========================================="
+          echo "ANALYZER SUMMARY"
+          echo "=========================================="
+          echo "Analyzer exit code : ${ANALYZE_STATUS}"
+          echo "Errors             : ${ERROR_COUNT}"
+          echo "Warnings           : ${WARNING_COUNT}"
+          echo "Info               : ${INFO_COUNT}"
+          echo "=========================================="
+
+          if [ "${ERROR_COUNT}" -gt 0 ]; then
+            echo ""
+            echo "ERROR: Flutter analyzer found real errors."
+            echo "The APK build will not continue."
+            exit 1
+          fi
+
+          if [ "${ANALYZE_STATUS}" -ne 0 ]; then
+            if [ "${WARNING_COUNT}" -gt 0 ] || [ "${INFO_COUNT}" -gt 0 ]; then
+              echo ""
+              echo "Analyzer returned a non-zero status because of"
+              echo "warnings/info diagnostics only."
+              echo "These do not block the release build."
+            else
+              echo ""
+              echo "ERROR: Flutter analyze failed unexpectedly."
+              echo "No recognized error/warning/info diagnostics were found."
+              exit 1
+            fi
+          fi
+
+          echo ""
+          echo "Flutter analyze completed without blocking errors."
+
+      # ==========================================================
+      # 10. UPLOAD ANALYZER REPORT
+      # ==========================================================
+
+      - name: Upload analyzer report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-analyze-report-${{ github.run_number }}
+          path: flutter-analyze-report.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      # ==========================================================
+      # 11. BUILD RELEASE APK
+      # ==========================================================
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "BUILDING RELEASE APK"
+          echo "=========================================="
+
+          flutter build apk \
+            --release \
+            --build-name="${APP_VERSION}" \
+            --build-number="${GITHUB_RUN_NUMBER}" \
+            --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
+            --dart-define="SA7BI_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" \
+            --dart-define="SA7BI_COMMIT_SHA=${COMMIT_SHORT}"
+
+          echo ""
+          echo "APK build completed."
+
+      # ==========================================================
+      # 12. VERIFY APK
+      # ==========================================================
+
+      - name: Verify APK and calculate SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="${APK_PATH}"
+
+          echo "=========================================="
+          echo "VERIFYING APK"
+          echo "=========================================="
+
+          if [ ! -f "${APK}" ]; then
+            echo "ERROR: APK was not created."
+            echo "Expected path:"
+            echo "${APK}"
+            exit 1
+          fi
+
+          APK_SIZE=$(stat -c%s "${APK}")
+          APK_SHA256=$(sha256sum "${APK}" | awk '{print $1}')
+
+          if [ "${APK_SIZE}" -le 0 ]; then
+            echo "ERROR: APK file is empty."
+            exit 1
+          fi
+
+          echo "APK path:"
+          echo "${APK}"
+
+          echo ""
+          echo "APK size:"
+          echo "${APK_SIZE} bytes"
+
+          echo ""
+          echo "APK SHA256:"
+          echo "${APK_SHA256}"
+
+          echo ""
+          echo "Commit:"
+          echo "${GITHUB_SHA}"
+
+          echo ""
+          echo "Short commit:"
+          echo "${COMMIT_SHORT}"
+
+          echo ""
+          echo "Build number:"
+          echo "${GITHUB_RUN_NUMBER}"
+
+          echo "APK_SHA256=${APK_SHA256}" >> "${GITHUB_ENV}"
+          echo "APK_SIZE=${APK_SIZE}" >> "${GITHUB_ENV}"
+
+          echo "${APK_SHA256}  ${APK}" > apk-sha256.txt
+
+      # ==========================================================
+      # 13. APK BUILD METADATA
+      # ==========================================================
+
+      - name: Create APK build metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > apk-build-info.txt <<EOF
+          Sa7bi AI APK Build
+          ==================
+
+          App version: ${APP_VERSION}
+          Build number: ${GITHUB_RUN_NUMBER}
+          Commit: ${GITHUB_SHA}
+          Short commit: ${COMMIT_SHORT}
+
+          Flutter: ${FLUTTER_VERSION}
+          Java: ${JAVA_VERSION}
+          Gradle: ${GRADLE_VERSION}
+
+          APK SHA256: ${APK_SHA256}
+          APK size: ${APK_SIZE}
+
+          Repository:
+          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}
+
+          Workflow run:
+          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+
+      # ==========================================================
+      # 14. UPLOAD APK ARTIFACT
+      # ==========================================================
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-ai-apk-${{ github.run_number }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            apk-sha256.txt
+            apk-build-info.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      # ==========================================================
+      # 15. PREPARE RELEASE APK
+      # ==========================================================
+
+      - name: Prepare release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp "${APK_PATH}" "${RELEASE_APK_NAME}"
+
+          if [ ! -f "${RELEASE_APK_NAME}" ]; then
+            echo "ERROR: Release APK copy was not created."
+            exit 1
+          fi
+
+          sha256sum "${RELEASE_APK_NAME}"
+
+      # ==========================================================
+      # 16. PREPARE GITHUB RELEASE
+      #
+      # apk-latest is deliberately recreated so that it always
+      # points to THIS exact commit/build.
+      # ==========================================================
+
+      - name: Create or replace latest APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "UPDATING GITHUB APK RELEASE"
+          echo "=========================================="
+
+          gh release delete "${RELEASE_TAG}" \
+            --yes \
+            --cleanup-tag \
+            2>/dev/null || true
+
+          gh release create "${RELEASE_TAG}" \
+            "${RELEASE_APK_NAME}" \
+            --target "${GITHUB_SHA}" \
+            --title "Sa7bi AI - Latest APK" \
+            --notes "Automated APK release from commit ${GITHUB_SHA}."
+
+          echo ""
+          echo "Release created successfully."
+
+      # ==========================================================
+      # 17. VERIFY GITHUB RELEASE APK
+      #
+      # Download the actual release asset and compare SHA256.
+      # This proves the distributed APK is byte-for-byte identical
+      # to the APK produced by this workflow.
+      # ==========================================================
+
+      - name: Verify released APK SHA256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RELEASE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_APK_NAME}"
+
+          echo "=========================================="
+          echo "VERIFYING RELEASED APK"
+          echo "=========================================="
+
+          echo "Release URL:"
+          echo "${RELEASE_URL}"
+
+          rm -f downloaded-sa7bi-ai.apk
+
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --location \
+            --connect-timeout 20 \
+            --max-time 180 \
+            --output downloaded-sa7bi-ai.apk \
+            "${RELEASE_URL}"
+
+          if [ ! -s downloaded-sa7bi-ai.apk ]; then
+            echo "ERROR: Downloaded release APK is missing or empty."
+            exit 1
+          fi
+
+          DOWNLOADED_SHA256=$(sha256sum downloaded-sa7bi-ai.apk | awk '{print $1}')
+
+          echo ""
+          echo "Build APK SHA256:"
+          echo "${APK_SHA256}"
+
+          echo ""
+          echo "Downloaded Release APK SHA256:"
+          echo "${DOWNLOADED_SHA256}"
+
+          if [ "${DOWNLOADED_SHA256}" != "${APK_SHA256}" ]; then
+            echo ""
+            echo "ERROR: RELEASE APK SHA256 DOES NOT MATCH BUILD APK."
+            echo "The distributed APK is not the same file produced by this build."
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "RELEASE APK SHA256 VERIFIED"
+          echo "=========================================="
+
+      # ==========================================================
+      # 18. SETUP NODE FOR CLOUDFLARE
+      # ==========================================================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # ==========================================================
+      # 19. INSTALL BACKEND DEPENDENCIES
+      # ==========================================================
+
+      - name: Install backend dependencies
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      # ==========================================================
+      # 20. CHECK WRANGLER
+      # ==========================================================
+
+      - name: Check Wrangler
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npx wrangler --version
+
+      # ==========================================================
+      # 21. DEPLOY CLOUDFLARE WORKER
+      # ==========================================================
+
+      - name: Deploy Cloudflare Worker
+        working-directory: backend
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "ERROR: CLOUDFLARE_API_TOKEN GitHub secret is missing."
+            exit 1
+          fi
+
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "ERROR: CLOUDFLARE_ACCOUNT_ID GitHub secret is missing."
+            exit 1
+          fi
+
+          echo "=========================================="
+          echo "DEPLOYING CLOUDFLARE WORKER"
+          echo "=========================================="
+
+          npx wrangler deploy --config wrangler.toml
+
+      # ==========================================================
+      # 22. TEST WORKER HEALTH
+      # ==========================================================
+
+      - name: Test Worker health
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "TESTING WORKER /health"
+          echo "=========================================="
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --show-error \
+            --request GET \
+            --connect-timeout 15 \
+            --max-time 60 \
+            --output /tmp/sa7bi-health.json \
+            --write-out "%{http_code}" \
+            "${WORKER_URL}/health")
+
+          echo "HTTP status: ${HTTP_CODE}"
+
+          cat /tmp/sa7bi-health.json || true
+
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo ""
+            echo "ERROR: Worker /health failed."
+            exit 1
+          fi
+
+          echo ""
+          echo "Worker /health verified."
+
+      # ==========================================================
+      # 23. TEST WORKER ROOT
+      # ==========================================================
+
+      - name: Test Worker root
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "TESTING WORKER ROOT"
+          echo "=========================================="
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --show-error \
+            --request GET \
+            --connect-timeout 15 \
+            --max-time 60 \
+            --output /tmp/sa7bi-root.json \
+            --write-out "%{http_code}" \
+            "${WORKER_URL}/")
+
+          echo "HTTP status: ${HTTP_CODE}"
+
+          cat /tmp/sa7bi-root.json || true
+
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo ""
+            echo "ERROR: Worker root endpoint failed."
+            exit 1
+          fi
+
+          echo ""
+          echo "Worker root endpoint verified."
+
+      # ==========================================================
+      # 24. TEST WORKER DIAGNOSTICS
+      # ==========================================================
+
+      - name: Test Worker diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "TESTING WORKER /v1/diagnostics"
+          echo "=========================================="
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --show-error \
+            --request GET \
+            --connect-timeout 15 \
+            --max-time 60 \
+            --output /tmp/sa7bi-diagnostics.json \
+            --write-out "%{http_code}" \
+            "${WORKER_URL}/v1/diagnostics")
+
+          echo "HTTP status: ${HTTP_CODE}"
+
+          cat /tmp/sa7bi-diagnostics.json || true
+
+          if [ "${HTTP_CODE}" != "200" ]; then
+            echo ""
+            echo "ERROR: Worker diagnostics endpoint failed."
+            exit 1
+          fi
+
+          echo ""
+          echo "Worker diagnostics verified."
+
+      # ==========================================================
+      # 25. TEST WORKER APK DOWNLOAD
+      #
+      # IMPORTANT:
+      # The Worker exposes GET /download.
+      # Do NOT use HEAD here.
+      #
+      # Expected:
+      # GET /download -> 302
+      # Location      -> exact GitHub release APK
+      # Follow GET    -> 200
+      # ==========================================================
+
+      - name: Test Worker APK download endpoint
+        shell: bash
+        env:
+          EXPECTED_APK_URL: "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/download/apk-latest/sa7bi-ai.apk"
+        run: |
+          set -euo pipefail
 
           DOWNLOAD_URL="${WORKER_URL}/download"
 
           echo "=========================================="
           echo "TESTING WORKER APK DOWNLOAD ENDPOINT"
           echo "=========================================="
+
           echo "Worker URL:"
           echo "${DOWNLOAD_URL}"
+
           echo ""
-
-          # ------------------------------------------------------
-          # STEP 1:
-          # Test the actual HTTP method supported by the Worker.
-          #
-          # The Worker route is:
-          # GET /download
-          #
-          # We intentionally do NOT use HEAD here.
-          # ------------------------------------------------------
-
           echo "STEP 1: Testing GET /download without following redirect"
 
           HTTP_CODE=$(curl \
@@ -51,12 +676,6 @@
 
           echo ""
           echo "Worker returned the expected HTTP 302 redirect."
-
-          # ------------------------------------------------------
-          # STEP 2:
-          # Verify that the redirect points to the exact APK
-          # release asset expected by the application.
-          # ------------------------------------------------------
 
           echo ""
           echo "STEP 2: Verifying redirect destination"
@@ -90,16 +709,6 @@
           echo ""
           echo "Redirect destination is correct."
 
-          # ------------------------------------------------------
-          # STEP 3:
-          # Follow the redirect and verify that the actual APK
-          # can be reached successfully.
-          #
-          # Output is discarded because the actual APK bytes were
-          # already verified by the build job's direct download
-          # SHA256 test.
-          # ------------------------------------------------------
-
           echo ""
           echo "STEP 3: Following Worker redirect to the APK"
 
@@ -109,7 +718,7 @@
             --location \
             --request GET \
             --connect-timeout 15 \
-            --max-time 90 \
+            --max-time 120 \
             --output /dev/null \
             --write-out "%{http_code}" \
             "${DOWNLOAD_URL}")
@@ -130,3 +739,39 @@
           echo "Redirect target     : verified"
           echo "Final APK response  : 200"
           echo "=========================================="
+
+      # ==========================================================
+      # 26. FINAL VERIFICATION SUMMARY
+      # ==========================================================
+
+      - name: Final build verification summary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo ""
+          echo "============================================================"
+          echo "SA7BI AI FINAL BUILD VERIFICATION"
+          echo "============================================================"
+          echo ""
+          echo "Application version : ${APP_VERSION}"
+          echo "Build number        : ${GITHUB_RUN_NUMBER}"
+          echo "Commit              : ${GITHUB_SHA}"
+          echo "Short commit        : ${COMMIT_SHORT}"
+          echo ""
+          echo "APK SHA256          : ${APK_SHA256}"
+          echo "APK size            : ${APK_SIZE} bytes"
+          echo ""
+          echo "GitHub Release      : ${RELEASE_TAG}"
+          echo "Worker              : ${WORKER_URL}"
+          echo ""
+          echo "APK build           : VERIFIED"
+          echo "Release APK         : SHA256 VERIFIED"
+          echo "Worker health       : VERIFIED"
+          echo "Worker root         : VERIFIED"
+          echo "Worker diagnostics  : VERIFIED"
+          echo "Worker /download    : VERIFIED"
+          echo ""
+          echo "============================================================"
+          echo "SA7BI AI BUILD PIPELINE SUCCESS"
+          echo "============================================================"
