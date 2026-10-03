@@ -740,7 +740,255 @@ jobs:
           echo "=========================================="
 
       # ==========================================================
-      # 26. FINAL VERIFICATION SUMMARY
+      # 26. TEST WORKER CONTENT / SERVICE ENDPOINTS
+      # ==========================================================
+
+      - name: Test Worker content and service endpoints
+        shell: bash
+        env:
+          TEST_DEVICE_ID: "github-actions-diagnostic-device"
+        run: |
+          set -u
+          set -o pipefail
+
+          BASE="${WORKER_URL}"
+          FAILURES=0
+
+          test_endpoint() {
+            local NAME="$1"
+            local URL="$2"
+            local EXPECTED="$3"
+            local FILE="$4"
+
+            echo ""
+            echo "============================================================"
+            echo "TEST: ${NAME}"
+            echo "URL : ${URL}"
+            echo "============================================================"
+
+            rm -f "${FILE}"
+
+            local HTTP_CODE
+
+            HTTP_CODE=$(curl \
+              --silent \
+              --show-error \
+              --request GET \
+              --connect-timeout 15 \
+              --max-time 90 \
+              --output "${FILE}" \
+              --write-out "%{http_code}" \
+              "${URL}" 2>"${FILE}.curl-error")
+
+            local CURL_STATUS=$?
+
+            echo "HTTP status: ${HTTP_CODE}"
+
+            echo "Response:"
+            head -c 4000 "${FILE}" 2>/dev/null || true
+            echo ""
+
+            if [ "${CURL_STATUS}" -ne 0 ]; then
+              echo "RESULT: CURL FAILED"
+              cat "${FILE}.curl-error" 2>/dev/null || true
+              FAILURES=$((FAILURES + 1))
+              return
+            fi
+
+            if [ "${HTTP_CODE}" != "200" ]; then
+              echo "RESULT: HTTP FAILURE (expected 200)"
+              FAILURES=$((FAILURES + 1))
+              return
+            fi
+
+            if ! grep -q "${EXPECTED}" "${FILE}"; then
+              echo "RESULT: RESPONSE SHAPE FAILURE"
+              echo "Missing expected key: ${EXPECTED}"
+              FAILURES=$((FAILURES + 1))
+              return
+            fi
+
+            echo "RESULT: PASS"
+          }
+
+          # ------------------------------------------------------
+          # NEWS
+          # ------------------------------------------------------
+
+          test_endpoint \
+            "NEWS" \
+            "${BASE}/v1/news?refresh=${GITHUB_RUN_ID}" \
+            '"items"' \
+            /tmp/sa7bi-news.json
+
+          # ------------------------------------------------------
+          # QURAN
+          # ------------------------------------------------------
+
+          test_endpoint \
+            "QURAN CATALOG" \
+            "${BASE}/v1/audio/quran" \
+            '"reciters"' \
+            /tmp/sa7bi-quran.json
+
+          # ------------------------------------------------------
+          # HADITH
+          # ------------------------------------------------------
+
+          test_endpoint \
+            "HADITH BOOKS" \
+            "${BASE}/v1/hadith/books" \
+            '"items"' \
+            /tmp/sa7bi-hadith-books.json
+
+          test_endpoint \
+            "HADITH SEARCH" \
+            "${BASE}/v1/hadith?limit=3" \
+            '"items"' \
+            /tmp/sa7bi-hadith.json
+
+          # ------------------------------------------------------
+          # TAFSIR
+          # ------------------------------------------------------
+
+          test_endpoint \
+            "TAFSIR BOOKS" \
+            "${BASE}/v1/tafsir/books" \
+            '"items"' \
+            /tmp/sa7bi-tafsir-books.json
+
+          test_endpoint \
+            "TAFSIR SEARCH" \
+            "${BASE}/v1/tafsir?tafsir=1&sura=1" \
+            '"items"' \
+            /tmp/sa7bi-tafsir.json
+
+          # ------------------------------------------------------
+          # RADIO
+          # ------------------------------------------------------
+
+          test_endpoint \
+            "RADIO COUNTRIES" \
+            "${BASE}/v1/radio/countries" \
+            '"countries"' \
+            /tmp/sa7bi-radio-countries.json
+
+          test_endpoint \
+            "RADIO EGYPT" \
+            "${BASE}/v1/radio/stations?country=EG&limit=10" \
+            '"stations"' \
+            /tmp/sa7bi-radio-eg.json
+
+          # ------------------------------------------------------
+          # PODCASTS
+          # ------------------------------------------------------
+
+          test_endpoint \
+            "PODCAST SEARCH" \
+            "${BASE}/v1/podcasts/search?q=podcast&limit=3" \
+            '"items"' \
+            /tmp/sa7bi-podcasts.json
+
+          # ------------------------------------------------------
+          # SHORTS
+          # ------------------------------------------------------
+
+          test_endpoint \
+            "SHORTS" \
+            "${BASE}/v1/shorts" \
+            '"items"' \
+            /tmp/sa7bi-shorts.json
+
+          # ------------------------------------------------------
+          # AUDIO SEARCH
+          # ------------------------------------------------------
+
+          test_endpoint \
+            "AUDIO SEARCH" \
+            "${BASE}/v1/audio/search-v4?q=قرآن&type=quran" \
+            '"items"' \
+            /tmp/sa7bi-audio.json
+
+          # ------------------------------------------------------
+          # CREDITS
+          # ------------------------------------------------------
+
+          echo ""
+          echo "============================================================"
+          echo "TEST: CREDITS BALANCE"
+          echo "============================================================"
+
+          rm -f /tmp/sa7bi-credits.json
+
+          CREDITS_HTTP=$(curl \
+            --silent \
+            --show-error \
+            --request GET \
+            --connect-timeout 15 \
+            --max-time 60 \
+            --header "X-Sa7bi-Device-Id: ${TEST_DEVICE_ID}" \
+            --output /tmp/sa7bi-credits.json \
+            --write-out "%{http_code}" \
+            "${BASE}/v1/credits" \
+            2>/tmp/sa7bi-credits.curl-error)
+
+          CREDITS_STATUS=$?
+
+          echo "HTTP status: ${CREDITS_HTTP}"
+
+          echo "Response:"
+          head -c 4000 /tmp/sa7bi-credits.json 2>/dev/null || true
+          echo ""
+
+          if [ "${CREDITS_STATUS}" -ne 0 ]; then
+            echo "RESULT: CREDITS CURL FAILURE"
+            cat /tmp/sa7bi-credits.curl-error 2>/dev/null || true
+            FAILURES=$((FAILURES + 1))
+
+          elif [ "${CREDITS_HTTP}" != "200" ]; then
+            echo "RESULT: CREDITS HTTP FAILURE"
+            FAILURES=$((FAILURES + 1))
+
+          elif ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/sa7bi-credits.json; then
+            echo "RESULT: CREDITS RESPONSE FAILURE"
+            FAILURES=$((FAILURES + 1))
+
+          else
+            echo "RESULT: PASS"
+          fi
+
+          # ------------------------------------------------------
+          # FINAL CONTENT TEST RESULT
+          # ------------------------------------------------------
+
+          echo ""
+          echo "============================================================"
+          echo "CONTENT / SERVICE TEST SUMMARY"
+          echo "============================================================"
+
+          echo "Failures: ${FAILURES}"
+
+          echo "============================================================"
+
+          if [ "${FAILURES}" -ne 0 ]; then
+            echo ""
+            echo "ERROR: One or more real app service endpoints failed."
+            echo ""
+            echo "The HTTP status and response body printed above identify"
+            echo "the failing endpoint/layer."
+            echo ""
+            echo "The workflow is intentionally stopping here."
+            echo "No fake success will be reported."
+            exit 1
+          fi
+
+          echo ""
+          echo "All tested content/service endpoints returned valid"
+          echo "HTTP 200 responses with the expected response keys."
+          echo ""
+
+      # ==========================================================
+      # 27. FINAL VERIFICATION SUMMARY
       # ==========================================================
 
       - name: Final build verification summary
@@ -770,6 +1018,7 @@ jobs:
           echo "Worker root         : VERIFIED"
           echo "Worker diagnostics  : VERIFIED"
           echo "Worker /download    : VERIFIED"
+          echo "Content/services    : VERIFIED"
           echo ""
           echo "============================================================"
           echo "SA7BI AI BUILD PIPELINE SUCCESS"
