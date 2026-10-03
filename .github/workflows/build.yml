@@ -349,10 +349,7 @@ jobs:
           sha256sum "${RELEASE_APK_NAME}"
 
       # ==========================================================
-      # 16. PREPARE GITHUB RELEASE
-      #
-      # apk-latest is deliberately recreated so that it always
-      # points to THIS exact commit/build.
+      # 16. CREATE OR REPLACE LATEST APK RELEASE
       # ==========================================================
 
       - name: Create or replace latest APK release
@@ -382,15 +379,9 @@ jobs:
 
       # ==========================================================
       # 17. VERIFY GITHUB RELEASE APK
-      #
-      # Download the actual release asset and compare SHA256.
-      # This proves the distributed APK is byte-for-byte identical
-      # to the APK produced by this workflow.
       # ==========================================================
 
       - name: Verify released APK SHA256
-        env:
-          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -445,14 +436,18 @@ jobs:
 
       # ==========================================================
       # 18. SETUP NODE FOR CLOUDFLARE
+      #
+      # IMPORTANT:
+      # No npm cache is enabled here because this repository does
+      # not contain backend/package-lock.json.
+      #
+      # npm install below works normally without the cache.
       # ==========================================================
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
 
       # ==========================================================
       # 19. INSTALL BACKEND DEPENDENCIES
@@ -465,8 +460,12 @@ jobs:
           set -euo pipefail
 
           if [ -f package-lock.json ]; then
+            echo "package-lock.json found."
+            echo "Using npm ci."
             npm ci
           else
+            echo "package-lock.json not found."
+            echo "Using npm install."
             npm install
           fi
 
