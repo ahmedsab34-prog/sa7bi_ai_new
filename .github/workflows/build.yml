@@ -1,374 +1,425 @@
 name: Build Flutter APK + Deploy Cloudflare Worker
 
 on:
-  push:
-    branches: [ main ]
+push:
+branches: [ main ]
 
-  pull_request:
-    branches: [ main ]
+workflow_dispatch:
 
 permissions:
-  contents: write
+contents: write
 
 jobs:
-  build:
-    name: Build Flutter APK
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: '17'
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.38.1'
-          channel: stable
-          cache: true
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
-
-      - name: Show toolchain versions
-        run: |
-          echo "===== JAVA ====="
-          java -version
-
-          echo "===== FLUTTER ====="
-          flutter --version
-
-          echo "===== GRADLE ====="
-          gradle --version
-
-      - name: Clean Flutter build
-        run: flutter clean
-
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Analyze project
-        continue-on-error: true
-        run: flutter analyze
-
-      - name: Build Release APK
-        run: flutter build apk --release
-
-      - name: Verify APK
-        run: |
-          set -e
-
-          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
-
-          if [ ! -s "${APK_PATH}" ]; then
-            echo "ERROR: APK was not created."
-            exit 1
-          fi
-
-          echo "=========================================="
-          echo "APK CREATED SUCCESSFULLY"
-          echo "=========================================="
-
-          ls -lh "${APK_PATH}"
-          file "${APK_PATH}"
-
-          echo "=========================================="
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Prepare stable APK filename
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          set -e
-
-          cp \
-            "build/app/outputs/flutter-apk/app-release.apk" \
-            "sa7bi-ai.apk"
-
-          if [ ! -s "sa7bi-ai.apk" ]; then
-            echo "ERROR: sa7bi-ai.apk was not created."
-            exit 1
-          fi
-
-          echo "===== DIRECT APK FILE ====="
-          ls -lh "sa7bi-ai.apk"
-          file "sa7bi-ai.apk"
-
-      - name: Publish direct APK download
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-
-          RELEASE_TAG="apk-latest"
-          APK_PATH="sa7bi-ai.apk"
-
-          echo "=========================================="
-          echo "PREPARING DIRECT APK RELEASE"
-          echo "=========================================="
-
-          if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Creating APK release..."
-
-            gh release create "${RELEASE_TAG}" \
-              --title "Sa7bi AI - Latest APK" \
-              --notes "Latest Sa7bi AI APK generated automatically from the main branch." \
-              --latest
-          else
-            echo "APK release already exists."
-
-            echo "Updating release to be the latest release..."
-
-            gh release edit "${RELEASE_TAG}" \
-              --latest
-          fi
-
-          echo "Removing old APK asset if necessary..."
-
-          gh release delete-asset \
-            "${RELEASE_TAG}" \
-            "app-release.apk" \
-            --yes \
-            >/dev/null 2>&1 || true
-
-          gh release delete-asset \
-            "${RELEASE_TAG}" \
-            "sa7bi-ai.apk" \
-            --yes \
-            >/dev/null 2>&1 || true
-
-          echo "Uploading stable APK filename..."
-
-          gh release upload \
-            "${RELEASE_TAG}" \
-            "${APK_PATH}" \
-            --clobber
-
-          echo ""
-          echo "=========================================="
-          echo "DIRECT APK READY"
-          echo "=========================================="
-
-          echo "Release tag: ${RELEASE_TAG}"
-          echo "Asset: sa7bi-ai.apk"
-
-          echo "=========================================="
-
-      - name: Verify direct APK download URL
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          APK_URL: https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/latest/download/sa7bi-ai.apk
-        run: |
-          set -e
-
-          echo "=========================================="
-          echo "VERIFYING DIRECT APK DOWNLOAD"
-          echo "=========================================="
-
-          echo "URL:"
-          echo "${APK_URL}"
-
-          HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --location \
-            --connect-timeout 15 \
-            --max-time 60 \
-            --output /tmp/sa7bi-ai-download.apk \
-            --write-out "%{http_code}" \
-            "${APK_URL}")
-
-          echo "HTTP status: ${HTTP_CODE}"
-
-          if [ "${HTTP_CODE}" != "200" ]; then
-            echo ""
-            echo "ERROR: Direct APK download URL failed."
-            exit 1
-          fi
-
-          if [ ! -s "/tmp/sa7bi-ai-download.apk" ]; then
-            echo ""
-            echo "ERROR: APK download returned an empty file."
-            exit 1
-          fi
-
-          echo ""
-          echo "===== DIRECT DOWNLOAD VERIFIED ====="
-
-          ls -lh /tmp/sa7bi-ai-download.apk
-          file /tmp/sa7bi-ai-download.apk
-
-          echo ""
-          echo "Direct APK URL is working."
-
-  deploy-worker:
-    name: Deploy Cloudflare Worker
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install backend dependencies
-        working-directory: backend
-        run: npm install
-
-      - name: Check Wrangler
-        working-directory: backend
-        run: npx wrangler --version
-
-      - name: Deploy Cloudflare Worker
-        working-directory: backend
-        run: npx wrangler deploy --config wrangler.toml
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Wait for Worker propagation
-        run: |
-          echo "Waiting for Cloudflare Worker propagation..."
-          sleep 8
-
-      - name: Test live Worker health endpoint
-        env:
-          WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
-        run: |
-          set -e
-
-          echo "=========================================="
-          echo "Testing live Sa7bi AI Worker"
-          echo "=========================================="
-
-          SUCCESS=0
-
-          for ATTEMPT in 1 2 3 4 5 6; do
-            echo ""
-            echo "Attempt ${ATTEMPT}/6"
-
-            HTTP_CODE=$(curl \
-              --silent \
-              --show-error \
-              --location \
-              --connect-timeout 10 \
-              --max-time 30 \
-              --output /tmp/sa7bi-health.json \
-              --write-out "%{http_code}" \
-              "${WORKER_URL}/health" || true)
-
-            echo "HTTP status: ${HTTP_CODE}"
-
-            if [ "${HTTP_CODE}" = "200" ]; then
-              echo ""
-              echo "===== WORKER RESPONSE ====="
-              cat /tmp/sa7bi-health.json
-              echo ""
-              echo "===== WORKER IS REACHABLE ====="
-
-              SUCCESS=1
-              break
-            fi
-
-            echo "Worker is not reachable yet."
-            sleep 5
-          done
-
-          if [ "${SUCCESS}" != "1" ]; then
-            echo ""
-            echo "=========================================="
-            echo "WORKER LIVE HEALTH CHECK FAILED"
-            echo "=========================================="
-
-            cat /tmp/sa7bi-health.json 2>/dev/null || true
-
-            exit 1
-          fi
-
-      - name: Test Worker root endpoint
-        env:
-          WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
-        run: |
-          set -e
-
-          echo "Testing Worker root endpoint..."
-
-          HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --location \
-            --connect-timeout 10 \
-            --max-time 30 \
-            --output /tmp/sa7bi-root.json \
-            --write-out "%{http_code}" \
-            "${WORKER_URL}/" || true)
-
-          echo "HTTP status: ${HTTP_CODE}"
-
-          if [ "${HTTP_CODE}" != "200" ]; then
-            echo "Root endpoint failed."
-            cat /tmp/sa7bi-root.json 2>/dev/null || true
-            exit 1
-          fi
-
-          echo "===== ROOT RESPONSE ====="
-          cat /tmp/sa7bi-root.json
-          echo ""
-
-      - name: Test Worker diagnostics endpoint
-        env:
-          WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
-        run: |
-          set -e
-
-          echo "Testing Worker diagnostics endpoint..."
-
-          HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --location \
-            --connect-timeout 10 \
-            --max-time 30 \
-            --output /tmp/sa7bi-diagnostics.json \
-            --write-out "%{http_code}" \
-            "${WORKER_URL}/v1/diagnostics" || true)
-
-          echo "HTTP status: ${HTTP_CODE}"
-
-          if [ "${HTTP_CODE}" != "200" ]; then
-            echo "Diagnostics endpoint failed."
-            cat /tmp/sa7bi-diagnostics.json 2>/dev/null || true
-            exit 1
-          fi
-
-          echo "===== DIAGNOSTICS RESPONSE ====="
-          cat /tmp/sa7bi-diagnostics.json
-          echo ""
-
-      - name: Worker deployment verification complete
-        run: |
-          echo ""
-          echo "=========================================="
-          echo "SA7BI AI WORKER VERIFICATION COMPLETE"
-          echo "=========================================="
-          echo "Deployment succeeded."
-          echo "Public endpoint responded successfully."
-          echo "Health endpoint responded."
-          echo "Root endpoint responded."
-          echo "Diagnostics endpoint responded."
-          echo "=========================================="
+build:
+name: Build Flutter APK
+runs-on: ubuntu-latest
+
+steps:
+  - name: Checkout exact repository commit
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
+
+  - name: Set up Java 17
+    uses: actions/setup-java@v4
+    with:
+      distribution: zulu
+      java-version: '17'
+
+  - name: Set up Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      flutter-version: '3.38.1'
+      channel: stable
+      cache: true
+
+  - name: Set up Gradle
+    uses: gradle/actions/setup-gradle@v4
+    with:
+      gradle-version: '8.13'
+
+  - name: Set build identity
+    id: build_identity
+    shell: bash
+    run: |
+      set -e
+
+      COMMIT_SHORT="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+      BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+      APP_VERSION="1.0.1"
+
+      echo "APP_VERSION=${APP_VERSION}" >> "${GITHUB_ENV}"
+      echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "${GITHUB_ENV}"
+      echo "COMMIT_SHORT=${COMMIT_SHORT}" >> "${GITHUB_ENV}"
+
+      echo "=========================================="
+      echo "SA7BI AI BUILD IDENTITY"
+      echo "=========================================="
+      echo "App version : ${APP_VERSION}"
+      echo "Build number: ${BUILD_NUMBER}"
+      echo "Commit      : ${COMMIT_SHORT}"
+      echo "Full SHA    : ${GITHUB_SHA}"
+      echo "=========================================="
+
+  - name: Show toolchain versions
+    run: |
+      echo "===== JAVA ====="
+      java -version
+
+      echo "===== FLUTTER ====="
+      flutter --version
+
+      echo "===== GRADLE ====="
+      gradle --version
+
+  - name: Clean Flutter build
+    run: flutter clean
+
+  - name: Get dependencies
+    run: flutter pub get
+
+  - name: Analyze project
+    run: flutter analyze
+
+  - name: Build Release APK
+    run: |
+      set -e
+
+      flutter build apk \
+        --release \
+        --build-name="${APP_VERSION}" \
+        --build-number="${BUILD_NUMBER}" \
+        --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
+        --dart-define="SA7BI_BUILD_NUMBER=${BUILD_NUMBER}" \
+        --dart-define="SA7BI_COMMIT_SHA=${COMMIT_SHORT}"
+
+  - name: Verify APK
+    run: |
+      set -e
+
+      APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+
+      if [ ! -s "${APK_PATH}" ]; then
+        echo "ERROR: APK was not created."
+        exit 1
+      fi
+
+      echo "=========================================="
+      echo "APK CREATED SUCCESSFULLY"
+      echo "=========================================="
+
+      ls -lh "${APK_PATH}"
+      file "${APK_PATH}"
+
+      SHA256="$(sha256sum "${APK_PATH}" | cut -d ' ' -f1)"
+
+      echo "APK SHA256:"
+      echo "${SHA256}"
+
+      echo "APK_SHA256=${SHA256}" >> "${GITHUB_ENV}"
+
+      echo "=========================================="
+
+  - name: Upload APK Artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: sa7bi-ai-apk-${{ github.run_number }}
+      path: build/app/outputs/flutter-apk/app-release.apk
+      if-no-files-found: error
+      retention-days: 14
+
+  - name: Prepare stable APK filename
+    run: |
+      set -e
+
+      cp \
+        "build/app/outputs/flutter-apk/app-release.apk" \
+        "sa7bi-ai.apk"
+
+      if [ ! -s "sa7bi-ai.apk" ]; then
+        echo "ERROR: sa7bi-ai.apk was not created."
+        exit 1
+      fi
+
+      echo "===== DIRECT APK FILE ====="
+      ls -lh "sa7bi-ai.apk"
+      file "sa7bi-ai.apk"
+
+  - name: Publish direct APK download
+    env:
+      GH_TOKEN: ${{ github.token }}
+    run: |
+      set -e
+
+      RELEASE_TAG="apk-latest"
+      APK_PATH="sa7bi-ai.apk"
+
+      echo "=========================================="
+      echo "PUBLISHING LATEST APK"
+      echo "=========================================="
+
+      if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+        echo "Creating APK release..."
+
+        gh release create "${RELEASE_TAG}" \
+          --title "Sa7bi AI - Latest APK" \
+          --notes "Latest Sa7bi AI APK generated automatically from main." \
+          --latest
+      else
+        echo "APK release already exists."
+
+        gh release edit "${RELEASE_TAG}" \
+          --title "Sa7bi AI - Latest APK" \
+          --notes "Latest Sa7bi AI APK generated automatically from main." \
+          --latest
+      fi
+
+      echo "Removing previous APK asset..."
+
+      gh release delete-asset \
+        "${RELEASE_TAG}" \
+        "sa7bi-ai.apk" \
+        --yes \
+        >/dev/null 2>&1 || true
+
+      gh release delete-asset \
+        "${RELEASE_TAG}" \
+        "app-release.apk" \
+        --yes \
+        >/dev/null 2>&1 || true
+
+      echo "Uploading current APK..."
+
+      gh release upload \
+        "${RELEASE_TAG}" \
+        "${APK_PATH}" \
+        --clobber
+
+      echo ""
+      echo "=========================================="
+      echo "APK RELEASE PUBLISHED"
+      echo "=========================================="
+      echo "Release tag : ${RELEASE_TAG}"
+      echo "Asset       : sa7bi-ai.apk"
+      echo "Build       : ${BUILD_NUMBER}"
+      echo "Commit      : ${COMMIT_SHORT}"
+      echo "SHA256      : ${APK_SHA256}"
+      echo "=========================================="
+
+  - name: Verify direct APK download
+    env:
+      APK_URL: https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/download/apk-latest/sa7bi-ai.apk
+    run: |
+      set -e
+
+      echo "=========================================="
+      echo "VERIFYING DIRECT APK DOWNLOAD"
+      echo "=========================================="
+
+      echo "URL:"
+      echo "${APK_URL}"
+
+      HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --location \
+        --connect-timeout 15 \
+        --max-time 90 \
+        --output /tmp/sa7bi-ai-download.apk \
+        --write-out "%{http_code}" \
+        "${APK_URL}")
+
+      echo "HTTP status: ${HTTP_CODE}"
+
+      if [ "${HTTP_CODE}" != "200" ]; then
+        echo "ERROR: Direct APK download failed."
+        exit 1
+      fi
+
+      if [ ! -s "/tmp/sa7bi-ai-download.apk" ]; then
+        echo "ERROR: APK download returned empty file."
+        exit 1
+      fi
+
+      DOWNLOADED_SHA256="$(sha256sum /tmp/sa7bi-ai-download.apk | cut -d ' ' -f1)"
+
+      echo "Downloaded SHA256:"
+      echo "${DOWNLOADED_SHA256}"
+
+      if [ "${DOWNLOADED_SHA256}" != "${APK_SHA256}" ]; then
+        echo "ERROR: Downloaded APK SHA256 does not match build APK."
+        exit 1
+      fi
+
+      echo ""
+      echo "===== DIRECT APK VERIFIED ====="
+      echo "The downloaded file is exactly the APK produced by this build."
+      echo "=========================================="
+
+deploy-worker:
+name: Deploy Cloudflare Worker
+runs-on: ubuntu-latest
+needs: build
+
+steps:
+  - name: Checkout exact repository commit
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
+
+  - name: Set up Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: '22'
+
+  - name: Install backend dependencies
+    working-directory: backend
+    run: npm install
+
+  - name: Check Wrangler
+    working-directory: backend
+    run: npx wrangler --version
+
+  - name: Deploy Cloudflare Worker
+    working-directory: backend
+    run: npx wrangler deploy --config wrangler.toml
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  - name: Wait for Worker propagation
+    run: |
+      echo "Waiting for Cloudflare Worker propagation..."
+      sleep 10
+
+  - name: Test live Worker health endpoint
+    env:
+      WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
+    run: |
+      set -e
+
+      SUCCESS=0
+
+      for ATTEMPT in 1 2 3 4 5 6; do
+        echo ""
+        echo "Attempt ${ATTEMPT}/6"
+
+        HTTP_CODE=$(curl \
+          --silent \
+          --show-error \
+          --location \
+          --connect-timeout 10 \
+          --max-time 30 \
+          --output /tmp/sa7bi-health.json \
+          --write-out "%{http_code}" \
+          "${WORKER_URL}/health" || true)
+
+        echo "HTTP status: ${HTTP_CODE}"
+
+        if [ "${HTTP_CODE}" = "200" ]; then
+          cat /tmp/sa7bi-health.json
+          SUCCESS=1
+          break
+        fi
+
+        sleep 5
+      done
+
+      if [ "${SUCCESS}" != "1" ]; then
+        echo "WORKER LIVE HEALTH CHECK FAILED"
+        cat /tmp/sa7bi-health.json 2>/dev/null || true
+        exit 1
+      fi
+
+  - name: Test Worker root endpoint
+    env:
+      WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
+    run: |
+      set -e
+
+      HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --location \
+        --connect-timeout 10 \
+        --max-time 30 \
+        --output /tmp/sa7bi-root.json \
+        --write-out "%{http_code}" \
+        "${WORKER_URL}/")
+
+      echo "HTTP status: ${HTTP_CODE}"
+
+      if [ "${HTTP_CODE}" != "200" ]; then
+        cat /tmp/sa7bi-root.json
+        exit 1
+      fi
+
+      cat /tmp/sa7bi-root.json
+
+  - name: Test Worker diagnostics endpoint
+    env:
+      WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
+    run: |
+      set -e
+
+      HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --location \
+        --connect-timeout 10 \
+        --max-time 30 \
+        --output /tmp/sa7bi-diagnostics.json \
+        --write-out "%{http_code}" \
+        "${WORKER_URL}/v1/diagnostics")
+
+      echo "HTTP status: ${HTTP_CODE}"
+
+      if [ "${HTTP_CODE}" != "200" ]; then
+        cat /tmp/sa7bi-diagnostics.json
+        exit 1
+      fi
+
+      cat /tmp/sa7bi-diagnostics.json
+
+  - name: Test Worker APK download endpoint
+    env:
+      WORKER_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
+    run: |
+      set -e
+
+      echo "Testing Worker APK download endpoint..."
+
+      HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --head \
+        --location \
+        --connect-timeout 15 \
+        --max-time 60 \
+        --write-out "%{http_code}" \
+        --output /dev/null \
+        "${WORKER_URL}/download")
+
+      echo "Final HTTP status: ${HTTP_CODE}"
+
+      if [ "${HTTP_CODE}" != "200" ]; then
+        echo "ERROR: Worker APK download endpoint failed."
+        exit 1
+      fi
+
+      echo "Worker APK download endpoint is working."
+
+  - name: Worker deployment verification complete
+    run: |
+      echo ""
+      echo "=========================================="
+      echo "SA7BI AI DEPLOYMENT VERIFIED"
+      echo "=========================================="
+      echo "APK build: verified"
+      echo "APK release: verified"
+      echo "APK SHA256: verified"
+      echo "Worker health: verified"
+      echo "Worker root: verified"
+      echo "Worker diagnostics: verified"
+      echo "Worker APK download: verified"
+      echo "=========================================="
