@@ -4,7 +4,7 @@
 
 import { fetchJson } from "../utils.js";
 
-const BACKEND_VERSION = "6.3.1";
+const BACKEND_VERSION = "6.3.2";
 
 const ITUNES_SEARCH_URL =
   "https://itunes.apple.com/search";
@@ -69,8 +69,7 @@ function isBlockedHostname(hostname) {
 
   if (
     hostname === "localhost" ||
-    hostname ===
-      "localhost.localdomain" ||
+    hostname === "localhost.localdomain" ||
     hostname === "0.0.0.0" ||
     hostname === "::" ||
     hostname === "::1"
@@ -217,8 +216,7 @@ function normalizePodcast(
       ),
 
     description:
-      typeof item.description ===
-      "string"
+      typeof item.description === "string"
         ? item.description
         : "",
 
@@ -235,36 +233,33 @@ function normalizeArabicQuery(value) {
     .toLowerCase();
 }
 
-export async function handlePodcastSearch(
-  request
+/*
+ * Apple can temporarily return HTTP 429 to Cloudflare
+ * Worker egress addresses.
+ *
+ * We therefore try several equivalent public Apple
+ * Podcast Search requests before declaring the service
+ * unavailable.
+ */
+async function fetchApplePodcastSearch(
+  query,
+  limit
 ) {
-  try {
-    const url =
-      new URL(request.url);
+  const countries = [
+    "eg",
+    "",
+    "us",
+  ];
 
-    const query =
-      normalizeArabicQuery(
-        url.searchParams.get("q") ||
-          ""
-      );
+  let lastError = null;
 
-    const limitRaw =
-      Number(
-        url.searchParams.get(
-          "limit"
-        ) || 30
-      );
-
-    const limit =
-      Number.isFinite(limitRaw)
-        ? Math.min(
-            Math.max(
-              Math.trunc(limitRaw),
-              1
-            ),
-            MAX_SEARCH_LIMIT
-          )
-        : 30;
+  for (
+    let index = 0;
+    index < countries.length;
+    index++
+  ) {
+    const country =
+      countries[index];
 
     const params =
       new URLSearchParams();
@@ -274,10 +269,12 @@ export async function handlePodcastSearch(
       query || "podcast"
     );
 
-    params.set(
-      "country",
-      "eg"
-    );
+    if (country) {
+      params.set(
+        "country",
+        country
+      );
+    }
 
     params.set(
       "media",
@@ -297,8 +294,72 @@ export async function handlePodcastSearch(
     const endpoint =
       `${ITUNES_SEARCH_URL}?${params.toString()}`;
 
+    try {
+      return await fetchJson(
+        endpoint,
+        {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
+    } catch (error) {
+      lastError = error;
+
+      /*
+       * 429 means the current Apple request path
+       * was rate-limited. Try the next compatible
+       * request instead of immediately returning 502.
+       *
+       * For other errors we still try the next source
+       * variation because Apple can reject a specific
+       * regional query independently.
+       */
+    }
+  }
+
+  throw (
+    lastError ||
+    new Error(
+      "PODCAST_SEARCH_PROVIDER_UNAVAILABLE"
+    )
+  );
+}
+
+export async function handlePodcastSearch(
+  request
+) {
+  try {
+    const url =
+      new URL(request.url);
+
+    const query =
+      normalizeArabicQuery(
+        url.searchParams.get("q") || ""
+      );
+
+    const limitRaw =
+      Number(
+        url.searchParams.get("limit") || 30
+      );
+
+    const limit =
+      Number.isFinite(limitRaw)
+        ? Math.min(
+            Math.max(
+              Math.trunc(limitRaw),
+              1
+            ),
+            MAX_SEARCH_LIMIT
+          )
+        : 30;
+
     const response =
-      await fetchJson(endpoint);
+      await fetchApplePodcastSearch(
+        query,
+        limit
+      );
 
     const results =
       Array.isArray(
@@ -370,9 +431,8 @@ export async function handlePodcastLookup(
 
     const id =
       (
-        url.searchParams.get(
-          "id"
-        ) || ""
+        url.searchParams.get("id") ||
+        ""
       ).trim();
 
     if (!id) {
@@ -394,10 +454,8 @@ export async function handlePodcastLookup(
       return jsonResponse(
         {
           ok: false,
-
           error:
             "INVALID_PODCAST_ID",
-
           backendVersion:
             BACKEND_VERSION,
         },
@@ -422,7 +480,15 @@ export async function handlePodcastLookup(
       `${ITUNES_LOOKUP_URL}?${params.toString()}`;
 
     const data =
-      await fetchJson(endpoint);
+      await fetchJson(
+        endpoint,
+        {
+          headers: {
+            Accept:
+              "application/json",
+          },
+        }
+      );
 
     const results =
       Array.isArray(
@@ -1032,13 +1098,34 @@ function stripCdata(value) {
 
 function decodeXml(value) {
   return String(value || "")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'")
-    .replace(/&#39;/gi, "'")
-    .replace(/&#x27;/gi, "'")
+    .replace(
+      /&amp;/gi,
+      "&"
+    )
+    .replace(
+      /&lt;/gi,
+      "<"
+    )
+    .replace(
+      /&gt;/gi,
+      ">"
+    )
+    .replace(
+      /&quot;/gi,
+      '"'
+    )
+    .replace(
+      /&apos;/gi,
+      "'"
+    )
+    .replace(
+      /&#39;/gi,
+      "'"
+    )
+    .replace(
+      /&#x27;/gi,
+      "'"
+    )
     .replace(
       /&#(\d+);/gi,
       (_match, number) => {
