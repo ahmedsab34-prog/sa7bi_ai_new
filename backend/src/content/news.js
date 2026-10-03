@@ -1,15 +1,12 @@
 // backend/src/content/news.js
 // Sa7bi AI Backend - News Module
-// Final Backend Version: 6.3.0
+// Final Backend Version: 6.3.1
 //
 // Main endpoint:
 // GET /v1/news
 //
 // Source:
 // Google News RSS
-//
-// The Worker fetches public RSS feeds and normalizes
-// them into a stable structure for the Flutter app.
 
 import {
   json,
@@ -18,7 +15,7 @@ import {
   extractNewsImage,
 } from "../utils.js";
 
-const BACKEND_VERSION = "6.3.0";
+const BACKEND_VERSION = "6.3.1";
 
 const MAX_ITEMS = 40;
 
@@ -26,15 +23,12 @@ const MAX_ITEMS = 40;
 /* RSS parsing                                                                */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Parse RSS/XML items into a stable news structure.
- */
 function parseRssItems(xml) {
   const items = [];
 
   const blocks =
     String(xml || "").match(
-      /<item\b[\s\S]*?<\/item>/gi
+      /<item\b[\s\S]*?<\/item>/gi,
     ) || [];
 
   for (const block of blocks) {
@@ -42,7 +36,7 @@ function parseRssItems(xml) {
       stripHtml(
         firstMatch(block, [
           /<title[^>]*>([\s\S]*?)<\/title>/i,
-        ])
+        ]),
       );
 
     const link =
@@ -68,7 +62,7 @@ function parseRssItems(xml) {
       stripHtml(
         firstMatch(block, [
           /<source[^>]*>([\s\S]*?)<\/source>/i,
-        ])
+        ]),
       ) || "Google News";
 
     const image =
@@ -98,9 +92,6 @@ function parseRssItems(xml) {
 /* RSS fetch                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Fetch one public RSS feed.
- */
 async function fetchRssFeed(url) {
   const response =
     await fetch(
@@ -110,19 +101,25 @@ async function fetchRssFeed(url) {
 
         headers: {
           "User-Agent":
-            "Sa7bi-AI/6.3.0",
+            "Sa7bi-AI/6.3.1",
+
           Accept:
             "application/rss+xml, application/xml, text/xml, */*",
+
+          "Cache-Control":
+            "no-cache",
+
+          Pragma:
+            "no-cache",
         },
 
-        redirect:
-          "follow",
-      }
+        redirect: "follow",
+      },
     );
 
   if (!response.ok) {
     throw new Error(
-      `RSS_HTTP_${response.status}`
+      `RSS_HTTP_${response.status}`,
     );
   }
 
@@ -133,16 +130,6 @@ async function fetchRssFeed(url) {
 /* Google News                                                                */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Fetch several Google News RSS feeds.
- *
- * We use:
- * - general Egypt/Arabic news
- * - Egypt search
- * - technology search
- *
- * Results are deduplicated by article URL.
- */
 async function fetchGoogleNews() {
   const feeds = [
     "https://news.google.com/rss?hl=ar&gl=EG&ceid=EG:ar",
@@ -154,42 +141,27 @@ async function fetchGoogleNews() {
 
   const all = [];
 
-  const seen =
-    new Set();
+  const seen = new Set();
 
-  for (
-    const feed of feeds
-  ) {
+  for (const feed of feeds) {
     try {
       const xml =
-        await fetchRssFeed(
-          feed
-        );
+        await fetchRssFeed(feed);
 
       const items =
-        parseRssItems(
-          xml
-        );
+        parseRssItems(xml);
 
-      for (
-        const item of items
-      ) {
+      for (const item of items) {
         if (
           !item.link ||
-          seen.has(
-            item.link
-          )
+          seen.has(item.link)
         ) {
           continue;
         }
 
-        seen.add(
-          item.link
-        );
+        seen.add(item.link);
 
-        all.push(
-          item
-        );
+        all.push(item);
 
         if (
           all.length >=
@@ -206,16 +178,13 @@ async function fetchGoogleNews() {
         break;
       }
     } catch (_) {
-      /*
-       * One feed failing must not make the
-       * entire news service unavailable.
-       */
+      // فشل مصدر واحد لا يوقف بقية المصادر.
     }
   }
 
   return all.slice(
     0,
-    MAX_ITEMS
+    MAX_ITEMS,
   );
 }
 
@@ -223,9 +192,6 @@ async function fetchGoogleNews() {
 /* Public endpoint                                                            */
 /* -------------------------------------------------------------------------- */
 
-/**
- * GET /v1/news
- */
 export async function handleNews() {
   try {
     const items =
@@ -258,14 +224,10 @@ export async function handleNews() {
         backendVersion:
           BACKEND_VERSION,
       },
-      502
+      502,
     );
   }
 }
-
-/* -------------------------------------------------------------------------- */
-/* Exports                                                                    */
-/* -------------------------------------------------------------------------- */
 
 export {
   parseRssItems,
