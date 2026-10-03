@@ -15,420 +15,472 @@ import 'widgets/profile_reminders.dart';
 import 'widgets/rewarded_ad_button.dart';
 
 class ProfileScreen extends StatefulWidget {
-final VoidCallback? onAudio;
+  final VoidCallback? onAudio;
 
-const ProfileScreen({
-super.key,
-this.onAudio,
-});
+  const ProfileScreen({
+    super.key,
+    this.onAudio,
+  });
 
-@override
-State<ProfileScreen> createState() => _ProfileScreenState();
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-final ProfileService _profileService =
-ProfileService.instance;
+  final ProfileService _profileService =
+      ProfileService.instance;
 
-final ReminderService _reminderService =
-ReminderService.instance;
+  final ReminderService _reminderService =
+      ReminderService.instance;
 
-Uint8List? _photo;
+  Uint8List? _photo;
 
-String _displayName = '';
-String _reelName = '';
-String _bio = '';
-String _status = '';
+  String _displayName = '';
+  String _reelName = '';
+  String _bio = '';
+  String _status = '';
 
-bool _aiConnected = false;
-bool _loading = true;
-bool _checkingAi = false;
+  bool _aiConnected = false;
+  bool _loading = true;
+  bool _checkingAi = false;
 
-@override
-void initState() {
-super.initState();
+  @override
+  void initState() {
+    super.initState();
 
-_profileService.changes.addListener(
-  _syncProfile,
-);
+    _profileService.changes.addListener(
+      _syncProfile,
+    );
 
-_reminderService.reminders.addListener(
-  _onRemindersChanged,
-);
+    _reminderService.reminders.addListener(
+      _onRemindersChanged,
+    );
 
-_initialize();
+    _initialize();
+  }
 
-}
+  @override
+  void dispose() {
+    _profileService.changes.removeListener(
+      _syncProfile,
+    );
 
-@override
-void dispose() {
-_profileService.changes.removeListener(
-_syncProfile,
-);
+    _reminderService.reminders.removeListener(
+      _onRemindersChanged,
+    );
 
-_reminderService.reminders.removeListener(
-  _onRemindersChanged,
-);
+    super.dispose();
+  }
 
-super.dispose();
+  Future<void> _initialize() async {
+    try {
+      await Future.wait([
+        _profileService.initialize(),
+        _reminderService.initialize(),
+      ]);
 
-}
+      if (!mounted) {
+        return;
+      }
 
-Future<void> _initialize() async {
-try {
-await Future.wait([
-_profileService.initialize(),
-_reminderService.initialize(),
-]);
+      _syncProfile();
 
-  if (!mounted) return;
+      setState(() {
+        _loading = false;
+      });
 
-  _syncProfile();
+      await _checkAiConnection();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
 
-  setState(() {
-    _loading = false;
-  });
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
 
-  await _checkAiConnection();
-} catch (_) {
-  if (!mounted) return;
+  void _syncProfile() {
+    if (!mounted) {
+      return;
+    }
 
-  setState(() {
-    _loading = false;
-  });
-}
+    setState(() {
+      _photo = _profileService.photoBytes;
+      _displayName = _profileService.displayName;
+      _reelName = _profileService.reelName;
+      _bio = _profileService.bio;
+      _status = _profileService.status;
+      _aiConnected = _profileService.aiConnected;
+    });
+  }
 
-}
+  void _onRemindersChanged() {
+    if (!mounted) {
+      return;
+    }
 
-void _syncProfile() {
-if (!mounted) return;
+    setState(() {});
+  }
 
-setState(() {
-  _photo = _profileService.photoBytes;
-  _displayName = _profileService.displayName;
-  _reelName = _profileService.reelName;
-  _bio = _profileService.bio;
-  _status = _profileService.status;
-  _aiConnected = _profileService.aiConnected;
-});
+  Future<void> _checkAiConnection() async {
+    if (_checkingAi) {
+      return;
+    }
 
-}
+    if (mounted) {
+      setState(() {
+        _checkingAi = true;
+      });
+    }
 
-void _onRemindersChanged() {
-if (!mounted) return;
+    try {
+      final connected =
+          await AiService.checkConnection();
 
-setState(() {});
+      await _profileService.saveAiConnection(
+        connected,
+      );
 
-}
+      if (!mounted) {
+        return;
+      }
 
-Future<void> _checkAiConnection() async {
-if (_checkingAi) return;
+      setState(() {
+        _aiConnected = connected;
+        _checkingAi = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
 
-if (mounted) {
-  setState(() {
-    _checkingAi = true;
-  });
-}
+      setState(() {
+        _aiConnected = false;
+        _checkingAi = false;
+      });
 
-try {
-  final connected =
-      await AiService.checkConnection();
+      await _profileService.saveAiConnection(
+        false,
+      );
+    }
+  }
 
-  await _profileService.saveAiConnection(
-    connected,
-  );
+  Future<void> _refreshProfile() async {
+    try {
+      await _profileService.refresh();
 
-  if (!mounted) return;
+      await _reminderService.initialize();
+      await _reminderService.rescheduleAll();
 
-  setState(() {
-    _aiConnected = connected;
-    _checkingAi = false;
-  });
-} catch (_) {
-  if (!mounted) return;
+      await _checkAiConnection();
 
-  setState(() {
-    _aiConnected = false;
-    _checkingAi = false;
-  });
+      if (!mounted) {
+        return;
+      }
 
-  await _profileService.saveAiConnection(
-    false,
-  );
-}
+      _syncProfile();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
 
-}
+      _showMessage(
+        'تعذر تحديث بيانات الحساب حاليًا.',
+      );
+    }
+  }
 
-Future<void> _refreshProfile() async {
-try {
-await _profileService.refresh();
+  void _showMessage(String message) {
+    if (!mounted ||
+        message.trim().isEmpty) {
+      return;
+    }
 
-  await _reminderService.initialize();
-  await _reminderService.rescheduleAll();
-
-  await _checkAiConnection();
-
-  if (!mounted) return;
-
-  _syncProfile();
-} catch (_) {
-  if (!mounted) return;
-
-  _showMessage(
-    'تعذر تحديث بيانات الحساب حاليًا.',
-  );
-}
-
-}
-
-void _showMessage(String message) {
-if (!mounted || message.trim().isEmpty) {
-return;
-}
-
-ScaffoldMessenger.of(context)
-  ..hideCurrentSnackBar()
-  ..showSnackBar(
-    SnackBar(
-      content: Text(
-        message,
-        textDirection: TextDirection.rtl,
-      ),
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(
-        seconds: 2,
-      ),
-    ),
-  );
-
-}
-
-Widget _buildAiStatusBar() {
-final connected = _aiConnected;
-
-final statusColor = connected
-    ? Colors.greenAccent
-    : Colors.orangeAccent;
-
-return Container(
-  margin: const EdgeInsets.fromLTRB(
-    8,
-    0,
-    8,
-    7,
-  ),
-  padding: const EdgeInsets.symmetric(
-    horizontal: 12,
-    vertical: 9,
-  ),
-  decoration: BoxDecoration(
-    color: Theme.of(context)
-        .colorScheme
-        .surfaceContainerHighest
-        .withValues(alpha: 0.55),
-    borderRadius: BorderRadius.circular(15),
-    border: Border.all(
-      color: statusColor.withValues(
-        alpha: 0.30,
-      ),
-    ),
-  ),
-  child: Row(
-    children: [
-      if (_checkingAi)
-        SizedBox(
-          width: 10,
-          height: 10,
-          child: CircularProgressIndicator(
-            strokeWidth: 1.8,
-            color: statusColor,
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            message,
+            textDirection: TextDirection.rtl,
           ),
-        )
-      else
-        Container(
-          width: 9,
-          height: 9,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: statusColor,
-            boxShadow: [
-              BoxShadow(
-                color: statusColor.withValues(
-                  alpha: 0.35,
-                ),
-                blurRadius: 7,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(
+            seconds: 2,
+          ),
+        ),
+      );
+  }
+
+  Widget _buildAiStatusBar() {
+    final connected = _aiConnected;
+
+    final statusColor = connected
+        ? Colors.greenAccent
+        : Colors.orangeAccent;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        6,
+        0,
+        6,
+        5,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.55),
+        borderRadius:
+            BorderRadius.circular(13),
+        border: Border.all(
+          color: statusColor.withValues(
+            alpha: 0.30,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (_checkingAi)
+            SizedBox(
+              width: 9,
+              height: 9,
+              child:
+                  CircularProgressIndicator(
+                strokeWidth: 1.7,
+                color: statusColor,
               ),
-            ],
+            )
+          else
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: statusColor,
+                boxShadow: [
+                  BoxShadow(
+                    color:
+                        statusColor.withValues(
+                      alpha: 0.35,
+                    ),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              connected
+                  ? 'صاحبي AI متصل وجاهز'
+                  : 'صاحبي AI غير متصل',
+              textDirection:
+                  TextDirection.rtl,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
-        ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          connected
-              ? 'صاحبي AI متصل وجاهز'
-              : 'صاحبي AI غير متصل',
-          textDirection: TextDirection.rtl,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
+          Icon(
+            connected
+                ? Icons.cloud_done_rounded
+                : Icons.cloud_off_rounded,
+            size: 17,
+            color: statusColor,
           ),
+          const SizedBox(width: 1),
+          IconButton(
+            onPressed:
+                _checkingAi
+                    ? null
+                    : _checkAiConnection,
+            tooltip: 'فحص الاتصال',
+            padding: EdgeInsets.zero,
+            constraints:
+                const BoxConstraints(
+              minWidth: 30,
+              minHeight: 30,
+            ),
+            icon: Icon(
+              Icons.refresh_rounded,
+              size: 17,
+              color: statusColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCreditsSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        6,
+        0,
+        6,
+        5,
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: CreditsStatus(
+              compact: true,
+              showRewardButton: false,
+            ),
+          ),
+          const SizedBox(width: 6),
+          const RewardedAdButton(
+            compact: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBuildInfo() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        6,
+        0,
+        6,
+        5,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111720),
+        borderRadius:
+            BorderRadius.circular(11),
+        border: Border.all(
+          color: const Color(0x33FFD76A),
         ),
       ),
-      Icon(
-        connected
-            ? Icons.cloud_done_rounded
-            : Icons.cloud_off_rounded,
-        size: 18,
-        color: statusColor,
+      child: Row(
+        children: [
+          const Icon(
+            Icons.verified_rounded,
+            size: 14,
+            color: Color(0xFFFFD76A),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'نسخة التطبيق: '
+              '${AppConfig.appVersion}+'
+              '${AppConfig.buildNumber}',
+              textDirection:
+                  TextDirection.rtl,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          Text(
+            AppConfig.commitSha,
+            style: const TextStyle(
+              fontSize: 8,
+              color: Colors.white54,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
-      const SizedBox(width: 4),
-      IconButton(
-        onPressed:
-            _checkingAi
-                ? null
-                : _checkAiConnection,
-        tooltip: 'فحص الاتصال',
-        icon: Icon(
-          Icons.refresh_rounded,
-          size: 18,
-          color: statusColor,
+    );
+  }
+
+  Widget _buildProfileContent(
+    BoxConstraints constraints,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ProfileHeader(
+          photo: _photo,
+          displayName: _displayName,
+          reelName: _reelName,
+          onChanged: _syncProfile,
+          onMessage: _showMessage,
         ),
+
+        ProfileBioStatus(
+          bio: _bio,
+          status: _status,
+          onProfileChanged: _syncProfile,
+        ),
+
+        _buildAiStatusBar(),
+
+        _buildCreditsSection(),
+
+        _buildBuildInfo(),
+
+        ProfileActions(
+          onMessage: _showMessage,
+        ),
+
+        ProfileReminders(
+          reminders:
+              _reminderService.items,
+          onMessage: _showMessage,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        children: [
+          // الهيدر كما هو؛ لا يتم تغييره من صفحة البروفايل.
+          AppHeader(
+            onAudioTap: widget.onAudio,
+          ),
+
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child:
+                        CircularProgressIndicator(),
+                  )
+                : LayoutBuilder(
+                    builder:
+                        (
+                      context,
+                      constraints,
+                    ) {
+                      return ClipRect(
+                        child: FittedBox(
+                          fit:
+                              BoxFit.scaleDown,
+                          alignment:
+                              Alignment.topCenter,
+                          child: SizedBox(
+                            width:
+                                constraints.maxWidth,
+                            child:
+                                _buildProfileContent(
+                              constraints,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
-    ],
-  ),
-);
-
-}
-
-Widget _buildCreditsSection() {
-return Padding(
-padding: const EdgeInsets.fromLTRB(
-8,
-0,
-8,
-7,
-),
-child: Row(
-children: [
-const Expanded(
-child: CreditsStatus(
-compact: true,
-showRewardButton: false,
-),
-),
-const SizedBox(width: 8),
-const RewardedAdButton(
-compact: true,
-),
-],
-),
-);
-}
-
-Widget _buildBuildInfo() {
-return Container(
-margin: const EdgeInsets.fromLTRB(
-8,
-0,
-8,
-7,
-),
-padding: const EdgeInsets.symmetric(
-horizontal: 12,
-vertical: 8,
-),
-decoration: BoxDecoration(
-color: const Color(0xFF111720),
-borderRadius: BorderRadius.circular(13),
-border: Border.all(
-color: const Color(0x33FFD76A),
-),
-),
-child: Row(
-children: [
-const Icon(
-Icons.verified_rounded,
-size: 16,
-color: Color(0xFFFFD76A),
-),
-const SizedBox(width: 7),
-Expanded(
-child: Text(
-'نسخة التطبيق: ${AppConfig.appVersion}+${AppConfig.buildNumber}',
-textDirection: TextDirection.rtl,
-style: const TextStyle(
-fontSize: 10,
-fontWeight: FontWeight.w800,
-),
-),
-),
-Text(
-AppConfig.commitSha,
-style: const TextStyle(
-fontSize: 9,
-color: Colors.white54,
-fontWeight: FontWeight.w700,
-),
-),
-],
-),
-);
-}
-
-@override
-Widget build(BuildContext context) {
-return SafeArea(
-child: Column(
-children: [
-AppHeader(
-onAudioTap: widget.onAudio,
-),
-Expanded(
-child: _loading
-? const Center(
-child: CircularProgressIndicator(),
-)
-: RefreshIndicator(
-onRefresh: _refreshProfile,
-child: ListView(
-physics:
-const AlwaysScrollableScrollPhysics(),
-padding:
-const EdgeInsets.only(
-top: 3,
-bottom: 18,
-),
-children: [
-ProfileHeader(
-photo: _photo,
-displayName: _displayName,
-reelName: _reelName,
-onChanged: _syncProfile,
-onMessage: _showMessage,
-),
-ProfileBioStatus(
-bio: _bio,
-status: _status,
-onProfileChanged:
-_syncProfile,
-),
-_buildAiStatusBar(),
-_buildCreditsSection(),
-_buildBuildInfo(),
-ProfileActions(
-onMessage: _showMessage,
-),
-ProfileReminders(
-reminders:
-_reminderService.items,
-onMessage: _showMessage,
-),
-],
-),
-),
-),
-],
-),
-);
-}
+    );
+  }
 }
