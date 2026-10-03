@@ -1,6 +1,5 @@
 // backend/src/credits.js
 // Sa7bi AI - Server Authoritative Credits
-// Final Persistent Credit Ledger
 // Cloudflare Durable Objects + SQLite
 
 import { DurableObject } from "cloudflare:workers";
@@ -9,18 +8,17 @@ import { DurableObject } from "cloudflare:workers";
    CREDIT POLICY
    ========================================================= */
 
-export const CREDIT_COSTS = Object.freeze({
-  text: 1,
-  image_analysis: 3,
-  video_analysis: 5,
-  image_generation: 10,
-  image_edit: 10,
-});
+export const CREDIT_COSTS =
+  Object.freeze({
+    text: 1,
+    image_analysis: 3,
+    video_analysis: 5,
+    image_generation: 10,
+    image_edit: 10,
+  });
 
 export const INITIAL_CREDITS = 100;
-
 export const REWARDED_AD_CREDITS = 10;
-
 export const REWARDED_AD_DAILY_LIMIT = 5;
 
 const RESERVATION_TTL_MS =
@@ -35,57 +33,50 @@ const MAX_SOURCE_LENGTH = 128;
    HELPERS
    ========================================================= */
 
-function json(data, status = 200) {
+function json(
+  data,
+  status = 200
+) {
   return new Response(
     JSON.stringify(data),
     {
       status,
+
       headers: {
         "Content-Type":
           "application/json; charset=utf-8",
+
         "Cache-Control":
           "no-store",
       },
-    },
+    }
   );
 }
 
 function todayKey() {
-  const now = new Date();
+  const now =
+    new Date();
 
   const year =
     now.getUTCFullYear();
 
-  const month = String(
-    now.getUTCMonth() + 1,
-  ).padStart(2, "0");
+  const month =
+    String(
+      now.getUTCMonth() + 1
+    ).padStart(2, "0");
 
-  const day = String(
-    now.getUTCDate(),
-  ).padStart(2, "0");
+  const day =
+    String(
+      now.getUTCDate()
+    ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
 function normalizeDeviceId(value) {
-  if (typeof value !== "string") {
-    return "";
-  }
-
-  const clean = value.trim();
-
-  if (!clean) {
-    return "";
-  }
-
-  return clean.substring(
-    0,
-    MAX_DEVICE_ID_LENGTH,
-  );
-}
-
-function normalizeRequestId(value) {
-  if (typeof value !== "string") {
+  if (
+    typeof value !== "string"
+  ) {
     return "";
   }
 
@@ -93,12 +84,14 @@ function normalizeRequestId(value) {
     .trim()
     .substring(
       0,
-      MAX_REQUEST_ID_LENGTH,
+      MAX_DEVICE_ID_LENGTH
     );
 }
 
-function normalizeTransactionId(value) {
-  if (typeof value !== "string") {
+function normalizeRequestId(value) {
+  if (
+    typeof value !== "string"
+  ) {
     return "";
   }
 
@@ -106,12 +99,31 @@ function normalizeTransactionId(value) {
     .trim()
     .substring(
       0,
-      MAX_TRANSACTION_ID_LENGTH,
+      MAX_REQUEST_ID_LENGTH
+    );
+}
+
+function normalizeTransactionId(
+  value
+) {
+  if (
+    typeof value !== "string"
+  ) {
+    return "";
+  }
+
+  return value
+    .trim()
+    .substring(
+      0,
+      MAX_TRANSACTION_ID_LENGTH
     );
 }
 
 function normalizeOperation(value) {
-  if (typeof value !== "string") {
+  if (
+    typeof value !== "string"
+  ) {
     return "";
   }
 
@@ -121,11 +133,14 @@ function normalizeOperation(value) {
 }
 
 function normalizeSource(value) {
-  if (typeof value !== "string") {
+  if (
+    typeof value !== "string"
+  ) {
     return "admob_ssv";
   }
 
-  const clean = value.trim();
+  const clean =
+    value.trim();
 
   if (!clean) {
     return "admob_ssv";
@@ -133,24 +148,30 @@ function normalizeSource(value) {
 
   return clean.substring(
     0,
-    MAX_SOURCE_LENGTH,
+    MAX_SOURCE_LENGTH
   );
 }
 
 function getCreditCost(operation) {
   const normalized =
-    normalizeOperation(operation);
+    normalizeOperation(
+      operation
+    );
 
   return (
-    CREDIT_COSTS[normalized] ??
-    null
+    CREDIT_COSTS[
+      normalized
+    ] ?? null
   );
 }
 
 function clampCredits(value) {
-  const number = Number(value);
+  const number =
+    Number(value);
 
-  if (!Number.isFinite(number)) {
+  if (
+    !Number.isFinite(number)
+  ) {
     return 0;
   }
 
@@ -165,10 +186,15 @@ function clampCredits(value) {
   return Math.floor(number);
 }
 
-function normalizeRewardedCount(value) {
-  const number = Number(value);
+function normalizeRewardedCount(
+  value
+) {
+  const number =
+    Number(value);
 
-  if (!Number.isFinite(number)) {
+  if (
+    !Number.isFinite(number)
+  ) {
     return 0;
   }
 
@@ -192,15 +218,14 @@ function normalizeRewardedCount(value) {
 
 export class Sa7biCredits
   extends DurableObject {
-  constructor(ctx, env) {
+  constructor(
+    ctx,
+    env
+  ) {
     super(ctx, env);
 
     this.ctx = ctx;
     this.env = env;
-
-    /* -------------------------------------------------------
-       ACCOUNT
-       ------------------------------------------------------- */
 
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS account (
@@ -213,10 +238,6 @@ export class Sa7biCredits
       )
     `);
 
-    /* -------------------------------------------------------
-       AI RESERVATIONS
-       ------------------------------------------------------- */
-
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS reservations (
         request_id TEXT PRIMARY KEY,
@@ -227,10 +248,6 @@ export class Sa7biCredits
         state TEXT NOT NULL
       )
     `);
-
-    /* -------------------------------------------------------
-       VERIFIED REWARDED AD TRANSACTIONS
-       ------------------------------------------------------- */
 
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS rewarded_transactions (
@@ -243,14 +260,22 @@ export class Sa7biCredits
   }
 
   /* =======================================================
-     ACCOUNT INITIALIZATION
+     SAFE SQL SINGLE ROW
      ======================================================= */
 
-  ensureAccount() {
-    const row =
+  /*
+   * IMPORTANT:
+   *
+   * Cloudflare SQLite .one() throws when there are
+   * zero rows.
+   *
+   * These helpers intentionally use toArray()[0].
+   */
+
+  selectAccount() {
+    const rows =
       this.ctx.storage.sql
-        .exec(
-          `
+        .exec(`
           SELECT
             id,
             credits,
@@ -261,15 +286,74 @@ export class Sa7biCredits
           FROM account
           WHERE id = 1
           LIMIT 1
+        `)
+        .toArray();
+
+    return rows[0] ?? null;
+  }
+
+  selectReservation(
+    requestId
+  ) {
+    const rows =
+      this.ctx.storage.sql
+        .exec(
+          `
+          SELECT
+            request_id,
+            operation,
+            cost,
+            created_at,
+            expires_at,
+            state
+          FROM reservations
+          WHERE request_id = ?
+          LIMIT 1
           `,
+          requestId
         )
-        .one();
+        .toArray();
+
+    return rows[0] ?? null;
+  }
+
+  selectRewardTransaction(
+    transactionId
+  ) {
+    const rows =
+      this.ctx.storage.sql
+        .exec(
+          `
+          SELECT
+            transaction_id,
+            reward_amount,
+            created_at,
+            source
+          FROM rewarded_transactions
+          WHERE transaction_id = ?
+          LIMIT 1
+          `,
+          transactionId
+        )
+        .toArray();
+
+    return rows[0] ?? null;
+  }
+
+  /* =======================================================
+     ACCOUNT INITIALIZATION
+     ======================================================= */
+
+  ensureAccount() {
+    let row =
+      this.selectAccount();
 
     if (row) {
       return row;
     }
 
-    const now = Date.now();
+    const now =
+      Date.now();
 
     this.ctx.storage.sql.exec(
       `
@@ -288,25 +372,19 @@ export class Sa7biCredits
       todayKey(),
       0,
       now,
-      now,
+      now
     );
 
-    return this.ctx.storage.sql
-      .exec(
-        `
-        SELECT
-          id,
-          credits,
-          rewarded_date,
-          rewarded_count,
-          created_at,
-          updated_at
-        FROM account
-        WHERE id = 1
-        LIMIT 1
-        `,
-      )
-      .one();
+    row =
+      this.selectAccount();
+
+    if (!row) {
+      throw new Error(
+        "CREDITS_ACCOUNT_INITIALIZATION_FAILED"
+      );
+    }
+
+    return row;
   }
 
   /* =======================================================
@@ -327,7 +405,8 @@ export class Sa7biCredits
       return account;
     }
 
-    const now = Date.now();
+    const now =
+      Date.now();
 
     this.ctx.storage.sql.exec(
       `
@@ -339,7 +418,7 @@ export class Sa7biCredits
       WHERE id = 1
       `,
       today,
-      now,
+      now
     );
 
     return this.ensureAccount();
@@ -350,15 +429,13 @@ export class Sa7biCredits
      ======================================================= */
 
   cleanupExpiredReservations() {
-    const now = Date.now();
-
     this.ctx.storage.sql.exec(
       `
       DELETE FROM reservations
       WHERE state = 'reserved'
         AND expires_at <= ?
       `,
-      now,
+      Date.now()
     );
   }
 
@@ -367,10 +444,9 @@ export class Sa7biCredits
      ======================================================= */
 
   getReservedTotal() {
-    const row =
+    const rows =
       this.ctx.storage.sql
-        .exec(
-          `
+        .exec(`
           SELECT
             COALESCE(
               SUM(cost),
@@ -378,12 +454,14 @@ export class Sa7biCredits
             ) AS total
           FROM reservations
           WHERE state = 'reserved'
-          `,
-        )
-        .one();
+        `)
+        .toArray();
+
+    const row =
+      rows[0];
 
     return clampCredits(
-      row?.total ?? 0,
+      row?.total ?? 0
     );
   }
 
@@ -402,25 +480,25 @@ export class Sa7biCredits
 
     const credits =
       clampCredits(
-        account.credits,
+        account.credits
       );
 
     const available =
       Math.max(
         0,
-        credits - reserved,
+        credits - reserved
       );
 
     const rewardedAdsToday =
       normalizeRewardedCount(
-        account.rewarded_count,
+        account.rewarded_count
       );
 
     const remainingRewardedAds =
       Math.max(
         0,
         REWARDED_AD_DAILY_LIMIT -
-          rewardedAdsToday,
+          rewardedAdsToday
       );
 
     return {
@@ -445,7 +523,7 @@ export class Sa7biCredits
   }
 
   /* =======================================================
-     RESERVE AI CREDITS
+     RESERVE
      ======================================================= */
 
   reserve({
@@ -456,12 +534,12 @@ export class Sa7biCredits
 
     const normalizedOperation =
       normalizeOperation(
-        operation,
+        operation
       );
 
     const normalizedRequestId =
       normalizeRequestId(
-        requestId,
+        requestId
       );
 
     if (!normalizedRequestId) {
@@ -474,40 +552,21 @@ export class Sa7biCredits
 
     const cost =
       getCreditCost(
-        normalizedOperation,
+        normalizedOperation
       );
 
     if (cost === null) {
       return {
         ok: false,
-
         error:
           "UNKNOWN_CREDIT_OPERATION",
       };
     }
 
-    /* -------------------------------------------------------
-       REQUEST IDEMPOTENCY
-       ------------------------------------------------------- */
-
     const existing =
-      this.ctx.storage.sql
-        .exec(
-          `
-          SELECT
-            request_id,
-            operation,
-            cost,
-            created_at,
-            expires_at,
-            state
-          FROM reservations
-          WHERE request_id = ?
-          LIMIT 1
-          `,
-          normalizedRequestId,
-        )
-        .one();
+      this.selectReservation(
+        normalizedRequestId
+      );
 
     if (existing) {
       if (
@@ -517,14 +576,16 @@ export class Sa7biCredits
         return {
           ok: true,
 
-          alreadyReserved: true,
+          alreadyReserved:
+            true,
 
           operation:
             existing.operation,
 
-          cost: Number(
-            existing.cost,
-          ),
+          cost:
+            Number(
+              existing.cost
+            ),
 
           requestId:
             existing.request_id,
@@ -534,7 +595,7 @@ export class Sa7biCredits
 
           expiresAt:
             Number(
-              existing.expires_at,
+              existing.expires_at
             ),
 
           balance:
@@ -560,8 +621,8 @@ export class Sa7biCredits
       Math.max(
         0,
         clampCredits(
-          account.credits,
-        ) - reserved,
+          account.credits
+        ) - reserved
       );
 
     if (available < cost) {
@@ -571,7 +632,8 @@ export class Sa7biCredits
         error:
           "INSUFFICIENT_CREDITS",
 
-        required: cost,
+        required:
+          cost,
 
         available,
 
@@ -580,19 +642,11 @@ export class Sa7biCredits
       };
     }
 
-    const now = Date.now();
+    const now =
+      Date.now();
 
     const expiresAt =
       now + RESERVATION_TTL_MS;
-
-    /*
-     * The INSERT is synchronous.
-     * No await occurs between the balance check
-     * and the reservation write.
-     *
-     * SQLite-backed Durable Objects keep these
-     * synchronous storage operations atomic.
-     */
 
     this.ctx.storage.sql.exec(
       `
@@ -610,13 +664,14 @@ export class Sa7biCredits
       normalizedOperation,
       cost,
       now,
-      expiresAt,
+      expiresAt
     );
 
     return {
       ok: true,
 
-      alreadyReserved: false,
+      alreadyReserved:
+        false,
 
       operation:
         normalizedOperation,
@@ -637,7 +692,7 @@ export class Sa7biCredits
   }
 
   /* =======================================================
-     COMMIT AI CREDITS
+     COMMIT
      ======================================================= */
 
   commit(requestId) {
@@ -645,35 +700,21 @@ export class Sa7biCredits
 
     const normalizedRequestId =
       normalizeRequestId(
-        requestId,
+        requestId
       );
 
     if (!normalizedRequestId) {
       return {
         ok: false,
-
         error:
           "REQUEST_ID_REQUIRED",
       };
     }
 
     const reservation =
-      this.ctx.storage.sql
-        .exec(
-          `
-          SELECT
-            request_id,
-            operation,
-            cost,
-            state,
-            expires_at
-          FROM reservations
-          WHERE request_id = ?
-          LIMIT 1
-          `,
-          normalizedRequestId,
-        )
-        .one();
+      this.selectReservation(
+        normalizedRequestId
+      );
 
     if (!reservation) {
       return {
@@ -691,11 +732,13 @@ export class Sa7biCredits
       return {
         ok: true,
 
-        alreadyCommitted: true,
+        alreadyCommitted:
+          true,
 
-        cost: Number(
-          reservation.cost,
-        ),
+        cost:
+          Number(
+            reservation.cost
+          ),
 
         balance:
           this.getState(),
@@ -716,7 +759,7 @@ export class Sa7biCredits
 
     if (
       Number(
-        reservation.expires_at,
+        reservation.expires_at
       ) <= Date.now()
     ) {
       this.ctx.storage.sql.exec(
@@ -725,7 +768,7 @@ export class Sa7biCredits
         SET state = 'released'
         WHERE request_id = ?
         `,
-        normalizedRequestId,
+        normalizedRequestId
       );
 
       return {
@@ -738,7 +781,7 @@ export class Sa7biCredits
 
     const cost =
       clampCredits(
-        reservation.cost,
+        reservation.cost
       );
 
     const account =
@@ -746,7 +789,7 @@ export class Sa7biCredits
 
     const currentCredits =
       clampCredits(
-        account.credits,
+        account.credits
       );
 
     if (
@@ -758,7 +801,7 @@ export class Sa7biCredits
         SET state = 'released'
         WHERE request_id = ?
         `,
-        normalizedRequestId,
+        normalizedRequestId
       );
 
       return {
@@ -772,30 +815,22 @@ export class Sa7biCredits
       };
     }
 
-    const now = Date.now();
+    const now =
+      Date.now();
 
-    /*
-     * Explicit synchronous SQLite transaction.
-     *
-     * Both:
-     *   1. subtract credits
-     *   2. mark reservation committed
-     *
-     * must succeed together.
-     */
-
-    this.ctx.storage
-      .transactionSync(() => {
+    this.ctx.storage.transactionSync(
+      () => {
         this.ctx.storage.sql.exec(
           `
           UPDATE account
           SET
-            credits = credits - ?,
+            credits =
+              credits - ?,
             updated_at = ?
           WHERE id = 1
           `,
           cost,
-          now,
+          now
         );
 
         this.ctx.storage.sql.exec(
@@ -804,9 +839,10 @@ export class Sa7biCredits
           SET state = 'committed'
           WHERE request_id = ?
           `,
-          normalizedRequestId,
+          normalizedRequestId
         );
-      });
+      }
+    );
 
     return {
       ok: true,
@@ -821,13 +857,13 @@ export class Sa7biCredits
   }
 
   /* =======================================================
-     RELEASE AI CREDITS
+     RELEASE
      ======================================================= */
 
   release(requestId) {
     const normalizedRequestId =
       normalizeRequestId(
-        requestId,
+        requestId
       );
 
     if (!normalizedRequestId) {
@@ -840,21 +876,9 @@ export class Sa7biCredits
     }
 
     const reservation =
-      this.ctx.storage.sql
-        .exec(
-          `
-          SELECT
-            request_id,
-            operation,
-            cost,
-            state
-          FROM reservations
-          WHERE request_id = ?
-          LIMIT 1
-          `,
-          normalizedRequestId,
-        )
-        .one();
+      this.selectReservation(
+        normalizedRequestId
+      );
 
     if (!reservation) {
       return {
@@ -872,7 +896,8 @@ export class Sa7biCredits
       return {
         ok: true,
 
-        alreadyReleased: true,
+        alreadyReleased:
+          true,
 
         balance:
           this.getState(),
@@ -897,7 +922,7 @@ export class Sa7biCredits
       SET state = 'released'
       WHERE request_id = ?
       `,
-      normalizedRequestId,
+      normalizedRequestId
     );
 
     return {
@@ -905,9 +930,10 @@ export class Sa7biCredits
 
       released: true,
 
-      cost: Number(
-        reservation.cost,
-      ),
+      cost:
+        Number(
+          reservation.cost
+        ),
 
       balance:
         this.getState(),
@@ -915,27 +941,8 @@ export class Sa7biCredits
   }
 
   /* =======================================================
-     VERIFIED ADMOB REWARDED AD
+     VERIFIED ADMOB REWARD
      ======================================================= */
-
-  /*
-   * IMPORTANT:
-   *
-   * This method MUST only be reached after the
-   * AdMob SSV handler verifies the Google signature.
-   *
-   * Flutter cannot call the Worker route that grants
-   * this reward directly.
-   *
-   * The reward amount is controlled by the server:
-   *
-   * REWARDED_AD_CREDITS = 10
-   *
-   * The client cannot choose:
-   * - reward amount
-   * - transaction ID
-   * - daily reward count
-   */
 
   rewardVerifiedAd({
     transactionId,
@@ -943,7 +950,7 @@ export class Sa7biCredits
   }) {
     const normalizedTransactionId =
       normalizeTransactionId(
-        transactionId,
+        transactionId
       );
 
     if (
@@ -957,39 +964,24 @@ export class Sa7biCredits
       };
     }
 
-    /* -------------------------------------------------------
-       IDEMPOTENCY CHECK
-       ------------------------------------------------------- */
-
     const existing =
-      this.ctx.storage.sql
-        .exec(
-          `
-          SELECT
-            transaction_id,
-            reward_amount,
-            created_at,
-            source
-          FROM rewarded_transactions
-          WHERE transaction_id = ?
-          LIMIT 1
-          `,
-          normalizedTransactionId,
-        )
-        .one();
+      this.selectRewardTransaction(
+        normalizedTransactionId
+      );
 
     if (existing) {
       return {
         ok: true,
 
-        alreadyRewarded: true,
+        alreadyRewarded:
+          true,
 
         transactionId:
           existing.transaction_id,
 
         added:
           Number(
-            existing.reward_amount,
+            existing.reward_amount
           ),
 
         balance:
@@ -997,16 +989,12 @@ export class Sa7biCredits
       };
     }
 
-    /* -------------------------------------------------------
-       DAILY LIMIT
-       ------------------------------------------------------- */
-
     const account =
       this.resetRewardedCounterIfNeeded();
 
     const rewardedCount =
       normalizeRewardedCount(
-        account.rewarded_count,
+        account.rewarded_count
       );
 
     if (
@@ -1024,30 +1012,16 @@ export class Sa7biCredits
       };
     }
 
-    /* -------------------------------------------------------
-       APPLY VERIFIED REWARD
-       ------------------------------------------------------- */
-
-    const now = Date.now();
+    const now =
+      Date.now();
 
     const cleanSource =
-      normalizeSource(source);
+      normalizeSource(
+        source
+      );
 
-    /*
-     * Explicit SQLite transaction.
-     *
-     * These two writes must succeed together:
-     *
-     * 1. Store transaction ID.
-     * 2. Add exactly 10 credits and increment
-     *    today's rewarded-ad counter.
-     *
-     * If either operation fails, SQLite rolls back
-     * the whole transaction.
-     */
-
-    this.ctx.storage
-      .transactionSync(() => {
+    this.ctx.storage.transactionSync(
+      () => {
         this.ctx.storage.sql.exec(
           `
           INSERT INTO rewarded_transactions (
@@ -1061,14 +1035,15 @@ export class Sa7biCredits
           normalizedTransactionId,
           REWARDED_AD_CREDITS,
           now,
-          cleanSource,
+          cleanSource
         );
 
         this.ctx.storage.sql.exec(
           `
           UPDATE account
           SET
-            credits = credits + ?,
+            credits =
+              credits + ?,
             rewarded_count =
               rewarded_count + 1,
             rewarded_date = ?,
@@ -1077,16 +1052,18 @@ export class Sa7biCredits
           `,
           REWARDED_AD_CREDITS,
           todayKey(),
-          now,
+          now
         );
-      });
+      }
+    );
 
     return {
       ok: true,
 
       rewarded: true,
 
-      alreadyRewarded: false,
+      alreadyRewarded:
+        false,
 
       transactionId:
         normalizedTransactionId,
@@ -1100,17 +1077,8 @@ export class Sa7biCredits
   }
 
   /* =======================================================
-     LEGACY REWARD METHOD
+     LEGACY REWARD
      ======================================================= */
-
-  /*
-   * Old direct reward path intentionally disabled.
-   *
-   * No Flutter request can simply say:
-   * "give me 10 credits".
-   *
-   * A valid Google SSV callback is required.
-   */
 
   rewardAd() {
     return {
@@ -1122,23 +1090,21 @@ export class Sa7biCredits
   }
 
   /* =======================================================
-     DURABLE OBJECT HTTP API
+     HTTP API
      ======================================================= */
 
   async fetch(request) {
     try {
       const url =
-        new URL(request.url);
+        new URL(
+          request.url
+        );
 
       const action =
         url.searchParams.get(
-          "action",
+          "action"
         ) ||
         "balance";
-
-      /* -----------------------------------------------------
-         GET
-         ----------------------------------------------------- */
 
       if (
         request.method ===
@@ -1150,6 +1116,7 @@ export class Sa7biCredits
         ) {
           return json({
             ok: true,
+
             ...this.getState(),
           });
         }
@@ -1161,13 +1128,9 @@ export class Sa7biCredits
             error:
               "UNKNOWN_ACTION",
           },
-          400,
+          400
         );
       }
-
-      /* -----------------------------------------------------
-         METHOD
-         ----------------------------------------------------- */
 
       if (
         request.method !==
@@ -1180,7 +1143,7 @@ export class Sa7biCredits
             error:
               "METHOD_NOT_ALLOWED",
           },
-          405,
+          405
         );
       }
 
@@ -1193,10 +1156,6 @@ export class Sa7biCredits
         body = {};
       }
 
-      /* -----------------------------------------------------
-         RESERVE
-         ----------------------------------------------------- */
-
       if (
         action ===
         "reserve"
@@ -1208,14 +1167,9 @@ export class Sa7biCredits
 
             requestId:
               body.requestId,
-          }),
-          200,
+          })
         );
       }
-
-      /* -----------------------------------------------------
-         COMMIT
-         ----------------------------------------------------- */
 
       if (
         action ===
@@ -1223,15 +1177,10 @@ export class Sa7biCredits
       ) {
         return json(
           this.commit(
-            body.requestId,
-          ),
-          200,
+            body.requestId
+          )
         );
       }
-
-      /* -----------------------------------------------------
-         RELEASE
-         ----------------------------------------------------- */
 
       if (
         action ===
@@ -1239,15 +1188,10 @@ export class Sa7biCredits
       ) {
         return json(
           this.release(
-            body.requestId,
-          ),
-          200,
+            body.requestId
+          )
         );
       }
-
-      /* -----------------------------------------------------
-         VERIFIED REWARD
-         ----------------------------------------------------- */
 
       if (
         action ===
@@ -1261,14 +1205,9 @@ export class Sa7biCredits
             source:
               body.source ||
               "admob_ssv",
-          }),
-          200,
+          })
         );
       }
-
-      /* -----------------------------------------------------
-         LEGACY REWARD
-         ----------------------------------------------------- */
 
       if (
         action ===
@@ -1281,7 +1220,7 @@ export class Sa7biCredits
             error:
               "REWARD_VERIFICATION_REQUIRED",
           },
-          403,
+          403
         );
       }
 
@@ -1292,7 +1231,7 @@ export class Sa7biCredits
           error:
             "UNKNOWN_ACTION",
         },
-        400,
+        400
       );
     } catch (error) {
       return json(
@@ -1303,7 +1242,7 @@ export class Sa7biCredits
             error?.message ||
             "CREDITS_INTERNAL_ERROR",
         },
-        500,
+        500
       );
     }
   }
@@ -1315,47 +1254,34 @@ export class Sa7biCredits
 
 export async function getCreditsObject(
   env,
-  deviceId,
+  deviceId
 ) {
   if (!env.SA7BI_CREDITS) {
     throw new Error(
-      "SA7BI_CREDITS_BINDING_MISSING",
+      "SA7BI_CREDITS_BINDING_MISSING"
     );
   }
 
   const normalized =
     normalizeDeviceId(
-      deviceId,
+      deviceId
     );
 
   if (!normalized) {
     throw new Error(
-      "DEVICE_ID_REQUIRED",
+      "DEVICE_ID_REQUIRED"
     );
   }
 
-  /*
-   * Never use the raw device ID as the
-   * Durable Object name.
-   *
-   * Instead:
-   *
-   * device ID
-   *     ↓
-   * SHA-256
-   *     ↓
-   * Durable Object name
-   */
-
   const bytes =
     new TextEncoder().encode(
-      normalized,
+      normalized
     );
 
   const digest =
     await crypto.subtle.digest(
       "SHA-256",
-      bytes,
+      bytes
     );
 
   const digestBytes =
@@ -1364,8 +1290,7 @@ export async function getCreditsObject(
   let hex = "";
 
   for (
-    const byte of
-      digestBytes
+    const byte of digestBytes
   ) {
     hex += byte
       .toString(16)
@@ -1374,7 +1299,7 @@ export async function getCreditsObject(
 
   const id =
     env.SA7BI_CREDITS.idFromName(
-      hex,
+      hex
     );
 
   return env.SA7BI_CREDITS.get(id);
@@ -1386,17 +1311,17 @@ export async function getCreditsObject(
 
 export async function getServerCredits(
   env,
-  deviceId,
+  deviceId
 ) {
   const object =
     await getCreditsObject(
       env,
-      deviceId,
+      deviceId
     );
 
   const response =
     await object.fetch(
-      "https://credits.local/?action=balance",
+      "https://credits.local/?action=balance"
     );
 
   return response.json();
@@ -1408,12 +1333,12 @@ export async function reserveCredits(
     deviceId,
     operation,
     requestId,
-  },
+  }
 ) {
   const object =
     await getCreditsObject(
       env,
-      deviceId,
+      deviceId
     );
 
   const response =
@@ -1433,8 +1358,8 @@ export async function reserveCredits(
               operation,
               requestId,
             }),
-        },
-      ),
+        }
+      )
     );
 
   return response.json();
@@ -1445,12 +1370,12 @@ export async function commitCredits(
   {
     deviceId,
     requestId,
-  },
+  }
 ) {
   const object =
     await getCreditsObject(
       env,
-      deviceId,
+      deviceId
     );
 
   const response =
@@ -1469,8 +1394,8 @@ export async function commitCredits(
             JSON.stringify({
               requestId,
             }),
-        },
-      ),
+        }
+      )
     );
 
   return response.json();
@@ -1481,12 +1406,12 @@ export async function releaseCredits(
   {
     deviceId,
     requestId,
-  },
+  }
 ) {
   const object =
     await getCreditsObject(
       env,
-      deviceId,
+      deviceId
     );
 
   const response =
@@ -1505,8 +1430,8 @@ export async function releaseCredits(
             JSON.stringify({
               requestId,
             }),
-        },
-      ),
+        }
+      )
     );
 
   return response.json();
@@ -1522,17 +1447,17 @@ export async function rewardVerifiedAd(
     deviceId,
     transactionId,
     source = "admob_ssv",
-  },
+  }
 ) {
   const object =
     await getCreditsObject(
       env,
-      deviceId,
+      deviceId
     );
 
   const normalizedTransactionId =
     normalizeTransactionId(
-      transactionId,
+      transactionId
     );
 
   if (
@@ -1565,11 +1490,11 @@ export async function rewardVerifiedAd(
 
               source:
                 normalizeSource(
-                  source,
+                  source
                 ),
             }),
-        },
-      ),
+        }
+      )
     );
 
   return response.json();
