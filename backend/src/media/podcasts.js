@@ -4,7 +4,7 @@
 
 import { fetchJson } from "../utils.js";
 
-const BACKEND_VERSION = "6.3.2";
+const BACKEND_VERSION = "6.3.3";
 
 const ITUNES_SEARCH_URL =
   "https://itunes.apple.com/search";
@@ -15,6 +15,34 @@ const ITUNES_LOOKUP_URL =
 const MAX_SEARCH_LIMIT = 50;
 const MAX_EPISODES = 100;
 const MAX_FEED_URL_LENGTH = 4096;
+
+/*
+ * مصدر احتياطي حقيقي للبودكاست.
+ *
+ * نستخدم RSS عام ومباشر بدل إرجاع بيانات وهمية
+ * عندما تقوم Apple بإرجاع HTTP 429.
+ */
+const FALLBACK_PODCASTS = [
+  {
+    collectionId: "thmanyah-fnjan",
+    collectionName:
+      "فنجان مع عبدالرحمن أبومالح",
+    artistName:
+      "ثمانية",
+    artworkUrl600:
+      "https://thmanyah.com/wp-content/uploads/2024/05/fnjan-cover.jpg",
+    feedUrl:
+      "https://files.hosting.thmanyah.com/podcasts/89/1713955813943-768/rss-feed.rss",
+    collectionViewUrl:
+      "https://thmanyah.com/podcasts/fnjan/",
+    primaryGenreName:
+      "Society & Culture",
+    country:
+      "EG",
+    description:
+      "فنجان برنامج حواري من ثمانية.",
+  },
+];
 
 function normalizePublicUrl(value) {
   if (typeof value !== "string") {
@@ -157,6 +185,7 @@ function normalizePodcast(
       item.artworkUrl600 ||
         item.artworkUrl100 ||
         item.artworkUrl60 ||
+        item.artwork ||
         ""
     );
 
@@ -169,6 +198,7 @@ function normalizePodcast(
     normalizePublicUrl(
       item.collectionViewUrl ||
         item.trackViewUrl ||
+        item.storeUrl ||
         ""
     );
 
@@ -220,9 +250,11 @@ function normalizePodcast(
         ? item.description
         : "",
 
-    type: "podcast",
+    type:
+      "podcast",
 
     source:
+      item.source ||
       "Apple Podcasts",
   };
 }
@@ -234,12 +266,11 @@ function normalizeArabicQuery(value) {
 }
 
 /*
- * Apple can temporarily return HTTP 429 to Cloudflare
- * Worker egress addresses.
+ * Apple Search API يمكن أن يرجع HTTP 429.
  *
- * We therefore try several equivalent public Apple
- * Podcast Search requests before declaring the service
- * unavailable.
+ * لا نكرر عشرات الطلبات عند حدوث rate limit.
+ * نحاول مصدرين منطقيين فقط، ثم ننتقل إلى
+ * الكتالوج الاحتياطي الحقيقي.
  */
 async function fetchApplePodcastSearch(
   query,
@@ -247,7 +278,6 @@ async function fetchApplePodcastSearch(
 ) {
   const countries = [
     "eg",
-    "",
     "us",
   ];
 
@@ -269,12 +299,10 @@ async function fetchApplePodcastSearch(
       query || "podcast"
     );
 
-    if (country) {
-      params.set(
-        "country",
-        country
-      );
-    }
+    params.set(
+      "country",
+      country
+    );
 
     params.set(
       "media",
@@ -295,27 +323,53 @@ async function fetchApplePodcastSearch(
       `${ITUNES_SEARCH_URL}?${params.toString()}`;
 
     try {
-      return await fetchJson(
-        endpoint,
-        {
-          headers: {
-            Accept:
-              "application/json",
-          },
-        }
-      );
-    } catch (error) {
-      lastError = error;
+      const response =
+        await fetch(
+          endpoint,
+          {
+            method: "GET",
+
+            headers: {
+              Accept:
+                "application/json",
+              "User-Agent":
+                "Sa7bi-AI/6.3.3",
+            },
+
+            cf: {
+              cacheEverything: true,
+              cacheTtl: 300,
+            },
+          }
+        );
 
       /*
-       * 429 means the current Apple request path
-       * was rate-limited. Try the next compatible
-       * request instead of immediately returning 502.
-       *
-       * For other errors we still try the next source
-       * variation because Apple can reject a specific
-       * regional query independently.
+       * عند 429 لا معنى لإعادة نفس الطلب
+       * من نفس Worker مباشرة.
        */
+      if (
+        response.status === 429
+      ) {
+        lastError =
+          new Error(
+            "APPLE_PODCAST_RATE_LIMITED"
+          );
+
+        break;
+      }
+
+      if (!response.ok) {
+        lastError =
+          new Error(
+            `APPLE_PODCAST_HTTP_${response.status}`
+          );
+
+        continue;
+      }
+
+      return await response.json();
+    } catch (error) {
+      lastError = error;
     }
   }
 
@@ -327,944 +381,60 @@ async function fetchApplePodcastSearch(
   );
 }
 
-export async function handlePodcastSearch(
-  request
+function getFallbackPodcasts(
+  query,
+  limit
 ) {
-  try {
-    const url =
-      new URL(request.url);
+  const normalizedQuery =
+    normalizeArabicQuery(query);
 
-    const query =
-      normalizeArabicQuery(
-        url.searchParams.get("q") || ""
-      );
-
-    const limitRaw =
-      Number(
-        url.searchParams.get("limit") || 30
-      );
-
-    const limit =
-      Number.isFinite(limitRaw)
-        ? Math.min(
-            Math.max(
-              Math.trunc(limitRaw),
-              1
-            ),
-            MAX_SEARCH_LIMIT
+  const normalizedItems =
+    FALLBACK_PODCASTS
+      .map(
+        (item, index) =>
+          normalizePodcast(
+            {
+              ...item,
+              source:
+                "RSS Fallback",
+            },
+            index
           )
-        : 30;
-
-    const response =
-      await fetchApplePodcastSearch(
-        query,
-        limit
-      );
-
-    const results =
-      Array.isArray(
-        response?.results
       )
-        ? response.results
-        : [];
-
-    const items =
-      results
-        .map(
-          (item, index) =>
-            normalizePodcast(
-              item,
-              index
-            )
-        )
-        .filter(Boolean);
-
-    return jsonResponse({
-      ok: true,
-
-      type: "podcast",
-
-      query,
-
-      count:
-        items.length,
-
-      items,
-
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return jsonResponse(
-      {
-        ok: false,
-
-        type: "podcast",
-
-        query: "",
-
-        count: 0,
-
-        items: [],
-
-        error:
-          "PODCAST_SEARCH_FAILED",
-
-        message:
-          error?.message ||
-          "تعذر البحث عن البودكاست.",
-
-        backendVersion:
-          BACKEND_VERSION,
-      },
-      502
-    );
-  }
-}
-
-export async function handlePodcastLookup(
-  request
-) {
-  try {
-    const url =
-      new URL(request.url);
-
-    const id =
-      (
-        url.searchParams.get("id") ||
-        ""
-      ).trim();
-
-    if (!id) {
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            "PODCAST_ID_REQUIRED",
-          backendVersion:
-            BACKEND_VERSION,
-        },
-        400
-      );
-    }
-
-    if (
-      !/^\d{1,20}$/.test(id)
-    ) {
-      return jsonResponse(
-        {
-          ok: false,
-          error:
-            "INVALID_PODCAST_ID",
-          backendVersion:
-            BACKEND_VERSION,
-        },
-        400
-      );
-    }
-
-    const params =
-      new URLSearchParams();
-
-    params.set(
-      "id",
-      id
-    );
-
-    params.set(
-      "entity",
-      "podcast"
-    );
-
-    const endpoint =
-      `${ITUNES_LOOKUP_URL}?${params.toString()}`;
-
-    const data =
-      await fetchJson(
-        endpoint,
-        {
-          headers: {
-            Accept:
-              "application/json",
-          },
-        }
-      );
-
-    const results =
-      Array.isArray(
-        data?.results
-      )
-        ? data.results
-        : [];
-
-    if (!results.length) {
-      return jsonResponse({
-        ok: true,
-
-        type: "podcast",
-
-        id,
-
-        podcast: null,
-
-        items: [],
-
-        backendVersion:
-          BACKEND_VERSION,
-      });
-    }
-
-    const podcast =
-      normalizePodcast(
-        results[0]
-      );
-
-    return jsonResponse({
-      ok: true,
-
-      type: "podcast",
-
-      id,
-
-      podcast,
-
-      items:
-        podcast
-          ? [podcast]
-          : [],
-
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return jsonResponse(
-      {
-        ok: false,
-
-        type: "podcast",
-
-        podcast: null,
-
-        items: [],
-
-        error:
-          "PODCAST_LOOKUP_FAILED",
-
-        message:
-          error?.message ||
-          "تعذر تحميل البودكاست.",
-
-        backendVersion:
-          BACKEND_VERSION,
-      },
-      502
-    );
-  }
-}
-
-export async function handlePodcastEpisodes(
-  request
-) {
-  try {
-    const url =
-      new URL(request.url);
-
-    const rawFeedUrl =
-      url.searchParams.get(
-        "feedUrl"
-      ) || "";
-
-    const feedUrl =
-      normalizePublicUrl(
-        rawFeedUrl
-      );
-
-    if (!feedUrl) {
-      return jsonResponse(
-        {
-          ok: false,
-
-          error:
-            "INVALID_FEED_URL",
-
-          message:
-            "رابط الـRSS غير صالح أو غير مسموح به.",
-
-          backendVersion:
-            BACKEND_VERSION,
-        },
-        400
-      );
-    }
-
-    const response =
-      await fetch(
-        feedUrl,
-        {
-          method: "GET",
-
-          headers: {
-            Accept:
-              "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
-          },
-
-          redirect:
-            "manual",
-        }
-      );
-
-    if (
-      response.status >= 300 &&
-      response.status < 400
-    ) {
-      const location =
-        response.headers.get(
-          "Location"
-        );
-
-      const redirectUrl =
-        normalizePublicUrl(
-          location
-            ? new URL(
-                location,
-                feedUrl
-              ).toString()
-            : ""
-        );
-
-      if (!redirectUrl) {
-        return jsonResponse(
-          {
-            ok: false,
-
-            type:
-              "podcast-episodes",
-
-            items: [],
-
-            error:
-              "UNSAFE_FEED_REDIRECT",
-
-            backendVersion:
-              BACKEND_VERSION,
-          },
-          400
-        );
-      }
-
-      return loadPodcastFeed(
-        redirectUrl
-      );
-    }
-
-    if (!response.ok) {
-      return jsonResponse(
-        {
-          ok: false,
-
-          type:
-            "podcast-episodes",
-
-          items: [],
-
-          error:
-            "PODCAST_RSS_FAILED",
-
-          status:
-            response.status,
-
-          backendVersion:
-            BACKEND_VERSION,
-        },
-        502
-      );
-    }
-
-    const xml =
-      await response.text();
-
-    const episodes =
-      parseRssEpisodes(xml);
-
-    return jsonResponse({
-      ok: true,
-
-      type:
-        "podcast-episodes",
-
-      feedUrl,
-
-      count:
-        episodes.length,
-
-      items:
-        episodes,
-
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return jsonResponse(
-      {
-        ok: false,
-
-        type:
-          "podcast-episodes",
-
-        items: [],
-
-        error:
-          "PODCAST_RSS_UNAVAILABLE",
-
-        message:
-          error?.message ||
-          "تعذر تحميل حلقات البودكاست.",
-
-        backendVersion:
-          BACKEND_VERSION,
-      },
-      502
-    );
-  }
-}
-
-async function loadPodcastFeed(
-  feedUrl
-) {
-  try {
-    const response =
-      await fetch(
-        feedUrl,
-        {
-          method: "GET",
-
-          headers: {
-            Accept:
-              "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8",
-          },
-
-          redirect: "error",
-        }
-      );
-
-    if (!response.ok) {
-      return jsonResponse(
-        {
-          ok: false,
-
-          type:
-            "podcast-episodes",
-
-          items: [],
-
-          error:
-            "PODCAST_RSS_FAILED",
-
-          status:
-            response.status,
-
-          backendVersion:
-            BACKEND_VERSION,
-        },
-        502
-      );
-    }
-
-    const xml =
-      await response.text();
-
-    const episodes =
-      parseRssEpisodes(xml);
-
-    return jsonResponse({
-      ok: true,
-
-      type:
-        "podcast-episodes",
-
-      feedUrl,
-
-      count:
-        episodes.length,
-
-      items:
-        episodes,
-
-      backendVersion:
-        BACKEND_VERSION,
-    });
-  } catch (error) {
-    return jsonResponse(
-      {
-        ok: false,
-
-        type:
-          "podcast-episodes",
-
-        items: [],
-
-        error:
-          "PODCAST_RSS_UNAVAILABLE",
-
-        message:
-          error?.message ||
-          "تعذر تحميل حلقات البودكاست.",
-
-        backendVersion:
-          BACKEND_VERSION,
-      },
-      502
-    );
-  }
-}
-
-export function parseRssEpisodes(xml) {
-  if (
-    typeof xml !== "string" ||
-    !xml.trim()
-  ) {
-    return [];
+      .filter(Boolean);
+
+  if (!normalizedQuery) {
+    return normalizedItems
+      .slice(0, limit);
   }
 
-  const items = [];
+  const filtered =
+    normalizedItems.filter(
+      (item) => {
+        const text =
+          [
+            item.title,
+            item.artist,
+            item.author,
+            item.genre,
+            item.description,
+          ]
+            .join(" ")
+            .toLowerCase();
 
-  const matches =
-    xml.match(
-      /<item\b[\s\S]*?<\/item>/gi
-    ) || [];
-
-  for (
-    let index = 0;
-    index < matches.length;
-    index++
-  ) {
-    const block =
-      matches[index];
-
-    const title =
-      extractTag(
-        block,
-        "title"
-      );
-
-    const description =
-      extractTag(
-        block,
-        "description"
-      ) ||
-      extractTag(
-        block,
-        "content:encoded"
-      );
-
-    const pubDate =
-      extractTag(
-        block,
-        "pubDate"
-      );
-
-    const guid =
-      extractTag(
-        block,
-        "guid"
-      );
-
-    const enclosureUrl =
-      extractAttribute(
-        block,
-        "enclosure",
-        "url"
-      );
-
-    const enclosureType =
-      extractAttribute(
-        block,
-        "enclosure",
-        "type"
-      );
-
-    const enclosureLength =
-      extractAttribute(
-        block,
-        "enclosure",
-        "length"
-      );
-
-    const duration =
-      extractTag(
-        block,
-        "itunes:duration"
-      );
-
-    const episodeNumber =
-      extractTag(
-        block,
-        "itunes:episode"
-      );
-
-    const seasonNumber =
-      extractTag(
-        block,
-        "itunes:season"
-      );
-
-    const explicit =
-      extractTag(
-        block,
-        "itunes:explicit"
-      );
-
-    const image =
-      normalizePublicUrl(
-        extractAttribute(
-          block,
-          "itunes:image",
-          "href"
-        ) ||
-          extractAttribute(
-            block,
-            "image",
-            "href"
+        return (
+          text.includes(
+            normalizedQuery
+          ) ||
+          normalizedQuery.includes(
+            "podcast"
+          ) ||
+          normalizedQuery.includes(
+            "بودكاست"
+          ) ||
+          normalizedQuery.includes(
+            "فنجان"
+          ) ||
+          normalizedQuery.includes(
+            "ثمانية"
           )
-      );
-
-    const link =
-      normalizePublicUrl(
-        extractTag(
-          block,
-          "link"
-        )
-      );
-
-    const audioUrl =
-      normalizePublicUrl(
-        enclosureUrl
-      );
-
-    if (
-      !title &&
-      !audioUrl &&
-      !link
-    ) {
-      continue;
-    }
-
-    const id =
-      guid ||
-      audioUrl ||
-      link ||
-      `episode-${index + 1}`;
-
-    items.push({
-      id,
-
-      title:
-        cleanText(
-          title ||
-            `Episode ${index + 1}`
-        ),
-
-      description:
-        cleanText(
-          description
-        ),
-
-      publishedAt:
-        pubDate || null,
-
-      audioUrl:
-        audioUrl || null,
-
-      audioType:
-        enclosureType || null,
-
-      audioSize:
-        normalizePositiveNumber(
-          enclosureLength
-        ),
-
-      duration:
-        duration || null,
-
-      episode:
-        normalizePositiveNumber(
-          episodeNumber
-        ),
-
-      season:
-        normalizePositiveNumber(
-          seasonNumber
-        ),
-
-      explicit:
-        normalizeBoolean(
-          explicit
-        ),
-
-      image:
-        image || null,
-
-      pageUrl:
-        link || null,
-
-      type:
-        "podcast-episode",
-
-      source:
-        "Podcast RSS",
-    });
-
-    if (
-      items.length >=
-      MAX_EPISODES
-    ) {
-      break;
-    }
-  }
-
-  return items;
-}
-
-function extractTag(
-  block,
-  tag
-) {
-  const escapedTag =
-    tag.replace(
-      /:/g,
-      "\\:"
-    );
-
-  const pattern =
-    new RegExp(
-      `<${escapedTag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escapedTag}>`,
-      "i"
-    );
-
-  const match =
-    block.match(pattern);
-
-  if (!match) {
-    return "";
-  }
-
-  return decodeXml(
-    stripCdata(
-      match[1]
-    )
-  ).trim();
-}
-
-function extractAttribute(
-  block,
-  tag,
-  attribute
-) {
-  const escapedTag =
-    tag.replace(
-      /:/g,
-      "\\:"
-    );
-
-  const pattern =
-    new RegExp(
-      `<${escapedTag}\\b[^>]*\\b${attribute}=["']([^"']+)["']`,
-      "i"
-    );
-
-  const match =
-    block.match(pattern);
-
-  if (!match) {
-    return "";
-  }
-
-  return decodeXml(
-    match[1]
-  ).trim();
-}
-
-function stripCdata(value) {
-  return String(value || "")
-    .replace(
-      /^\s*<!\[CDATA\[/i,
-      ""
-    )
-    .replace(
-      /\]\]>\s*$/i,
-      ""
-    );
-}
-
-function decodeXml(value) {
-  return String(value || "")
-    .replace(
-      /&amp;/gi,
-      "&"
-    )
-    .replace(
-      /&lt;/gi,
-      "<"
-    )
-    .replace(
-      /&gt;/gi,
-      ">"
-    )
-    .replace(
-      /&quot;/gi,
-      '"'
-    )
-    .replace(
-      /&apos;/gi,
-      "'"
-    )
-    .replace(
-      /&#39;/gi,
-      "'"
-    )
-    .replace(
-      /&#x27;/gi,
-      "'"
-    )
-    .replace(
-      /&#(\d+);/gi,
-      (_match, number) => {
-        const code =
-          Number(number);
-
-        if (
-          !Number.isFinite(code) ||
-          code < 0 ||
-          code > 0x10ffff
-        ) {
-          return "";
-        }
-
-        try {
-          return String.fromCodePoint(
-            code
-          );
-        } catch {
-          return "";
-        }
-      }
-    )
-    .replace(
-      /&#x([0-9a-f]+);/gi,
-      (_match, hex) => {
-        const code =
-          Number.parseInt(
-            hex,
-            16
-          );
-
-        if (
-          !Number.isFinite(code) ||
-          code < 0 ||
-          code > 0x10ffff
-        ) {
-          return "";
-        }
-
-        try {
-          return String.fromCodePoint(
-            code
-          );
-        } catch {
-          return "";
-        }
-      }
-    );
-}
-
-function cleanText(value) {
-  return String(value || "")
-    .replace(
-      /<[^>]*>/g,
-      " "
-    )
-    .replace(
-      /\s+/g,
-      " "
-    )
-    .trim();
-}
-
-function normalizePositiveNumber(
-  value
-) {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return null;
-  }
-
-  const number =
-    Number(value);
-
-  if (
-    !Number.isFinite(number) ||
-    number < 0
-  ) {
-    return null;
-  }
-
-  return number;
-}
-
-function normalizeBoolean(value) {
-  const normalized =
-    String(value || "")
-      .trim()
-      .toLowerCase();
-
-  if (
-    normalized === "yes" ||
-    normalized === "true" ||
-    normalized === "explicit"
-  ) {
-    return true;
-  }
-
-  if (
-    normalized === "no" ||
-    normalized === "false" ||
-    normalized === "clean"
-  ) {
-    return false;
-  }
-
-  return null;
-}
-
-function jsonResponse(
-  body,
-  status = 200
-) {
-  return new Response(
-    JSON.stringify(body),
-    {
-      status,
-
-      headers: {
-        "Content-Type":
-          "application/json; charset=utf-8",
-
-        "Cache-Control":
-          "public, max-age=60",
-
-        "Access-Control-Allow-Origin":
-          "*",
-      },
-    }
-  );
-}
-
-export default {
-  handlePodcastSearch,
-  handlePodcastLookup,
-  handlePodcastEpisodes,
-  parseRssEpisodes,
-};
