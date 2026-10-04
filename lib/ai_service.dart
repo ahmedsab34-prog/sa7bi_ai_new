@@ -319,7 +319,7 @@ class AiService {
             },
           )
           .timeout(
-            const Duration(seconds: 25),
+            const Duration(seconds: 45),
           );
 
       if (response.statusCode < 200 ||
@@ -1597,8 +1597,7 @@ class AiService {
           title:
               raw['title']?.toString() ??
                   '',
-          creator:
-              (
+          creator: (
                 raw['creator'] ??
                 raw['source'] ??
                 ''
