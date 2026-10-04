@@ -1025,9 +1025,20 @@ jobs:
             "github-actions-ai-fallback-${GITHUB_RUN_ID}" \
             /tmp/sa7bi-ai-fallback.json
 
-          if ! grep -q '"provider"[[:space:]]*:[[:space:]]*"gemini"' /tmp/sa7bi-ai-primary.json; then
+          # Gemini is the PRIMARY provider. A production test is still
+          # healthy when Gemini is temporarily unavailable and the backend
+          # correctly falls back to Cloudflare Workers AI.
+          if grep -q '"provider"[[:space:]]*:[[:space:]]*"gemini"' /tmp/sa7bi-ai-primary.json; then
             echo ""
-            echo "ERROR: Primary AI request did not report provider=gemini."
+            echo "PRIMARY AI RESULT: Gemini succeeded."
+          elif grep -q '"provider"[[:space:]]*:[[:space:]]*"cloudflare-workers-ai"' /tmp/sa7bi-ai-primary.json \
+            && grep -q '"fallback"[[:space:]]*:[[:space:]]*true' /tmp/sa7bi-ai-primary.json \
+            && grep -q '"fallbackReason"' /tmp/sa7bi-ai-primary.json; then
+            echo ""
+            echo "PRIMARY AI RESULT: Gemini was attempted and Workers AI fallback succeeded."
+          else
+            echo ""
+            echo "ERROR: Primary AI request was neither a Gemini success nor a valid Gemini-to-Workers-AI fallback."
             FAILURES=$((FAILURES + 1))
           fi
 
