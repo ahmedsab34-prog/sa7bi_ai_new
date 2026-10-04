@@ -1,1006 +1,1114 @@
 name: Build Flutter APK + Deploy Cloudflare Worker
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+push:
+branches:
+- main
+workflow_dispatch:
 
 permissions:
-  contents: write
+contents: write
 
 env:
-  APP_VERSION: "1.0.1"
-  FLUTTER_VERSION: "3.38.1"
-  JAVA_VERSION: "17"
-  GRADLE_VERSION: "8.13"
-  WORKER_URL: "https://sa7bi-ai-new.ahmedsab34.workers.dev"
-  APK_PATH: "build/app/outputs/flutter-apk/app-release.apk"
-  RELEASE_TAG: "apk-latest"
-  RELEASE_APK_NAME: "sa7bi-ai.apk"
+APP_VERSION: "1.0.1"
+FLUTTER_VERSION: "3.38.1"
+JAVA_VERSION: "17"
+GRADLE_VERSION: "8.13"
+WORKER_URL: "https://sa7bi-ai-new.ahmedsab34.workers.dev"
+APK_PATH: "build/app/outputs/flutter-apk/app-release.apk"
+RELEASE_TAG: "apk-latest"
+RELEASE_APK_NAME: "sa7bi-ai.apk"
 
 jobs:
-  build-and-deploy:
-    name: Build APK + Verify + Deploy Worker
-    runs-on: ubuntu-latest
+build-and-deploy:
+name: Build APK + Verify + Deploy Worker
+runs-on: ubuntu-latest
 
-    steps:
+steps:
 
-      # ==========================================================
-      # 1. CHECKOUT
-      # ==========================================================
+  # ==========================================================
+  # 1. CHECKOUT
+  # ==========================================================
 
-      - name: Checkout exact repository commit
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+  - name: Checkout exact repository commit
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
 
-      # ==========================================================
-      # 2. JAVA
-      # ==========================================================
+  # ==========================================================
+  # 2. JAVA
+  # ==========================================================
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
+  - name: Setup Java
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: ${{ env.JAVA_VERSION }}
 
-      # ==========================================================
-      # 3. FLUTTER
-      # ==========================================================
+  # ==========================================================
+  # 3. FLUTTER
+  # ==========================================================
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
+  - name: Setup Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      flutter-version: ${{ env.FLUTTER_VERSION }}
+      channel: stable
+      cache: true
 
-      # ==========================================================
-      # 4. GRADLE
-      # ==========================================================
+  # ==========================================================
+  # 4. GRADLE
+  # ==========================================================
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
+  - name: Setup Gradle
+    uses: gradle/actions/setup-gradle@v4
+    with:
+      gradle-version: ${{ env.GRADLE_VERSION }}
 
-      # ==========================================================
-      # 5. BUILD IDENTITY
-      # ==========================================================
+  # ==========================================================
+  # 5. BUILD IDENTITY
+  # ==========================================================
 
-      - name: Set build identity
-        shell: bash
-        run: |
-          set -euo pipefail
+  - name: Set build identity
+    shell: bash
+    run: |
+      set -euo pipefail
 
-          COMMIT_SHORT="${GITHUB_SHA:0:7}"
+      COMMIT_SHORT="${GITHUB_SHA:0:7}"
 
-          echo "APP_VERSION=${APP_VERSION}"
-          echo "BUILD_NUMBER=${GITHUB_RUN_NUMBER}"
-          echo "COMMIT_SHORT=${COMMIT_SHORT}"
-          echo "FULL_COMMIT=${GITHUB_SHA}"
+      echo "APP_VERSION=${APP_VERSION}"
+      echo "BUILD_NUMBER=${GITHUB_RUN_NUMBER}"
+      echo "COMMIT_SHORT=${COMMIT_SHORT}"
+      echo "FULL_COMMIT=${GITHUB_SHA}"
 
-          echo "COMMIT_SHORT=${COMMIT_SHORT}" >> "${GITHUB_ENV}"
+      echo "COMMIT_SHORT=${COMMIT_SHORT}" >> "${GITHUB_ENV}"
 
-      # ==========================================================
-      # 6. TOOLCHAIN INFORMATION
-      # ==========================================================
+  # ==========================================================
+  # 6. TOOLCHAIN INFORMATION
+  # ==========================================================
 
-      - name: Show toolchain versions
-        shell: bash
-        run: |
-          set -euo pipefail
+  - name: Show toolchain versions
+    shell: bash
+    run: |
+      set -euo pipefail
 
-          echo "=========================================="
-          echo "BUILD TOOLCHAIN"
-          echo "=========================================="
+      echo "=========================================="
+      echo "BUILD TOOLCHAIN"
+      echo "=========================================="
 
-          java -version
-          flutter --version
-          dart --version
-          gradle --version
+      java -version
+      flutter --version
+      dart --version
+      gradle --version
 
-          echo "=========================================="
+      echo "=========================================="
 
-      # ==========================================================
-      # 7. CLEAN
-      # ==========================================================
+  # ==========================================================
+  # 7. CLEAN
+  # ==========================================================
 
-      - name: Flutter clean
-        shell: bash
-        run: |
-          set -euo pipefail
+  - name: Flutter clean
+    shell: bash
+    run: |
+      set -euo pipefail
 
-          flutter clean
+      flutter clean
 
-      # ==========================================================
-      # 8. DEPENDENCIES
-      # ==========================================================
+  # ==========================================================
+  # 8. DEPENDENCIES
+  # ==========================================================
 
-      - name: Flutter pub get
-        shell: bash
-        run: |
-          set -euo pipefail
+  - name: Flutter pub get
+    shell: bash
+    run: |
+      set -euo pipefail
 
-          flutter pub get
+      flutter pub get
 
-      # ==========================================================
-      # 9. ANALYZE
-      # ==========================================================
+  # ==========================================================
+  # 9. ANALYZE
+  # ==========================================================
 
-      - name: Flutter analyze
-        shell: bash
-        run: |
-          set -u
-          set -o pipefail
+  - name: Flutter analyze
+    shell: bash
+    run: |
+      set -u
+      set -o pipefail
 
-          echo "=========================================="
-          echo "FLUTTER ANALYZE"
-          echo "=========================================="
+      echo "=========================================="
+      echo "FLUTTER ANALYZE"
+      echo "=========================================="
 
-          set +e
+      set +e
 
-          flutter analyze 2>&1 | tee flutter-analyze-report.txt
+      flutter analyze 2>&1 | tee flutter-analyze-report.txt
 
-          ANALYZE_STATUS=${PIPESTATUS[0]}
+      ANALYZE_STATUS=${PIPESTATUS[0]}
 
-          set -e
+      set -e
 
-          ERROR_COUNT=$(grep -c "error •" flutter-analyze-report.txt || true)
-          WARNING_COUNT=$(grep -c "warning •" flutter-analyze-report.txt || true)
-          INFO_COUNT=$(grep -c "info •" flutter-analyze-report.txt || true)
+      ERROR_COUNT=$(grep -c "error •" flutter-analyze-report.txt || true)
+      WARNING_COUNT=$(grep -c "warning •" flutter-analyze-report.txt || true)
+      INFO_COUNT=$(grep -c "info •" flutter-analyze-report.txt || true)
 
+      echo ""
+      echo "=========================================="
+      echo "ANALYZER SUMMARY"
+      echo "=========================================="
+      echo "Analyzer exit code : ${ANALYZE_STATUS}"
+      echo "Errors             : ${ERROR_COUNT}"
+      echo "Warnings           : ${WARNING_COUNT}"
+      echo "Info               : ${INFO_COUNT}"
+      echo "=========================================="
+
+      if [ "${ERROR_COUNT}" -gt 0 ]; then
+        echo ""
+        echo "ERROR: Flutter analyzer found real errors."
+        echo "The APK build will not continue."
+        exit 1
+      fi
+
+      if [ "${ANALYZE_STATUS}" -ne 0 ]; then
+        if [ "${WARNING_COUNT}" -gt 0 ] || [ "${INFO_COUNT}" -gt 0 ]; then
           echo ""
-          echo "=========================================="
-          echo "ANALYZER SUMMARY"
-          echo "=========================================="
-          echo "Analyzer exit code : ${ANALYZE_STATUS}"
-          echo "Errors             : ${ERROR_COUNT}"
-          echo "Warnings           : ${WARNING_COUNT}"
-          echo "Info               : ${INFO_COUNT}"
-          echo "=========================================="
-
-          if [ "${ERROR_COUNT}" -gt 0 ]; then
-            echo ""
-            echo "ERROR: Flutter analyzer found real errors."
-            echo "The APK build will not continue."
-            exit 1
-          fi
-
-          if [ "${ANALYZE_STATUS}" -ne 0 ]; then
-            if [ "${WARNING_COUNT}" -gt 0 ] || [ "${INFO_COUNT}" -gt 0 ]; then
-              echo ""
-              echo "Analyzer returned a non-zero status because of"
-              echo "warnings/info diagnostics only."
-              echo "These do not block the release build."
-            else
-              echo ""
-              echo "ERROR: Flutter analyze failed unexpectedly."
-              echo "No recognized error/warning/info diagnostics were found."
-              exit 1
-            fi
-          fi
-
+          echo "Analyzer returned a non-zero status because of"
+          echo "warnings/info diagnostics only."
+          echo "These do not block the release build."
+        else
           echo ""
-          echo "Flutter analyze completed without blocking errors."
-
-      # ==========================================================
-      # 10. UPLOAD ANALYZER REPORT
-      # ==========================================================
-
-      - name: Upload analyzer report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-analyze-report-${{ github.run_number }}
-          path: flutter-analyze-report.txt
-          if-no-files-found: warn
-          retention-days: 14
-
-      # ==========================================================
-      # 11. BUILD RELEASE APK
-      # ==========================================================
-
-      - name: Build release APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=========================================="
-          echo "BUILDING RELEASE APK"
-          echo "=========================================="
-
-          flutter build apk \
-            --release \
-            --build-name="${APP_VERSION}" \
-            --build-number="${GITHUB_RUN_NUMBER}" \
-            --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
-            --dart-define="SA7BI_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" \
-            --dart-define="SA7BI_COMMIT_SHA=${COMMIT_SHORT}"
-
-          echo ""
-          echo "APK build completed."
-
-      # ==========================================================
-      # 12. VERIFY APK
-      # ==========================================================
-
-      - name: Verify APK and calculate SHA256
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          APK="${APK_PATH}"
-
-          echo "=========================================="
-          echo "VERIFYING APK"
-          echo "=========================================="
-
-          if [ ! -f "${APK}" ]; then
-            echo "ERROR: APK was not created."
-            echo "Expected path:"
-            echo "${APK}"
-            exit 1
-          fi
-
-          APK_SIZE=$(stat -c%s "${APK}")
-          APK_SHA256=$(sha256sum "${APK}" | awk '{print $1}')
-
-          if [ "${APK_SIZE}" -le 0 ]; then
-            echo "ERROR: APK file is empty."
-            exit 1
-          fi
-
-          echo "APK path:"
-          echo "${APK}"
-
-          echo ""
-          echo "APK size:"
-          echo "${APK_SIZE} bytes"
-
-          echo ""
-          echo "APK SHA256:"
-          echo "${APK_SHA256}"
-
-          echo ""
-          echo "Commit:"
-          echo "${GITHUB_SHA}"
-
-          echo ""
-          echo "Short commit:"
-          echo "${COMMIT_SHORT}"
-
-          echo ""
-          echo "Build number:"
-          echo "${GITHUB_RUN_NUMBER}"
-
-          echo "APK_SHA256=${APK_SHA256}" >> "${GITHUB_ENV}"
-          echo "APK_SIZE=${APK_SIZE}" >> "${GITHUB_ENV}"
-
-          echo "${APK_SHA256}  ${APK}" > apk-sha256.txt
-
-      # ==========================================================
-      # 13. APK BUILD METADATA
-      # ==========================================================
-
-      - name: Create APK build metadata
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cat > apk-build-info.txt <<EOF
-          Sa7bi AI APK Build
-          ==================
-
-          App version: ${APP_VERSION}
-          Build number: ${GITHUB_RUN_NUMBER}
-          Commit: ${GITHUB_SHA}
-          Short commit: ${COMMIT_SHORT}
-
-          Flutter: ${FLUTTER_VERSION}
-          Java: ${JAVA_VERSION}
-          Gradle: ${GRADLE_VERSION}
-
-          APK SHA256: ${APK_SHA256}
-          APK size: ${APK_SIZE}
-
-          Repository:
-          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}
-
-          Workflow run:
-          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-          EOF
-
-      # ==========================================================
-      # 14. UPLOAD APK ARTIFACT
-      # ==========================================================
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sa7bi-ai-apk-${{ github.run_number }}
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            apk-sha256.txt
-            apk-build-info.txt
-          if-no-files-found: error
-          retention-days: 30
-
-      # ==========================================================
-      # 15. PREPARE RELEASE APK
-      # ==========================================================
-
-      - name: Prepare release APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cp "${APK_PATH}" "${RELEASE_APK_NAME}"
-
-          if [ ! -f "${RELEASE_APK_NAME}" ]; then
-            echo "ERROR: Release APK copy was not created."
-            exit 1
-          fi
-
-          sha256sum "${RELEASE_APK_NAME}"
-
-      # ==========================================================
-      # 16. CREATE OR REPLACE LATEST APK RELEASE
-      # ==========================================================
-
-      - name: Create or replace latest APK release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=========================================="
-          echo "UPDATING GITHUB APK RELEASE"
-          echo "=========================================="
-
-          gh release delete "${RELEASE_TAG}" \
-            --yes \
-            --cleanup-tag \
-            2>/dev/null || true
-
-          gh release create "${RELEASE_TAG}" \
-            "${RELEASE_APK_NAME}" \
-            --target "${GITHUB_SHA}" \
-            --title "Sa7bi AI - Latest APK" \
-            --notes "Automated APK release from commit ${GITHUB_SHA}."
-
-          echo ""
-          echo "Release created successfully."
-
-      # ==========================================================
-      # 17. VERIFY GITHUB RELEASE APK
-      # ==========================================================
-
-      - name: Verify released APK SHA256
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          RELEASE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_APK_NAME}"
-
-          echo "=========================================="
-          echo "VERIFYING RELEASED APK"
-          echo "=========================================="
-
-          echo "Release URL:"
-          echo "${RELEASE_URL}"
-
-          rm -f downloaded-sa7bi-ai.apk
-
-          curl \
-            --fail \
-            --silent \
-            --show-error \
-            --location \
-            --connect-timeout 20 \
-            --max-time 180 \
-            --output downloaded-sa7bi-ai.apk \
-            "${RELEASE_URL}"
-
-          if [ ! -s downloaded-sa7bi-ai.apk ]; then
-            echo "ERROR: Downloaded release APK is missing or empty."
-            exit 1
-          fi
-
-          DOWNLOADED_SHA256=$(sha256sum downloaded-sa7bi-ai.apk | awk '{print $1}')
-
-          echo ""
-          echo "Build APK SHA256:"
-          echo "${APK_SHA256}"
-
-          echo ""
-          echo "Downloaded Release APK SHA256:"
-          echo "${DOWNLOADED_SHA256}"
-
-          if [ "${DOWNLOADED_SHA256}" != "${APK_SHA256}" ]; then
-            echo ""
-            echo "ERROR: RELEASE APK SHA256 DOES NOT MATCH BUILD APK."
-            echo "The distributed APK is not the same file produced by this build."
-            exit 1
-          fi
-
-          echo ""
-          echo "=========================================="
-          echo "RELEASE APK SHA256 VERIFIED"
-          echo "=========================================="
-
-      # ==========================================================
-      # 18. SETUP NODE FOR CLOUDFLARE
-      # ==========================================================
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      # ==========================================================
-      # 19. INSTALL BACKEND DEPENDENCIES
-      # ==========================================================
-
-      - name: Install backend dependencies
-        working-directory: backend
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -f package-lock.json ]; then
-            echo "package-lock.json found."
-            echo "Using npm ci."
-            npm ci
-          else
-            echo "package-lock.json not found."
-            echo "Using npm install."
-            npm install
-          fi
-
-      # ==========================================================
-      # 20. CHECK WRANGLER
-      # ==========================================================
-
-      - name: Check Wrangler
-        working-directory: backend
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          npx wrangler --version
-
-      # ==========================================================
-      # 21. DEPLOY CLOUDFLARE WORKER
-      # ==========================================================
-
-      - name: Deploy Cloudflare Worker
-        working-directory: backend
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
-            echo "ERROR: CLOUDFLARE_API_TOKEN GitHub secret is missing."
-            exit 1
-          fi
-
-          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
-            echo "ERROR: CLOUDFLARE_ACCOUNT_ID GitHub secret is missing."
-            exit 1
-          fi
-
-          echo "=========================================="
-          echo "DEPLOYING CLOUDFLARE WORKER"
-          echo "=========================================="
-
-          npx wrangler deploy --config wrangler.toml
-
-      # ==========================================================
-      # 22. TEST WORKER HEALTH
-      # ==========================================================
-
-      - name: Test Worker health
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=========================================="
-          echo "TESTING WORKER /health"
-          echo "=========================================="
-
-          HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --request GET \
-            --connect-timeout 15 \
-            --max-time 60 \
-            --output /tmp/sa7bi-health.json \
-            --write-out "%{http_code}" \
-            "${WORKER_URL}/health")
-
-          echo "HTTP status: ${HTTP_CODE}"
-
-          cat /tmp/sa7bi-health.json || true
-
-          if [ "${HTTP_CODE}" != "200" ]; then
-            echo ""
-            echo "ERROR: Worker /health failed."
-            exit 1
-          fi
-
-          echo ""
-          echo "Worker /health verified."
-
-      # ==========================================================
-      # 23. TEST WORKER ROOT
-      # ==========================================================
-
-      - name: Test Worker root
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=========================================="
-          echo "TESTING WORKER ROOT"
-          echo "=========================================="
-
-          HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --request GET \
-            --connect-timeout 15 \
-            --max-time 60 \
-            --output /tmp/sa7bi-root.json \
-            --write-out "%{http_code}" \
-            "${WORKER_URL}/")
-
-          echo "HTTP status: ${HTTP_CODE}"
-
-          cat /tmp/sa7bi-root.json || true
-
-          if [ "${HTTP_CODE}" != "200" ]; then
-            echo ""
-            echo "ERROR: Worker root endpoint failed."
-            exit 1
-          fi
-
-          echo ""
-          echo "Worker root endpoint verified."
-
-      # ==========================================================
-      # 24. TEST WORKER DIAGNOSTICS
-      # ==========================================================
-
-      - name: Test Worker diagnostics
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "=========================================="
-          echo "TESTING WORKER /v1/diagnostics"
-          echo "=========================================="
-
-          HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --request GET \
-            --connect-timeout 15 \
-            --max-time 60 \
-            --output /tmp/sa7bi-diagnostics.json \
-            --write-out "%{http_code}" \
-            "${WORKER_URL}/v1/diagnostics")
-
-          echo "HTTP status: ${HTTP_CODE}"
-
-          cat /tmp/sa7bi-diagnostics.json || true
-
-          if [ "${HTTP_CODE}" != "200" ]; then
-            echo ""
-            echo "ERROR: Worker diagnostics endpoint failed."
-            exit 1
-          fi
-
-          echo ""
-          echo "Worker diagnostics verified."
-
-      # ==========================================================
-      # 25. TEST WORKER APK DOWNLOAD
-      # ==========================================================
-
-      - name: Test Worker APK download endpoint
-        shell: bash
-        env:
-          EXPECTED_APK_URL: "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/download/apk-latest/sa7bi-ai.apk"
-        run: |
-          set -euo pipefail
-
-          DOWNLOAD_URL="${WORKER_URL}/download"
-
-          echo "=========================================="
-          echo "TESTING WORKER APK DOWNLOAD ENDPOINT"
-          echo "=========================================="
-
-          echo "Worker URL:"
-          echo "${DOWNLOAD_URL}"
-
-          echo ""
-          echo "STEP 1: Testing GET /download without following redirect"
-
-          HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --request GET \
-            --connect-timeout 15 \
-            --max-time 60 \
-            --dump-header /tmp/sa7bi-download-headers.txt \
-            --output /dev/null \
-            --write-out "%{http_code}" \
-            "${DOWNLOAD_URL}")
-
-          echo "Worker HTTP status: ${HTTP_CODE}"
-
-          if [ "${HTTP_CODE}" != "302" ]; then
-            echo ""
-            echo "ERROR: Worker /download did not return HTTP 302."
-            echo ""
-            echo "===== RESPONSE HEADERS ====="
-            cat /tmp/sa7bi-download-headers.txt || true
-            echo "============================"
-            exit 1
-          fi
-
-          echo ""
-          echo "Worker returned the expected HTTP 302 redirect."
-
-          echo ""
-          echo "STEP 2: Verifying redirect destination"
-
-          LOCATION=$(grep -i '^location:' /tmp/sa7bi-download-headers.txt \
-            | head -n 1 \
-            | sed 's/^[Ll]ocation:[[:space:]]*//' \
-            | tr -d '\r')
-
-          echo "Redirect Location:"
-          echo "${LOCATION}"
-
-          if [ -z "${LOCATION}" ]; then
-            echo ""
-            echo "ERROR: Worker returned 302 but no Location header."
-            exit 1
-          fi
-
-          if [ "${LOCATION}" != "${EXPECTED_APK_URL}" ]; then
-            echo ""
-            echo "ERROR: Worker redirect points to an unexpected APK URL."
-            echo ""
-            echo "Expected:"
-            echo "${EXPECTED_APK_URL}"
-            echo ""
-            echo "Actual:"
-            echo "${LOCATION}"
-            exit 1
-          fi
-
-          echo ""
-          echo "Redirect destination is correct."
-
-          echo ""
-          echo "STEP 3: Following Worker redirect to the APK"
-
-          FINAL_HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --location \
-            --request GET \
-            --connect-timeout 15 \
-            --max-time 120 \
-            --output /dev/null \
-            --write-out "%{http_code}" \
-            "${DOWNLOAD_URL}")
-
-          echo "Final HTTP status: ${FINAL_HTTP_CODE}"
-
-          if [ "${FINAL_HTTP_CODE}" != "200" ]; then
-            echo ""
-            echo "ERROR: Worker redirect did not reach the APK successfully."
-            exit 1
-          fi
-
-          echo ""
-          echo "=========================================="
-          echo "WORKER APK DOWNLOAD VERIFIED"
-          echo "=========================================="
-          echo "GET /download       : 302"
-          echo "Redirect target     : verified"
-          echo "Final APK response  : 200"
-          echo "=========================================="
-
-      # ==========================================================
-      # 26. TEST WORKER CONTENT / SERVICE ENDPOINTS
-      # ==========================================================
-
-      - name: Test Worker content and service endpoints
-        shell: bash
-        run: |
-          set -u
-          set -o pipefail
-
-          BASE="${WORKER_URL}"
-          FAILURES=0
-          TEST_DEVICE_ID="github-actions-diagnostic-device"
-
-          test_endpoint() {
-            local NAME="$1"
-            local URL="$2"
-            local EXPECTED="$3"
-            local FILE="$4"
-
-            echo ""
-            echo "============================================================"
-            echo "TEST: ${NAME}"
-            echo "URL : ${URL}"
-            echo "============================================================"
-
-            rm -f "${FILE}"
-
-            local HTTP_CODE
-
-            HTTP_CODE=$(curl \
-              --silent \
-              --show-error \
-              --request GET \
-              --connect-timeout 15 \
-              --max-time 90 \
-              --output "${FILE}" \
-              --write-out "%{http_code}" \
-              "${URL}" 2>"${FILE}.curl-error")
-
-            local CURL_STATUS=$?
-
-            echo "HTTP status: ${HTTP_CODE}"
-
-            echo "Response:"
-            head -c 4000 "${FILE}" 2>/dev/null || true
-            echo ""
-
-            if [ "${CURL_STATUS}" -ne 0 ]; then
-              echo "RESULT: CURL FAILED"
-              cat "${FILE}.curl-error" 2>/dev/null || true
-              FAILURES=$((FAILURES + 1))
-              return
-            fi
-
-            if [ "${HTTP_CODE}" != "200" ]; then
-              echo "RESULT: HTTP FAILURE (expected 200)"
-              FAILURES=$((FAILURES + 1))
-              return
-            fi
-
-            if ! grep -q "${EXPECTED}" "${FILE}"; then
-              echo "RESULT: RESPONSE SHAPE FAILURE"
-              echo "Missing expected key: ${EXPECTED}"
-              FAILURES=$((FAILURES + 1))
-              return
-            fi
-
-            echo "RESULT: PASS"
-          }
-
-          # ------------------------------------------------------
-          # NEWS
-          # ------------------------------------------------------
-
-          test_endpoint \
-            "NEWS" \
-            "${BASE}/v1/news?refresh=${GITHUB_RUN_ID}" \
-            '"items"' \
-            /tmp/sa7bi-news.json
-
-          # ------------------------------------------------------
-          # QURAN
-          # ------------------------------------------------------
-
-          test_endpoint \
-            "QURAN CATALOG" \
-            "${BASE}/v1/audio/quran" \
-            '"reciters"' \
-            /tmp/sa7bi-quran.json
-
-          # ------------------------------------------------------
-          # HADITH
-          # ------------------------------------------------------
-
-          test_endpoint \
-            "HADITH BOOKS" \
-            "${BASE}/v1/hadith/books" \
-            '"items"' \
-            /tmp/sa7bi-hadith-books.json
-
-          test_endpoint \
-            "HADITH SEARCH" \
-            "${BASE}/v1/hadith?limit=3" \
-            '"items"' \
-            /tmp/sa7bi-hadith.json
-
-          # ------------------------------------------------------
-          # TAFSIR
-          # ------------------------------------------------------
-
-          test_endpoint \
-            "TAFSIR BOOKS" \
-            "${BASE}/v1/tafsir/books" \
-            '"items"' \
-            /tmp/sa7bi-tafsir-books.json
-
-          test_endpoint \
-            "TAFSIR SEARCH" \
-            "${BASE}/v1/tafsir?tafsir=1&sura=1" \
-            '"items"' \
-            /tmp/sa7bi-tafsir.json
-
-          # ------------------------------------------------------
-          # RADIO
-          # ------------------------------------------------------
-
-          test_endpoint \
-            "RADIO COUNTRIES" \
-            "${BASE}/v1/radio/countries" \
-            '"countries"' \
-            /tmp/sa7bi-radio-countries.json
-
-          test_endpoint \
-            "RADIO EGYPT" \
-            "${BASE}/v1/radio/stations?country=EG&limit=10" \
-            '"stations"' \
-            /tmp/sa7bi-radio-eg.json
-
-          # ------------------------------------------------------
-          # PODCASTS
-          # ------------------------------------------------------
-
-          test_endpoint \
-            "PODCAST SEARCH" \
-            "${BASE}/v1/podcasts/search?q=podcast&limit=3" \
-            '"items"' \
-            /tmp/sa7bi-podcasts.json
-
-          # ------------------------------------------------------
-          # SHORTS
-          # ------------------------------------------------------
-
-          test_endpoint \
-            "SHORTS" \
-            "${BASE}/v1/shorts" \
-            '"items"' \
-            /tmp/sa7bi-shorts.json
-
-          # ------------------------------------------------------
-          # AUDIO SEARCH
-          # ------------------------------------------------------
-
-          test_endpoint \
-            "AUDIO SEARCH" \
-            "${BASE}/v1/audio/search-v4?q=%D9%82%D8%B1%D8%A2%D9%86&type=quran" \
-            '"items"' \
-            /tmp/sa7bi-audio.json
-
-          # ------------------------------------------------------
-          # CREDITS
-          # ------------------------------------------------------
-
-          echo ""
-          echo "============================================================"
-          echo "TEST: CREDITS BALANCE"
-          echo "============================================================"
-
-          rm -f /tmp/sa7bi-credits.json
-
-          CREDITS_HTTP=$(curl \
-            --silent \
-            --show-error \
-            --request GET \
-            --connect-timeout 15 \
-            --max-time 60 \
-            --header "X-Sa7bi-Device-Id: ${TEST_DEVICE_ID}" \
-            --output /tmp/sa7bi-credits.json \
-            --write-out "%{http_code}" \
-            "${BASE}/v1/credits" \
-            2>/tmp/sa7bi-credits.curl-error)
-
-          CREDITS_STATUS=$?
-
-          echo "HTTP status: ${CREDITS_HTTP}"
-
-          echo "Response:"
-          head -c 4000 /tmp/sa7bi-credits.json 2>/dev/null || true
-          echo ""
-
-          if [ "${CREDITS_STATUS}" -ne 0 ]; then
-            echo "RESULT: CREDITS CURL FAILURE"
-            cat /tmp/sa7bi-credits.curl-error 2>/dev/null || true
-            FAILURES=$((FAILURES + 1))
-
-          elif [ "${CREDITS_HTTP}" != "200" ]; then
-            echo "RESULT: CREDITS HTTP FAILURE"
-            FAILURES=$((FAILURES + 1))
-
-          elif ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/sa7bi-credits.json; then
-            echo "RESULT: CREDITS RESPONSE FAILURE"
-            FAILURES=$((FAILURES + 1))
-
-          else
-            echo "RESULT: PASS"
-          fi
-
-          # ------------------------------------------------------
-          # FINAL CONTENT TEST RESULT
-          # ------------------------------------------------------
-
-          echo ""
-          echo "============================================================"
-          echo "CONTENT / SERVICE TEST SUMMARY"
-          echo "============================================================"
-
-          echo "Failures: ${FAILURES}"
-
-          echo "============================================================"
-
-          if [ "${FAILURES}" -ne 0 ]; then
-            echo ""
-            echo "ERROR: One or more real app service endpoints failed."
-            echo ""
-            echo "The HTTP status and response body printed above identify"
-            echo "the failing endpoint/layer."
-            echo ""
-            echo "The workflow is intentionally stopping here."
-            echo "No fake success will be reported."
-            exit 1
-          fi
-
-          echo ""
-          echo "All tested content/service endpoints returned valid"
-          echo "HTTP 200 responses with the expected response keys."
-          echo ""
-
-      # ==========================================================
-      # 27. FINAL VERIFICATION SUMMARY
-      # ==========================================================
-
-      - name: Final build verification summary
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo ""
-          echo "============================================================"
-          echo "SA7BI AI FINAL BUILD VERIFICATION"
-          echo "============================================================"
-          echo ""
-          echo "Application version : ${APP_VERSION}"
-          echo "Build number        : ${GITHUB_RUN_NUMBER}"
-          echo "Commit              : ${GITHUB_SHA}"
-          echo "Short commit        : ${COMMIT_SHORT}"
-          echo ""
-          echo "APK SHA256          : ${APK_SHA256}"
-          echo "APK size            : ${APK_SIZE} bytes"
-          echo ""
-          echo "GitHub Release      : ${RELEASE_TAG}"
-          echo "Worker              : ${WORKER_URL}"
-          echo ""
-          echo "APK build           : VERIFIED"
-          echo "Release APK         : SHA256 VERIFIED"
-          echo "Worker health       : VERIFIED"
-          echo "Worker root         : VERIFIED"
-          echo "Worker diagnostics  : VERIFIED"
-          echo "Worker /download    : VERIFIED"
-          echo "Content/services    : VERIFIED"
-          echo ""
-          echo "============================================================"
-          echo "SA7BI AI BUILD PIPELINE SUCCESS"
-          echo "============================================================"
+          echo "ERROR: Flutter analyze failed unexpectedly."
+          echo "No recognized error/warning/info diagnostics were found."
+          exit 1
+        fi
+      fi
+
+      echo ""
+      echo "Flutter analyze completed without blocking errors."
+
+  # ==========================================================
+  # 10. UPLOAD ANALYZER REPORT
+  # ==========================================================
+
+  - name: Upload analyzer report
+    if: always()
+    uses: actions/upload-artifact@v4
+    with:
+      name: flutter-analyze-report-${{ github.run_number }}
+      path: flutter-analyze-report.txt
+      if-no-files-found: warn
+      retention-days: 14
+
+  # ==========================================================
+  # 11. BUILD RELEASE APK
+  # ==========================================================
+
+  - name: Build release APK
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      echo "=========================================="
+      echo "BUILDING RELEASE APK"
+      echo "=========================================="
+
+      flutter build apk \
+        --release \
+        --build-name="${APP_VERSION}" \
+        --build-number="${GITHUB_RUN_NUMBER}" \
+        --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
+        --dart-define="SA7BI_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" \
+        --dart-define="SA7BI_COMMIT_SHA=${COMMIT_SHORT}"
+
+      echo ""
+      echo "APK build completed."
+
+  # ==========================================================
+  # 12. VERIFY APK
+  # ==========================================================
+
+  - name: Verify APK and calculate SHA256
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      APK="${APK_PATH}"
+
+      echo "=========================================="
+      echo "VERIFYING APK"
+      echo "=========================================="
+
+      if [ ! -f "${APK}" ]; then
+        echo "ERROR: APK was not created."
+        echo "Expected path:"
+        echo "${APK}"
+        exit 1
+      fi
+
+      APK_SIZE=$(stat -c%s "${APK}")
+      APK_SHA256=$(sha256sum "${APK}" | awk '{print $1}')
+
+      if [ "${APK_SIZE}" -le 0 ]; then
+        echo "ERROR: APK file is empty."
+        exit 1
+      fi
+
+      echo "APK path:"
+      echo "${APK}"
+
+      echo ""
+      echo "APK size:"
+      echo "${APK_SIZE} bytes"
+
+      echo ""
+      echo "APK SHA256:"
+      echo "${APK_SHA256}"
+
+      echo ""
+      echo "Commit:"
+      echo "${GITHUB_SHA}"
+
+      echo ""
+      echo "Short commit:"
+      echo "${COMMIT_SHORT}"
+
+      echo ""
+      echo "Build number:"
+      echo "${GITHUB_RUN_NUMBER}"
+
+      echo "APK_SHA256=${APK_SHA256}" >> "${GITHUB_ENV}"
+      echo "APK_SIZE=${APK_SIZE}" >> "${GITHUB_ENV}"
+
+      echo "${APK_SHA256}  ${APK}" > apk-sha256.txt
+
+  # ==========================================================
+  # 13. APK BUILD METADATA
+  # ==========================================================
+
+  - name: Create APK build metadata
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      cat > apk-build-info.txt <<EOF
+      Sa7bi AI APK Build
+      ==================
+
+      App version: ${APP_VERSION}
+      Build number: ${GITHUB_RUN_NUMBER}
+      Commit: ${GITHUB_SHA}
+      Short commit: ${COMMIT_SHORT}
+
+      Flutter: ${FLUTTER_VERSION}
+      Java: ${JAVA_VERSION}
+      Gradle: ${GRADLE_VERSION}
+
+      APK SHA256: ${APK_SHA256}
+      APK size: ${APK_SIZE}
+
+      Repository:
+      ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}
+
+      Workflow run:
+      ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+      EOF
+
+  # ==========================================================
+  # 14. UPLOAD APK ARTIFACT
+  # ==========================================================
+
+  - name: Upload APK artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: sa7bi-ai-apk-${{ github.run_number }}
+      path: |
+        build/app/outputs/flutter-apk/app-release.apk
+        apk-sha256.txt
+        apk-build-info.txt
+      if-no-files-found: error
+      retention-days: 30
+
+  # ==========================================================
+  # 15. PREPARE RELEASE APK
+  # ==========================================================
+
+  - name: Prepare release APK
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      cp "${APK_PATH}" "${RELEASE_APK_NAME}"
+
+      if [ ! -f "${RELEASE_APK_NAME}" ]; then
+        echo "ERROR: Release APK copy was not created."
+        exit 1
+      fi
+
+      sha256sum "${RELEASE_APK_NAME}"
+
+  # ==========================================================
+  # 16. CREATE OR REPLACE LATEST APK RELEASE
+  # ==========================================================
+
+  - name: Create or replace latest APK release
+    env:
+      GH_TOKEN: ${{ github.token }}
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      echo "=========================================="
+      echo "UPDATING GITHUB APK RELEASE"
+      echo "=========================================="
+
+      gh release delete "${RELEASE_TAG}" \
+        --yes \
+        --cleanup-tag \
+        2>/dev/null || true
+
+      gh release create "${RELEASE_TAG}" \
+        "${RELEASE_APK_NAME}" \
+        --target "${GITHUB_SHA}" \
+        --title "Sa7bi AI - Latest APK" \
+        --notes "Automated APK release from commit ${GITHUB_SHA}."
+
+      echo ""
+      echo "Release created successfully."
+
+  # ==========================================================
+  # 17. VERIFY GITHUB RELEASE APK
+  # ==========================================================
+
+  - name: Verify released APK SHA256
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      RELEASE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_APK_NAME}"
+
+      echo "=========================================="
+      echo "VERIFYING RELEASED APK"
+      echo "=========================================="
+
+      echo "Release URL:"
+      echo "${RELEASE_URL}"
+
+      rm -f downloaded-sa7bi-ai.apk
+
+      curl \
+        --fail \
+        --silent \
+        --show-error \
+        --location \
+        --connect-timeout 20 \
+        --max-time 180 \
+        --output downloaded-sa7bi-ai.apk \
+        "${RELEASE_URL}"
+
+      if [ ! -s downloaded-sa7bi-ai.apk ]; then
+        echo "ERROR: Downloaded release APK is missing or empty."
+        exit 1
+      fi
+
+      DOWNLOADED_SHA256=$(sha256sum downloaded-sa7bi-ai.apk | awk '{print $1}')
+
+      echo ""
+      echo "Build APK SHA256:"
+      echo "${APK_SHA256}"
+
+      echo ""
+      echo "Downloaded Release APK SHA256:"
+      echo "${DOWNLOADED_SHA256}"
+
+      if [ "${DOWNLOADED_SHA256}" != "${APK_SHA256}" ]; then
+        echo ""
+        echo "ERROR: RELEASE APK SHA256 DOES NOT MATCH BUILD APK."
+        echo "The distributed APK is not the same file produced by this build."
+        exit 1
+      fi
+
+      echo ""
+      echo "=========================================="
+      echo "RELEASE APK SHA256 VERIFIED"
+      echo "=========================================="
+
+  # ==========================================================
+  # 18. SETUP NODE FOR CLOUDFLARE
+  # ==========================================================
+
+  - name: Setup Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: "22"
+
+  # ==========================================================
+  # 19. INSTALL BACKEND DEPENDENCIES
+  # ==========================================================
+
+  - name: Install backend dependencies
+    working-directory: backend
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      if [ -f package-lock.json ]; then
+        echo "package-lock.json found."
+        echo "Using npm ci."
+        npm ci
+      else
+        echo "package-lock.json not found."
+        echo "Using npm install."
+        npm install
+      fi
+
+  # ==========================================================
+  # 20. CHECK WRANGLER
+  # ==========================================================
+
+  - name: Check Wrangler
+    working-directory: backend
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      npx wrangler --version
+
+  # ==========================================================
+  # 21. DEPLOY CLOUDFLARE WORKER
+  # ==========================================================
+
+  - name: Deploy Cloudflare Worker
+    working-directory: backend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+        echo "ERROR: CLOUDFLARE_API_TOKEN GitHub secret is missing."
+        exit 1
+      fi
+
+      if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+        echo "ERROR: CLOUDFLARE_ACCOUNT_ID GitHub secret is missing."
+        exit 1
+      fi
+
+      echo "=========================================="
+      echo "DEPLOYING CLOUDFLARE WORKER"
+      echo "=========================================="
+
+      npx wrangler deploy --config wrangler.toml
+
+  # ==========================================================
+  # 22. TEST WORKER HEALTH
+  # ==========================================================
+
+  - name: Test Worker health
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      echo "=========================================="
+      echo "TESTING WORKER /health"
+      echo "=========================================="
+
+      HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --request GET \
+        --connect-timeout 15 \
+        --max-time 60 \
+        --output /tmp/sa7bi-health.json \
+        --write-out "%{http_code}" \
+        "${WORKER_URL}/health")
+
+      echo "HTTP status: ${HTTP_CODE}"
+
+      cat /tmp/sa7bi-health.json || true
+
+      if [ "${HTTP_CODE}" != "200" ]; then
+        echo ""
+        echo "ERROR: Worker /health failed."
+        exit 1
+      fi
+
+      echo ""
+      echo "Worker /health verified."
+
+  # ==========================================================
+  # 23. TEST WORKER ROOT
+  # ==========================================================
+
+  - name: Test Worker root
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      echo "=========================================="
+      echo "TESTING WORKER ROOT"
+      echo "=========================================="
+
+      HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --request GET \
+        --connect-timeout 15 \
+        --max-time 60 \
+        --output /tmp/sa7bi-root.json \
+        --write-out "%{http_code}" \
+        "${WORKER_URL}/")
+
+      echo "HTTP status: ${HTTP_CODE}"
+
+      cat /tmp/sa7bi-root.json || true
+
+      if [ "${HTTP_CODE}" != "200" ]; then
+        echo ""
+        echo "ERROR: Worker root endpoint failed."
+        exit 1
+      fi
+
+      echo ""
+      echo "Worker root endpoint verified."
+
+  # ==========================================================
+  # 24. TEST WORKER DIAGNOSTICS
+  # ==========================================================
+
+  - name: Test Worker diagnostics
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      echo "=========================================="
+      echo "TESTING WORKER /v1/diagnostics"
+      echo "=========================================="
+
+      HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --request GET \
+        --connect-timeout 15 \
+        --max-time 60 \
+        --output /tmp/sa7bi-diagnostics.json \
+        --write-out "%{http_code}" \
+        "${WORKER_URL}/v1/diagnostics")
+
+      echo "HTTP status: ${HTTP_CODE}"
+
+      cat /tmp/sa7bi-diagnostics.json || true
+
+      if [ "${HTTP_CODE}" != "200" ]; then
+        echo ""
+        echo "ERROR: Worker diagnostics endpoint failed."
+        exit 1
+      fi
+
+      echo ""
+      echo "Worker diagnostics verified."
+
+  # ==========================================================
+  # 25. TEST WORKER APK DOWNLOAD
+  # ==========================================================
+
+  - name: Test Worker APK download endpoint
+    shell: bash
+    env:
+      EXPECTED_APK_URL: "https://github.com/ahmedsab34-prog/sa7bi_ai_new/releases/download/apk-latest/sa7bi-ai.apk"
+    run: |
+      set -euo pipefail
+
+      DOWNLOAD_URL="${WORKER_URL}/download"
+
+      echo "=========================================="
+      echo "TESTING WORKER APK DOWNLOAD ENDPOINT"
+      echo "=========================================="
+
+      echo "Worker URL:"
+      echo "${DOWNLOAD_URL}"
+
+      echo ""
+      echo "STEP 1: Testing GET /download without following redirect"
+
+      HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --request GET \
+        --connect-timeout 15 \
+        --max-time 60 \
+        --dump-header /tmp/sa7bi-download-headers.txt \
+        --output /dev/null \
+        --write-out "%{http_code}" \
+        "${DOWNLOAD_URL}")
+
+      echo "Worker HTTP status: ${HTTP_CODE}"
+
+      if [ "${HTTP_CODE}" != "302" ]; then
+        echo ""
+        echo "ERROR: Worker /download did not return HTTP 302."
+        echo ""
+        echo "===== RESPONSE HEADERS ====="
+        cat /tmp/sa7bi-download-headers.txt || true
+        echo "============================"
+        exit 1
+      fi
+
+      echo ""
+      echo "Worker returned the expected HTTP 302 redirect."
+
+      echo ""
+      echo "STEP 2: Verifying redirect destination"
+
+      LOCATION=$(grep -i '^location:' /tmp/sa7bi-download-headers.txt \
+        | head -n 1 \
+        | sed 's/^[Ll]ocation:[[:space:]]*//' \
+        | tr -d '\r')
+
+      echo "Redirect Location:"
+      echo "${LOCATION}"
+
+      if [ -z "${LOCATION}" ]; then
+        echo ""
+        echo "ERROR: Worker returned 302 but no Location header."
+        exit 1
+      fi
+
+      if [ "${LOCATION}" != "${EXPECTED_APK_URL}" ]; then
+        echo ""
+        echo "ERROR: Worker redirect points to an unexpected APK URL."
+        echo ""
+        echo "Expected:"
+        echo "${EXPECTED_APK_URL}"
+        echo ""
+        echo "Actual:"
+        echo "${LOCATION}"
+        exit 1
+      fi
+
+      echo ""
+      echo "Redirect destination is correct."
+
+      echo ""
+      echo "STEP 3: Following Worker redirect to the APK"
+
+      FINAL_HTTP_CODE=$(curl \
+        --silent \
+        --show-error \
+        --location \
+        --request GET \
+        --connect-timeout 15 \
+        --max-time 120 \
+        --output /dev/null \
+        --write-out "%{http_code}" \
+        "${DOWNLOAD_URL}")
+
+      echo "Final HTTP status: ${FINAL_HTTP_CODE}"
+
+      if [ "${FINAL_HTTP_CODE}" != "200" ]; then
+        echo ""
+        echo "ERROR: Worker redirect did not reach the APK successfully."
+        exit 1
+      fi
+
+      echo ""
+      echo "=========================================="
+      echo "WORKER APK DOWNLOAD VERIFIED"
+      echo "=========================================="
+      echo "GET /download       : 302"
+      echo "Redirect target     : verified"
+      echo "Final APK response  : 200"
+      echo "=========================================="
+
+  # ==========================================================
+  # 26. TEST WORKER CONTENT / SERVICE ENDPOINTS
+  # ==========================================================
+
+  - name: Test Worker content and service endpoints
+    shell: bash
+    run: |
+      set -u
+      set -o pipefail
+
+      BASE="${WORKER_URL}"
+      FAILURES=0
+      TEST_DEVICE_ID="github-actions-diagnostic-device"
+
+      test_endpoint() {
+        local NAME="$1"
+        local URL="$2"
+        local EXPECTED="$3"
+        local FILE="$4"
+
+        echo ""
+        echo "============================================================"
+        echo "TEST: ${NAME}"
+        echo "URL : ${URL}"
+        echo "============================================================"
+
+        rm -f "${FILE}"
+
+        local HTTP_CODE
+
+        HTTP_CODE=$(curl \
+          --silent \
+          --show-error \
+          --request GET \
+          --connect-timeout 15 \
+          --max-time 90 \
+          --output "${FILE}" \
+          --write-out "%{http_code}" \
+          "${URL}" 2>"${FILE}.curl-error")
+
+        local CURL_STATUS=$?
+
+        echo "HTTP status: ${HTTP_CODE}"
+
+        echo "Response:"
+        head -c 4000 "${FILE}" 2>/dev/null || true
+        echo ""
+
+        if [ "${CURL_STATUS}" -ne 0 ]; then
+          echo "RESULT: CURL FAILED"
+          cat "${FILE}.curl-error" 2>/dev/null || true
+          FAILURES=$((FAILURES + 1))
+          return
+        fi
+
+        if [ "${HTTP_CODE}" != "200" ]; then
+          echo "RESULT: HTTP FAILURE (expected 200)"
+          FAILURES=$((FAILURES + 1))
+          return
+        fi
+
+        if ! grep -q "${EXPECTED}" "${FILE}"; then
+          echo "RESULT: RESPONSE SHAPE FAILURE"
+          echo "Missing expected key: ${EXPECTED}"
+          FAILURES=$((FAILURES + 1))
+          return
+        fi
+
+        echo "RESULT: PASS"
+      }
+
+      test_endpoint \
+        "NEWS" \
+        "${BASE}/v1/news?refresh=${GITHUB_RUN_ID}" \
+        '"items"' \
+        /tmp/sa7bi-news.json
+
+      test_endpoint \
+        "QURAN CATALOG" \
+        "${BASE}/v1/audio/quran" \
+        '"reciters"' \
+        /tmp/sa7bi-quran.json
+
+      test_endpoint \
+        "HADITH BOOKS" \
+        "${BASE}/v1/hadith/books" \
+        '"items"' \
+        /tmp/sa7bi-hadith-books.json
+
+      test_endpoint \
+        "HADITH SEARCH" \
+        "${BASE}/v1/hadith?limit=3" \
+        '"items"' \
+        /tmp/sa7bi-hadith.json
+
+      test_endpoint \
+        "TAFSIR BOOKS" \
+        "${BASE}/v1/tafsir/books" \
+        '"items"' \
+        /tmp/sa7bi-tafsir-books.json
+
+      test_endpoint \
+        "TAFSIR SEARCH" \
+        "${BASE}/v1/tafsir?tafsir=1&sura=1" \
+        '"items"' \
+        /tmp/sa7bi-tafsir.json
+
+      test_endpoint \
+        "RADIO COUNTRIES" \
+        "${BASE}/v1/radio/countries" \
+        '"countries"' \
+        /tmp/sa7bi-radio-countries.json
+
+      test_endpoint \
+        "RADIO EGYPT" \
+        "${BASE}/v1/radio/stations?country=EG&limit=10" \
+        '"stations"' \
+        /tmp/sa7bi-radio-eg.json
+
+      test_endpoint \
+        "PODCAST SEARCH" \
+        "${BASE}/v1/podcasts/search?q=podcast&limit=3" \
+        '"items"' \
+        /tmp/sa7bi-podcasts.json
+
+      test_endpoint \
+        "SHORTS" \
+        "${BASE}/v1/shorts" \
+        '"items"' \
+        /tmp/sa7bi-shorts.json
+
+      test_endpoint \
+        "AUDIO SEARCH" \
+        "${BASE}/v1/audio/search-v4?q=%D9%82%D8%B1%D8%A2%D9%86&type=quran" \
+        '"items"' \
+        /tmp/sa7bi-audio.json
+
+      echo ""
+      echo "============================================================"
+      echo "TEST: CREDITS BALANCE"
+      echo "============================================================"
+
+      rm -f /tmp/sa7bi-credits.json
+
+      CREDITS_HTTP=$(curl \
+        --silent \
+        --show-error \
+        --request GET \
+        --connect-timeout 15 \
+        --max-time 60 \
+        --header "X-Sa7bi-Device-Id: ${TEST_DEVICE_ID}" \
+        --output /tmp/sa7bi-credits.json \
+        --write-out "%{http_code}" \
+        "${BASE}/v1/credits" \
+        2>/tmp/sa7bi-credits.curl-error)
+
+      CREDITS_STATUS=$?
+
+      echo "HTTP status: ${CREDITS_HTTP}"
+
+      echo "Response:"
+      head -c 4000 /tmp/sa7bi-credits.json 2>/dev/null || true
+      echo ""
+
+      if [ "${CREDITS_STATUS}" -ne 0 ]; then
+        echo "RESULT: CREDITS CURL FAILURE"
+        cat /tmp/sa7bi-credits.curl-error 2>/dev/null || true
+        FAILURES=$((FAILURES + 1))
+      elif [ "${CREDITS_HTTP}" != "200" ]; then
+        echo "RESULT: CREDITS HTTP FAILURE"
+        FAILURES=$((FAILURES + 1))
+      elif ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' /tmp/sa7bi-credits.json; then
+        echo "RESULT: CREDITS RESPONSE FAILURE"
+        FAILURES=$((FAILURES + 1))
+      else
+        echo "RESULT: PASS"
+      fi
+
+      echo ""
+      echo "============================================================"
+      echo "CONTENT / SERVICE TEST SUMMARY"
+      echo "============================================================"
+
+      echo "Failures: ${FAILURES}"
+
+      echo "============================================================"
+
+      if [ "${FAILURES}" -ne 0 ]; then
+        echo ""
+        echo "ERROR: One or more app service endpoints failed."
+        echo ""
+        echo "The HTTP status and response body printed above identify"
+        echo "the failing endpoint/layer."
+        echo ""
+        echo "The workflow is intentionally stopping here."
+        echo "No fake success will be reported."
+        exit 1
+      fi
+
+      echo ""
+      echo "All tested content/service endpoints returned valid"
+      echo "HTTP 200 responses with the expected response keys."
+      echo ""
+
+  # ==========================================================
+  # 27. REAL AI END-TO-END TESTS
+  # ==========================================================
+
+  - name: Test real AI text, forced fallback, and image generation
+    shell: bash
+    run: |
+      set -u
+      set -o pipefail
+
+      BASE="${WORKER_URL}"
+      FAILURES=0
+
+      post_ai() {
+        local NAME="$1"
+        local URL="$2"
+        local BODY="$3"
+        local DEVICE="$4"
+        local FILE="$5"
+
+        echo ""
+        echo "============================================================"
+        echo "AI TEST: ${NAME}"
+        echo "URL: ${URL}"
+        echo "============================================================"
+
+        rm -f "${FILE}"
+
+        local HTTP_CODE
+
+        HTTP_CODE=$(curl \
+          --silent \
+          --show-error \
+          --request POST \
+          --connect-timeout 20 \
+          --max-time 180 \
+          --header "Content-Type: application/json" \
+          --header "Accept: application/json" \
+          --header "Cache-Control: no-cache" \
+          --header "Pragma: no-cache" \
+          --header "X-Sa7bi-Device-Id: ${DEVICE}" \
+          --header "X-Sa7bi-Request-Id: github-actions-${GITHUB_RUN_ID}-${DEVICE}" \
+          --data "${BODY}" \
+          --output "${FILE}" \
+          --write-out "%{http_code}" \
+          "${URL}" \
+          2>"${FILE}.curl-error")
+
+        local CURL_STATUS=$?
+
+        echo "HTTP status: ${HTTP_CODE}"
+
+        echo "Response:"
+        head -c 6000 "${FILE}" 2>/dev/null || true
+        echo ""
+
+        if [ "${CURL_STATUS}" -ne 0 ]; then
+          echo "RESULT: CURL FAILED"
+          cat "${FILE}.curl-error" 2>/dev/null || true
+          FAILURES=$((FAILURES + 1))
+          return
+        fi
+
+        if [ "${HTTP_CODE}" != "200" ]; then
+          echo "RESULT: HTTP FAILURE"
+          FAILURES=$((FAILURES + 1))
+          return
+        fi
+
+        if ! grep -q '"ok"[[:space:]]*:[[:space:]]*true' "${FILE}"; then
+          echo "RESULT: AI RESPONSE IS NOT ok:true"
+          FAILURES=$((FAILURES + 1))
+          return
+        fi
+
+        echo "RESULT: PASS"
+      }
+
+      # ------------------------------------------------------
+      # GEMINI PRIMARY
+      # ------------------------------------------------------
+
+      post_ai \
+        "TEXT / GEMINI PRIMARY" \
+        "${BASE}/v1/chat" \
+        '{"messages":[{"role":"user","content":"رد بكلمة واحدة فقط: مرحبًا"}]}' \
+        "github-actions-ai-primary-${GITHUB_RUN_ID}" \
+        /tmp/sa7bi-ai-primary.json
+
+      # ------------------------------------------------------
+      # WORKERS AI FORCED FALLBACK
+      # ------------------------------------------------------
+
+      post_ai \
+        "TEXT / FORCED WORKERS AI FALLBACK" \
+        "${BASE}/v1/chat?provider=workers" \
+        '{"messages":[{"role":"user","content":"رد بكلمة واحدة فقط: اختبار"}]}' \
+        "github-actions-ai-fallback-${GITHUB_RUN_ID}" \
+        /tmp/sa7bi-ai-fallback.json
+
+      if ! grep -q '"provider"[[:space:]]*:[[:space:]]*"gemini"' /tmp/sa7bi-ai-primary.json; then
+        echo ""
+        echo "ERROR: Primary AI request did not report provider=gemini."
+        FAILURES=$((FAILURES + 1))
+      fi
+
+      if ! grep -q '"provider"[[:space:]]*:[[:space:]]*"cloudflare-workers-ai"' /tmp/sa7bi-ai-fallback.json; then
+        echo ""
+        echo "ERROR: Forced fallback did not report provider=cloudflare-workers-ai."
+        FAILURES=$((FAILURES + 1))
+      fi
+
+      # ------------------------------------------------------
+      # IMAGE GENERATION
+      # ------------------------------------------------------
+
+      post_ai \
+        "IMAGE GENERATION / GEMINI OR FALLBACK" \
+        "${BASE}/v1/image" \
+        '{"prompt":"صورة اختبار بسيطة جدًا: تفاحة حمراء على خلفية بيضاء","aspectRatio":"1:1","imageSize":"1K"}' \
+        "github-actions-ai-image-${GITHUB_RUN_ID}" \
+        /tmp/sa7bi-ai-image.json
+
+      if ! grep -q '"imageDataUrl"[[:space:]]*:' /tmp/sa7bi-ai-image.json; then
+        echo ""
+        echo "ERROR: Image generation returned no imageDataUrl."
+        FAILURES=$((FAILURES + 1))
+      fi
+
+      echo ""
+      echo "============================================================"
+      echo "REAL AI TEST SUMMARY"
+      echo "============================================================"
+
+      echo "Failures: ${FAILURES}"
+
+      echo "============================================================"
+
+      if [ "${FAILURES}" -ne 0 ]; then
+        echo ""
+        echo "ERROR: Real AI end-to-end verification failed."
+        echo "The Flutter APK will not be considered AI-ready."
+        exit 1
+      fi
+
+      echo ""
+      echo "Real AI text, fallback, and image generation are verified."
+
+  # ==========================================================
+  # 28. FINAL BUILD VERIFICATION SUMMARY
+  # ==========================================================
+
+  - name: Final build verification summary
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      echo ""
+      echo "============================================================"
+      echo "SA7BI AI FINAL BUILD VERIFICATION"
+      echo "============================================================"
+      echo ""
+      echo "Application version : ${APP_VERSION}"
+      echo "Build number        : ${GITHUB_RUN_NUMBER}"
+      echo "Commit              : ${GITHUB_SHA}"
+      echo "Short commit        : ${COMMIT_SHORT}"
+      echo ""
+      echo "APK SHA256          : ${APK_SHA256}"
+      echo "APK size            : ${APK_SIZE} bytes"
+      echo ""
+      echo "GitHub Release      : ${RELEASE_TAG}"
+      echo "Worker              : ${WORKER_URL}"
+      echo ""
+      echo "APK build           : VERIFIED"
+      echo "Release APK         : SHA256 VERIFIED"
+      echo "Worker health       : VERIFIED"
+      echo "Worker root         : VERIFIED"
+      echo "Worker diagnostics  : VERIFIED"
+      echo "Worker /download    : VERIFIED"
+      echo "Content/services    : VERIFIED"
+      echo "AI primary          : VERIFIED"
+      echo "AI fallback         : VERIFIED"
+      echo "AI image            : VERIFIED"
+      echo ""
+      echo "============================================================"
+      echo "SA7BI AI BUILD PIPELINE SUCCESS"
+      echo "============================================================"
