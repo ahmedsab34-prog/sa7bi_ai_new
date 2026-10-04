@@ -733,6 +733,7 @@ jobs:
 
           BASE="${WORKER_URL}"
           FAILURES=0
+          TEST_DEVICE_ID="github-actions-diagnostic-device"
 
           test_endpoint() {
             local NAME="$1"
