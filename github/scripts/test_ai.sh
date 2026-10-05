@@ -63,6 +63,10 @@ post_ai() {
   echo "OK: ${NAME}"
 }
 
+# ---------------------------------------------------------------------------
+# PRIMARY TEXT
+# ---------------------------------------------------------------------------
+
 PRIMARY_URL="${BASE}/v1/chat"
 PRIMARY_BODY='{"messages":[{"role":"user","content":"رد بكلمة واحدة فقط: مرحبًا"}]}'
 PRIMARY_DEVICE="github-actions-ai-primary-${GITHUB_RUN_ID}"
@@ -79,23 +83,31 @@ echo ""
 echo "Checking primary provider..."
 
 if [ -s "${PRIMARY_FILE}" ]; then
+
   if grep -q '"provider"[[:space:]]*:[[:space:]]*"gemini"' "${PRIMARY_FILE}"; then
     echo "Primary provider: Gemini"
+
   elif \
     grep -q '"provider"[[:space:]]*:[[:space:]]*"cloudflare-workers-ai"' "${PRIMARY_FILE}" \
     && grep -q '"fallback"[[:space:]]*:[[:space:]]*true' "${PRIMARY_FILE}" \
-    && grep -q '"fallbackReason"[[:space:]]*":' "${PRIMARY_FILE}"
+    && grep -q '"fallbackReason"[[:space:]]*:' "${PRIMARY_FILE}"
   then
-    echo "Primary request used Cloudflare Workers AI fallback."
+    echo "Primary Gemini unavailable; Cloudflare Workers AI fallback verified."
+
   else
     echo "ERROR: Primary AI response has an invalid provider/fallback state."
     cat "${PRIMARY_FILE}"
     FAILURES=$((FAILURES + 1))
   fi
+
 else
   echo "ERROR: Primary AI response file is empty."
   FAILURES=$((FAILURES + 1))
 fi
+
+# ---------------------------------------------------------------------------
+# FORCED WORKERS AI FALLBACK
+# ---------------------------------------------------------------------------
 
 FALLBACK_URL="${BASE}/v1/chat?provider=workers"
 FALLBACK_BODY='{"messages":[{"role":"user","content":"رد بكلمة واحدة فقط: اختبار"}]}'
@@ -113,17 +125,26 @@ echo ""
 echo "Checking forced fallback provider..."
 
 if [ -s "${FALLBACK_FILE}" ]; then
-  if grep -q '"provider"[[:space:]]*:[[:space:]]*"cloudflare-workers-ai"' "${FALLBACK_FILE}"; then
+
+  if \
+    grep -q '"provider"[[:space:]]*:[[:space:]]*"cloudflare-workers-ai"' "${FALLBACK_FILE}" \
+    && grep -q '"fallback"[[:space:]]*:[[:space:]]*true' "${FALLBACK_FILE}"
+  then
     echo "Forced fallback provider: Cloudflare Workers AI"
   else
-    echo "ERROR: Forced fallback did not report Cloudflare Workers AI."
+    echo "ERROR: Forced fallback did not report Cloudflare Workers AI correctly."
     cat "${FALLBACK_FILE}"
     FAILURES=$((FAILURES + 1))
   fi
+
 else
   echo "ERROR: Forced fallback response file is empty."
   FAILURES=$((FAILURES + 1))
 fi
+
+# ---------------------------------------------------------------------------
+# IMAGE GENERATION
+# ---------------------------------------------------------------------------
 
 IMAGE_URL="${BASE}/v1/image"
 IMAGE_BODY='{"prompt":"صورة اختبار بسيطة جدًا: تفاحة حمراء على خلفية بيضاء","aspectRatio":"1:1","imageSize":"1K"}'
@@ -141,13 +162,18 @@ echo ""
 echo "Checking generated image..."
 
 if [ -s "${IMAGE_FILE}" ]; then
-  if grep -q '"imageDataUrl"[[:space:]]*":' "${IMAGE_FILE}"; then
-    echo "Image generation returned imageDataUrl."
+
+  if \
+    grep -q '"imageDataUrl"[[:space:]]*:' "${IMAGE_FILE}" \
+    && grep -q '"imageDataUrl"[[:space:]]*:[[:space:]]*"data:image/' "${IMAGE_FILE}"
+  then
+    echo "Image generation returned a valid imageDataUrl."
   else
-    echo "ERROR: Image generation response does not contain imageDataUrl."
+    echo "ERROR: Image generation response does not contain a valid imageDataUrl."
     cat "${IMAGE_FILE}"
     FAILURES=$((FAILURES + 1))
   fi
+
 else
   echo "ERROR: Image generation response file is empty."
   FAILURES=$((FAILURES + 1))
