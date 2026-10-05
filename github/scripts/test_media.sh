@@ -191,7 +191,7 @@ probe_url \
 # Radio
 # ------------------------------------------------------------
 
-RADIO_URL=$(python3 - <<'PY'
+RADIO_CANDIDATES=$(python3 - <<'PY'
 import json
 import re
 import sys
@@ -211,8 +211,8 @@ if not isinstance(stations, list):
     print("ERROR:stations is not a list")
     sys.exit(1)
 
-https_url = None
-http_url = None
+https_urls = []
+http_urls = []
 
 for station in stations:
     if not isinstance(station, dict):
@@ -232,27 +232,30 @@ for station in stations:
     if not re.match(r"^https?://", candidate, re.I):
         continue
 
-    if candidate.lower().startswith("https://") and https_url is None:
-        https_url = candidate
+    if candidate.lower().startswith("https://"):
+        if candidate not in https_urls:
+            https_urls.append(candidate)
 
-    if candidate.lower().startswith("http://") and http_url is None:
-        http_url = candidate
+    elif candidate.lower().startswith("http://"):
+        if candidate not in http_urls:
+            http_urls.append(candidate)
 
-# Prefer HTTPS because that is the safest Android runtime candidate.
-if https_url:
-    print(https_url)
-elif http_url:
-    print(http_url)
-else:
+# Test every HTTPS station before trying HTTP.
+# A single dead/slow stream must not fail the entire CI job
+# when another station works.
+for url in https_urls + http_urls:
+    print(url)
+
+if not (https_urls or http_urls):
     print("ERROR:no radio stream")
     sys.exit(1)
 PY
 )
 
-if [[ "${RADIO_URL}" == ERROR:* ]]; then
+if [[ "${RADIO_CANDIDATES}" == ERROR:* ]]; then
   echo ""
-  echo "ERROR: Could not find a usable radio stream."
-  echo "${RADIO_URL}"
+  echo "ERROR: Could not find any usable radio stream."
+  echo "${RADIO_CANDIDATES}"
   exit 1
 fi
 
@@ -260,19 +263,46 @@ echo ""
 echo "============================================================"
 echo "RADIO MEDIA"
 echo "============================================================"
-echo "Selected stream:"
-echo "${RADIO_URL}"
+echo "Testing radio streams until one responds successfully."
 
-if [[ "${RADIO_URL}" == http://* ]]; then
+RADIO_URL=""
+RADIO_ATTEMPTS=0
+
+while IFS= read -r CANDIDATE; do
+  [[ -z "${CANDIDATE}" ]] && continue
+
+  RADIO_ATTEMPTS=$((RADIO_ATTEMPTS + 1))
+
   echo ""
-  echo "WARNING: Selected radio stream uses HTTP."
-  echo "Android cleartext policy may block it in the APK."
+  echo "Radio candidate #${RADIO_ATTEMPTS}:"
+  echo "${CANDIDATE}"
+
+  if [[ "${CANDIDATE}" == http://* ]]; then
+    echo "WARNING: Candidate uses HTTP; Android cleartext policy may block it."
+  fi
+
+  if probe_url \
+    "Egypt radio candidate #${RADIO_ATTEMPTS}" \
+    "${CANDIDATE}" \
+    20
+  then
+    RADIO_URL="${CANDIDATE}"
+    break
+  fi
+
+  echo "Candidate did not respond successfully; trying the next station."
+done <<< "${RADIO_CANDIDATES}"
+
+if [[ -z "${RADIO_URL}" ]]; then
+  echo ""
+  echo "RESULT: FAIL - no Egypt radio stream responded successfully."
+  echo "Tested ${RADIO_ATTEMPTS} candidate stream(s)."
+  exit 1
 fi
 
-probe_url \
-  "First reachable Egypt radio stream" \
-  "${RADIO_URL}" \
-  45
+echo ""
+echo "Selected reachable radio stream:"
+echo "${RADIO_URL}"
 
 # ------------------------------------------------------------
 # Podcast
