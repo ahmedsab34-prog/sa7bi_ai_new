@@ -20,10 +20,6 @@
 //
 // No private API keys are required.
 
-/* =========================================================
-   IMPORTS
-   ========================================================= */
-
 import {
   json,
   normalizeArabic,
@@ -47,10 +43,16 @@ const ADHKAR_URL =
 const ITUNES_SEARCH_URL =
   "https://itunes.apple.com/search";
 
+const DEEZER_SEARCH_URL =
+  "https://api.deezer.com/search";
+
 const MAX_ADHKAR_RESULTS =
   80;
 
 const MAX_APPLE_RESULTS =
+  30;
+
+const MAX_DEEZER_RESULTS =
   30;
 
 /* =========================================================
@@ -114,9 +116,8 @@ export async function handleAudioSearch(
         );
 
       case "music":
-        return await handleAppleSearch(
-          query,
-          "music"
+        return await handleMusicSearch(
+          query
         );
 
       case "podcast":
@@ -212,6 +213,324 @@ export async function handleAudioSearch(
       502
     );
   }
+}
+
+/* =========================================================
+   MUSIC SEARCH WITH FALLBACK
+   ========================================================= */
+
+/**
+ * Music search strategy:
+ *
+ * 1. Try Apple Search first.
+ * 2. If Apple fails or returns no usable results,
+ *    try Deezer public Search API.
+ *
+ * This prevents a temporary Apple 429/provider failure
+ * from making music search appear completely broken.
+ *
+ * Deezer is used only as a metadata/preview fallback.
+ * It does not proxy or host full copyrighted tracks.
+ */
+export async function handleMusicSearch(
+  query = ""
+) {
+  let appleResult;
+
+  try {
+    appleResult =
+      await handleAppleSearchData(
+        query,
+        "music"
+      );
+
+    if (
+      appleResult.ok &&
+      Array.isArray(
+        appleResult.items
+      ) &&
+      appleResult.items.length >
+        0
+    ) {
+      return json(
+        appleResult
+      );
+    }
+  } catch {
+    /*
+     * Apple failed.
+     * Continue to Deezer fallback.
+     */
+  }
+
+  try {
+    const deezerResult =
+      await handleDeezerMusicSearch(
+        query
+      );
+
+    if (
+      deezerResult.ok &&
+      Array.isArray(
+        deezerResult.items
+      ) &&
+      deezerResult.items.length >
+        0
+    ) {
+      return json(
+        deezerResult
+      );
+    }
+
+    /*
+     * If both providers returned no results,
+     * return a normal empty result instead of
+     * exposing an internal provider failure.
+     */
+    return json({
+      ok: true,
+
+      type:
+        "music",
+
+      query,
+
+      count:
+        0,
+
+      items: [],
+
+      backendVersion:
+        BACKEND_VERSION,
+
+      provider:
+        "none",
+    });
+  } catch (error) {
+    return json(
+      {
+        ok: false,
+
+        type:
+          "music",
+
+        query,
+
+        count:
+          0,
+
+        items: [],
+
+        error:
+          "MUSIC_PROVIDERS_UNAVAILABLE",
+
+        message:
+          error?.message ||
+          "تعذر تحميل نتائج الموسيقى حاليًا.",
+
+        backendVersion:
+          BACKEND_VERSION,
+      },
+      502
+    );
+  }
+}
+
+/* =========================================================
+   DEEZER MUSIC FALLBACK
+   ========================================================= */
+
+/**
+ * Search Deezer's public catalog.
+ *
+ * The public search endpoint does not require an API key
+ * for catalog searches.
+ *
+ * Returned preview URLs are short previews supplied by
+ * Deezer. We do not proxy full tracks through the Worker.
+ */
+async function handleDeezerMusicSearch(
+  query = ""
+) {
+  const params =
+    new URLSearchParams();
+
+  params.set(
+    "q",
+    query ||
+      "music"
+  );
+
+  params.set(
+    "limit",
+    String(
+      MAX_DEEZER_RESULTS
+    )
+  );
+
+  const endpoint =
+    `${DEEZER_SEARCH_URL}?${params.toString()}`;
+
+  const data =
+    await fetchJson(
+      endpoint
+    );
+
+  const rawResults =
+    Array.isArray(
+      data?.data
+    )
+      ? data.data
+      : [];
+
+  const items =
+    rawResults
+      .map(
+        (
+          item,
+          index
+        ) =>
+          normalizeDeezerResult(
+            item,
+            index
+          )
+      )
+      .filter(
+        Boolean
+      );
+
+  return {
+    ok: true,
+
+    type:
+      "music",
+
+    query,
+
+    count:
+      items.length,
+
+    items,
+
+    backendVersion:
+      BACKEND_VERSION,
+
+    provider:
+      "Deezer",
+  };
+}
+
+/**
+ * Normalize one Deezer track.
+ */
+function normalizeDeezerResult(
+  item,
+  index
+) {
+  if (
+    !item ||
+    typeof item !==
+      "object"
+  ) {
+    return null;
+  }
+
+  const artwork =
+    normalizeHttpUrl(
+      item.album?.cover_xl ||
+        item.album?.cover_big ||
+        item.album?.cover_medium ||
+        item.artist?.picture_xl ||
+        item.artist?.picture_big ||
+        null
+    );
+
+  const previewUrl =
+    normalizeHttpUrl(
+      item.preview
+    );
+
+  const storeUrl =
+    normalizeHttpUrl(
+      item.link
+    );
+
+  const artistName =
+    typeof item.artist?.name ===
+      "string"
+      ? item.artist.name
+      : "";
+
+  const albumTitle =
+    typeof item.album?.title ===
+      "string"
+      ? item.album.title
+      : "";
+
+  const title =
+    typeof item.title ===
+      "string"
+      ? item.title
+      : (
+          typeof item.title_short ===
+            "string"
+            ? item.title_short
+            : "Music"
+        );
+
+  /*
+   * Do not expose an item that has neither a usable
+   * title nor a usable media/store URL.
+   */
+  if (
+    !title.trim() &&
+    !previewUrl &&
+    !storeUrl
+  ) {
+    return null;
+  }
+
+  return {
+    id:
+      item.id ??
+      `deezer-${index + 1}`,
+
+    title:
+      title.trim(),
+
+    artist:
+      artistName,
+
+    collection:
+      albumTitle,
+
+    artwork:
+      artwork || null,
+
+    previewUrl:
+      previewUrl || null,
+
+    storeUrl:
+      storeUrl || null,
+
+    feedUrl:
+      null,
+
+    releaseDate:
+      null,
+
+    genre:
+      "",
+
+    country:
+      "EG",
+
+    type:
+      "music",
+
+    source:
+      "Deezer",
+  };
 }
 
 /* =========================================================
@@ -457,7 +776,7 @@ export async function handleAdhkarSearch(
    ========================================================= */
 
 /**
- * Search Apple public metadata.
+ * Public Apple metadata search.
  *
  * This endpoint returns metadata and public preview/store
  * URLs where supplied by Apple.
@@ -470,6 +789,30 @@ export async function handleAdhkarSearch(
  * - podcast
  */
 export async function handleAppleSearch(
+  query = "",
+  media = "music"
+) {
+  const result =
+    await handleAppleSearchData(
+      query,
+      media
+    );
+
+  return json(
+    result,
+    result.ok
+      ? 200
+      : 502
+  );
+}
+
+/**
+ * Internal Apple search implementation.
+ *
+ * Kept separate so the music fallback can inspect
+ * the result without creating an intermediate Response.
+ */
+async function handleAppleSearchData(
   query = "",
   media = "music"
 ) {
@@ -557,7 +900,7 @@ export async function handleAppleSearch(
           Boolean
         );
 
-    return json({
+    return {
       ok: true,
 
       type:
@@ -572,36 +915,39 @@ export async function handleAppleSearch(
 
       backendVersion:
         BACKEND_VERSION,
-    });
+
+      provider:
+        "Apple Search",
+    };
   } catch (error) {
-    return json(
-      {
-        ok: false,
+    return {
+      ok: false,
 
-        type:
-          media === "podcast"
-            ? "podcast"
-            : "music",
+      type:
+        media === "podcast"
+          ? "podcast"
+          : "music",
 
-        query,
+      query,
 
-        count:
-          0,
+      count:
+        0,
 
-        items: [],
+      items: [],
 
-        error:
-          "APPLE_AUDIO_PROVIDER_UNAVAILABLE",
+      error:
+        "APPLE_AUDIO_PROVIDER_UNAVAILABLE",
 
-        message:
-          error?.message ||
-          "تعذر تحميل نتائج الصوت.",
+      message:
+        error?.message ||
+        "تعذر تحميل نتائج الصوت.",
 
-        backendVersion:
-          BACKEND_VERSION,
-      },
-      502
-    );
+      backendVersion:
+        BACKEND_VERSION,
+
+      provider:
+        "Apple Search",
+    };
   }
 }
 
