@@ -35,11 +35,18 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 const MAX_IMAGE_DATA_URL_LENGTH = 20 * 1024 * 1024;
 const MAX_IMAGE_PROMPT_LENGTH = 2048;
 
+const IMAGE_GENERATION_ATTEMPTS = 2;
+const IMAGE_RETRY_DELAY_MS = 1200;
+
 /* -------------------------------------------------------------------------- */
 /* Errors                                                                     */
 /* -------------------------------------------------------------------------- */
 
-function createError(code, message, details = null) {
+function createError(
+  code,
+  message,
+  details = null
+) {
   const error = new Error(message);
   error.code = code;
 
@@ -99,7 +106,10 @@ function getImageModel(env) {
 /* -------------------------------------------------------------------------- */
 
 function normalizeRole(role) {
-  if (role === "assistant" || role === "model") {
+  if (
+    role === "assistant" ||
+    role === "model"
+  ) {
     return "assistant";
   }
 
@@ -137,7 +147,10 @@ function normalizeContent(content) {
           return part.text;
         }
 
-        if (typeof part.content === "string") {
+        if (
+          typeof part.content ===
+          "string"
+        ) {
           return part.content;
         }
 
@@ -149,11 +162,17 @@ function normalizeContent(content) {
   }
 
   if (typeof content === "object") {
-    if (typeof content.text === "string") {
+    if (
+      typeof content.text ===
+      "string"
+    ) {
       return content.text.trim();
     }
 
-    if (typeof content.content === "string") {
+    if (
+      typeof content.content ===
+      "string"
+    ) {
       return content.content.trim();
     }
   }
@@ -175,16 +194,19 @@ function normalizeMessages(messages) {
         return null;
       }
 
-      const content = normalizeContent(
-        message.content
-      );
+      const content =
+        normalizeContent(
+          message.content
+        );
 
       if (!content) {
         return null;
       }
 
       return {
-        role: normalizeRole(message.role),
+        role: normalizeRole(
+          message.role
+        ),
         content,
       };
     })
@@ -195,7 +217,8 @@ function normalizePrompt(
   prompt,
   messages = []
 ) {
-  const directPrompt = normalizeContent(prompt);
+  const directPrompt =
+    normalizeContent(prompt);
 
   if (directPrompt) {
     return directPrompt;
@@ -210,11 +233,15 @@ function normalizePrompt(
 
   return normalized
     .map((message) => {
-      if (message.role === "system") {
+      if (
+        message.role === "system"
+      ) {
         return `System: ${message.content}`;
       }
 
-      if (message.role === "assistant") {
+      if (
+        message.role === "assistant"
+      ) {
         return `Assistant: ${message.content}`;
       }
 
@@ -249,14 +276,6 @@ function normalizeImageDataUrl(value) {
     );
   }
 
-  /*
-   * The Flutter app sends images as base64 data URLs.
-   *
-   * Example:
-   * data:image/png;base64,...
-   *
-   * We intentionally do not accept arbitrary remote URLs here.
-   */
   if (
     !/^data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/.test(
       image
@@ -278,9 +297,14 @@ function normalizeImageDataUrls(
     return [];
   }
 
-  if (typeof imageDataUrls === "string") {
+  if (
+    typeof imageDataUrls ===
+    "string"
+  ) {
     return [
-      normalizeImageDataUrl(imageDataUrls),
+      normalizeImageDataUrl(
+        imageDataUrls
+      ),
     ].filter(Boolean);
   }
 
@@ -294,10 +318,12 @@ function normalizeImageDataUrls(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Workers AI response normalization                                           */
+/* Workers AI response normalization                                          */
 /* -------------------------------------------------------------------------- */
 
-function extractWorkersText(response) {
+function extractWorkersText(
+  response
+) {
   if (
     response === null ||
     response === undefined
@@ -310,38 +336,44 @@ function extractWorkersText(response) {
   }
 
   if (
-    typeof response.response === "string"
+    typeof response.response ===
+    "string"
   ) {
     return response.response.trim();
   }
 
   if (
-    typeof response.result === "string"
+    typeof response.result ===
+    "string"
   ) {
     return response.result.trim();
   }
 
   if (
-    typeof response.text === "string"
+    typeof response.text ===
+    "string"
   ) {
     return response.text.trim();
   }
 
   if (
-    typeof response.description === "string"
+    typeof response.description ===
+    "string"
   ) {
     return response.description.trim();
   }
 
   if (
     response.result &&
-    typeof response.result === "object"
+    typeof response.result ===
+      "object"
   ) {
     if (
-      typeof response.result.response ===
-      "string"
+      typeof response.result
+        .response === "string"
     ) {
-      return response.result.response.trim();
+      return response.result
+        .response.trim();
     }
 
     if (
@@ -352,26 +384,34 @@ function extractWorkersText(response) {
     }
 
     if (
-      typeof response.result.description ===
-      "string"
+      typeof response.result
+        .description === "string"
     ) {
-      return response.result.description.trim();
+      return response.result
+        .description.trim();
     }
   }
 
   return "";
 }
 
-function extractWorkersImage(response) {
+function extractWorkersImage(
+  response
+) {
   if (
-    !response ||
-    typeof response !== "object"
+    response === null ||
+    response === undefined
   ) {
     return null;
   }
 
+  if (typeof response === "string") {
+    return response.trim() || null;
+  }
+
   if (
-    typeof response.image === "string" &&
+    typeof response.image ===
+    "string" &&
     response.image.trim()
   ) {
     return response.image.trim();
@@ -379,44 +419,86 @@ function extractWorkersImage(response) {
 
   if (
     response.result &&
-    typeof response.result === "object" &&
-    typeof response.result.image ===
-      "string" &&
-    response.result.image.trim()
+    typeof response.result ===
+      "object"
   ) {
-    return response.result.image.trim();
+    if (
+      typeof response.result
+        .image === "string" &&
+      response.result.image.trim()
+    ) {
+      return response.result.image.trim();
+    }
   }
 
   return null;
 }
 
-function imageBase64ToDataUrl(base64) {
+function normalizeBase64Image(
+  value
+) {
   if (
-    typeof base64 !== "string" ||
-    !base64.trim()
+    typeof value !== "string"
   ) {
     return null;
   }
 
-  const cleanBase64 = base64
-    .trim()
-    .replace(
-      /^data:image\/[^;]+;base64,/i,
-      ""
-    );
+  let image = value.trim();
 
-  if (!cleanBase64) {
+  if (!image) {
     return null;
   }
 
-  return `data:image/jpeg;base64,${cleanBase64}`;
+  image = image.replace(
+    /^data:image\/[^;]+;base64,/i,
+    ""
+  );
+
+  image = image.replace(
+    /\s+/g,
+    ""
+  );
+
+  if (!image) {
+    return null;
+  }
+
+  /*
+   * Basic Base64 validation.
+   * Do not decode the entire image here;
+   * the payload may be several megabytes.
+   */
+  if (
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(
+      image
+    )
+  ) {
+    return null;
+  }
+
+  return image;
+}
+
+function imageBase64ToDataUrl(
+  base64
+) {
+  const normalized =
+    normalizeBase64Image(base64);
+
+  if (!normalized) {
+    return null;
+  }
+
+  return `data:image/jpeg;base64,${normalized}`;
 }
 
 /* -------------------------------------------------------------------------- */
 /* Request options                                                             */
 /* -------------------------------------------------------------------------- */
 
-function normalizeMaxTokens(value) {
+function normalizeMaxTokens(
+  value
+) {
   const parsed = Number(value);
 
   if (!Number.isFinite(parsed)) {
@@ -461,8 +543,11 @@ export async function generateWorkersText({
     DEFAULT_MAX_OUTPUT_TOKENS,
   temperature = 0.6,
 } = {}) {
-  const AI = requireWorkersAI(env);
-  const model = getTextModel(env);
+  const AI =
+    requireWorkersAI(env);
+
+  const model =
+    getTextModel(env);
 
   const normalizedMessages =
     normalizeMessages(messages);
@@ -470,12 +555,14 @@ export async function generateWorkersText({
   const finalMessages = [];
 
   if (
-    typeof systemInstruction === "string" &&
+    typeof systemInstruction ===
+      "string" &&
     systemInstruction.trim()
   ) {
     finalMessages.push({
       role: "system",
-      content: systemInstruction.trim(),
+      content:
+        systemInstruction.trim(),
     });
   }
 
@@ -505,18 +592,21 @@ export async function generateWorkersText({
   let raw;
 
   try {
-    raw = await AI.run(model, {
-      messages: finalMessages,
-      max_tokens:
-        normalizeMaxTokens(
-          maxOutputTokens
-        ),
-      temperature:
-        normalizeTemperature(
-          temperature
-        ),
-      stream: false,
-    });
+    raw = await AI.run(
+      model,
+      {
+        messages: finalMessages,
+        max_tokens:
+          normalizeMaxTokens(
+            maxOutputTokens
+          ),
+        temperature:
+          normalizeTemperature(
+            temperature
+          ),
+        stream: false,
+      }
+    );
   } catch (error) {
     throw createError(
       "WORKERS_TEXT_REQUEST_FAILED",
@@ -568,26 +658,17 @@ export async function generateWorkersVision({
     DEFAULT_MAX_OUTPUT_TOKENS,
   temperature = 0.4,
 } = {}) {
-  const AI = requireWorkersAI(env);
-  const model = getVisionModel(env);
+  const AI =
+    requireWorkersAI(env);
+
+  const model =
+    getVisionModel(env);
 
   const images =
     normalizeImageDataUrls(
       imageDataUrls
     );
 
-  /*
-   * Cloudflare's documented Llama 3.2 Vision
-   * integration uses:
-   *
-   *   messages
-   *   image
-   *
-   * We intentionally process one image per
-   * inference call. The router is responsible
-   * for calling this function for multiple
-   * images when required.
-   */
   const image =
     images.length > 0
       ? images[0]
@@ -599,12 +680,14 @@ export async function generateWorkersVision({
   const finalMessages = [];
 
   if (
-    typeof systemInstruction === "string" &&
+    typeof systemInstruction ===
+      "string" &&
     systemInstruction.trim()
   ) {
     finalMessages.push({
       role: "system",
-      content: systemInstruction.trim(),
+      content:
+        systemInstruction.trim(),
     });
   }
 
@@ -713,14 +796,78 @@ export async function generateWorkersVision({
 /* Image generation                                                            */
 /* -------------------------------------------------------------------------- */
 
+function isRetryableImageError(
+  error
+) {
+  const code =
+    String(error?.code || "")
+      .toUpperCase();
+
+  const message =
+    String(
+      error?.message || ""
+    ).toLowerCase();
+
+  return (
+    code.includes("1101") ||
+    code.includes("TIMEOUT") ||
+    code.includes("INTERNAL") ||
+    code.includes("OVERLOAD") ||
+    code.includes("SERVER") ||
+    message.includes("high demand") ||
+    message.includes("temporarily") ||
+    message.includes("timeout") ||
+    message.includes("internal") ||
+    message.includes("overload") ||
+    message.includes("service unavailable") ||
+    message.includes("1101")
+  );
+}
+
+function sleep(ms) {
+  return new Promise(
+    (resolve) =>
+      setTimeout(resolve, ms)
+  );
+}
+
+async function runWorkersImageOnce({
+  AI,
+  model,
+  request,
+} = {}) {
+  try {
+    return await AI.run(
+      model,
+      request
+    );
+  } catch (error) {
+    throw createError(
+      "WORKERS_IMAGE_REQUEST_FAILED",
+      error?.message ||
+        "Workers AI image generation failed.",
+      {
+        model,
+        cause:
+          error?.code ||
+          error?.name ||
+          "unknown",
+      }
+    );
+  }
+}
+
 export async function generateWorkersImage({
   env,
   prompt = "",
   seed = null,
   steps = 4,
 } = {}) {
-  const AI = requireWorkersAI(env);
-  const model = getImageModel(env);
+  const AI =
+    requireWorkersAI(env);
+
+  const model =
+    getImageModel(env);
 
   const normalizedPrompt =
     normalizeContent(prompt);
@@ -742,7 +889,8 @@ export async function generateWorkersImage({
     );
   }
 
-  const parsedSteps = Number(steps);
+  const parsedSteps =
+    Number(steps);
 
   const normalizedSteps =
     Number.isFinite(parsedSteps)
@@ -755,86 +903,135 @@ export async function generateWorkersImage({
         )
       : 4;
 
+  /*
+   * FLUX.1 schnell officially accepts
+   * prompt, steps and seed.
+   */
   const request = {
     prompt: normalizedPrompt,
     steps: normalizedSteps,
   };
 
-  /*
-   * Cloudflare documents seed as a positive
-   * integer for FLUX. If no valid seed is
-   * supplied, the provider chooses one.
-   */
   const normalizedSeed =
     Number(seed);
 
   if (
-    Number.isFinite(normalizedSeed) &&
+    Number.isFinite(
+      normalizedSeed
+    ) &&
     normalizedSeed >= 1 &&
     normalizedSeed <= 9999999999
   ) {
     request.seed =
-      Math.floor(normalizedSeed);
+      Math.floor(
+        normalizedSeed
+      );
   }
 
-  let raw;
+  let raw = null;
+  let lastError = null;
 
-  try {
-    raw = await AI.run(
-      model,
-      request
-    );
-  } catch (error) {
+  for (
+    let attempt = 1;
+    attempt <=
+      IMAGE_GENERATION_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      raw =
+        await runWorkersImageOnce({
+          AI,
+          model,
+          request,
+        });
+
+      const imageBase64 =
+        extractWorkersImage(
+          raw
+        );
+
+      const imageDataUrl =
+        imageBase64ToDataUrl(
+          imageBase64
+        );
+
+      if (imageDataUrl) {
+        return {
+          imageDataUrl,
+          mimeType:
+            "image/jpeg",
+          model,
+          provider:
+            "cloudflare-workers-ai",
+          raw,
+          attempts: attempt,
+        };
+      }
+
+      lastError =
+        createError(
+          "WORKERS_IMAGE_INVALID_RESPONSE",
+          "Workers AI returned no valid Base64 image.",
+          {
+            model,
+            attempt,
+          }
+        );
+    } catch (error) {
+      lastError = error;
+
+      if (
+        attempt <
+          IMAGE_GENERATION_ATTEMPTS &&
+        isRetryableImageError(
+          error
+        )
+      ) {
+        await sleep(
+          IMAGE_RETRY_DELAY_MS
+        );
+        continue;
+      }
+
+      break;
+    }
+
+    if (
+      attempt <
+        IMAGE_GENERATION_ATTEMPTS
+    ) {
+      await sleep(
+        IMAGE_RETRY_DELAY_MS
+      );
+    }
+  }
+
+  if (lastError) {
     throw createError(
-      "WORKERS_IMAGE_REQUEST_FAILED",
-      error?.message ||
+      lastError.code ||
+        "WORKERS_IMAGE_FAILED",
+      lastError.message ||
         "Workers AI image generation failed.",
       {
         model,
+        attempts:
+          IMAGE_GENERATION_ATTEMPTS,
         cause:
-          error?.code ||
-          error?.name ||
-          "unknown",
+          lastError.details ||
+          null,
       }
     );
   }
 
-  const imageBase64 =
-    extractWorkersImage(raw);
-
-  if (!imageBase64) {
-    throw createError(
-      "WORKERS_IMAGE_EMPTY",
-      "Workers AI returned no generated image.",
-      {
-        model,
-      }
-    );
-  }
-
-  const imageDataUrl =
-    imageBase64ToDataUrl(
-      imageBase64
-    );
-
-  if (!imageDataUrl) {
-    throw createError(
-      "WORKERS_IMAGE_INVALID_RESPONSE",
-      "Workers AI returned an invalid image payload.",
-      {
-        model,
-      }
-    );
-  }
-
-  return {
-    imageDataUrl,
-    mimeType: "image/jpeg",
-    model,
-    provider:
-      "cloudflare-workers-ai",
-    raw,
-  };
+  throw createError(
+    "WORKERS_IMAGE_EMPTY",
+    "Workers AI returned no generated image.",
+    {
+      model,
+      attempts:
+        IMAGE_GENERATION_ATTEMPTS,
+    }
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -878,7 +1075,8 @@ export function getWorkersAIStatus(
     capabilities: {
       text: configured,
       vision: configured,
-      imageGeneration: configured,
+      imageGeneration:
+        configured,
     },
   };
 }
