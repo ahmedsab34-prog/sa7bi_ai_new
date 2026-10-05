@@ -17,16 +17,24 @@ echo "============================================================"
 #   /tmp/sa7bi-radio-eg.json
 #   /tmp/sa7bi-podcasts.json
 #
-# A media URL is considered reachable when curl receives a valid
-# HTTP response (2xx or 3xx) within the configured timeout.
+# Normal media files are verified with a bounded request.
 #
-# For audio streams, a small byte-range request is used because
-# many streaming servers do not implement HEAD correctly.
+# Live radio streams are different:
+# they normally never finish, so curl may return exit code 28
+# after successfully receiving audio data.
+#
+# For live streams, a timeout is NOT considered a failure when:
+#   1. HTTP status is 2xx or 3xx
+#   2. Content-Type is audio/*
+#   3. A meaningful amount of data was received
+#
+# This prevents false CI failures on healthy infinite streams.
 
 probe_url() {
   local NAME="$1"
   local URL="$2"
   local MAX_TIME="${3:-30}"
+  local LIVE_STREAM="${4:-false}"
 
   echo ""
   echo "------------------------------------------------------------"
@@ -39,11 +47,17 @@ probe_url() {
     return 1
   fi
 
-  local META
-  local CURL_STATUS
-  local HTTP_CODE
-  local CONTENT_TYPE
-  local FINAL_URL
+  local META=""
+  local CURL_STATUS=0
+  local HTTP_CODE=""
+  local CONTENT_TYPE=""
+  local FINAL_URL=""
+  local SIZE_DOWNLOAD="0"
+
+  # curl can legitimately return 28 for an infinite live stream.
+  # Disable errexit only around curl so we can inspect its actual
+  # HTTP/content/byte results before deciding pass/fail.
+  set +e
 
   META=$(curl \
     --silent \
@@ -53,24 +67,85 @@ probe_url() {
     --connect-timeout 15 \
     --max-time "${MAX_TIME}" \
     --output /dev/null \
-    --write-out "%{http_code}|%{content_type}|%{url_effective}" \
+    --write-out "%{http_code}|%{content_type}|%{url_effective}|%{size_download}" \
     "${URL}" 2>/tmp/sa7bi-media-curl-error)
 
   CURL_STATUS=$?
 
+  set -e
+
   HTTP_CODE="${META%%|*}"
+
   local REST="${META#*|}"
   CONTENT_TYPE="${REST%%|*}"
-  FINAL_URL="${REST#*|}"
+
+  REST="${REST#*|}"
+  FINAL_URL="${REST%%|*}"
+
+  SIZE_DOWNLOAD="${REST#*|}"
+
+  if [[ -z "${SIZE_DOWNLOAD}" || "${SIZE_DOWNLOAD}" == "${REST}" ]]; then
+    SIZE_DOWNLOAD="0"
+  fi
 
   echo "curl status  : ${CURL_STATUS}"
   echo "HTTP status  : ${HTTP_CODE}"
   echo "Content type : ${CONTENT_TYPE}"
+  echo "Bytes read   : ${SIZE_DOWNLOAD}"
   echo "Final URL    : ${FINAL_URL}"
+
+  # ----------------------------------------------------------
+  # Live radio stream handling
+  # ----------------------------------------------------------
+  #
+  # A live stream normally keeps sending bytes forever.
+  # Therefore curl may exit with 28 after the timeout even though
+  # the stream is healthy.
+  #
+  # Accept timeout only when the server actually responded with
+  # a valid HTTP status, audio content type, and meaningful data.
+  #
+  if [[ "${LIVE_STREAM}" == "true" ]]; then
+    if [[ "${HTTP_CODE}" =~ ^(2|3)[0-9][0-9]$ ]] \
+      && [[ "${CONTENT_TYPE,,}" == audio/* ]] \
+      && [[ "${SIZE_DOWNLOAD}" =~ ^[0-9]+$ ]] \
+      && (( SIZE_DOWNLOAD >= 32768 )); then
+
+      if [[ "${CURL_STATUS}" -eq 28 ]]; then
+        echo "RESULT: PASS - live audio stream is reachable."
+        echo "Note: curl timeout is expected because the stream is continuous."
+        return 0
+      fi
+
+      if [[ "${CURL_STATUS}" -eq 0 ]]; then
+        echo "RESULT: PASS - live audio stream is reachable."
+        return 0
+      fi
+
+      echo "RESULT: PASS - live audio stream delivered valid audio data."
+      return 0
+    fi
+
+    echo "RESULT: FAIL - live stream did not provide valid audio data."
+
+    if [[ -s /tmp/sa7bi-media-curl-error ]]; then
+      cat /tmp/sa7bi-media-curl-error
+    fi
+
+    return 1
+  fi
+
+  # ----------------------------------------------------------
+  # Normal media handling
+  # ----------------------------------------------------------
 
   if [ "${CURL_STATUS}" -ne 0 ]; then
     echo "RESULT: FAIL - curl could not reach the media URL."
-    cat /tmp/sa7bi-media-curl-error 2>/dev/null || true
+
+    if [[ -s /tmp/sa7bi-media-curl-error ]]; then
+      cat /tmp/sa7bi-media-curl-error
+    fi
+
     return 1
   fi
 
@@ -185,7 +260,8 @@ echo "============================================================"
 probe_url \
   "First Quran audio file" \
   "${QURAN_URL}" \
-  45
+  45 \
+  false
 
 # ------------------------------------------------------------
 # Radio
@@ -240,9 +316,8 @@ for station in stations:
         if candidate not in http_urls:
             http_urls.append(candidate)
 
-# Test every HTTPS station before trying HTTP.
-# A single dead/slow stream must not fail the entire CI job
-# when another station works.
+# Prefer HTTPS stations first.
+# A single unavailable station must never fail the whole test.
 for url in https_urls + http_urls:
     print(url)
 
@@ -264,6 +339,8 @@ echo "============================================================"
 echo "RADIO MEDIA"
 echo "============================================================"
 echo "Testing radio streams until one responds successfully."
+echo "Live-stream validation accepts continuous audio streams"
+echo "when HTTP, content type, and received bytes are valid."
 
 RADIO_URL=""
 RADIO_ATTEMPTS=0
@@ -284,7 +361,8 @@ while IFS= read -r CANDIDATE; do
   if probe_url \
     "Egypt radio candidate #${RADIO_ATTEMPTS}" \
     "${CANDIDATE}" \
-    20
+    20 \
+    true
   then
     RADIO_URL="${CANDIDATE}"
     break
@@ -364,7 +442,8 @@ echo "${PODCAST_URL}"
 probe_url \
   "First podcast feed" \
   "${PODCAST_URL}" \
-  45
+  45 \
+  false
 
 echo ""
 echo "============================================================"
