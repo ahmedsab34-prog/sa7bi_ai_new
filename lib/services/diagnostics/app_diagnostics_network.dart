@@ -26,7 +26,7 @@ extension AppDiagnosticsNetworkChecks
   }
 
   Future<DiagnosticResult>
-      checkDiagnosticIdentity() async {
+      _checkDiagnosticIdentity() async {
     return DiagnosticResult(
       name: 'Diagnostic engine identity',
       category: 'BUILD',
