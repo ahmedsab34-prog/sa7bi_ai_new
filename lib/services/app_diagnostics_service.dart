@@ -69,12 +69,37 @@ class AppDiagnosticsReport {
 
 class AppDiagnosticsService {
   AppDiagnosticsService({
-    this.workerBaseUrl = 'https://sa7bi-ai-new.ahmedsab34.workers.dev',
+    this.workerBaseUrl =
+        'https://sa7bi-ai-new.ahmedsab34.workers.dev',
   });
 
   final String workerBaseUrl;
 
   static const Duration defaultTimeout = Duration(seconds: 12);
+
+  /// Diagnostic version.
+  ///
+  /// This is intentionally changed whenever the diagnostic engine itself
+  /// changes, so the report can prove which diagnostic engine is running.
+  static const String diagnosticVersion = '2.0.0';
+
+  /// Optional build identity supplied by Flutter/Dart defines.
+  ///
+  /// If the GitHub Actions workflow does not supply APP_BUILD_ID,
+  /// the report will explicitly say that no build ID was injected.
+  static const String buildId = String.fromEnvironment(
+    'APP_BUILD_ID',
+    defaultValue: 'NOT_INJECTED',
+  );
+
+  /// Optional source/commit identity supplied by Flutter/Dart defines.
+  ///
+  /// If the workflow does not supply APP_SOURCE_ID, the report will
+  /// explicitly expose that fact instead of pretending we know the commit.
+  static const String sourceId = String.fromEnvironment(
+    'APP_SOURCE_ID',
+    defaultValue: 'NOT_INJECTED',
+  );
 
   Future<AppDiagnosticsReport> runFullDiagnostics({
     void Function(DiagnosticResult result)? onResult,
@@ -99,7 +124,8 @@ class AppDiagnosticsService {
               success: false,
               status: 'TIMEOUT',
               details:
-                  'The diagnostic test exceeded ${defaultTimeout.inSeconds} seconds.',
+                  'The diagnostic test exceeded '
+                  '${defaultTimeout.inSeconds} seconds.',
               durationMs: defaultTimeout.inMilliseconds,
             );
           },
@@ -119,11 +145,31 @@ class AppDiagnosticsService {
       onResult?.call(result);
     }
 
+    // ============================================================
+    // BUILD / APP IDENTITY
+    // ============================================================
+
     await run(
       'BUILD',
       'Runtime identity',
       _checkRuntimeIdentity,
     );
+
+    await run(
+      'BUILD',
+      'Diagnostic engine identity',
+      _checkDiagnosticIdentity,
+    );
+
+    await run(
+      'BUILD',
+      'Build/source identity',
+      _checkBuildSourceIdentity,
+    );
+
+    // ============================================================
+    // NETWORK
+    // ============================================================
 
     await run(
       'NETWORK',
@@ -142,6 +188,10 @@ class AppDiagnosticsService {
       'TLS / HTTPS',
       _checkTls,
     );
+
+    // ============================================================
+    // WORKER
+    // ============================================================
 
     await run(
       'WORKER',
@@ -163,33 +213,45 @@ class AppDiagnosticsService {
       ),
     );
 
+    // ============================================================
+    // AI
+    //
+    // IMPORTANT:
+    // We deliberately DO NOT send a real AI generation POST here.
+    // We only probe the route using OPTIONS/GET.
+    // ============================================================
+
     await run(
       'AI',
-      'AI chat route',
-      () => _httpPost(
-        name: 'AI chat route',
+      'AI chat route reachability',
+      () => _probeRoute(
+        name: 'AI chat route reachability',
         category: 'AI',
         path: '/v1/chat',
-        body: {
-          'message': 'diagnostic ping',
-          'input': 'diagnostic ping',
-          'stream': false,
-        },
       ),
     );
 
+    // ============================================================
+    // IMAGE
+    //
+    // IMPORTANT:
+    // We deliberately DO NOT call POST /v1/image.
+    // That could create a real image and consume credits/cost.
+    // ============================================================
+
     await run(
       'IMAGE',
-      'Image route',
-      () => _httpPost(
-        name: 'Image route',
+      'Image route reachability',
+      () => _probeRoute(
+        name: 'Image route reachability',
         category: 'IMAGE',
         path: '/v1/image',
-        body: {
-          'prompt': 'diagnostic test',
-        },
       ),
     );
+
+    // ============================================================
+    // NEWS
+    // ============================================================
 
     await run(
       'NEWS',
@@ -200,6 +262,10 @@ class AppDiagnosticsService {
         path: '/v1/news',
       ),
     );
+
+    // ============================================================
+    // QURAN / TAFSIR / HADITH
+    // ============================================================
 
     await run(
       'QURAN',
@@ -231,6 +297,10 @@ class AppDiagnosticsService {
       ),
     );
 
+    // ============================================================
+    // RADIO
+    // ============================================================
+
     await run(
       'RADIO',
       'Radio countries',
@@ -251,6 +321,10 @@ class AppDiagnosticsService {
       ),
     );
 
+    // ============================================================
+    // AUDIO
+    // ============================================================
+
     await run(
       'AUDIO',
       'Audio search route',
@@ -260,6 +334,10 @@ class AppDiagnosticsService {
         path: '/v1/audio/search-v4?q=diagnostic',
       ),
     );
+
+    // ============================================================
+    // SHORTS
+    // ============================================================
 
     await run(
       'SHORTS',
@@ -271,6 +349,10 @@ class AppDiagnosticsService {
       ),
     );
 
+    // ============================================================
+    // DOWNLOAD
+    // ============================================================
+
     await run(
       'DOWNLOAD',
       'Download route',
@@ -281,11 +363,19 @@ class AppDiagnosticsService {
       ),
     );
 
+    // ============================================================
+    // MEDIA URL
+    // ============================================================
+
     await run(
       'MEDIA',
       'Media URL handling',
       _checkMediaUrlHandling,
     );
+
+    // ============================================================
+    // MONETIZATION
+    // ============================================================
 
     await run(
       'MONETIZATION',
@@ -293,11 +383,19 @@ class AppDiagnosticsService {
       _checkMonetization,
     );
 
+    // ============================================================
+    // HTTP ERROR CLASSIFICATION
+    // ============================================================
+
     await run(
       'ERRORS',
       'HTTP error classification',
       _checkErrorClassification,
     );
+
+    // ============================================================
+    // TIMEOUT
+    // ============================================================
 
     await run(
       'TIMEOUT',
@@ -313,6 +411,10 @@ class AppDiagnosticsService {
       results: results,
     );
   }
+
+  // ==============================================================
+  // BUILD IDENTITY
+  // ==============================================================
 
   Future<DiagnosticResult> _checkRuntimeIdentity() async {
     final stopwatch = Stopwatch()..start();
@@ -338,6 +440,53 @@ class AppDiagnosticsService {
       durationMs: stopwatch.elapsedMilliseconds,
     );
   }
+
+  Future<DiagnosticResult> _checkDiagnosticIdentity() async {
+    final stopwatch = Stopwatch()..start();
+
+    stopwatch.stop();
+
+    return DiagnosticResult(
+      name: 'Diagnostic engine identity',
+      category: 'BUILD',
+      success: true,
+      status: 'OK',
+      details: 'diagnosticVersion=$diagnosticVersion',
+      durationMs: stopwatch.elapsedMilliseconds,
+    );
+  }
+
+  Future<DiagnosticResult> _checkBuildSourceIdentity() async {
+    final stopwatch = Stopwatch()..start();
+
+    final buildKnown = buildId != 'NOT_INJECTED';
+    final sourceKnown = sourceId != 'NOT_INJECTED';
+
+    final success = buildKnown || sourceKnown;
+
+    final details = <String, dynamic>{
+      'buildId': buildId,
+      'sourceId': sourceId,
+      'buildIdentityInjected': buildKnown,
+      'sourceIdentityInjected': sourceKnown,
+      'diagnosticVersion': diagnosticVersion,
+    };
+
+    stopwatch.stop();
+
+    return DiagnosticResult(
+      name: 'Build/source identity',
+      category: 'BUILD',
+      success: success,
+      status: success ? 'IDENTIFIED' : 'NOT_INJECTED',
+      details: jsonEncode(details),
+      durationMs: stopwatch.elapsedMilliseconds,
+    );
+  }
+
+  // ==============================================================
+  // NETWORK
+  // ==============================================================
 
   Future<DiagnosticResult> _checkInternet() async {
     final stopwatch = Stopwatch()..start();
@@ -419,6 +568,19 @@ class AppDiagnosticsService {
     try {
       final uri = Uri.parse(workerBaseUrl);
 
+      if (uri.scheme.toLowerCase() != 'https') {
+        stopwatch.stop();
+
+        return DiagnosticResult(
+          name: 'TLS / HTTPS',
+          category: 'NETWORK',
+          success: false,
+          status: 'NOT_HTTPS',
+          details: 'Worker URL is not using HTTPS.',
+          durationMs: stopwatch.elapsedMilliseconds,
+        );
+      }
+
       final client = HttpClient()
         ..connectionTimeout = defaultTimeout;
 
@@ -455,6 +617,107 @@ class AppDiagnosticsService {
     }
   }
 
+  // ==============================================================
+  // SAFE ROUTE PROBE
+  // ==============================================================
+
+  Future<DiagnosticResult> _probeRoute({
+    required String name,
+    required String category,
+    required String path,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+
+    final uri = _buildUri(path);
+
+    // First try OPTIONS because it is non-generating and does not
+    // execute the actual AI/image operation.
+    final optionsResult = await _httpOptions(
+      name: name,
+      category: category,
+      path: path,
+    );
+
+    if (_routeExistsFromStatus(optionsResult.httpStatus)) {
+      stopwatch.stop();
+
+      return DiagnosticResult(
+        name: name,
+        category: category,
+        success: true,
+        status: _routeProbeStatus(optionsResult.httpStatus),
+        details:
+            'Route is reachable without executing the actual operation. '
+            'Method used: OPTIONS. '
+            'URL: ${uri.toString()}. '
+            'No AI/image generation request was executed.',
+        httpStatus: optionsResult.httpStatus,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
+    }
+
+    // Some Workers do not implement OPTIONS.
+    // A GET can still reveal whether the route exists.
+    final getResult = await _httpGet(
+      name: name,
+      category: category,
+      path: path,
+    );
+
+    stopwatch.stop();
+
+    final status = getResult.httpStatus;
+
+    if (_routeExistsFromStatus(status)) {
+      return DiagnosticResult(
+        name: name,
+        category: category,
+        success: true,
+        status: _routeProbeStatus(status),
+        details:
+            'Route is reachable without executing the actual '
+            'generation operation. '
+            'Method used: GET. '
+            'A 405/401/403 can indicate the route exists even when '
+            'GET itself is not the expected application method.',
+        httpStatus: status,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
+    }
+
+    if (status == 404) {
+      return DiagnosticResult(
+        name: name,
+        category: category,
+        success: false,
+        status: 'ROUTE_NOT_FOUND',
+        details:
+            'The route returned HTTP 404. '
+            'No real AI/image generation request was executed.',
+        httpStatus: status,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
+    }
+
+    return DiagnosticResult(
+      name: name,
+      category: category,
+      success: false,
+      status: getResult.status,
+      details:
+          'Safe route probe could not confirm the route. '
+          'OPTIONS=${optionsResult.status}; '
+          'GET=${getResult.status}. '
+          'No real AI/image generation request was executed.',
+      httpStatus: status ?? optionsResult.httpStatus,
+      durationMs: stopwatch.elapsedMilliseconds,
+    );
+  }
+
+  // ==============================================================
+  // HTTP GET
+  // ==============================================================
+
   Future<DiagnosticResult> _httpGet({
     required String name,
     required String category,
@@ -469,16 +732,19 @@ class AppDiagnosticsService {
 
     try {
       final request = await client.getUrl(uri);
+
       request.headers.set(
         HttpHeaders.acceptHeader,
         'application/json, text/plain, */*',
       );
+
       request.headers.set(
         HttpHeaders.userAgentHeader,
-        'Sa7biAI-Diagnostics/1.0',
+        'Sa7biAI-Diagnostics/$diagnosticVersion',
       );
 
       final response = await request.close();
+
       final body = await response
           .transform(utf8.decoder)
           .join()
@@ -493,7 +759,7 @@ class AppDiagnosticsService {
         name: name,
         category: category,
         success: success,
-        status: 'HTTP_${response.statusCode}',
+        status: _statusForHttpCode(response.statusCode),
         details: _summarizeBody(body),
         httpStatus: response.statusCode,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -514,11 +780,14 @@ class AppDiagnosticsService {
     }
   }
 
-  Future<DiagnosticResult> _httpPost({
+  // ==============================================================
+  // HTTP OPTIONS
+  // ==============================================================
+
+  Future<DiagnosticResult> _httpOptions({
     required String name,
     required String category,
     required String path,
-    required Map<String, dynamic> body,
   }) async {
     final stopwatch = Stopwatch()..start();
 
@@ -528,12 +797,7 @@ class AppDiagnosticsService {
       ..connectionTimeout = defaultTimeout;
 
     try {
-      final request = await client.postUrl(uri);
-
-      request.headers.set(
-        HttpHeaders.contentTypeHeader,
-        'application/json',
-      );
+      final request = await client.openUrl('OPTIONS', uri);
 
       request.headers.set(
         HttpHeaders.acceptHeader,
@@ -542,29 +806,24 @@ class AppDiagnosticsService {
 
       request.headers.set(
         HttpHeaders.userAgentHeader,
-        'Sa7biAI-Diagnostics/1.0',
+        'Sa7biAI-Diagnostics/$diagnosticVersion',
       );
-
-      request.write(jsonEncode(body));
 
       final response = await request.close();
 
-      final responseBody = await response
+      final body = await response
           .transform(utf8.decoder)
           .join()
           .timeout(defaultTimeout);
 
       stopwatch.stop();
 
-      final success = response.statusCode >= 200 &&
-          response.statusCode < 400;
-
       return DiagnosticResult(
         name: name,
         category: category,
-        success: success,
-        status: 'HTTP_${response.statusCode}',
-        details: _summarizeBody(responseBody),
+        success: _routeExistsFromStatus(response.statusCode),
+        status: _statusForHttpCode(response.statusCode),
+        details: _summarizeBody(body),
         httpStatus: response.statusCode,
         durationMs: stopwatch.elapsedMilliseconds,
       );
@@ -584,6 +843,10 @@ class AppDiagnosticsService {
     }
   }
 
+  // ==============================================================
+  // MEDIA
+  // ==============================================================
+
   Future<DiagnosticResult> _checkMediaUrlHandling() async {
     final stopwatch = Stopwatch()..start();
 
@@ -591,6 +854,8 @@ class AppDiagnosticsService {
       final testUrls = <String>[
         workerBaseUrl,
         '$workerBaseUrl/health',
+        '$workerBaseUrl/v1/radio/stations?country=EG',
+        '$workerBaseUrl/v1/audio/search-v4?q=diagnostic',
       ];
 
       final parsed = <String>[];
@@ -598,7 +863,9 @@ class AppDiagnosticsService {
       for (final value in testUrls) {
         final uri = Uri.tryParse(value);
 
-        if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+        if (uri == null ||
+            !uri.hasScheme ||
+            uri.host.isEmpty) {
           stopwatch.stop();
 
           return DiagnosticResult(
@@ -606,7 +873,7 @@ class AppDiagnosticsService {
             category: 'MEDIA',
             success: false,
             status: 'INVALID_URL',
-            details: 'Invalid media/base URL: $value',
+            details: 'Invalid URL: $value',
             durationMs: stopwatch.elapsedMilliseconds,
           );
         }
@@ -614,14 +881,32 @@ class AppDiagnosticsService {
         parsed.add(uri.toString());
       }
 
+      // Also verify the internal URL builder because this was a
+      // previous source of query-string problems.
+      final radioUri = _buildUri(
+        '/v1/radio/stations?country=EG',
+      );
+
+      final audioUri = _buildUri(
+        '/v1/audio/search-v4?q=diagnostic',
+      );
+
+      final queryHandlingWorks =
+          radioUri.queryParameters['country'] == 'EG' &&
+              audioUri.queryParameters['q'] == 'diagnostic';
+
       stopwatch.stop();
 
       return DiagnosticResult(
         name: 'Media URL handling',
         category: 'MEDIA',
-        success: true,
-        status: 'OK',
-        details: 'URL parsing works for ${parsed.length} URLs.',
+        success: queryHandlingWorks,
+        status: queryHandlingWorks ? 'OK' : 'QUERY_BUILD_FAILED',
+        details:
+            'Parsed ${parsed.length} URLs. '
+            'Internal query builder: '
+            'country=${radioUri.queryParameters['country']}, '
+            'q=${audioUri.queryParameters['q']}.',
         durationMs: stopwatch.elapsedMilliseconds,
       );
     } catch (e) {
@@ -637,6 +922,10 @@ class AppDiagnosticsService {
       );
     }
   }
+
+  // ==============================================================
+  // MONETIZATION
+  // ==============================================================
 
   Future<DiagnosticResult> _checkMonetization() async {
     final stopwatch = Stopwatch()..start();
@@ -658,7 +947,8 @@ class AppDiagnosticsService {
         );
 
         statuses.add(
-          '$path=${result.status}${result.httpStatus != null ? '(${result.httpStatus})' : ''}',
+          '$path=${result.status}'
+          '${result.httpStatus != null ? '(${result.httpStatus})' : ''}',
         );
 
         if (result.httpStatus != null &&
@@ -670,8 +960,26 @@ class AppDiagnosticsService {
             name: 'Monetization endpoint',
             category: 'MONETIZATION',
             success: true,
-            status: result.status,
+            status: 'CONFIRMED',
             details: statuses.join(' | '),
+            httpStatus: result.httpStatus,
+            durationMs: stopwatch.elapsedMilliseconds,
+          );
+        }
+
+        // 401/403 also prove that the route exists.
+        if (result.httpStatus == 401 ||
+            result.httpStatus == 403) {
+          stopwatch.stop();
+
+          return DiagnosticResult(
+            name: 'Monetization endpoint',
+            category: 'MONETIZATION',
+            success: true,
+            status: 'ROUTE_EXISTS_AUTH_REQUIRED',
+            details:
+                '$path exists but requires authentication/authorization. '
+                '${statuses.join(' | ')}',
             httpStatus: result.httpStatus,
             durationMs: stopwatch.elapsedMilliseconds,
           );
@@ -689,10 +997,15 @@ class AppDiagnosticsService {
       success: false,
       status: 'NOT_CONFIRMED',
       details:
-          'No known monetization endpoint was confirmed. ${statuses.join(' | ')}',
+          'No known monetization endpoint was confirmed. '
+          '${statuses.join(' | ')}',
       durationMs: stopwatch.elapsedMilliseconds,
     );
   }
+
+  // ==============================================================
+  // ERROR CLASSIFICATION
+  // ==============================================================
 
   Future<DiagnosticResult> _checkErrorClassification() async {
     final stopwatch = Stopwatch()..start();
@@ -707,17 +1020,20 @@ class AppDiagnosticsService {
       stopwatch.stop();
 
       final validClassification =
-          result.httpStatus == 404 ||
-              result.status == 'HTTP_404';
+          result.httpStatus == 404;
 
       return DiagnosticResult(
         name: 'HTTP error classification',
         category: 'ERRORS',
         success: validClassification,
-        status: result.status,
+        status: validClassification
+            ? 'CONTROLLED_404'
+            : result.status,
         details:
-            'Diagnostic intentionally requested a missing endpoint. '
-            'Expected a controlled HTTP error such as 404.',
+            'Diagnostic intentionally requested a known-missing '
+            'endpoint. Expected HTTP 404. '
+            'This verifies that the Worker/network can return '
+            'a controlled HTTP error.',
         httpStatus: result.httpStatus,
         durationMs: stopwatch.elapsedMilliseconds,
       );
@@ -735,6 +1051,10 @@ class AppDiagnosticsService {
     }
   }
 
+  // ==============================================================
+  // TIMEOUT
+  // ==============================================================
+
   Future<DiagnosticResult> _checkTimeoutConfiguration() async {
     final stopwatch = Stopwatch()..start();
 
@@ -749,36 +1069,142 @@ class AppDiagnosticsService {
       success: valid,
       status: valid ? 'OK' : 'INVALID',
       details:
-          'Diagnostic network timeout = ${defaultTimeout.inSeconds} seconds.',
+          'Diagnostic network timeout = '
+          '${defaultTimeout.inSeconds} seconds.',
       durationMs: stopwatch.elapsedMilliseconds,
     );
   }
 
-  Uri _buildUri(String path) {
-    final base = Uri.parse(workerBaseUrl);
+  // ==============================================================
+  // URL BUILDER
+  // ==============================================================
 
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return Uri.parse(path);
+  Uri _buildUri(String rawPath) {
+    final raw = rawPath.trim();
+
+    if (raw.startsWith('http://') ||
+        raw.startsWith('https://')) {
+      return Uri.parse(raw);
     }
 
-    final normalizedPath = path.startsWith('/') ? path : '/$path';
+    final base = Uri.parse(workerBaseUrl);
+
+    final normalized =
+        raw.startsWith('/') ? raw : '/$raw';
+
+    final parsed = Uri.parse(normalized);
 
     return base.replace(
-      path: normalizedPath,
-      queryParameters: _extractQueryParameters(normalizedPath),
+      path: parsed.path,
+      queryParameters: parsed.queryParameters.isEmpty
+          ? null
+          : parsed.queryParameters,
     );
   }
 
-  Map<String, String>? _extractQueryParameters(String path) {
-    final index = path.indexOf('?');
+  // ==============================================================
+  // HELPERS
+  // ==============================================================
 
-    if (index == -1) {
-      return null;
+  bool _routeExistsFromStatus(int? status) {
+    if (status == null) {
+      return false;
     }
 
-    final query = path.substring(index + 1);
+    // 2xx = route reachable.
+    if (status >= 200 && status < 300) {
+      return true;
+    }
 
-    return Uri.splitQueryString(query);
+    // 3xx = route reachable and redirecting.
+    if (status >= 300 && status < 400) {
+      return true;
+    }
+
+    // 401/403 = route exists but protected.
+    if (status == 401 || status == 403) {
+      return true;
+    }
+
+    // 405 = route exists but this diagnostic HTTP method
+    // is not the method expected by the endpoint.
+    if (status == 405) {
+      return true;
+    }
+
+    return false;
+  }
+
+  String _routeProbeStatus(int? status) {
+    if (status == null) {
+      return 'UNKNOWN';
+    }
+
+    if (status >= 200 && status < 300) {
+      return 'ROUTE_REACHABLE';
+    }
+
+    if (status >= 300 && status < 400) {
+      return 'ROUTE_REDIRECT';
+    }
+
+    if (status == 401) {
+      return 'ROUTE_EXISTS_AUTH_REQUIRED';
+    }
+
+    if (status == 403) {
+      return 'ROUTE_EXISTS_FORBIDDEN';
+    }
+
+    if (status == 405) {
+      return 'ROUTE_EXISTS_METHOD_REQUIRED';
+    }
+
+    if (status == 404) {
+      return 'ROUTE_NOT_FOUND';
+    }
+
+    if (status >= 500) {
+      return 'SERVER_ERROR';
+    }
+
+    return 'HTTP_$status';
+  }
+
+  String _statusForHttpCode(int statusCode) {
+    if (statusCode == 401) {
+      return 'HTTP_401_AUTH_REQUIRED';
+    }
+
+    if (statusCode == 403) {
+      return 'HTTP_403_FORBIDDEN';
+    }
+
+    if (statusCode == 404) {
+      return 'HTTP_404_NOT_FOUND';
+    }
+
+    if (statusCode == 405) {
+      return 'HTTP_405_METHOD_NOT_ALLOWED';
+    }
+
+    if (statusCode >= 500) {
+      return 'HTTP_${statusCode}_SERVER_ERROR';
+    }
+
+    if (statusCode >= 400) {
+      return 'HTTP_${statusCode}_CLIENT_ERROR';
+    }
+
+    if (statusCode >= 300) {
+      return 'HTTP_${statusCode}_REDIRECT';
+    }
+
+    if (statusCode >= 200) {
+      return 'HTTP_${statusCode}_OK';
+    }
+
+    return 'HTTP_$statusCode';
   }
 
   String _summarizeBody(String body) {
@@ -786,7 +1212,8 @@ class AppDiagnosticsService {
       return 'Empty response body.';
     }
 
-    final cleaned = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final cleaned =
+        body.replaceAll(RegExp(r'\s+'), ' ').trim();
 
     if (cleaned.length <= 800) {
       return cleaned;
@@ -821,6 +1248,9 @@ class AppDiagnosticsService {
   }
 
   String _safeError(Object error) {
-    return error.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    return error
+        .toString()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 }
