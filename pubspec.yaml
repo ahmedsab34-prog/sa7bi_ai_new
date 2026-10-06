@@ -19,6 +19,7 @@ dependencies:
   flutter_tts: ^4.2.3
 
   http: ^1.2.2
+  cronet_http: ^1.10.0
   webview_flutter: ^4.13.0
   shared_preferences: ^2.3.2
 
