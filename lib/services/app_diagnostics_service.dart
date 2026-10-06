@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'sa7bi_network_client.dart';
+
 part 'diagnostics/app_diagnostics_models.dart';
 part 'diagnostics/app_diagnostics_network.dart';
 part 'diagnostics/app_diagnostics_content.dart';
@@ -18,13 +20,13 @@ class AppDiagnosticsService {
   final String workerBaseUrl;
 
   static const Duration defaultTimeout =
-      Duration(seconds: 12);
+      Duration(seconds: 15);
 
   static const Duration deepTimeout =
-      Duration(seconds: 5);
+      Duration(seconds: 8);
 
   static const String diagnosticVersion =
-      '4.1.0';
+      '4.2.0';
 
   static const String buildId =
       String.fromEnvironment(
@@ -56,6 +58,10 @@ class AppDiagnosticsService {
     defaultValue: 'NOT_INJECTED',
   );
 
+  // ============================================================
+  // FULL DIAGNOSTICS
+  // ============================================================
+
   Future<AppDiagnosticsReport> runFullDiagnostics({
     void Function(DiagnosticResult result)? onResult,
   }) async {
@@ -67,9 +73,9 @@ class AppDiagnosticsService {
       String name,
       Future<DiagnosticResult> Function() test,
     ) async {
-      DiagnosticResult result;
-
       final stopwatch = Stopwatch()..start();
+
+      DiagnosticResult result;
 
       try {
         result = await test().timeout(
@@ -97,13 +103,14 @@ class AppDiagnosticsService {
           severity: 'FAIL',
           status: _classifyException(error),
           details: _safeError(error),
-          durationMs: stopwatch.elapsedMilliseconds,
+          durationMs:
+              stopwatch.elapsedMilliseconds,
         );
       }
 
       stopwatch.stop();
 
-      if (result.durationMs == 0) {
+      if (result.durationMs <= 0) {
         result = DiagnosticResult(
           name: result.name,
           category: result.category,
@@ -111,9 +118,11 @@ class AppDiagnosticsService {
           status: result.status,
           details: result.details,
           httpStatus: result.httpStatus,
-          durationMs: stopwatch.elapsedMilliseconds,
+          durationMs:
+              stopwatch.elapsedMilliseconds,
           severity: result.severity,
           repairable: result.repairable,
+          blocked: result.blocked,
         );
       }
 
@@ -144,6 +153,46 @@ class AppDiagnosticsService {
     );
 
     // ============================================================
+    // NETWORK TRANSPORT
+    // ============================================================
+
+    await run(
+      'NETWORK',
+      'Network transport identity',
+      _checkNetworkTransportIdentity,
+    );
+
+    await run(
+      'NETWORK',
+      'Internet HTTPS control',
+      _checkInternetHttps,
+    );
+
+    await run(
+      'NETWORK',
+      'Worker DNS resolution',
+      _checkDns,
+    );
+
+    await run(
+      'NETWORK',
+      'Worker HTTPS health',
+      _checkWorkerHttpsHealth,
+    );
+
+    await run(
+      'NETWORK',
+      'HTTP error classification',
+      _checkErrorClassification,
+    );
+
+    await run(
+      'NETWORK',
+      'Network timeout configuration',
+      _checkTimeoutConfiguration,
+    );
+
+    // ============================================================
     // DEVICE
     // ============================================================
 
@@ -163,94 +212,6 @@ class AppDiagnosticsService {
       'DEVICE',
       'Network interfaces',
       _checkNetworkInterfaces,
-    );
-
-    // ============================================================
-    // NETWORK
-    // ============================================================
-
-    await run(
-      'NETWORK',
-      'Internet connectivity',
-      _checkInternet,
-    );
-
-    await run(
-      'NETWORK',
-      'Worker DNS resolution',
-      _checkDns,
-    );
-
-    await run(
-      'NETWORK',
-      'Worker IPv4 DNS',
-      _checkDnsV4,
-    );
-
-    await run(
-      'NETWORK',
-      'Worker IPv6 DNS',
-      _checkDnsV6,
-    );
-
-    await run(
-      'NETWORK',
-      'Raw HttpClient HTTPS → Google',
-      _checkRawHttpClientGoogle,
-    );
-
-    await run(
-      'NETWORK',
-      'package:http HTTPS → Google',
-      _checkPackageHttpGoogle,
-    );
-
-    await run(
-      'NETWORK',
-      'Cloudflare HTTPS',
-      _checkCloudflare,
-    );
-
-    await run(
-      'NETWORK',
-      'HTTP proxy configuration',
-      _checkProxyConfiguration,
-    );
-
-    await run(
-      'NETWORK',
-      'Worker IPv4 socket reachability',
-      _checkWorkerIpv4Socket,
-    );
-
-    await run(
-      'NETWORK',
-      'Worker IPv6 socket reachability',
-      _checkWorkerIpv6Socket,
-    );
-
-    await run(
-      'NETWORK',
-      'Worker HTTPS via resolved IPv4',
-      _checkWorkerHttpsViaIp4,
-    );
-
-    await run(
-      'NETWORK',
-      'Worker HTTPS via resolved IPv6',
-      _checkWorkerHttpsViaIp6,
-    );
-
-    await run(
-      'NETWORK',
-      'package:http HTTPS → Worker health',
-      _checkPackageHttpWorkerHealth,
-    );
-
-    await run(
-      'NETWORK',
-      'Raw TLS / HTTPS → Worker',
-      _checkTls,
     );
 
     // ============================================================
@@ -411,7 +372,8 @@ class AppDiagnosticsService {
       () => _httpGet(
         name: 'Egypt radio stations',
         category: 'RADIO',
-        path: '/v1/radio/stations?country=EG',
+        path:
+            '/v1/radio/stations?country=EG',
       ),
     );
 
@@ -421,7 +383,8 @@ class AppDiagnosticsService {
       () => _httpGet(
         name: 'Audio search route',
         category: 'AUDIO',
-        path: '/v1/audio/search-v4?q=diagnostic',
+        path:
+            '/v1/audio/search-v4?q=diagnostic',
       ),
     );
 
@@ -431,7 +394,8 @@ class AppDiagnosticsService {
       () => _httpGet(
         name: 'Podcast search route',
         category: 'PODCAST',
-        path: '/v1/podcasts/search?q=diagnostic',
+        path:
+            '/v1/podcasts/search?q=diagnostic',
       ),
     );
 
@@ -446,7 +410,7 @@ class AppDiagnosticsService {
     );
 
     // ============================================================
-    // MEDIA / MONETIZATION / ERRORS
+    // MEDIA
     // ============================================================
 
     await run(
@@ -455,22 +419,14 @@ class AppDiagnosticsService {
       _checkMediaUrlHandling,
     );
 
+    // ============================================================
+    // MONETIZATION
+    // ============================================================
+
     await run(
       'MONETIZATION',
       'Monetization endpoints',
       _checkMonetization,
-    );
-
-    await run(
-      'ERRORS',
-      'HTTP error classification',
-      _checkErrorClassification,
-    );
-
-    await run(
-      'TIMEOUT',
-      'Timeout configuration',
-      _checkTimeoutConfiguration,
     );
 
     return AppDiagnosticsReport(
@@ -480,54 +436,45 @@ class AppDiagnosticsService {
     );
   }
 
+  // ============================================================
+  // SAFE REPAIR
+  // ============================================================
+
   Future<DiagnosticRepairResult> repairSafeIssues(
     AppDiagnosticsReport report, {
     bool clearTemporaryFiles = false,
   }) async {
     final actions = <String>[];
-    var changed = false;
 
     if (clearTemporaryFiles) {
       actions.add(
-        'تم تجاهل تنظيف systemTemp بالكامل '
-        'لأسباب تتعلق بسلامة التطبيق.',
+        'تم تجاهل تنظيف الملفات المؤقتة '
+        'حتى لا يتم حذف بيانات التطبيق.',
       );
     }
 
-    final networkFailure = report.results.any(
+    final networkFailure =
+        report.results.any(
       (item) =>
           item.category == 'NETWORK' &&
           !item.success &&
-          (
-            item.status == 'TIMEOUT' ||
-            item.status == 'SOCKET_ERROR' ||
-            item.status == 'NETWORK_ERROR' ||
-            item.status == 'DNS_ERROR' ||
-            item.status == 'NETWORK_UNREACHABLE'
-          ),
+          !item.blocked,
     );
 
     if (networkFailure) {
-      try {
-        await InternetAddress.lookup(
-          Uri.parse(workerBaseUrl).host,
-        );
+      actions.add(
+        'تم تسجيل مشكلة في طبقة الشبكة.',
+      );
 
-        actions.add(
-          'تمت إعادة حل DNS للـWorker بنجاح.',
-        );
+      actions.add(
+        'لا يتم تغيير DNS أو IP أو Proxy '
+        'أو إعدادات Cloudflare تلقائيًا.',
+      );
 
-        actions.add(
-          'VPN وISP وFirewall وCloudflare '
-          'لا يمكن إصلاحها من داخل APK.',
-        );
-
-        changed = true;
-      } catch (error) {
-        actions.add(
-          'إعادة حل DNS فشلت: ${_safeError(error)}',
-        );
-      }
+      actions.add(
+        'يجب إصلاح السبب من طبقة النقل '
+        'أو الشبكة الخارجية.',
+      );
     }
 
     if (actions.isEmpty) {
@@ -542,10 +489,8 @@ class AppDiagnosticsService {
 
     return DiagnosticRepairResult(
       success: true,
-      changed: changed,
-      title: changed
-          ? 'تم تنفيذ الإصلاح الآمن'
-          : 'تم تنفيذ التشخيص الآمن',
+      changed: false,
+      title: 'تم تنفيذ التشخيص الآمن',
       details: actions.join('\n'),
     );
   }
@@ -577,7 +522,9 @@ class AppDiagnosticsService {
     );
   }
 
-  String _statusForHttpCode(int statusCode) {
+  String _statusForHttpCode(
+    int statusCode,
+  ) {
     if (statusCode == 401) {
       return 'HTTP_401_AUTH_REQUIRED';
     }
@@ -613,34 +560,51 @@ class AppDiagnosticsService {
     return 'HTTP_$statusCode';
   }
 
-  String _classifyException(Object error) {
-    final value = error.toString().toLowerCase();
+  String _classifyException(
+    Object error,
+  ) {
+    final value =
+        error.toString().toLowerCase();
 
     if (value.contains('timeout')) {
       return 'TIMEOUT';
     }
 
-    if (value.contains('network is unreachable')) {
-      return 'NETWORK_UNREACHABLE';
-    }
-
-    if (value.contains('failed host lookup') ||
-        value.contains('no address associated')) {
+    if (value.contains(
+          'failed host lookup',
+        ) ||
+        value.contains(
+          'no address associated',
+        )) {
       return 'DNS_ERROR';
     }
 
-    if (value.contains('certificate') ||
+    if (value.contains(
+          'certificate',
+        ) ||
         value.contains('tls') ||
         value.contains('ssl')) {
       return 'TLS_ERROR';
     }
 
-    if (value.contains('connection refused')) {
+    if (value.contains(
+      'connection refused',
+    )) {
       return 'CONNECTION_REFUSED';
+    }
+
+    if (value.contains(
+      'network is unreachable',
+    )) {
+      return 'NETWORK_UNREACHABLE';
     }
 
     if (value.contains('socket')) {
       return 'SOCKET_ERROR';
+    }
+
+    if (error is http.ClientException) {
+      return 'HTTP_CLIENT_ERROR';
     }
 
     return 'NETWORK_ERROR';
@@ -649,13 +613,21 @@ class AppDiagnosticsService {
   String _safeError(Object error) {
     return error
         .toString()
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(
+          RegExp(r'\s+'),
+          ' ',
+        )
         .trim();
   }
 
-  String _summarizeBody(String body) {
+  String _summarizeBody(
+    String body,
+  ) {
     final cleaned = body
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(
+          RegExp(r'\s+'),
+          ' ',
+        )
         .trim();
 
     if (cleaned.isEmpty) {
@@ -678,7 +650,8 @@ class AppDiagnosticsService {
       return '${(bytes / 1024).toStringAsFixed(1)} KB';
     }
 
-    if (bytes < 1024 * 1024 * 1024) {
+    if (bytes <
+        1024 * 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
 
