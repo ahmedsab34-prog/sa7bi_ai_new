@@ -879,7 +879,7 @@ extension AppDiagnosticsNetworkChecks
       final client = HttpClient();
 
       final proxy =
-          client.findProxy(
+          HttpClient.findProxyFromEnvironment(
         Uri.parse(workerBaseUrl),
       );
 
