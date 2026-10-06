@@ -487,9 +487,6 @@ class AppDiagnosticsService {
     final actions = <String>[];
     var changed = false;
 
-    // متعمدين عدم حذف Directory.systemTemp بالكامل.
-    // ده كان إصلاحًا خطرًا لأنه ممكن يمس ملفات تخص مكتبات
-    // أو عمليات أخرى داخل النظام.
     if (clearTemporaryFiles) {
       actions.add(
         'تم تجاهل تنظيف systemTemp بالكامل '
