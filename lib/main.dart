@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/material.dart';
 
+import 'app_diagnostics_screen.dart';
 import 'audio_center_screen.dart';
 import 'audio_player_service.dart';
 import 'home_screen.dart';
@@ -105,6 +106,15 @@ class Sa7biAiApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'sans',
       ),
+
+      // ========================================================
+      // DIAGNOSTICS ROUTE
+      // ========================================================
+
+      routes: {
+        '/diagnostics': (_) => const AppDiagnosticsScreen(),
+      },
+
       home: const MainContainerScreen(),
     );
   }
@@ -163,6 +173,14 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
     );
   }
 
+  void openDiagnostics() {
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.of(context).pushNamed('/diagnostics');
+  }
+
   // ==========================================================
   // BUILD
   // ==========================================================
@@ -194,6 +212,48 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
               right: 10,
               bottom: 8,
               child: MiniAudioPlayer(),
+            ),
+
+            // ==================================================
+            // DIAGNOSTICS ENTRY
+            // ==================================================
+
+            Positioned(
+              left: 12,
+              bottom: 92,
+              child: Material(
+                color: Colors.transparent,
+                child: Tooltip(
+                  message: 'تشخيص التطبيق',
+                  child: InkWell(
+                    onTap: openDiagnostics,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF11141D).withOpacity(0.96),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0x55FFD76A),
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x55000000),
+                            blurRadius: 12,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.health_and_safety_outlined,
+                        color: Color(0xFFFFD76A),
+                        size: 23,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
 
             Positioned(
