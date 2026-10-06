@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'services/app_diagnostics_service.dart';
 
@@ -6,10 +7,12 @@ class AppDiagnosticsScreen extends StatefulWidget {
   const AppDiagnosticsScreen({super.key});
 
   @override
-  State<AppDiagnosticsScreen> createState() => _AppDiagnosticsScreenState();
+  State<AppDiagnosticsScreen> createState() =>
+      _AppDiagnosticsScreenState();
 }
 
-class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
+class _AppDiagnosticsScreenState
+    extends State<AppDiagnosticsScreen> {
   late final AppDiagnosticsService _service;
 
   AppDiagnosticsReport? _report;
@@ -18,7 +21,6 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
   @override
   void initState() {
     super.initState();
-
     _service = AppDiagnosticsService();
   }
 
@@ -32,43 +34,114 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
       _report = null;
     });
 
-    final report = await _service.runFullDiagnostics();
+    try {
+      final report =
+          await _service.runFullDiagnostics();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _report = report;
+        _running = false;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _running = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'حدث خطأ أثناء تشغيل التشخيص: $e',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _copyFullReport() async {
+    final report = _report;
+
+    if (report == null) {
+      return;
+    }
+
+    await Clipboard.setData(
+      ClipboardData(
+        text: report.toTextReport(),
+      ),
+    );
 
     if (!mounted) {
       return;
     }
 
-    setState(() {
-      _report = report;
-      _running = false;
-    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'تم نسخ التقرير الكامل. تقدر تلصقه هنا مباشرة.',
+        ),
+      ),
+    );
   }
 
-  Color _statusColor(DiagnosticResult result) {
-    if (result.success) {
-      return Colors.green;
+  Future<void> _copyJsonReport() async {
+    final report = _report;
+
+    if (report == null) {
+      return;
     }
 
-    if (result.status == 'TIMEOUT') {
-      return Colors.orange;
+    await Clipboard.setData(
+      ClipboardData(
+        text: report.toPrettyJson(),
+      ),
+    );
+
+    if (!mounted) {
+      return;
     }
 
-    return Colors.red;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'تم نسخ تقرير JSON الكامل.',
+        ),
+      ),
+    );
   }
 
-  IconData _statusIcon(DiagnosticResult result) {
-    if (result.success) {
-      return Icons.check_circle;
+  Color _severityColor(DiagnosticResult result) {
+    switch (result.severity) {
+      case 'PASS':
+        return Colors.green;
+      case 'WARN':
+        return Colors.orange;
+      default:
+        return Colors.red;
     }
-
-    if (result.status == 'TIMEOUT') {
-      return Icons.timer_off;
-    }
-
-    return Icons.error;
   }
 
-  Future<void> _showDetails(DiagnosticResult result) async {
+  IconData _severityIcon(DiagnosticResult result) {
+    switch (result.severity) {
+      case 'PASS':
+        return Icons.check_circle;
+      case 'WARN':
+        return Icons.warning_amber_rounded;
+      default:
+        return Icons.error;
+    }
+  }
+
+  Future<void> _showDetails(
+    DiagnosticResult result,
+  ) async {
     await showDialog<void>(
       context: context,
       builder: (context) {
@@ -78,6 +151,7 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
             child: SelectableText(
               [
                 'Category: ${result.category}',
+                'Severity: ${result.severity}',
                 'Status: ${result.status}',
                 'HTTP: ${result.httpStatus ?? '-'}',
                 'Duration: ${result.durationMs} ms',
@@ -88,7 +162,8 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () =>
+                  Navigator.of(context).pop(),
               child: const Text('إغلاق'),
             ),
           ],
@@ -108,16 +183,17 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             const Text(
               'ملخص التشخيص',
               style: TextStyle(
-                fontSize: 19,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
@@ -130,27 +206,41 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
                 ),
                 Expanded(
                   child: _SummaryItem(
+                    title: 'تحذير',
+                    value: '${report.warnings}',
+                    icon: Icons.warning_amber_rounded,
+                    color: Colors.orange,
+                  ),
+                ),
+                Expanded(
+                  child: _SummaryItem(
                     title: 'فشل',
                     value: '${report.failed}',
                     icon: Icons.error,
                     color: Colors.red,
                   ),
                 ),
-                Expanded(
-                  child: _SummaryItem(
-                    title: 'الإجمالي',
-                    value: '${report.results.length}',
-                    icon: Icons.analytics,
-                    color: Colors.blue,
-                  ),
-                ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+            Text(
+              'الإجمالي: ${report.total}',
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'مدة الفحص: '
+              '${report.duration.inMilliseconds} ms',
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'المشكلة الأساسية:',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 5),
             SelectableText(
-              'بدأ: ${report.startedAt.toLocal()}\n'
-              'انتهى: ${report.finishedAt.toLocal()}',
-              style: const TextStyle(fontSize: 12),
+              report.primaryProblem,
             ),
           ],
         ),
@@ -158,8 +248,42 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
     );
   }
 
-  Widget _resultCard(DiagnosticResult result) {
-    final color = _statusColor(result);
+  Widget _actionButtons() {
+    if (_report == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _copyFullReport,
+            icon: const Icon(Icons.copy),
+            label: const Text(
+              'نسخ التقرير الكامل',
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _copyJsonReport,
+            icon: const Icon(Icons.data_object),
+            label: const Text(
+              'نسخ تقرير JSON',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _resultCard(
+    DiagnosticResult result,
+  ) {
+    final color = _severityColor(result);
 
     return Card(
       child: InkWell(
@@ -170,14 +294,15 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
           child: Row(
             children: [
               Icon(
-                _statusIcon(result),
+                _severityIcon(result),
                 color: color,
                 size: 28,
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
                       result.name,
@@ -187,9 +312,12 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${result.category} • ${result.status} • ${result.durationMs} ms',
+                      '${result.category} • '
+                      '${result.severity} • '
+                      '${result.status} • '
+                      '${result.durationMs} ms',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 11,
                         color: Colors.grey.shade600,
                       ),
                     ),
@@ -197,13 +325,18 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
                     Text(
                       result.details,
                       maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12),
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_left),
+              const Icon(
+                Icons.chevron_left,
+              ),
             ],
           ),
         ),
@@ -219,7 +352,7 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
           children: const [
             Icon(
               Icons.health_and_safety_outlined,
-              size: 56,
+              size: 60,
             ),
             SizedBox(height: 12),
             Text(
@@ -231,8 +364,10 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
             ),
             SizedBox(height: 8),
             Text(
-              'اضغط على "ابدأ التشخيص" لفحص الاتصال والـWorker '
-              'والـAI والمحتوى والصوت والتنزيل وغيرها.',
+              'الفحص الشامل يختبر التطبيق والاتصال '
+              'والـWorker والـAI والصور والأخبار '
+              'والقرآن والتفسير والحديث والراديو '
+              'والبودكاست والتنزيل والتخزين والأداء.',
               textAlign: TextAlign.center,
             ),
           ],
@@ -247,12 +382,15 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('تشخيص صاحبي AI'),
+        title: const Text(
+          'تشخيص صاحبي AI',
+        ),
         actions: [
           if (report != null)
             IconButton(
-              tooltip: 'تشغيل مرة أخرى',
-              onPressed: _running ? null : _runDiagnostics,
+              tooltip: 'إعادة الفحص',
+              onPressed:
+                  _running ? null : _runDiagnostics,
               icon: const Icon(Icons.refresh),
             ),
         ],
@@ -267,10 +405,11 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'أداة تشخيص شاملة',
+                        '🛠️ فحص صاحبي AI الشامل',
                         style: TextStyle(
                           fontSize: 21,
                           fontWeight: FontWeight.bold,
@@ -278,32 +417,42 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'هذه الشاشة لا تصلح أي شيء ولا تغيّر إعدادات التطبيق. '
-                        'وظيفتها فقط اختبار المسارات وتسجيل النتيجة.',
+                        'الفحص لا يغيّر إعدادات التطبيق ولا '
+                        'ينفذ عمليات AI مدفوعة. وظيفته '
+                        'اكتشاف مكان المشكلة وتسجيلها بالكامل.',
                       ),
                       const SizedBox(height: 12),
                       SelectableText(
-                        'Worker:\n${_service.workerBaseUrl}',
-                        style: const TextStyle(fontSize: 12),
+                        'Worker:\n'
+                        '${_service.workerBaseUrl}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: _running ? null : _runDiagnostics,
+                          onPressed:
+                              _running
+                                  ? null
+                                  : _runDiagnostics,
                           icon: _running
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(
+                                  child:
+                                      CircularProgressIndicator(
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Icon(Icons.play_arrow),
+                              : const Icon(
+                                  Icons.play_arrow,
+                                ),
                           label: Text(
                             _running
-                                ? 'جاري التشخيص...'
-                                : 'ابدأ التشخيص',
+                                ? 'جاري الفحص الشامل...'
+                                : 'ابدأ الفحص الشامل',
                           ),
                         ),
                       ),
@@ -312,36 +461,39 @@ class _AppDiagnosticsScreenState extends State<AppDiagnosticsScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (report == null) _emptyState(),
+              if (report == null)
+                _emptyState(),
               if (report != null) ...[
                 _summaryCard(),
-                const SizedBox(height: 8),
-                const Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 8,
-                  ),
-                  child: Text(
-                    'نتائج الاختبارات',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                const SizedBox(height: 12),
+                _actionButtons(),
+                const SizedBox(height: 16),
+                const Text(
+                  'نتائج الفحص',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                ...report.results.map(_resultCard),
+                const SizedBox(height: 8),
+                ...report.results.map(
+                  _resultCard,
+                ),
                 const SizedBox(height: 16),
                 Card(
                   child: ExpansionTile(
-                    title: const Text('التقرير الكامل JSON'),
+                    title: const Text(
+                      'عرض التقرير الكامل JSON',
+                    ),
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(12),
+                        padding:
+                            const EdgeInsets.all(12),
                         child: SelectableText(
                           report.toPrettyJson(),
                           style: const TextStyle(
                             fontFamily: 'monospace',
-                            fontSize: 11,
+                            fontSize: 10,
                           ),
                         ),
                       ),
@@ -374,7 +526,10 @@ class _SummaryItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icon, color: color),
+        Icon(
+          icon,
+          color: color,
+        ),
         const SizedBox(height: 4),
         Text(
           value,
@@ -386,7 +541,9 @@ class _SummaryItem extends StatelessWidget {
         ),
         Text(
           title,
-          style: const TextStyle(fontSize: 11),
+          style: const TextStyle(
+            fontSize: 11,
+          ),
         ),
       ],
     );
