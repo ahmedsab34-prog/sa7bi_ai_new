@@ -11,6 +11,10 @@ class DiagnosticResult {
   final String severity;
   final bool repairable;
 
+  /// true عندما يكون الفشل نتيجة مباشرة لفشل
+  /// طبقة أعلى، وليس خطأ مستقلًا في هذه الخدمة.
+  final bool blocked;
+
   const DiagnosticResult({
     required this.name,
     required this.category,
@@ -21,11 +25,14 @@ class DiagnosticResult {
     this.httpStatus,
     this.severity = 'PASS',
     this.repairable = false,
+    this.blocked = false,
   });
 
-  bool get isWarning => severity == 'WARN';
+  bool get isWarning =>
+      severity == 'WARN';
 
-  bool get isFailure => severity == 'FAIL';
+  bool get isFailure =>
+      severity == 'FAIL';
 
   Map<String, dynamic> toJson() {
     return {
@@ -38,6 +45,7 @@ class DiagnosticResult {
       'httpStatus': httpStatus,
       'durationMs': durationMs,
       'repairable': repairable,
+      'blocked': blocked,
     };
   }
 }
@@ -77,33 +85,55 @@ class AppDiagnosticsReport {
   });
 
   int get passed =>
-      results.where(
-        (item) => item.severity == 'PASS',
-      ).length;
+      results
+          .where(
+            (item) =>
+                item.severity == 'PASS',
+          )
+          .length;
 
   int get warnings =>
-      results.where(
-        (item) => item.severity == 'WARN',
-      ).length;
+      results
+          .where(
+            (item) =>
+                item.severity == 'WARN',
+          )
+          .length;
 
   int get failed =>
-      results.where(
-        (item) => item.severity == 'FAIL',
-      ).length;
+      results
+          .where(
+            (item) =>
+                item.severity == 'FAIL',
+          )
+          .length;
 
-  int get total => results.length;
+  int get blocked =>
+      results
+          .where(
+            (item) => item.blocked,
+          )
+          .length;
+
+  int get total =>
+      results.length;
 
   Duration get duration =>
-      finishedAt.difference(startedAt);
+      finishedAt.difference(
+        startedAt,
+      );
 
   bool get hasRepairableIssues =>
       results.any(
         (item) =>
             !item.success &&
-            item.repairable,
+            item.repairable &&
+            !item.blocked,
       );
 
-  DiagnosticResult? _find(String name) {
+  DiagnosticResult? _find(
+    String name,
+  ) {
     for (final item in results) {
       if (item.name == name) {
         return item;
@@ -113,98 +143,201 @@ class AppDiagnosticsReport {
     return null;
   }
 
-  String get rootCause {
+  // ============================================================
+  // ROOT CAUSE
+  // ============================================================
+
+  String get rootCauseCode {
+    final transport =
+        _find(
+      'Network transport identity',
+    );
+
+    final internet =
+        _find(
+      'Internet HTTPS control',
+    );
+
     final dns =
-        _find('Worker DNS resolution');
+        _find(
+      'Worker DNS resolution',
+    );
 
-    final ipv4 =
-        _find('Worker IPv4 socket reachability');
+    final worker =
+        _find(
+      'Worker HTTPS health',
+    );
 
-    final ipv6 =
-        _find('Worker IPv6 socket reachability');
+    final build =
+        _find(
+      'Build/source identity',
+    );
 
-    final https4 =
-        _find('Worker HTTPS via resolved IPv4');
-
-    final https6 =
-        _find('Worker HTTPS via resolved IPv6');
-
-    if (dns != null && !dns.success) {
-      return
-          'فشل حل اسم Worker عبر DNS. '
-          'المشكلة في طبقة DNS قبل الوصول إلى Worker.';
+    if (build != null &&
+        !build.success) {
+      return 'BUILD_IDENTITY';
     }
 
-    if (ipv4 != null &&
-        !ipv4.success &&
-        ipv6 != null &&
-        !ipv6.success) {
-      return
-          'اسم Worker يتم حله، لكن الاتصال TCP '
-          'بالمنفذ 443 غير متاح عبر IPv4 وIPv6. '
-          'الاحتمال الأقوى مشكلة شبكة أو VPN أو ISP '
-          'أو Firewall أو مسار Cloudflare.';
+    if (transport != null &&
+        transport.severity == 'WARN') {
+      return 'NETWORK_TRANSPORT_FALLBACK';
     }
 
-    if (https4?.success == true ||
-        https6?.success == true) {
-      return
-          'الاتصال بـWorker ينجح باستخدام عنوان IP '
-          'مع الاحتفاظ باسم المضيف. '
-          'هذا يوجه التشخيص إلى DNS أو hostname '
-          'أو proxy أو routing.';
+    if (internet != null &&
+        !internet.success) {
+      return 'NETWORK_INTERNET_HTTPS';
     }
 
-    if (ipv4?.success == true &&
-        https4 != null &&
-        !https4.success) {
-      return
-          'اتصال TCP عبر IPv4 يعمل، لكن HTTPS/TLS '
-          'عبر Worker لا يعمل. يجب فحص TLS/SNI '
-          'وCloudflare routing.';
+    if (dns != null &&
+        !dns.success) {
+      return 'NETWORK_DNS';
     }
 
-    if (ipv6?.success == true &&
-        https6 != null &&
-        !https6.success) {
-      return
-          'اتصال TCP عبر IPv6 يعمل، لكن HTTPS يفشل. '
-          'يجب فحص IPv6 routing أو TLS.';
+    if (worker != null &&
+        !worker.success) {
+      final status =
+          worker.status;
+
+      if (status == 'TIMEOUT') {
+        return 'NETWORK_WORKER_TIMEOUT';
+      }
+
+      if (status == 'TLS_ERROR') {
+        return 'NETWORK_TLS';
+      }
+
+      if (status == 'DNS_ERROR') {
+        return 'NETWORK_DNS';
+      }
+
+      return 'NETWORK_WORKER_HTTPS';
     }
 
-    final failures = results
-        .where(
-          (item) => item.severity == 'FAIL',
-        )
-        .toList();
+    final workerFailures =
+        results.where(
+      (item) =>
+          item.category == 'WORKER' &&
+          !item.success &&
+          !item.blocked,
+    );
 
-    if (failures.isNotEmpty) {
-      return failures.first.details;
+    if (workerFailures.isNotEmpty) {
+      return 'BACKEND_WORKER';
     }
 
-    final warnings = results
-        .where(
-          (item) => item.severity == 'WARN',
-        )
-        .toList();
+    final aiFailures =
+        results.where(
+      (item) =>
+          item.category == 'AI' &&
+          !item.success &&
+          !item.blocked,
+    );
 
-    if (warnings.isNotEmpty) {
-      return warnings.first.details;
+    if (aiFailures.isNotEmpty) {
+      return 'FEATURE_AI';
     }
 
-    return
-        'لم يتم اكتشاف مشكلة في الاختبارات الحالية.';
+    final featureFailures =
+        results.where(
+      (item) =>
+          !item.success &&
+          !item.blocked &&
+          (
+            item.category == 'NEWS' ||
+            item.category == 'QURAN' ||
+            item.category == 'TAFSIR' ||
+            item.category == 'HADITH' ||
+            item.category == 'RADIO' ||
+            item.category == 'AUDIO' ||
+            item.category == 'PODCAST' ||
+            item.category == 'SHORTS'
+          ),
+    );
+
+    if (featureFailures.isNotEmpty) {
+      return 'FEATURE_SERVICE';
+    }
+
+    return 'NO_ROOT_FAILURE';
   }
 
-  String get primaryProblem => rootCause;
+  String get rootCause {
+    switch (rootCauseCode) {
+      case 'BUILD_IDENTITY':
+        return
+            'هوية النسخة غير مكتملة. '
+            'لا يمكن إثبات أن الـAPK مبني من المصدر '
+            'والـcommit المقصودين.';
 
-  List<DiagnosticResult> get slowestResults {
+      case 'NETWORK_TRANSPORT_FALLBACK':
+        return
+            'التطبيق يعمل بدون Network transport '
+            'المطلوب. راجع Sa7biNetworkClient.';
+
+      case 'NETWORK_INTERNET_HTTPS':
+        return
+            'طبقة HTTPS العامة نفسها فاشلة. '
+            'قبل فحص Worker يجب إصلاح مسار الشبكة '
+            'على الجهاز أو النقل المستخدم.';
+
+      case 'NETWORK_DNS':
+        return
+            'اسم Worker لا يتم حله عبر DNS. '
+            'المشكلة قبل الوصول إلى Cloudflare.';
+
+      case 'NETWORK_WORKER_TIMEOUT':
+        return
+            'HTTPS إلى Worker انتهى بمهلة. '
+            'هذا يثبت مشكلة في مسار HTTPS/الشبكة، '
+            'وليس دليلًا على أن كود AI نفسه هو السبب.';
+
+      case 'NETWORK_TLS':
+        return
+            'الاتصال بـWorker يصل إلى مرحلة TLS '
+            'لكن المصافحة لا تكتمل.';
+
+      case 'NETWORK_WORKER_HTTPS':
+        return
+            'تعذر الوصول إلى Worker عبر HTTPS '
+            'من Network Client المستخدم فعليًا.';
+
+      case 'BACKEND_WORKER':
+        return
+            'الاتصال بالـWorker يعمل، لكن route '
+            'من routes الخاصة بالـbackend فاشل.';
+
+      case 'FEATURE_AI':
+        return
+            'الشبكة والـWorker يعملان، لكن route '
+            'خاص بالـAI فاشل.';
+
+      case 'FEATURE_SERVICE':
+        return
+            'الشبكة والـWorker يعملان، لكن إحدى '
+            'خدمات التطبيق نفسها لا تستجيب.';
+
+      default:
+        return
+            'لم يتم اكتشاف Root Failure '
+            'في الاختبارات الحالية.';
+    }
+  }
+
+  String get primaryProblem =>
+      rootCause;
+
+  List<DiagnosticResult>
+      get slowestResults {
     final copy =
-        List<DiagnosticResult>.from(results);
+        List<DiagnosticResult>.from(
+      results,
+    );
 
     copy.sort(
       (a, b) =>
-          b.durationMs.compareTo(a.durationMs),
+          b.durationMs.compareTo(
+        a.durationMs,
+      ),
     );
 
     return copy.take(5).toList();
@@ -213,43 +346,83 @@ class AppDiagnosticsReport {
   Map<String, dynamic> toJson() {
     return {
       'reportVersion':
-          AppDiagnosticsService.diagnosticVersion,
+          AppDiagnosticsService
+              .diagnosticVersion,
+
       'startedAt':
           startedAt.toIso8601String(),
+
       'finishedAt':
           finishedAt.toIso8601String(),
+
       'durationMs':
           duration.inMilliseconds,
+
       'passed': passed,
       'warnings': warnings,
       'failed': failed,
+      'blocked': blocked,
       'total': total,
-      'primaryProblem': primaryProblem,
-      'rootCause': rootCause,
-      'repairableIssues': results
-          .where(
-            (item) =>
-                !item.success &&
-                item.repairable,
-          )
-          .map(
-            (item) => item.name,
-          )
-          .toList(),
+
+      'rootCauseCode':
+          rootCauseCode,
+
+      'primaryProblem':
+          primaryProblem,
+
+      'repairableIssues':
+          results
+              .where(
+                (item) =>
+                    !item.success &&
+                    item.repairable &&
+                    !item.blocked,
+              )
+              .map(
+                (item) => item.name,
+              )
+              .toList(),
+
+      'buildIdentity': {
+        'appBuildId':
+            AppDiagnosticsService
+                .buildId,
+        'sourceId':
+            AppDiagnosticsService
+                .sourceId,
+        'appVersion':
+            AppDiagnosticsService
+                .appVersion,
+        'buildNumber':
+            AppDiagnosticsService
+                .buildNumber,
+        'commitSha':
+            AppDiagnosticsService
+                .commitSha,
+      },
+
+      'networkTransport':
+          Sa7biNetworkClient
+              .transportName,
+
       'results':
           results
               .map(
-                (item) => item.toJson(),
+                (item) =>
+                    item.toJson(),
               )
               .toList(),
+
       'slowestTests':
           slowestResults
               .map(
                 (item) => {
-                  'name': item.name,
+                  'name':
+                      item.name,
                   'durationMs':
                       item.durationMs,
-                  'status': item.status,
+                  'status':
+                      item.status,
                 },
               )
               .toList(),
@@ -257,12 +430,16 @@ class AppDiagnosticsReport {
   }
 
   String toPrettyJson() {
-    return const JsonEncoder.withIndent('  ')
-        .convert(toJson());
+    return const JsonEncoder
+        .withIndent('  ')
+        .convert(
+      toJson(),
+    );
   }
 
   String toTextReport() {
-    final buffer = StringBuffer();
+    final buffer =
+        StringBuffer();
 
     buffer.writeln(
       '========================================',
@@ -297,19 +474,45 @@ class AppDiagnosticsReport {
     buffer.writeln();
 
     buffer.writeln('SUMMARY');
-    buffer.writeln('Passed: $passed');
-    buffer.writeln('Warnings: $warnings');
-    buffer.writeln('Failed: $failed');
-    buffer.writeln('Total: $total');
+    buffer.writeln(
+      'Passed: $passed',
+    );
+    buffer.writeln(
+      'Warnings: $warnings',
+    );
+    buffer.writeln(
+      'Failed: $failed',
+    );
+    buffer.writeln(
+      'Blocked: $blocked',
+    );
+    buffer.writeln(
+      'Total: $total',
+    );
 
     buffer.writeln();
 
-    buffer.writeln('PRIMARY PROBLEM');
-    buffer.writeln(primaryProblem);
+    buffer.writeln(
+      'ROOT CAUSE CODE',
+    );
+    buffer.writeln(
+      rootCauseCode,
+    );
 
     buffer.writeln();
 
-    buffer.writeln('BUILD IDENTITY');
+    buffer.writeln(
+      'PRIMARY PROBLEM',
+    );
+    buffer.writeln(
+      primaryProblem,
+    );
+
+    buffer.writeln();
+
+    buffer.writeln(
+      'BUILD IDENTITY',
+    );
 
     buffer.writeln(
       'APP_BUILD_ID: '
@@ -338,13 +541,27 @@ class AppDiagnosticsReport {
 
     buffer.writeln();
 
-    buffer.writeln('RESULTS');
+    buffer.writeln(
+      'NETWORK TRANSPORT',
+    );
+
+    buffer.writeln(
+      Sa7biNetworkClient
+          .transportName,
+    );
+
+    buffer.writeln();
+
+    buffer.writeln(
+      'RESULTS',
+    );
 
     buffer.writeln(
       '----------------------------------------',
     );
 
-    for (final result in results) {
+    for (final result
+        in results) {
       buffer.writeln(
         '[${result.severity}] '
         '${result.category} | '
@@ -366,6 +583,11 @@ class AppDiagnosticsReport {
       );
 
       buffer.writeln(
+        'Blocked: '
+        '${result.blocked}',
+      );
+
+      buffer.writeln(
         'Repairable: '
         '${result.repairable}',
       );
@@ -378,13 +600,16 @@ class AppDiagnosticsReport {
       buffer.writeln();
     }
 
-    buffer.writeln('SLOWEST TESTS');
+    buffer.writeln(
+      'SLOWEST TESTS',
+    );
 
     buffer.writeln(
       '----------------------------------------',
     );
 
-    for (final result in slowestResults) {
+    for (final result
+        in slowestResults) {
       buffer.writeln(
         '${result.durationMs} ms | '
         '${result.status} | '
@@ -398,7 +623,9 @@ class AppDiagnosticsReport {
       '========================================',
     );
 
-    buffer.writeln('END OF REPORT');
+    buffer.writeln(
+      'END OF REPORT',
+    );
 
     buffer.writeln(
       '========================================',
