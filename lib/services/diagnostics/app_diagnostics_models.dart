@@ -1,3 +1,5 @@
+part of '../app_diagnostics_service.dart';
+
 class DiagnosticResult {
   final String name;
   final String category;
@@ -230,21 +232,27 @@ class AppDiagnosticsReport {
                 !item.success &&
                 item.repairable,
           )
-          .map((item) => item.name)
+          .map(
+            (item) => item.name,
+          )
           .toList(),
       'results':
-          results.map(
-            (item) => item.toJson(),
-          ).toList(),
+          results
+              .map(
+                (item) => item.toJson(),
+              )
+              .toList(),
       'slowestTests':
-          slowestResults.map(
-            (item) => {
-              'name': item.name,
-              'durationMs':
-                  item.durationMs,
-              'status': item.status,
-            },
-          ).toList(),
+          slowestResults
+              .map(
+                (item) => {
+                  'name': item.name,
+                  'durationMs':
+                      item.durationMs,
+                  'status': item.status,
+                },
+              )
+              .toList(),
     };
   }
 
@@ -302,22 +310,27 @@ class AppDiagnosticsReport {
     buffer.writeln();
 
     buffer.writeln('BUILD IDENTITY');
+
     buffer.writeln(
       'APP_BUILD_ID: '
       '${AppDiagnosticsService.buildId}',
     );
+
     buffer.writeln(
       'APP_SOURCE_ID: '
       '${AppDiagnosticsService.sourceId}',
     );
+
     buffer.writeln(
       'SA7BI_APP_VERSION: '
       '${AppDiagnosticsService.appVersion}',
     );
+
     buffer.writeln(
       'SA7BI_BUILD_NUMBER: '
       '${AppDiagnosticsService.buildNumber}',
     );
+
     buffer.writeln(
       'SA7BI_COMMIT_SHA: '
       '${AppDiagnosticsService.commitSha}',
@@ -326,6 +339,7 @@ class AppDiagnosticsReport {
     buffer.writeln();
 
     buffer.writeln('RESULTS');
+
     buffer.writeln(
       '----------------------------------------',
     );
@@ -365,6 +379,7 @@ class AppDiagnosticsReport {
     }
 
     buffer.writeln('SLOWEST TESTS');
+
     buffer.writeln(
       '----------------------------------------',
     );
@@ -382,7 +397,9 @@ class AppDiagnosticsReport {
     buffer.writeln(
       '========================================',
     );
+
     buffer.writeln('END OF REPORT');
+
     buffer.writeln(
       '========================================',
     );
