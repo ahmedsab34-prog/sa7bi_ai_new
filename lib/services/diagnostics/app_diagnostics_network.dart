@@ -47,9 +47,12 @@ extension AppDiagnosticsNetworkChecks
   Future<DiagnosticResult>
       _checkBuildSourceIdentity() async {
     final injected =
-        buildId != 'NOT_INJECTED' ||
-        sourceId != 'NOT_INJECTED' ||
-        commitSha != 'NOT_INJECTED';
+        AppDiagnosticsService.buildId !=
+                'NOT_INJECTED' ||
+        AppDiagnosticsService.sourceId !=
+                'NOT_INJECTED' ||
+        AppDiagnosticsService.commitSha !=
+                'NOT_INJECTED';
 
     return DiagnosticResult(
       name: 'Build/source identity',
@@ -62,11 +65,11 @@ extension AppDiagnosticsNetworkChecks
               ? 'INJECTED'
               : 'NOT_INJECTED',
       details:
-          'buildId=$buildId; '
-          'sourceId=$sourceId; '
-          'appVersion=$appVersion; '
-          'buildNumber=$buildNumber; '
-          'commitSha=$commitSha.',
+          'buildId=${AppDiagnosticsService.buildId}; '
+          'sourceId=${AppDiagnosticsService.sourceId}; '
+          'appVersion=${AppDiagnosticsService.appVersion}; '
+          'buildNumber=${AppDiagnosticsService.buildNumber}; '
+          'commitSha=${AppDiagnosticsService.commitSha}.',
       durationMs: 0,
     );
   }
@@ -645,16 +648,20 @@ extension AppDiagnosticsNetworkChecks
 
       client = HttpClient()
         ..connectionTimeout =
-            AppDiagnosticsService.deepTimeout
-        ..findProxy =
-            (_) => 'DIRECT'
-        ..userAgent =
-            'Sa7biAI-Diagnostics/'
-            '${AppDiagnosticsService.diagnosticVersion}';
+            AppDiagnosticsService.deepTimeout;
 
       // مهم:
-      // connectionFactory setter مستقل.
-      // ده يمنع التباس الـ cascade.
+      // نفصل findProxy عن userAgent.
+      // لا نستخدم cascade هنا حتى لا يصبح
+      // userAgent تابعًا لقيمة String الناتجة
+      // من findProxy.
+      client.findProxy =
+          (_) => 'DIRECT';
+
+      client.userAgent =
+          'Sa7biAI-Diagnostics/'
+          '${AppDiagnosticsService.diagnosticVersion}';
+
       client.connectionFactory = (
         Uri requested,
         String? proxyHost,
