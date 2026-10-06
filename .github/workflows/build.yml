@@ -75,13 +75,19 @@ jobs:
           set -euo pipefail
 
           COMMIT_SHORT="${GITHUB_SHA:0:7}"
+          BUILD_ID="run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+          SOURCE_ID="${GITHUB_REPOSITORY}@${GITHUB_SHA}"
 
           echo "APP_VERSION=${APP_VERSION}"
           echo "BUILD_NUMBER=${GITHUB_RUN_NUMBER}"
+          echo "BUILD_ID=${BUILD_ID}"
+          echo "SOURCE_ID=${SOURCE_ID}"
           echo "COMMIT_SHORT=${COMMIT_SHORT}"
           echo "FULL_COMMIT=${GITHUB_SHA}"
 
           echo "COMMIT_SHORT=${COMMIT_SHORT}" >> "${GITHUB_ENV}"
+          echo "BUILD_ID=${BUILD_ID}" >> "${GITHUB_ENV}"
+          echo "SOURCE_ID=${SOURCE_ID}" >> "${GITHUB_ENV}"
 
       # ==========================================================
       # 6. TOOLCHAIN INFORMATION
@@ -213,7 +219,9 @@ jobs:
             --build-number="${GITHUB_RUN_NUMBER}" \
             --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
             --dart-define="SA7BI_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" \
-            --dart-define="SA7BI_COMMIT_SHA=${COMMIT_SHORT}"
+            --dart-define="SA7BI_COMMIT_SHA=${GITHUB_SHA}" \
+            --dart-define="APP_BUILD_ID=${BUILD_ID}" \
+            --dart-define="APP_SOURCE_ID=${SOURCE_ID}"
 
           echo ""
           echo "APK build completed."
@@ -257,6 +265,10 @@ jobs:
           echo ""
           echo "Short commit: ${COMMIT_SHORT}"
           echo ""
+          echo "Build ID: ${BUILD_ID}"
+          echo ""
+          echo "Source ID: ${SOURCE_ID}"
+          echo ""
           echo "Build number: ${GITHUB_RUN_NUMBER}"
 
           echo "APK_SHA256=${APK_SHA256}" >> "${GITHUB_ENV}"
@@ -279,8 +291,12 @@ jobs:
 
           App version: ${APP_VERSION}
           Build number: ${GITHUB_RUN_NUMBER}
+
           Commit: ${GITHUB_SHA}
           Short commit: ${COMMIT_SHORT}
+
+          Build ID: ${BUILD_ID}
+          Source ID: ${SOURCE_ID}
 
           Flutter: ${FLUTTER_VERSION}
           Java: ${JAVA_VERSION}
@@ -353,7 +369,7 @@ jobs:
             "${RELEASE_APK_NAME}" \
             --target "${GITHUB_SHA}" \
             --title "Sa7bi AI - Latest APK" \
-            --notes "Automated APK release from commit ${GITHUB_SHA}."
+            --notes "Automated APK release from commit ${GITHUB_SHA}. Build ID: ${BUILD_ID}"
 
           echo ""
           echo "Release created successfully."
