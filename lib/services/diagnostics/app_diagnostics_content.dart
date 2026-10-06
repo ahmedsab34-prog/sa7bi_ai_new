@@ -3,7 +3,7 @@ part of '../app_diagnostics_service.dart';
 extension AppDiagnosticsContentChecks
     on AppDiagnosticsService {
   // ============================================================
-  // WORKER / ROUTES
+  // HTTP GET
   // ============================================================
 
   Future<DiagnosticResult> _httpGet({
@@ -14,50 +14,36 @@ extension AppDiagnosticsContentChecks
     final stopwatch =
         Stopwatch()..start();
 
-    final client = HttpClient()
-      ..connectionTimeout =
-          AppDiagnosticsService.defaultTimeout
-      ..userAgent =
-          'Sa7biAI-Diagnostics/'
-          '${AppDiagnosticsService.diagnosticVersion}';
-
     try {
-      final request =
-          await client.getUrl(
-        _buildUri(path),
-      );
-
-      request.headers.set(
-        HttpHeaders.acceptHeader,
-        'application/json',
-      );
-
-      request.headers.set(
-        HttpHeaders.cacheControlHeader,
-        'no-cache',
-      );
+      final uri =
+          _buildUri(path);
 
       final response =
-          await request.close();
+          await Sa7biNetworkClient.client
+              .get(
+        uri,
+        headers: const {
+          'Accept':
+              'application/json',
+          'Cache-Control':
+              'no-cache',
+        },
+      )
+              .timeout(
+        AppDiagnosticsService
+            .defaultTimeout,
+      );
+
+      stopwatch.stop();
 
       final status =
           response.statusCode;
 
       final body =
-          await response
-              .take(32)
-              .map(
-                (chunk) =>
-                    utf8.decode(
-                  chunk,
-                  allowMalformed: true,
-                ),
-              )
-              .join();
-
-      await response.drain<void>();
-
-      stopwatch.stop();
+          utf8.decode(
+        response.bodyBytes,
+        allowMalformed: true,
+      );
 
       final reachable =
           status >= 200 &&
@@ -113,10 +99,12 @@ extension AppDiagnosticsContentChecks
             category == 'WORKER' ||
             category == 'AI',
       );
-    } finally {
-      client.close(force: true);
     }
   }
+
+  // ============================================================
+  // ROUTE PROBE
+  // ============================================================
 
   Future<DiagnosticResult>
       _probeRoute({
@@ -129,19 +117,19 @@ extension AppDiagnosticsContentChecks
 
     try {
       final response =
-          await http.get(
+          await Sa7biNetworkClient.client
+              .get(
         _buildUri(path),
-        headers: {
+        headers: const {
           'Accept':
               'application/json',
-          'User-Agent':
-              'Sa7biAI-Diagnostics/'
-              '${AppDiagnosticsService.diagnosticVersion}',
           'Cache-Control':
               'no-cache',
         },
-      ).timeout(
-        AppDiagnosticsService.defaultTimeout,
+      )
+              .timeout(
+        AppDiagnosticsService
+            .defaultTimeout,
       );
 
       stopwatch.stop();
@@ -149,6 +137,12 @@ extension AppDiagnosticsContentChecks
       final reachable =
           response.statusCode >= 200 &&
           response.statusCode < 500;
+
+      final body =
+          utf8.decode(
+        response.bodyBytes,
+        allowMalformed: true,
+      );
 
       return DiagnosticResult(
         name: name,
@@ -164,8 +158,9 @@ extension AppDiagnosticsContentChecks
             response.statusCode,
         details:
             'HTTP ${response.statusCode}. '
-            'هذا اختبار route فقط؛ '
-            'لم يتم تنفيذ توليد AI.',
+            'Route reachability only; '
+            'no paid AI generation executed. '
+            '${_summarizeBody(body)}',
         durationMs:
             stopwatch.elapsedMilliseconds,
         repairable: !reachable,
@@ -189,7 +184,7 @@ extension AppDiagnosticsContentChecks
   }
 
   // ============================================================
-  // MEDIA
+  // MEDIA URL HANDLING
   // ============================================================
 
   Future<DiagnosticResult>
@@ -228,7 +223,8 @@ extension AppDiagnosticsContentChecks
       stopwatch.stop();
 
       return DiagnosticResult(
-        name: 'Media URL handling',
+        name:
+            'Media URL handling',
         category: 'MEDIA',
         success: valid,
         severity:
@@ -249,7 +245,8 @@ extension AppDiagnosticsContentChecks
       stopwatch.stop();
 
       return DiagnosticResult(
-        name: 'Media URL handling',
+        name:
+            'Media URL handling',
         category: 'MEDIA',
         success: false,
         severity: 'FAIL',
@@ -293,110 +290,13 @@ extension AppDiagnosticsContentChecks
       details:
           '/v1/credits='
           '${credits.status}. '
-          'AdMob نفسه لا يتم اختباره '
-          'من خلال Worker.',
+          'AdMob itself is not tested '
+          'through Worker.',
       durationMs:
           credits.durationMs,
       repairable: !success,
-    );
-  }
-
-  // ============================================================
-  // ERROR CLASSIFICATION
-  // ============================================================
-
-  Future<DiagnosticResult>
-      _checkErrorClassification() async {
-    final stopwatch =
-        Stopwatch()..start();
-
-    try {
-      final response =
-          await http.get(
-        _buildUri(
-          '/__sa7bi_diagnostic_missing_endpoint__',
-        ),
-      ).timeout(
-        AppDiagnosticsService.defaultTimeout,
-      );
-
-      stopwatch.stop();
-
-      final expected =
-          response.statusCode == 404;
-
-      return DiagnosticResult(
-        name:
-            'HTTP error classification',
-        category: 'ERRORS',
-        success: expected,
-        severity:
-            expected ? 'PASS' : 'WARN',
-        status:
-            expected
-                ? 'HTTP_404_EXPECTED'
-                : _statusForHttpCode(
-                    response.statusCode,
-                  ),
-        httpStatus:
-            response.statusCode,
-        details:
-            'تم إرسال طلب إلى route '
-            'غير موجود عمدًا؛ المتوقع 404.',
-        durationMs:
-            stopwatch.elapsedMilliseconds,
-      );
-    } catch (error) {
-      stopwatch.stop();
-
-      return DiagnosticResult(
-        name:
-            'HTTP error classification',
-        category: 'ERRORS',
-        success: false,
-        severity: 'WARN',
-        status:
-            _classifyException(error),
-        details:
-            'تعذر تنفيذ اختبار 404 '
-            'المتحكم فيه: '
-            '${_safeError(error)}',
-        durationMs:
-            stopwatch.elapsedMilliseconds,
-      );
-    }
-  }
-
-  // ============================================================
-  // TIMEOUT
-  // ============================================================
-
-  Future<DiagnosticResult>
-      _checkTimeoutConfiguration() async {
-    final valid =
-        AppDiagnosticsService
-                .defaultTimeout
-                .inSeconds >=
-            5 &&
-        AppDiagnosticsService
-                .deepTimeout
-                .inSeconds >=
-            3;
-
-    return DiagnosticResult(
-      name: 'Timeout configuration',
-      category: 'TIMEOUT',
-      success: valid,
-      severity:
-          valid ? 'PASS' : 'WARN',
-      status:
-          valid ? 'OK' : 'INVALID',
-      details:
-          'defaultTimeout='
-          '${AppDiagnosticsService.defaultTimeout.inSeconds}s; '
-          'deepTimeout='
-          '${AppDiagnosticsService.deepTimeout.inSeconds}s.',
-      durationMs: 0,
+      blocked:
+          credits.blocked,
     );
   }
 }
