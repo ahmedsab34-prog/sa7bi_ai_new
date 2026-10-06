@@ -16,10 +16,10 @@ extension AppDiagnosticsContentChecks
 
     final client = HttpClient()
       ..connectionTimeout =
-          defaultTimeout
+          AppDiagnosticsService.defaultTimeout
       ..userAgent =
           'Sa7biAI-Diagnostics/'
-          '$diagnosticVersion';
+          '${AppDiagnosticsService.diagnosticVersion}';
 
     try {
       final request =
@@ -136,11 +136,13 @@ extension AppDiagnosticsContentChecks
               'application/json',
           'User-Agent':
               'Sa7biAI-Diagnostics/'
-              '$diagnosticVersion',
+              '${AppDiagnosticsService.diagnosticVersion}',
           'Cache-Control':
               'no-cache',
         },
-      ).timeout(defaultTimeout);
+      ).timeout(
+        AppDiagnosticsService.defaultTimeout,
+      );
 
       stopwatch.stop();
 
@@ -314,7 +316,9 @@ extension AppDiagnosticsContentChecks
         _buildUri(
           '/__sa7bi_diagnostic_missing_endpoint__',
         ),
-      ).timeout(defaultTimeout);
+      ).timeout(
+        AppDiagnosticsService.defaultTimeout,
+      );
 
       stopwatch.stop();
 
@@ -370,8 +374,14 @@ extension AppDiagnosticsContentChecks
   Future<DiagnosticResult>
       _checkTimeoutConfiguration() async {
     final valid =
-        defaultTimeout.inSeconds >= 5 &&
-        deepTimeout.inSeconds >= 3;
+        AppDiagnosticsService
+                .defaultTimeout
+                .inSeconds >=
+            5 &&
+        AppDiagnosticsService
+                .deepTimeout
+                .inSeconds >=
+            3;
 
     return DiagnosticResult(
       name: 'Timeout configuration',
@@ -383,9 +393,9 @@ extension AppDiagnosticsContentChecks
           valid ? 'OK' : 'INVALID',
       details:
           'defaultTimeout='
-          '${defaultTimeout.inSeconds}s; '
+          '${AppDiagnosticsService.defaultTimeout.inSeconds}s; '
           'deepTimeout='
-          '${deepTimeout.inSeconds}s.',
+          '${AppDiagnosticsService.deepTimeout.inSeconds}s.',
       durationMs: 0,
     );
   }
