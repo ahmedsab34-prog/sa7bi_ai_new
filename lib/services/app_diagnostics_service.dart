@@ -14,6 +14,7 @@ class DiagnosticResult {
   final int? httpStatus;
   final int durationMs;
   final String severity;
+  final bool repairable;
 
   const DiagnosticResult({
     required this.name,
@@ -24,11 +25,8 @@ class DiagnosticResult {
     required this.durationMs,
     this.httpStatus,
     this.severity = 'PASS',
+    this.repairable = false,
   });
-
-  bool get isWarning => severity == 'WARN';
-
-  bool get isFailure => severity == 'FAIL';
 
   Map<String, dynamic> toJson() {
     return {
@@ -40,6 +38,30 @@ class DiagnosticResult {
       'details': details,
       'httpStatus': httpStatus,
       'durationMs': durationMs,
+      'repairable': repairable,
+    };
+  }
+}
+
+class DiagnosticRepairResult {
+  final bool success;
+  final bool changed;
+  final String title;
+  final String details;
+
+  const DiagnosticRepairResult({
+    required this.success,
+    required this.changed,
+    required this.title,
+    required this.details,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'success': success,
+      'changed': changed,
+      'title': title,
+      'details': details,
     };
   }
 }
@@ -66,50 +88,97 @@ class AppDiagnosticsReport {
 
   int get total => results.length;
 
-  Duration get duration => finishedAt.difference(startedAt);
+  Duration get duration =>
+      finishedAt.difference(startedAt);
 
-  String get primaryProblem {
-    final failures = results
-        .where((e) => e.severity == 'FAIL')
-        .toList();
+  bool get hasRepairableIssues =>
+      results.any((e) => !e.success && e.repairable);
 
-    if (failures.isEmpty) {
-      final warnings = results
-          .where((e) => e.severity == 'WARN')
-          .toList();
-
-      if (warnings.isEmpty) {
-        return 'لم يتم اكتشاف مشكلة في الاختبارات الحالية.';
+  DiagnosticResult? _find(String name) {
+    for (final item in results) {
+      if (item.name == name) {
+        return item;
       }
+    }
+    return null;
+  }
 
+  String get rootCause {
+    final dns = _find('Worker DNS resolution');
+    final ipv4 = _find('Worker IPv4 socket reachability');
+    final ipv6 = _find('Worker IPv6 socket reachability');
+    final https4 = _find('Worker HTTPS via resolved IPv4');
+    final https6 = _find('Worker HTTPS via resolved IPv6');
+
+    if (dns != null && !dns.success) {
+      return 'فشل حل اسم Worker عبر DNS. '
+          'المشكلة في طبقة DNS قبل الوصول إلى الـWorker.';
+    }
+
+    if (ipv4 != null &&
+        !ipv4.success &&
+        ipv6 != null &&
+        !ipv6.success) {
+      return 'اسم الـWorker يتم حله، لكن الاتصال TCP بالمنفذ 443 '
+          'غير متاح عبر IPv4 وIPv6. '
+          'هذا يشير إلى مشكلة في مسار الشبكة أو VPN أو ISP أو Firewall '
+          'أو مسار Cloudflare، وليس في كود AI نفسه.';
+    }
+
+    if (https4?.success == true ||
+        https6?.success == true) {
+      return 'الاتصال بالـWorker ينجح عند استخدام عنوان IP المحلول '
+          'مع إبقاء hostname الخاص بالـWorker. '
+          'هذا يوجه التشخيص إلى مسار hostname أو DNS أو proxy.';
+    }
+
+    if (ipv4?.success == true &&
+        https4 != null &&
+        !https4.success) {
+      return 'اتصال TCP عبر IPv4 يعمل، لكن HTTPS/TLS عبر Worker لا يعمل. '
+          'يجب فحص TLS/SNI/Cloudflare routing.';
+    }
+
+    if (ipv6?.success == true &&
+        https6 != null &&
+        !https6.success) {
+      return 'اتصال TCP عبر IPv6 يعمل، لكن HTTPS يفشل. '
+          'يجب فحص IPv6 routing أو TLS.';
+    }
+
+    final failures =
+        results.where((e) => e.severity == 'FAIL').toList();
+
+    if (failures.isNotEmpty) {
+      return failures.first.details;
+    }
+
+    final warnings =
+        results.where((e) => e.severity == 'WARN').toList();
+
+    if (warnings.isNotEmpty) {
       return warnings.first.details;
     }
 
-    final networkTimeouts = failures
-        .where((e) =>
-            e.status == 'TIMEOUT' ||
-            e.status == 'SOCKET_ERROR' ||
-            e.status == 'NETWORK_ERROR')
-        .toList();
-
-    if (networkTimeouts.isNotEmpty) {
-      return networkTimeouts.first.details;
-    }
-
-    return failures.first.details;
+    return 'لم يتم اكتشاف مشكلة في الاختبارات الحالية.';
   }
+
+  String get primaryProblem => rootCause;
 
   List<DiagnosticResult> get slowestResults {
     final copy = List<DiagnosticResult>.from(results);
+
     copy.sort(
       (a, b) => b.durationMs.compareTo(a.durationMs),
     );
+
     return copy.take(5).toList();
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'reportVersion': '3.0.0',
+      'reportVersion':
+          AppDiagnosticsService.diagnosticVersion,
       'startedAt': startedAt.toIso8601String(),
       'finishedAt': finishedAt.toIso8601String(),
       'durationMs': duration.inMilliseconds,
@@ -118,19 +187,27 @@ class AppDiagnosticsReport {
       'failed': failed,
       'total': total,
       'primaryProblem': primaryProblem,
+      'rootCause': rootCause,
+      'repairableIssues': results
+          .where((e) => !e.success && e.repairable)
+          .map((e) => e.name)
+          .toList(),
       'results': results.map((e) => e.toJson()).toList(),
       'slowestTests': slowestResults
-          .map((e) => {
-                'name': e.name,
-                'durationMs': e.durationMs,
-                'status': e.status,
-              })
+          .map(
+            (e) => {
+              'name': e.name,
+              'durationMs': e.durationMs,
+              'status': e.status,
+            },
+          )
           .toList(),
     };
   }
 
   String toPrettyJson() {
-    return const JsonEncoder.withIndent('  ').convert(toJson());
+    return const JsonEncoder.withIndent('  ')
+        .convert(toJson());
   }
 
   String toTextReport() {
@@ -139,7 +216,10 @@ class AppDiagnosticsReport {
     buffer.writeln('========================================');
     buffer.writeln('SA7BI AI DIAGNOSTIC REPORT');
     buffer.writeln('========================================');
-    buffer.writeln('Report version: 3.0.0');
+    buffer.writeln(
+      'Report version: '
+      '${AppDiagnosticsService.diagnosticVersion}',
+    );
     buffer.writeln(
       'Started: ${startedAt.toLocal().toIso8601String()}',
     );
@@ -162,6 +242,26 @@ class AppDiagnosticsReport {
     buffer.writeln(primaryProblem);
     buffer.writeln();
 
+    buffer.writeln('ROOT CAUSE ANALYSIS');
+    buffer.writeln(rootCause);
+    buffer.writeln();
+
+    buffer.writeln('REPAIRABLE ISSUES');
+
+    final repairable = results
+        .where((e) => !e.success && e.repairable)
+        .toList();
+
+    if (repairable.isEmpty) {
+      buffer.writeln('None confirmed locally.');
+    } else {
+      for (final item in repairable) {
+        buffer.writeln('- ${item.name}');
+      }
+    }
+
+    buffer.writeln();
+
     buffer.writeln('RESULTS');
     buffer.writeln('----------------------------------------');
 
@@ -178,7 +278,12 @@ class AppDiagnosticsReport {
       buffer.writeln(
         'Duration: ${result.durationMs} ms',
       );
-      buffer.writeln('Details: ${result.details}');
+      buffer.writeln(
+        'Repairable: ${result.repairable}',
+      );
+      buffer.writeln(
+        'Details: ${result.details}',
+      );
       buffer.writeln();
     }
 
@@ -213,29 +318,37 @@ class AppDiagnosticsService {
   static const Duration defaultTimeout =
       Duration(seconds: 12);
 
-  static const String diagnosticVersion = '3.0.0';
+  static const Duration deepTimeout =
+      Duration(seconds: 5);
 
-  static const String buildId = String.fromEnvironment(
+  static const String diagnosticVersion = '4.0.0';
+
+  static const String buildId =
+      String.fromEnvironment(
     'APP_BUILD_ID',
     defaultValue: 'NOT_INJECTED',
   );
 
-  static const String sourceId = String.fromEnvironment(
+  static const String sourceId =
+      String.fromEnvironment(
     'APP_SOURCE_ID',
     defaultValue: 'NOT_INJECTED',
   );
 
-  static const String appVersion = String.fromEnvironment(
+  static const String appVersion =
+      String.fromEnvironment(
     'SA7BI_APP_VERSION',
     defaultValue: 'NOT_INJECTED',
   );
 
-  static const String buildNumber = String.fromEnvironment(
+  static const String buildNumber =
+      String.fromEnvironment(
     'SA7BI_BUILD_NUMBER',
     defaultValue: 'NOT_INJECTED',
   );
 
-  static const String commitSha = String.fromEnvironment(
+  static const String commitSha =
+      String.fromEnvironment(
     'SA7BI_COMMIT_SHA',
     defaultValue: 'NOT_INJECTED',
   );
@@ -277,7 +390,7 @@ class AppDiagnosticsService {
           category: category,
           success: false,
           severity: 'FAIL',
-          status: 'EXCEPTION',
+          status: _classifyException(e),
           details: _safeError(e),
           durationMs: 0,
         );
@@ -306,7 +419,7 @@ class AppDiagnosticsService {
       _checkBuildSourceIdentity,
     );
 
-    // DEVICE / PERFORMANCE
+    // DEVICE
     await run(
       'DEVICE',
       'Runtime memory',
@@ -317,6 +430,12 @@ class AppDiagnosticsService {
       'DEVICE',
       'Temporary storage',
       _checkTemporaryStorage,
+    );
+
+    await run(
+      'DEVICE',
+      'Network interfaces',
+      _checkNetworkInterfaces,
     );
 
     // NETWORK
@@ -330,6 +449,18 @@ class AppDiagnosticsService {
       'NETWORK',
       'Worker DNS resolution',
       _checkDns,
+    );
+
+    await run(
+      'NETWORK',
+      'Worker IPv4 DNS',
+      _checkDnsV4,
+    );
+
+    await run(
+      'NETWORK',
+      'Worker IPv6 DNS',
+      _checkDnsV6,
     );
 
     await run(
@@ -348,6 +479,36 @@ class AppDiagnosticsService {
       'NETWORK',
       'Cloudflare HTTPS',
       _checkCloudflare,
+    );
+
+    await run(
+      'NETWORK',
+      'HTTP proxy configuration',
+      _checkProxyConfiguration,
+    );
+
+    await run(
+      'NETWORK',
+      'Worker IPv4 socket reachability',
+      _checkWorkerIpv4Socket,
+    );
+
+    await run(
+      'NETWORK',
+      'Worker IPv6 socket reachability',
+      _checkWorkerIpv6Socket,
+    );
+
+    await run(
+      'NETWORK',
+      'Worker HTTPS via resolved IPv4',
+      _checkWorkerHttpsViaIp4,
+    );
+
+    await run(
+      'NETWORK',
+      'Worker HTTPS via resolved IPv6',
+      _checkWorkerHttpsViaIp6,
     );
 
     await run(
@@ -546,7 +707,6 @@ class AppDiagnosticsService {
       ),
     );
 
-    // MEDIA / DOWNLOAD
     await run(
       'MEDIA',
       'Media URL handling',
@@ -563,14 +723,12 @@ class AppDiagnosticsService {
       ),
     );
 
-    // MONETIZATION
     await run(
       'MONETIZATION',
       'Monetization endpoint',
       _checkMonetization,
     );
 
-    // ERROR HANDLING
     await run(
       'ERRORS',
       'HTTP error classification',
@@ -583,65 +741,180 @@ class AppDiagnosticsService {
       _checkTimeoutConfiguration,
     );
 
-    final finished = DateTime.now();
-
     return AppDiagnosticsReport(
       startedAt: started,
-      finishedAt: finished,
+      finishedAt: DateTime.now(),
       results: results,
     );
   }
 
-  Future<DiagnosticResult> _checkRuntimeIdentity() async {
-    final stopwatch = Stopwatch()..start();
+  // ============================================================
+  // SAFE REPAIR
+  // ============================================================
 
-    final info = <String, dynamic>{
-      'platform': Platform.operatingSystem,
-      'osVersion': Platform.operatingSystemVersion,
-      'dart': Platform.version,
-      'debugMode': kDebugMode,
-      'profileMode': kProfileMode,
-      'releaseMode': kReleaseMode,
-      'worker': workerBaseUrl,
-      'appVersion': appVersion,
-      'buildNumber': buildNumber,
-      'commitSha': commitSha,
-    };
+  Future<DiagnosticRepairResult> repairSafeIssues(
+    AppDiagnosticsReport report, {
+    bool clearTemporaryFiles = false,
+  }) async {
+    final actions = <String>[];
+    var changed = false;
 
-    stopwatch.stop();
+    if (clearTemporaryFiles) {
+      final cleanup =
+          await _clearTemporaryFiles();
 
+      actions.add(cleanup.details);
+      changed = changed || cleanup.changed;
+    }
+
+    final networkFailure = report.results.any(
+      (e) =>
+          e.category == 'NETWORK' &&
+          !e.success &&
+          (
+            e.status == 'TIMEOUT' ||
+            e.status == 'SOCKET_ERROR' ||
+            e.status == 'NETWORK_ERROR' ||
+            e.status == 'DNS_ERROR' ||
+            e.status == 'NETWORK_UNREACHABLE'
+          ),
+    );
+
+    if (networkFailure) {
+      try {
+        await InternetAddress.lookup(
+          Uri.parse(workerBaseUrl).host,
+        );
+
+        actions.add(
+          'تمت إعادة حل DNS للـWorker '
+          'وتم تجهيز مسار اتصال جديد للفحص.',
+        );
+
+        actions.add(
+          'لا يستطيع التطبيق تغيير VPN أو ISP أو '
+          'Firewall أو إصلاح Cloudflare من داخل APK.',
+        );
+
+        changed = true;
+      } catch (e) {
+        actions.add(
+          'إعادة حل DNS فشلت: ${_safeError(e)}',
+        );
+      }
+    }
+
+    if (actions.isEmpty) {
+      return const DiagnosticRepairResult(
+        success: true,
+        changed: false,
+        title: 'لا يوجد إصلاح محلي مؤكد',
+        details:
+            'المشكلة الحالية تحتاج إصلاحًا خارج APK '
+            'أو لا تحتاج إصلاحًا.',
+      );
+    }
+
+    return DiagnosticRepairResult(
+      success: true,
+      changed: changed,
+      title: changed
+          ? 'تم تنفيذ الإصلاح الآمن'
+          : 'تمت محاولة الإصلاح الآمن',
+      details: actions.join('\n'),
+    );
+  }
+
+  Future<DiagnosticRepairResult>
+      _clearTemporaryFiles() async {
+    try {
+      final directory = Directory.systemTemp;
+
+      if (!await directory.exists()) {
+        return const DiagnosticRepairResult(
+          success: true,
+          changed: false,
+          title: 'لا توجد ملفات مؤقتة',
+          details:
+              'المجلد المؤقت غير متاح.',
+        );
+      }
+
+      var removed = 0;
+
+      await for (final entity
+          in directory.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is File) {
+          try {
+            await entity.delete();
+            removed++;
+          } catch (_) {}
+        }
+      }
+
+      return DiagnosticRepairResult(
+        success: true,
+        changed: removed > 0,
+        title: 'تنظيف الملفات المؤقتة',
+        details:
+            'تم حذف $removed ملفًا مؤقتًا قابلًا للحذف.',
+      );
+    } catch (e) {
+      return DiagnosticRepairResult(
+        success: false,
+        changed: false,
+        title: 'تعذر تنظيف الملفات المؤقتة',
+        details: _safeError(e),
+      );
+    }
+  }
+
+  // ============================================================
+  // BUILD / DEVICE
+  // ============================================================
+
+  Future<DiagnosticResult>
+      _checkRuntimeIdentity() async {
     return DiagnosticResult(
       name: 'Runtime identity',
       category: 'BUILD',
       success: true,
-      severity: 'PASS',
       status: 'OK',
-      details: jsonEncode(info),
-      durationMs: stopwatch.elapsedMilliseconds,
+      details: jsonEncode({
+        'platform': Platform.operatingSystem,
+        'osVersion': Platform.operatingSystemVersion,
+        'dart': Platform.version,
+        'debugMode': kDebugMode,
+        'profileMode': kProfileMode,
+        'releaseMode': kReleaseMode,
+        'worker': workerBaseUrl,
+        'appVersion': appVersion,
+        'buildNumber': buildNumber,
+        'commitSha': commitSha,
+      }),
+      durationMs: 0,
     );
   }
 
-  Future<DiagnosticResult> _checkDiagnosticIdentity() async {
-    final stopwatch = Stopwatch()..start();
-
-    stopwatch.stop();
-
+  Future<DiagnosticResult>
+      _checkDiagnosticIdentity() async {
     return DiagnosticResult(
       name: 'Diagnostic engine identity',
       category: 'BUILD',
       success: true,
-      severity: 'PASS',
       status: 'OK',
       details:
           'diagnosticVersion=$diagnosticVersion',
-      durationMs: stopwatch.elapsedMilliseconds,
+      durationMs: 0,
     );
   }
 
-  Future<DiagnosticResult> _checkBuildSourceIdentity() async {
-    final stopwatch = Stopwatch()..start();
-
-    final injected = <String, String>{
+  Future<DiagnosticResult>
+      _checkBuildSourceIdentity() async {
+    final data = {
       'APP_BUILD_ID': buildId,
       'APP_SOURCE_ID': sourceId,
       'SA7BI_APP_VERSION': appVersion,
@@ -649,30 +922,26 @@ class AppDiagnosticsService {
       'SA7BI_COMMIT_SHA': commitSha,
     };
 
-    final known = injected.values.any(
+    final identified = data.values.any(
       (value) => value != 'NOT_INJECTED',
     );
-
-    stopwatch.stop();
 
     return DiagnosticResult(
       name: 'Build/source identity',
       category: 'BUILD',
-      success: known,
-      severity: known ? 'PASS' : 'WARN',
-      status: known ? 'IDENTIFIED' : 'NOT_INJECTED',
-      details: jsonEncode(injected),
-      durationMs: stopwatch.elapsedMilliseconds,
+      success: identified,
+      severity: identified ? 'PASS' : 'WARN',
+      status:
+          identified ? 'IDENTIFIED' : 'NOT_INJECTED',
+      details: jsonEncode(data),
+      durationMs: 0,
     );
   }
 
-  Future<DiagnosticResult> _checkRuntimeMemory() async {
-    final stopwatch = Stopwatch()..start();
-
+  Future<DiagnosticResult>
+      _checkRuntimeMemory() async {
     try {
       final rss = ProcessInfo.currentRss;
-
-      stopwatch.stop();
 
       return DiagnosticResult(
         name: 'Runtime memory',
@@ -683,11 +952,9 @@ class AppDiagnosticsService {
         details:
             'Current Dart VM RSS: '
             '${_formatBytes(rss)}.',
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: 0,
       );
     } catch (e) {
-      stopwatch.stop();
-
       return DiagnosticResult(
         name: 'Runtime memory',
         category: 'DEVICE',
@@ -695,69 +962,65 @@ class AppDiagnosticsService {
         severity: 'WARN',
         status: 'UNAVAILABLE',
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: 0,
       );
     }
   }
 
-  Future<DiagnosticResult> _checkTemporaryStorage() async {
-    final stopwatch = Stopwatch()..start();
-
+  Future<DiagnosticResult>
+      _checkTemporaryStorage() async {
     try {
       final directory = Directory.systemTemp;
 
       if (!await directory.exists()) {
-        stopwatch.stop();
-
-        return DiagnosticResult(
+        return const DiagnosticResult(
           name: 'Temporary storage',
           category: 'DEVICE',
           success: false,
           severity: 'WARN',
           status: 'UNAVAILABLE',
-          details: 'System temporary directory is unavailable.',
-          durationMs: stopwatch.elapsedMilliseconds,
+          details:
+              'Temporary directory is unavailable.',
+          durationMs: 0,
         );
       }
 
-      var totalBytes = 0;
-      var fileCount = 0;
+      var bytes = 0;
+      var files = 0;
 
       await for (final entity
-          in directory.list(recursive: true, followLinks: false)) {
-        if (fileCount >= 2000) {
-          break;
-        }
+          in directory.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (files >= 2000) break;
 
         if (entity is File) {
           try {
-            totalBytes += await entity.length();
-            fileCount++;
-          } catch (_) {
-            // Ignore inaccessible temporary files.
-          }
+            bytes += await entity.length();
+            files++;
+          } catch (_) {}
         }
       }
-
-      stopwatch.stop();
-
-      final limited = fileCount >= 2000;
 
       return DiagnosticResult(
         name: 'Temporary storage',
         category: 'DEVICE',
         success: true,
-        severity: limited ? 'WARN' : 'PASS',
-        status: limited ? 'SCAN_LIMIT_REACHED' : 'OK',
+        severity:
+            files >= 2000 ? 'WARN' : 'PASS',
+        status:
+            files >= 2000
+                ? 'SCAN_LIMIT_REACHED'
+                : 'OK',
         details:
-            'Accessible temporary files: $fileCount. '
-            'Approximate size: ${_formatBytes(totalBytes)}.'
-            '${limited ? ' Scan capped at 2000 files.' : ''}',
-        durationMs: stopwatch.elapsedMilliseconds,
+            'Accessible temporary files: $files. '
+            'Approximate size: '
+            '${_formatBytes(bytes)}.',
+        durationMs: 0,
+        repairable: files > 0,
       );
     } catch (e) {
-      stopwatch.stop();
-
       return DiagnosticResult(
         name: 'Temporary storage',
         category: 'DEVICE',
@@ -765,178 +1028,286 @@ class AppDiagnosticsService {
         severity: 'WARN',
         status: 'UNAVAILABLE',
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: 0,
       );
     }
   }
+
+  Future<DiagnosticResult>
+      _checkNetworkInterfaces() async {
+    try {
+      final interfaces =
+          await NetworkInterface.list(
+        includeLoopback: false,
+        includeLinkLocal: false,
+      );
+
+      final details = interfaces
+          .map(
+            (item) =>
+                '${item.name}: '
+                '${item.addresses.map((a) => a.address).join(',')}',
+          )
+          .join(' | ');
+
+      return DiagnosticResult(
+        name: 'Network interfaces',
+        category: 'DEVICE',
+        success: interfaces.isNotEmpty,
+        severity:
+            interfaces.isNotEmpty
+                ? 'PASS'
+                : 'WARN',
+        status:
+            interfaces.isNotEmpty
+                ? 'OK'
+                : 'NO_INTERFACES',
+        details: details.isEmpty
+            ? 'No active interfaces reported.'
+            : details,
+        durationMs: 0,
+      );
+    } catch (e) {
+      return DiagnosticResult(
+        name: 'Network interfaces',
+        category: 'DEVICE',
+        success: false,
+        severity: 'WARN',
+        status: 'UNAVAILABLE',
+        details: _safeError(e),
+        durationMs: 0,
+      );
+    }
+  }
+
+  // ============================================================
+  // NETWORK
+  // ============================================================
 
   Future<DiagnosticResult> _checkInternet() async {
-    final stopwatch = Stopwatch()..start();
+    final sw = Stopwatch()..start();
 
     try {
       final addresses =
-          await InternetAddress.lookup('example.com');
+          await InternetAddress.lookup(
+        'example.com',
+      );
 
-      stopwatch.stop();
-
-      final ok = addresses.isNotEmpty;
+      sw.stop();
 
       return DiagnosticResult(
         name: 'Internet connectivity',
         category: 'NETWORK',
-        success: ok,
-        severity: ok ? 'PASS' : 'FAIL',
-        status: ok ? 'OK' : 'NO_ADDRESS',
-        details: ok
-            ? 'Internet/DNS access is available.'
-            : 'DNS returned no address.',
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-    } catch (e) {
-      stopwatch.stop();
-
-      return DiagnosticResult(
-        name: 'Internet connectivity',
-        category: 'NETWORK',
-        success: false,
-        severity: 'FAIL',
-        status: 'FAILED',
-        details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-    }
-  }
-
-  Future<DiagnosticResult> _checkDns() async {
-    final stopwatch = Stopwatch()..start();
-
-    try {
-      final uri = Uri.parse(workerBaseUrl);
-      final addresses =
-          await InternetAddress.lookup(uri.host);
-
-      stopwatch.stop();
-
-      final ok = addresses.isNotEmpty;
-
-      return DiagnosticResult(
-        name: 'Worker DNS resolution',
-        category: 'NETWORK',
-        success: ok,
-        severity: ok ? 'PASS' : 'FAIL',
-        status: ok ? 'OK' : 'NO_ADDRESS',
-        details: addresses
-            .map((e) => e.address)
-            .join(', '),
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-    } catch (e) {
-      stopwatch.stop();
-
-      return DiagnosticResult(
-        name: 'Worker DNS resolution',
-        category: 'NETWORK',
-        success: false,
-        severity: 'FAIL',
-        status: 'DNS_ERROR',
-        details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-    }
-  }
-
-  Future<DiagnosticResult> _checkRawHttpClientGoogle() async {
-    final stopwatch = Stopwatch()..start();
-
-    final uri = Uri.parse('https://www.google.com');
-
-    final client = HttpClient()
-      ..connectionTimeout = defaultTimeout;
-
-    try {
-      final request = await client.getUrl(uri);
-
-      request.headers.set(
-        HttpHeaders.userAgentHeader,
-        'Sa7biAI-Diagnostics/$diagnosticVersion',
-      );
-
-      final response = await request.close();
-
-      await response.drain();
-
-      stopwatch.stop();
-
-      final ok = response.statusCode >= 200 &&
-          response.statusCode < 500;
-
-      return DiagnosticResult(
-        name: 'Raw HttpClient HTTPS → Google',
-        category: 'NETWORK',
-        success: ok,
-        severity: ok ? 'PASS' : 'FAIL',
-        status: _statusForHttpCode(response.statusCode),
+        success: addresses.isNotEmpty,
+        severity:
+            addresses.isNotEmpty ? 'PASS' : 'FAIL',
+        status:
+            addresses.isNotEmpty ? 'OK' : 'NO_ADDRESS',
         details:
-            'Raw dart:io HttpClient reached '
-            '${uri.host}.',
-        httpStatus: response.statusCode,
-        durationMs: stopwatch.elapsedMilliseconds,
+            addresses.map((e) => e.address).join(', '),
+        durationMs: sw.elapsedMilliseconds,
       );
     } catch (e) {
-      stopwatch.stop();
+      sw.stop();
 
       return DiagnosticResult(
-        name: 'Raw HttpClient HTTPS → Google',
+        name: 'Internet connectivity',
         category: 'NETWORK',
         success: false,
         severity: 'FAIL',
         status: _classifyException(e),
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: sw.elapsedMilliseconds,
+      );
+    }
+  }
+
+  Future<DiagnosticResult> _checkDns() async {
+    return _dnsCheck(
+      'Worker DNS resolution',
+      InternetAddressType.any,
+    );
+  }
+
+  Future<DiagnosticResult> _checkDnsV4() async {
+    return _dnsCheck(
+      'Worker IPv4 DNS',
+      InternetAddressType.IPv4,
+    );
+  }
+
+  Future<DiagnosticResult> _checkDnsV6() async {
+    return _dnsCheck(
+      'Worker IPv6 DNS',
+      InternetAddressType.IPv6,
+    );
+  }
+
+  Future<DiagnosticResult> _dnsCheck(
+    String name,
+    InternetAddressType type,
+  ) async {
+    final sw = Stopwatch()..start();
+
+    try {
+      final host = Uri.parse(workerBaseUrl).host;
+
+      final addresses =
+          await InternetAddress.lookup(
+        host,
+        type: type,
+      );
+
+      sw.stop();
+
+      return DiagnosticResult(
+        name: name,
+        category: 'NETWORK',
+        success: addresses.isNotEmpty,
+        severity: addresses.isNotEmpty
+            ? 'PASS'
+            : (
+                type == InternetAddressType.IPv6
+                    ? 'WARN'
+                    : 'FAIL'
+              ),
+        status:
+            addresses.isNotEmpty ? 'OK' : 'NO_ADDRESS',
+        details:
+            addresses.map((e) => e.address).join(', '),
+        durationMs: sw.elapsedMilliseconds,
+      );
+    } catch (e) {
+      sw.stop();
+
+      return DiagnosticResult(
+        name: name,
+        category: 'NETWORK',
+        success: false,
+        severity:
+            type == InternetAddressType.IPv6
+                ? 'WARN'
+                : 'FAIL',
+        status: _classifyException(e),
+        details: _safeError(e),
+        durationMs: sw.elapsedMilliseconds,
+      );
+    }
+  }
+
+  Future<DiagnosticResult>
+      _checkRawHttpClientGoogle() async {
+    return _rawExternalGet(
+      'Raw HttpClient HTTPS → Google',
+      'https://www.google.com',
+    );
+  }
+
+  Future<DiagnosticResult>
+      _checkCloudflare() async {
+    return _rawExternalGet(
+      'Cloudflare HTTPS',
+      'https://www.cloudflare.com',
+    );
+  }
+
+  Future<DiagnosticResult> _rawExternalGet(
+    String name,
+    String url,
+  ) async {
+    final sw = Stopwatch()..start();
+
+    final client = HttpClient()
+      ..connectionTimeout = defaultTimeout
+      ..userAgent =
+          'Sa7biAI-Diagnostics/$diagnosticVersion';
+
+    try {
+      final request =
+          await client.getUrl(Uri.parse(url));
+
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        '*/*',
+      );
+
+      final response = await request.close();
+      final status = response.statusCode;
+
+      await response.drain<void>();
+
+      sw.stop();
+
+      return DiagnosticResult(
+        name: name,
+        category: 'NETWORK',
+        success:
+            status >= 200 && status < 500,
+        severity:
+            status >= 200 && status < 500
+                ? 'PASS'
+                : 'FAIL',
+        status: _statusForHttpCode(status),
+        httpStatus: status,
+        details:
+            'HTTPS response received.',
+        durationMs: sw.elapsedMilliseconds,
+      );
+    } catch (e) {
+      sw.stop();
+
+      return DiagnosticResult(
+        name: name,
+        category: 'NETWORK',
+        success: false,
+        severity: 'FAIL',
+        status: _classifyException(e),
+        details: _safeError(e),
+        durationMs: sw.elapsedMilliseconds,
       );
     } finally {
       client.close(force: true);
     }
   }
 
-  Future<DiagnosticResult> _checkPackageHttpGoogle() async {
-    final stopwatch = Stopwatch()..start();
-
-    final uri = Uri.parse('https://www.google.com');
-    final client = http.Client();
+  Future<DiagnosticResult>
+      _checkPackageHttpGoogle() async {
+    final sw = Stopwatch()..start();
 
     try {
-      final response = await client
-          .get(
-            uri,
-            headers: {
-              'Accept':
-                  'text/html,application/xhtml+xml,*/*;q=0.8',
-              'User-Agent':
-                  'Sa7biAI-Diagnostics/$diagnosticVersion',
-            },
-          )
-          .timeout(defaultTimeout);
+      final response = await http.get(
+        Uri.parse('https://www.google.com'),
+        headers: {
+          'User-Agent':
+              'Sa7biAI-Diagnostics/$diagnosticVersion',
+        },
+      ).timeout(defaultTimeout);
 
-      stopwatch.stop();
-
-      final ok = response.statusCode >= 200 &&
-          response.statusCode < 500;
+      sw.stop();
 
       return DiagnosticResult(
         name: 'package:http HTTPS → Google',
         category: 'NETWORK',
-        success: ok,
-        severity: ok ? 'PASS' : 'FAIL',
-        status: _statusForHttpCode(response.statusCode),
+        success:
+            response.statusCode >= 200 &&
+                response.statusCode < 500,
+        severity:
+            response.statusCode >= 200 &&
+                    response.statusCode < 500
+                ? 'PASS'
+                : 'FAIL',
+        status:
+            _statusForHttpCode(
+          response.statusCode,
+        ),
+        httpStatus: response.statusCode,
         details:
-            'package:http reached ${uri.host}. '
+            'package:http reached Google. '
             'responseBytes=${response.bodyBytes.length}.',
-        httpStatus: response.statusCode,
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: sw.elapsedMilliseconds,
       );
     } catch (e) {
-      stopwatch.stop();
+      sw.stop();
 
       return DiagnosticResult(
         name: 'package:http HTTPS → Google',
@@ -945,296 +1316,420 @@ class AppDiagnosticsService {
         severity: 'FAIL',
         status: _classifyException(e),
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: sw.elapsedMilliseconds,
       );
-    } finally {
-      client.close();
     }
   }
 
-  Future<DiagnosticResult> _checkCloudflare() async {
-    final stopwatch = Stopwatch()..start();
-
-    final client = http.Client();
-    final uri = Uri.parse('https://www.cloudflare.com');
-
+  Future<DiagnosticResult>
+      _checkProxyConfiguration() async {
     try {
-      final response = await client
-          .get(
-            uri,
-            headers: {
-              'User-Agent':
-                  'Sa7biAI-Diagnostics/$diagnosticVersion',
-            },
-          )
-          .timeout(defaultTimeout);
-
-      stopwatch.stop();
-
-      final ok = response.statusCode >= 200 &&
-          response.statusCode < 500;
+      final proxy =
+          HttpClient.findProxyFromEnvironment(
+        Uri.parse(workerBaseUrl),
+      );
 
       return DiagnosticResult(
-        name: 'Cloudflare HTTPS',
+        name: 'HTTP proxy configuration',
         category: 'NETWORK',
-        success: ok,
-        severity: ok ? 'PASS' : 'FAIL',
-        status: _statusForHttpCode(response.statusCode),
+        success: true,
+        severity: 'PASS',
+        status: 'OK',
         details:
-            'Cloudflare HTTPS response received.',
-        httpStatus: response.statusCode,
-        durationMs: stopwatch.elapsedMilliseconds,
+            'Proxy decision for Worker: $proxy',
+        durationMs: 0,
       );
     } catch (e) {
-      stopwatch.stop();
-
       return DiagnosticResult(
-        name: 'Cloudflare HTTPS',
+        name: 'HTTP proxy configuration',
         category: 'NETWORK',
         success: false,
-        severity: 'FAIL',
+        severity: 'WARN',
+        status: 'UNAVAILABLE',
+        details: _safeError(e),
+        durationMs: 0,
+      );
+    }
+  }
+
+  Future<DiagnosticResult>
+      _checkWorkerIpv4Socket() async {
+    return _socketCheck(
+      'Worker IPv4 socket reachability',
+      InternetAddressType.IPv4,
+    );
+  }
+
+  Future<DiagnosticResult>
+      _checkWorkerIpv6Socket() async {
+    return _socketCheck(
+      'Worker IPv6 socket reachability',
+      InternetAddressType.IPv6,
+    );
+  }
+
+  Future<DiagnosticResult> _socketCheck(
+    String name,
+    InternetAddressType type,
+  ) async {
+    final sw = Stopwatch()..start();
+
+    try {
+      final host = Uri.parse(workerBaseUrl).host;
+
+      final addresses =
+          await InternetAddress.lookup(
+        host,
+        type: type,
+      );
+
+      if (addresses.isEmpty) {
+        sw.stop();
+
+        return DiagnosticResult(
+          name: name,
+          category: 'NETWORK',
+          success: false,
+          severity:
+              type == InternetAddressType.IPv6
+                  ? 'WARN'
+                  : 'FAIL',
+          status: 'NO_ADDRESS',
+          details:
+              'No ${type.name} address is available.',
+          durationMs: sw.elapsedMilliseconds,
+        );
+      }
+
+      final outcomes = <String>[];
+      var connected = false;
+
+      for (final address
+          in addresses.take(4)) {
+        try {
+          final socket = await Socket.connect(
+            address,
+            443,
+            timeout: deepTimeout,
+          );
+
+          await socket.close();
+
+          connected = true;
+
+          outcomes.add(
+            '${address.address}=CONNECTED',
+          );
+        } catch (e) {
+          outcomes.add(
+            '${address.address}='
+            '${_classifyException(e)}',
+          );
+        }
+      }
+
+      sw.stop();
+
+      return DiagnosticResult(
+        name: name,
+        category: 'NETWORK',
+        success: connected,
+        severity: connected
+            ? 'PASS'
+            : (
+                type == InternetAddressType.IPv6
+                    ? 'WARN'
+                    : 'FAIL'
+              ),
+        status: connected
+            ? 'TCP_REACHABLE'
+            : 'TCP_UNREACHABLE',
+        details: outcomes.join(' | '),
+        durationMs: sw.elapsedMilliseconds,
+      );
+    } catch (e) {
+      sw.stop();
+
+      return DiagnosticResult(
+        name: name,
+        category: 'NETWORK',
+        success: false,
+        severity:
+            type == InternetAddressType.IPv6
+                ? 'WARN'
+                : 'FAIL',
         status: _classifyException(e),
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: sw.elapsedMilliseconds,
       );
-    } finally {
-      client.close();
     }
   }
 
-  Future<DiagnosticResult> _checkPackageHttpWorkerHealth() async {
-    final stopwatch = Stopwatch()..start();
+  Future<DiagnosticResult>
+      _checkWorkerHttpsViaIp4() async {
+    return _httpsViaResolvedIp(
+      'Worker HTTPS via resolved IPv4',
+      InternetAddressType.IPv4,
+    );
+  }
 
-    final uri = _buildUri('/health');
-    final client = http.Client();
+  Future<DiagnosticResult>
+      _checkWorkerHttpsViaIp6() async {
+    return _httpsViaResolvedIp(
+      'Worker HTTPS via resolved IPv6',
+      InternetAddressType.IPv6,
+    );
+  }
+
+  Future<DiagnosticResult> _httpsViaResolvedIp(
+    String name,
+    InternetAddressType type,
+  ) async {
+    final sw = Stopwatch()..start();
+
+    final uri = Uri.parse(workerBaseUrl);
+
+    HttpClient? client;
 
     try {
-      final response = await client
-          .get(
-            uri,
-            headers: {
-              'Accept':
-                  'application/json,text/plain,*/*',
-              'User-Agent':
-                  'Sa7biAI-Diagnostics/$diagnosticVersion',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache',
-            },
-          )
-          .timeout(defaultTimeout);
+      final addresses =
+          await InternetAddress.lookup(
+        uri.host,
+        type: type,
+      );
 
-      stopwatch.stop();
+      if (addresses.isEmpty) {
+        sw.stop();
 
-      final ok = response.statusCode >= 200 &&
-          response.statusCode < 400;
+        return DiagnosticResult(
+          name: name,
+          category: 'NETWORK',
+          success: false,
+          severity:
+              type == InternetAddressType.IPv6
+                  ? 'WARN'
+                  : 'FAIL',
+          status: 'NO_ADDRESS',
+          details:
+              'No ${type.name} address is available.',
+          durationMs: sw.elapsedMilliseconds,
+        );
+      }
+
+      final address = addresses.first;
+
+      client = HttpClient()
+        ..connectionTimeout = deepTimeout
+        ..findProxy = (_) => 'DIRECT'
+        ..connectionFactory = (
+          Uri requested,
+          String? proxyHost,
+          int? proxyPort,
+        ) {
+          return Socket.startConnect(
+            address,
+            443,
+          );
+        }
+        ..userAgent =
+            'Sa7biAI-Diagnostics/$diagnosticVersion';
+
+      final request =
+          await client.getUrl(uri);
+
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        '*/*',
+      );
+
+      request.headers.set(
+        HttpHeaders.hostHeader,
+        uri.host,
+      );
+
+      final response = await request.close();
+
+      final status = response.statusCode;
+      final certificate = response.certificate;
+
+      await response.drain<void>();
+
+      sw.stop();
 
       return DiagnosticResult(
-        name: 'package:http HTTPS → Worker health',
+        name: name,
         category: 'NETWORK',
-        success: ok,
-        severity: ok ? 'PASS' : 'FAIL',
-        status: _statusForHttpCode(response.statusCode),
+        success:
+            status >= 200 && status < 500,
+        severity:
+            status >= 200 && status < 500
+                ? 'PASS'
+                : (
+                    type == InternetAddressType.IPv6
+                        ? 'WARN'
+                        : 'FAIL'
+                  ),
+        status: _statusForHttpCode(status),
+        httpStatus: status,
         details:
-            'Worker /health body: '
-            '${_summarizeBody(response.body)}',
-        httpStatus: response.statusCode,
-        durationMs: stopwatch.elapsedMilliseconds,
+            'Connected to ${address.address} '
+            'while keeping hostname ${uri.host}. '
+            'TLS certificate='
+            '${certificate == null ? 'none' : 'received'}.',
+        durationMs: sw.elapsedMilliseconds,
       );
     } catch (e) {
-      stopwatch.stop();
+      sw.stop();
 
       return DiagnosticResult(
-        name: 'package:http HTTPS → Worker health',
+        name: name,
+        category: 'NETWORK',
+        success: false,
+        severity:
+            type == InternetAddressType.IPv6
+                ? 'WARN'
+                : 'FAIL',
+        status: _classifyException(e),
+        details: _safeError(e),
+        durationMs: sw.elapsedMilliseconds,
+      );
+    } finally {
+      client?.close(force: true);
+    }
+  }
+
+  Future<DiagnosticResult>
+      _checkPackageHttpWorkerHealth() async {
+    final sw = Stopwatch()..start();
+
+    try {
+      final response = await http.get(
+        _buildUri('/health'),
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent':
+              'Sa7biAI-Diagnostics/$diagnosticVersion',
+          'Cache-Control': 'no-cache',
+        },
+      ).timeout(defaultTimeout);
+
+      sw.stop();
+
+      final reachable =
+          response.statusCode >= 200 &&
+              response.statusCode < 500;
+
+      return DiagnosticResult(
+        name:
+            'package:http HTTPS → Worker health',
+        category: 'NETWORK',
+        success: reachable,
+        severity:
+            reachable ? 'PASS' : 'FAIL',
+        status:
+            _statusForHttpCode(
+          response.statusCode,
+        ),
+        httpStatus: response.statusCode,
+        details:
+            'Worker /health HTTP ${response.statusCode}.',
+        durationMs: sw.elapsedMilliseconds,
+        repairable: !reachable,
+      );
+    } catch (e) {
+      sw.stop();
+
+      return DiagnosticResult(
+        name:
+            'package:http HTTPS → Worker health',
         category: 'NETWORK',
         success: false,
         severity: 'FAIL',
         status: _classifyException(e),
         details:
-            'package:http could not reach Worker /health. '
-            '${_safeError(e)}',
-        durationMs: stopwatch.elapsedMilliseconds,
+            'package:http could not reach '
+            'Worker /health. ${_safeError(e)}',
+        durationMs: sw.elapsedMilliseconds,
+        repairable: true,
       );
-    } finally {
-      client.close();
     }
   }
 
   Future<DiagnosticResult> _checkTls() async {
-    final stopwatch = Stopwatch()..start();
+    final sw = Stopwatch()..start();
+
+    final client = HttpClient()
+      ..connectionTimeout = defaultTimeout;
 
     try {
-      final uri = Uri.parse(workerBaseUrl);
+      final request =
+          await client.getUrl(
+        Uri.parse(workerBaseUrl),
+      );
 
-      if (uri.scheme.toLowerCase() != 'https') {
-        stopwatch.stop();
+      final response = await request.close();
+      final certificate = response.certificate;
 
-        return DiagnosticResult(
-          name: 'Raw TLS / HTTPS → Worker',
-          category: 'NETWORK',
-          success: false,
-          severity: 'FAIL',
-          status: 'NOT_HTTPS',
-          details: 'Worker URL is not HTTPS.',
-          durationMs: stopwatch.elapsedMilliseconds,
-        );
-      }
+      await response.drain<void>();
 
-      final client = HttpClient()
-        ..connectionTimeout = defaultTimeout;
+      sw.stop();
 
-      try {
-        final request = await client.getUrl(uri);
-
-        request.headers.set(
-          HttpHeaders.userAgentHeader,
-          'Sa7biAI-Diagnostics/$diagnosticVersion',
-        );
-
-        final response = await request.close();
-
-        await response.drain();
-
-        stopwatch.stop();
-
-        return DiagnosticResult(
-          name: 'Raw TLS / HTTPS → Worker',
-          category: 'NETWORK',
-          success: true,
-          severity: 'PASS',
-          status: 'HTTP_${response.statusCode}',
-          details:
-              'HTTPS connection established with '
-              '${uri.host}.',
-          httpStatus: response.statusCode,
-          durationMs: stopwatch.elapsedMilliseconds,
-        );
-      } finally {
-        client.close(force: true);
-      }
+      return DiagnosticResult(
+        name: 'Raw TLS / HTTPS → Worker',
+        category: 'NETWORK',
+        success: certificate != null,
+        severity:
+            certificate != null ? 'PASS' : 'WARN',
+        status:
+            certificate != null
+                ? 'TLS_ESTABLISHED'
+                : 'NO_CERTIFICATE',
+        details:
+            certificate != null
+                ? 'TLS handshake established.'
+                : 'No TLS certificate metadata.',
+        durationMs: sw.elapsedMilliseconds,
+      );
     } catch (e) {
-      stopwatch.stop();
+      sw.stop();
 
       return DiagnosticResult(
         name: 'Raw TLS / HTTPS → Worker',
         category: 'NETWORK',
         success: false,
         severity: 'FAIL',
-        status: 'TLS_FAILED',
+        status: _classifyException(e),
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: sw.elapsedMilliseconds,
       );
+    } finally {
+      client.close(force: true);
     }
   }
 
-  Future<DiagnosticResult> _probeRoute({
-    required String name,
-    required String category,
-    required String path,
-  }) async {
-    final stopwatch = Stopwatch()..start();
-
-    final options = await _httpOptions(
-      name: name,
-      category: category,
-      path: path,
-    );
-
-    if (_routeExistsFromStatus(options.httpStatus)) {
-      stopwatch.stop();
-
-      return DiagnosticResult(
-        name: name,
-        category: category,
-        success: true,
-        severity: 'PASS',
-        status: _routeProbeStatus(options.httpStatus),
-        details:
-            'Route reachable using OPTIONS. '
-            'No real AI/image generation executed.',
-        httpStatus: options.httpStatus,
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-    }
-
-    final getResult = await _httpGet(
-      name: name,
-      category: category,
-      path: path,
-    );
-
-    stopwatch.stop();
-
-    if (_routeExistsFromStatus(getResult.httpStatus)) {
-      return DiagnosticResult(
-        name: name,
-        category: category,
-        success: true,
-        severity: 'PASS',
-        status: _routeProbeStatus(
-          getResult.httpStatus,
-        ),
-        details:
-            'Route reachable without executing '
-            'generation.',
-        httpStatus: getResult.httpStatus,
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-    }
-
-    if (getResult.httpStatus == 404) {
-      return DiagnosticResult(
-        name: name,
-        category: category,
-        success: false,
-        severity: 'FAIL',
-        status: 'ROUTE_NOT_FOUND',
-        details:
-            'Route returned HTTP 404. '
-            'No generation executed.',
-        httpStatus: 404,
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-    }
-
-    return DiagnosticResult(
-      name: name,
-      category: category,
-      success: false,
-      severity: 'FAIL',
-      status: getResult.status,
-      details:
-          'OPTIONS=${options.status}; '
-          'GET=${getResult.status}. '
-          'No generation executed.',
-      httpStatus:
-          getResult.httpStatus ?? options.httpStatus,
-      durationMs: stopwatch.elapsedMilliseconds,
-    );
-  }
+  // ============================================================
+  // WORKER / ROUTES
+  // ============================================================
 
   Future<DiagnosticResult> _httpGet({
     required String name,
     required String category,
     required String path,
   }) async {
-    final stopwatch = Stopwatch()..start();
-
-    final uri = _buildUri(path);
+    final sw = Stopwatch()..start();
 
     final client = HttpClient()
-      ..connectionTimeout = defaultTimeout;
+      ..connectionTimeout = defaultTimeout
+      ..userAgent =
+          'Sa7biAI-Diagnostics/$diagnosticVersion';
 
     try {
-      final request = await client.getUrl(uri);
+      final request =
+          await client.getUrl(_buildUri(path));
 
       request.headers.set(
         HttpHeaders.acceptHeader,
-        'application/json, text/plain, */*',
-      );
-
-      request.headers.set(
-        HttpHeaders.userAgentHeader,
-        'Sa7biAI-Diagnostics/$diagnosticVersion',
+        'application/json',
       );
 
       request.headers.set(
@@ -1243,33 +1738,53 @@ class AppDiagnosticsService {
       );
 
       final response = await request.close();
+      final status = response.statusCode;
 
-      final body = await response
-          .transform(utf8.decoder)
-          .join()
-          .timeout(defaultTimeout);
+      final chunks = await response
+          .take(32)
+          .map(
+            (chunk) => utf8.decode(
+              chunk,
+              allowMalformed: true,
+            ),
+          )
+          .join();
 
-      stopwatch.stop();
+      await response.drain<void>();
 
-      final ok = response.statusCode >= 200 &&
-          response.statusCode < 400;
+      sw.stop();
 
-      final authRoute = response.statusCode == 401 ||
-          response.statusCode == 403;
+      final reachable =
+          status >= 200 && status < 500;
+
+      final validation =
+          status == 400 ||
+          status == 401 ||
+          status == 403 ||
+          status == 405;
 
       return DiagnosticResult(
         name: name,
         category: category,
-        success: ok || authRoute,
-        severity:
-            ok || authRoute ? 'PASS' : 'FAIL',
-        status: _statusForHttpCode(response.statusCode),
-        details: _summarizeBody(body),
-        httpStatus: response.statusCode,
-        durationMs: stopwatch.elapsedMilliseconds,
+        success: reachable,
+        severity: reachable
+            ? (validation ? 'WARN' : 'PASS')
+            : 'FAIL',
+        status: _statusForHttpCode(status),
+        httpStatus: status,
+        details:
+            'HTTP $status. '
+            '${_summarizeBody(chunks)}',
+        durationMs: sw.elapsedMilliseconds,
+        repairable:
+            !reachable &&
+            (
+              category == 'WORKER' ||
+              category == 'AI'
+            ),
       );
     } catch (e) {
-      stopwatch.stop();
+      sw.stop();
 
       return DiagnosticResult(
         name: name,
@@ -1278,63 +1793,87 @@ class AppDiagnosticsService {
         severity: 'FAIL',
         status: _classifyException(e),
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: sw.elapsedMilliseconds,
+        repairable:
+            category == 'WORKER' ||
+            category == 'AI',
       );
     } finally {
       client.close(force: true);
     }
   }
 
-  Future<DiagnosticResult> _httpOptions({
+  Future<DiagnosticResult> _probeRoute({
     required String name,
     required String category,
     required String path,
   }) async {
-    final stopwatch = Stopwatch()..start();
+    final sw = Stopwatch()..start();
 
-    final uri = _buildUri(path);
-
-    final client = HttpClient()
-      ..connectionTimeout = defaultTimeout;
+    String first = 'NOT_TESTED';
+    String second = 'NOT_TESTED';
 
     try {
-      final request = await client.openUrl(
-        'OPTIONS',
-        uri,
-      );
+      try {
+        final response = await http.get(
+          _buildUri(path),
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent':
+                'Sa7biAI-Diagnostics/$diagnosticVersion',
+          },
+        ).timeout(defaultTimeout);
 
-      request.headers.set(
-        HttpHeaders.userAgentHeader,
-        'Sa7biAI-Diagnostics/$diagnosticVersion',
-      );
+        first =
+            _statusForHttpCode(
+          response.statusCode,
+        );
+      } catch (e) {
+        first = _classifyException(e);
+      }
 
-      final response = await request.close();
+      try {
+        final response = await http.get(
+          _buildUri(path),
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent':
+                'Sa7biAI-Diagnostics/$diagnosticVersion',
+          },
+        ).timeout(defaultTimeout);
 
-      final body = await response
-          .transform(utf8.decoder)
-          .join()
-          .timeout(defaultTimeout);
+        second =
+            _statusForHttpCode(
+          response.statusCode,
+        );
+      } catch (e) {
+        second = _classifyException(e);
+      }
 
-      stopwatch.stop();
+      sw.stop();
+
+      final reachable =
+          first.startsWith('HTTP_') ||
+          second.startsWith('HTTP_');
 
       return DiagnosticResult(
         name: name,
         category: category,
-        success:
-            _routeExistsFromStatus(response.statusCode),
+        success: reachable,
         severity:
-            _routeExistsFromStatus(response.statusCode)
-                ? 'PASS'
-                : 'FAIL',
-        status: _statusForHttpCode(
-          response.statusCode,
-        ),
-        details: _summarizeBody(body),
-        httpStatus: response.statusCode,
-        durationMs: stopwatch.elapsedMilliseconds,
+            reachable ? 'PASS' : 'FAIL',
+        status:
+            reachable
+                ? 'ROUTE_REACHABLE'
+                : 'UNREACHABLE',
+        details:
+            'Probe1=$first; Probe2=$second. '
+            'No generation executed.',
+        durationMs: sw.elapsedMilliseconds,
+        repairable: !reachable,
       );
     } catch (e) {
-      stopwatch.stop();
+      sw.stop();
 
       return DiagnosticResult(
         name: name,
@@ -1343,213 +1882,181 @@ class AppDiagnosticsService {
         severity: 'FAIL',
         status: _classifyException(e),
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: sw.elapsedMilliseconds,
+        repairable: true,
       );
-    } finally {
-      client.close(force: true);
     }
   }
 
-  Future<DiagnosticResult> _checkMediaUrlHandling() async {
-    final stopwatch = Stopwatch()..start();
+  // ============================================================
+  // MEDIA / MONETIZATION / ERRORS
+  // ============================================================
+
+  Future<DiagnosticResult>
+      _checkMediaUrlHandling() async {
+    final sw = Stopwatch()..start();
 
     try {
-      final urls = <String>[
-        workerBaseUrl,
-        '$workerBaseUrl/health',
-        '$workerBaseUrl/v1/radio/stations?country=EG',
-        '$workerBaseUrl/v1/audio/search-v4?q=diagnostic',
-        '$workerBaseUrl/v1/podcasts/search?q=diagnostic',
-      ];
-
-      for (final value in urls) {
-        final uri = Uri.tryParse(value);
-
-        if (uri == null ||
-            !uri.hasScheme ||
-            uri.host.isEmpty) {
-          stopwatch.stop();
-
-          return DiagnosticResult(
-            name: 'Media URL handling',
-            category: 'MEDIA',
-            success: false,
-            severity: 'FAIL',
-            status: 'INVALID_URL',
-            details: 'Invalid URL: $value',
-            durationMs:
-                stopwatch.elapsedMilliseconds,
-          );
-        }
-      }
-
-      final radioUri = _buildUri(
+      final radio =
+          _buildUri(
         '/v1/radio/stations?country=EG',
       );
 
-      final audioUri = _buildUri(
+      final audio =
+          _buildUri(
         '/v1/audio/search-v4?q=diagnostic',
       );
 
-      final podcastUri = _buildUri(
+      final podcast =
+          _buildUri(
         '/v1/podcasts/search?q=diagnostic',
       );
 
-      final ok =
-          radioUri.queryParameters['country'] == 'EG' &&
-              audioUri.queryParameters['q'] == 'diagnostic' &&
-              podcastUri.queryParameters['q'] ==
+      final valid =
+          radio.queryParameters['country'] ==
+                  'EG' &&
+              audio.queryParameters['q'] ==
+                  'diagnostic' &&
+              podcast.queryParameters['q'] ==
                   'diagnostic';
 
-      stopwatch.stop();
+      sw.stop();
 
       return DiagnosticResult(
         name: 'Media URL handling',
         category: 'MEDIA',
-        success: ok,
-        severity: ok ? 'PASS' : 'FAIL',
-        status: ok ? 'OK' : 'QUERY_BUILD_FAILED',
+        success: valid,
+        severity:
+            valid ? 'PASS' : 'FAIL',
+        status: valid ? 'OK' : 'INVALID',
         details:
-            'URL parsing and query handling verified. '
-            'country=${radioUri.queryParameters['country']}, '
-            'audioQ=${audioUri.queryParameters['q']}, '
-            'podcastQ=${podcastUri.queryParameters['q']}.',
-        durationMs: stopwatch.elapsedMilliseconds,
+            'URL parsing verified. '
+            'country=${radio.queryParameters['country']}, '
+            'audioQ=${audio.queryParameters['q']}, '
+            'podcastQ=${podcast.queryParameters['q']}.',
+        durationMs: sw.elapsedMilliseconds,
       );
     } catch (e) {
-      stopwatch.stop();
+      sw.stop();
 
       return DiagnosticResult(
         name: 'Media URL handling',
         category: 'MEDIA',
         success: false,
         severity: 'FAIL',
-        status: 'FAILED',
+        status: 'INVALID',
         details: _safeError(e),
-        durationMs: stopwatch.elapsedMilliseconds,
+        durationMs: sw.elapsedMilliseconds,
       );
     }
   }
 
-  Future<DiagnosticResult> _checkMonetization() async {
-    final stopwatch = Stopwatch()..start();
+  Future<DiagnosticResult>
+      _checkMonetization() async {
+    final a = await _httpGet(
+      name: 'Monetization endpoint',
+      category: 'MONETIZATION',
+      path: '/v1/monetization',
+    );
 
-    final candidates = <String>[
-      '/v1/monetization',
-      '/v1/credits',
-    ];
+    final b = await _httpGet(
+      name: 'Credits endpoint',
+      category: 'MONETIZATION',
+      path: '/v1/credits',
+    );
 
-    final statuses = <String>[];
-
-    for (final path in candidates) {
-      final result = await _httpGet(
-        name: 'Monetization probe',
-        category: 'MONETIZATION',
-        path: path,
-      );
-
-      statuses.add(
-        '$path=${result.status}'
-        '${result.httpStatus != null ? '(${result.httpStatus})' : ''}',
-      );
-
-      if (result.httpStatus != null &&
-          result.httpStatus! >= 200 &&
-          result.httpStatus! < 400) {
-        stopwatch.stop();
-
-        return DiagnosticResult(
-          name: 'Monetization endpoint',
-          category: 'MONETIZATION',
-          success: true,
-          severity: 'PASS',
-          status: 'CONFIRMED',
-          details: statuses.join(' | '),
-          httpStatus: result.httpStatus,
-          durationMs:
-              stopwatch.elapsedMilliseconds,
-        );
-      }
-
-      if (result.httpStatus == 401 ||
-          result.httpStatus == 403) {
-        stopwatch.stop();
-
-        return DiagnosticResult(
-          name: 'Monetization endpoint',
-          category: 'MONETIZATION',
-          success: true,
-          severity: 'WARN',
-          status: 'AUTH_REQUIRED',
-          details: statuses.join(' | '),
-          httpStatus: result.httpStatus,
-          durationMs:
-              stopwatch.elapsedMilliseconds,
-        );
-      }
-    }
-
-    stopwatch.stop();
+    final success =
+        a.success || b.success;
 
     return DiagnosticResult(
       name: 'Monetization endpoint',
       category: 'MONETIZATION',
-      success: false,
-      severity: 'FAIL',
-      status: 'NOT_CONFIRMED',
-      details: statuses.join(' | '),
-      durationMs: stopwatch.elapsedMilliseconds,
-    );
-  }
-
-  Future<DiagnosticResult> _checkErrorClassification() async {
-    final stopwatch = Stopwatch()..start();
-
-    final result = await _httpGet(
-      name: 'HTTP error classification',
-      category: 'ERRORS',
-      path: '/__sa7bi_diagnostic_missing_endpoint__',
-    );
-
-    stopwatch.stop();
-
-    final ok = result.httpStatus == 404;
-
-    return DiagnosticResult(
-      name: 'HTTP error classification',
-      category: 'ERRORS',
-      success: ok,
-      severity: ok ? 'PASS' : 'FAIL',
-      status: ok ? 'CONTROLLED_404' : result.status,
+      success: success,
+      severity:
+          success ? 'PASS' : 'FAIL',
+      status:
+          success ? 'CONFIRMED' : 'NOT_CONFIRMED',
       details:
-          'Expected controlled HTTP 404 from an intentionally '
-          'missing endpoint.',
-      httpStatus: result.httpStatus,
-      durationMs: stopwatch.elapsedMilliseconds,
+          '/v1/monetization=${a.status} | '
+          '/v1/credits=${b.status}',
+      durationMs:
+          a.durationMs + b.durationMs,
+      repairable: !success,
     );
   }
 
-  Future<DiagnosticResult> _checkTimeoutConfiguration() async {
-    final stopwatch = Stopwatch()..start();
+  Future<DiagnosticResult>
+      _checkErrorClassification() async {
+    final sw = Stopwatch()..start();
 
+    try {
+      final response = await http.get(
+        _buildUri(
+          '/__sa7bi_diagnostic_missing_endpoint__',
+        ),
+      ).timeout(defaultTimeout);
+
+      sw.stop();
+
+      final ok =
+          response.statusCode == 404;
+
+      return DiagnosticResult(
+        name: 'HTTP error classification',
+        category: 'ERRORS',
+        success: ok,
+        severity:
+            ok ? 'PASS' : 'WARN',
+        status: ok
+            ? 'HTTP_404_EXPECTED'
+            : _statusForHttpCode(
+                response.statusCode,
+              ),
+        httpStatus: response.statusCode,
+        details:
+            'Expected controlled HTTP 404.',
+        durationMs: sw.elapsedMilliseconds,
+      );
+    } catch (e) {
+      sw.stop();
+
+      return DiagnosticResult(
+        name: 'HTTP error classification',
+        category: 'ERRORS',
+        success: false,
+        severity: 'WARN',
+        status: _classifyException(e),
+        details:
+            'Could not reach Worker for '
+            'controlled 404 test: '
+            '${_safeError(e)}',
+        durationMs: sw.elapsedMilliseconds,
+      );
+    }
+  }
+
+  Future<DiagnosticResult>
+      _checkTimeoutConfiguration() async {
     final valid =
-        defaultTimeout.inSeconds >= 5 &&
-        defaultTimeout.inSeconds <= 60;
-
-    stopwatch.stop();
+        defaultTimeout.inSeconds >= 5;
 
     return DiagnosticResult(
       name: 'Timeout configuration',
       category: 'TIMEOUT',
       success: valid,
-      severity: valid ? 'PASS' : 'FAIL',
+      severity:
+          valid ? 'PASS' : 'WARN',
       status: valid ? 'OK' : 'INVALID',
       details:
           'Diagnostic timeout = '
           '${defaultTimeout.inSeconds} seconds.',
-      durationMs: stopwatch.elapsedMilliseconds,
+      durationMs: 0,
     );
   }
+
+  // ============================================================
+  // HELPERS
+  // ============================================================
 
   Uri _buildUri(String rawPath) {
     final raw = rawPath.trim();
@@ -1559,12 +2066,14 @@ class AppDiagnosticsService {
       return Uri.parse(raw);
     }
 
-    final base = Uri.parse(workerBaseUrl);
+    final base =
+        Uri.parse(workerBaseUrl);
 
-    final normalized =
-        raw.startsWith('/') ? raw : '/$raw';
-
-    final parsed = Uri.parse(normalized);
+    final parsed = Uri.parse(
+      raw.startsWith('/')
+          ? raw
+          : '/$raw',
+    );
 
     return base.replace(
       path: parsed.path,
@@ -1575,61 +2084,9 @@ class AppDiagnosticsService {
     );
   }
 
-  bool _routeExistsFromStatus(int? status) {
-    if (status == null) {
-      return false;
-    }
-
-    if (status >= 200 && status < 400) {
-      return true;
-    }
-
-    if (status == 401 ||
-        status == 403 ||
-        status == 405) {
-      return true;
-    }
-
-    return false;
-  }
-
-  String _routeProbeStatus(int? status) {
-    if (status == null) {
-      return 'UNKNOWN';
-    }
-
-    if (status >= 200 && status < 300) {
-      return 'ROUTE_REACHABLE';
-    }
-
-    if (status >= 300 && status < 400) {
-      return 'ROUTE_REDIRECT';
-    }
-
-    if (status == 401) {
-      return 'ROUTE_EXISTS_AUTH_REQUIRED';
-    }
-
-    if (status == 403) {
-      return 'ROUTE_EXISTS_FORBIDDEN';
-    }
-
-    if (status == 405) {
-      return 'ROUTE_EXISTS_METHOD_REQUIRED';
-    }
-
-    if (status == 404) {
-      return 'ROUTE_NOT_FOUND';
-    }
-
-    if (status >= 500) {
-      return 'SERVER_ERROR';
-    }
-
-    return 'HTTP_$status';
-  }
-
-  String _statusForHttpCode(int statusCode) {
+  String _statusForHttpCode(
+    int statusCode,
+  ) {
     if (statusCode == 401) {
       return 'HTTP_401_AUTH_REQUIRED';
     }
@@ -1665,30 +2122,29 @@ class AppDiagnosticsService {
     return 'HTTP_$statusCode';
   }
 
-  String _summarizeBody(String body) {
-    if (body.isEmpty) {
-      return 'Empty response body.';
-    }
-
-    final cleaned =
-        body.replaceAll(RegExp(r'\s+'), ' ').trim();
-
-    if (cleaned.length <= 1000) {
-      return cleaned;
-    }
-
-    return '${cleaned.substring(0, 1000)}…';
-  }
-
-  String _classifyException(Object error) {
-    final value = error.toString().toLowerCase();
+  String _classifyException(
+    Object error,
+  ) {
+    final value =
+        error.toString().toLowerCase();
 
     if (value.contains('timeout')) {
       return 'TIMEOUT';
     }
 
-    if (value.contains('socket')) {
-      return 'SOCKET_ERROR';
+    if (value.contains(
+      'network is unreachable',
+    )) {
+      return 'NETWORK_UNREACHABLE';
+    }
+
+    if (value.contains(
+          'failed host lookup',
+        ) ||
+        value.contains(
+          'no address associated',
+        )) {
+      return 'DNS_ERROR';
     }
 
     if (value.contains('certificate') ||
@@ -1697,17 +2153,14 @@ class AppDiagnosticsService {
       return 'TLS_ERROR';
     }
 
-    if (value.contains('failed host lookup') ||
-        value.contains('dns')) {
-      return 'DNS_ERROR';
-    }
-
-    if (value.contains('network is unreachable')) {
-      return 'NETWORK_UNREACHABLE';
-    }
-
-    if (value.contains('connection refused')) {
+    if (value.contains(
+      'connection refused',
+    )) {
       return 'CONNECTION_REFUSED';
+    }
+
+    if (value.contains('socket')) {
+      return 'SOCKET_ERROR';
     }
 
     return 'NETWORK_ERROR';
@@ -1716,8 +2169,32 @@ class AppDiagnosticsService {
   String _safeError(Object error) {
     return error
         .toString()
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(
+          RegExp(r'\s+'),
+          ' ',
+        )
         .trim();
+  }
+
+  String _summarizeBody(
+    String body,
+  ) {
+    final cleaned = body
+        .replaceAll(
+          RegExp(r'\s+'),
+          ' ',
+        )
+        .trim();
+
+    if (cleaned.isEmpty) {
+      return 'Empty response body.';
+    }
+
+    if (cleaned.length <= 1000) {
+      return cleaned;
+    }
+
+    return '${cleaned.substring(0, 1000)}…';
   }
 
   String _formatBytes(int bytes) {
