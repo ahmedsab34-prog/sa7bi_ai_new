@@ -632,7 +632,7 @@ jobs:
           echo "APK source:"
           echo "${APK_PATH}"
 
-          echo "Release asset:"
+          echo "Canonical release asset:"
           echo "${RELEASE_APK_NAME}"
 
           echo ""
@@ -645,13 +645,49 @@ jobs:
           cat /tmp/sa7bi-release-before.txt
 
           echo ""
-          echo "Uploading APK asset..."
+          echo "Removing any stale/conflicting APK assets..."
+
+          gh release delete-asset "${RELEASE_TAG}" "${RELEASE_APK_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --yes || true
+
+          gh release delete-asset "${RELEASE_TAG}" "app-release.apk" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --yes || true
+
+          echo ""
+          echo "Creating canonical APK filename..."
+
+          cp "${APK_PATH}" "${RELEASE_APK_NAME}"
+
+          if [ ! -f "${RELEASE_APK_NAME}" ]; then
+            echo "ERROR: Canonical APK file was not created."
+            exit 1
+          fi
+
+          RELEASE_APK_SIZE=$(stat -c%s "${RELEASE_APK_NAME}")
+          RELEASE_APK_SHA256=$(sha256sum "${RELEASE_APK_NAME}" | awk '{print $1}')
+
+          echo "Release APK size   : ${RELEASE_APK_SIZE}"
+          echo "Release APK SHA256 : ${RELEASE_APK_SHA256}"
+
+          if [ "${RELEASE_APK_SIZE}" != "${APK_SIZE}" ]; then
+            echo "ERROR: Release APK size does not match built APK size."
+            exit 1
+          fi
+
+          if [ "${RELEASE_APK_SHA256}" != "${APK_SHA256}" ]; then
+            echo "ERROR: Release APK SHA256 does not match built APK SHA256."
+            exit 1
+          fi
+
+          echo ""
+          echo "Uploading canonical APK asset..."
 
           gh release upload \
             "${RELEASE_TAG}" \
-            "${APK_PATH}#${RELEASE_APK_NAME}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --clobber
+            "${RELEASE_APK_NAME}" \
+            --repo "${GITHUB_REPOSITORY}"
 
           echo ""
           echo "Release asset upload completed."
@@ -681,10 +717,61 @@ jobs:
           echo "${RELEASE_JSON}"
 
           echo "${RELEASE_JSON}" | grep -q "\"tagName\":\"${RELEASE_TAG}\""
-          echo "${RELEASE_JSON}" | grep -q "\"name\":\"${RELEASE_APK_NAME}\""
+
+          ASSET_COUNT=$(
+            echo "${RELEASE_JSON}" |
+              jq '[.assets[] | select(.name == env.RELEASE_APK_NAME)] | length'
+          )
+
+          if [ "${ASSET_COUNT}" -ne 1 ]; then
+            echo "ERROR: Expected exactly one canonical APK asset."
+            echo "Found: ${ASSET_COUNT}"
+            exit 1
+          fi
+
+          CONFLICT_COUNT=$(
+            echo "${RELEASE_JSON}" |
+              jq '[.assets[] | select(.name == "app-release.apk")] | length'
+          )
+
+          if [ "${CONFLICT_COUNT}" -ne 0 ]; then
+            echo "ERROR: Conflicting app-release.apk asset still exists."
+            exit 1
+          fi
+
+          PUBLISHED_SHA256=$(
+            echo "${RELEASE_JSON}" |
+              jq -r '.assets[] | select(.name == env.RELEASE_APK_NAME) | .digest' |
+              sed 's/^sha256://'
+          )
+
+          PUBLISHED_SIZE=$(
+            echo "${RELEASE_JSON}" |
+              jq -r '.assets[] | select(.name == env.RELEASE_APK_NAME) | .size'
+          )
 
           echo ""
-          echo "Published APK release asset verified."
+          echo "Expected SHA256 : ${APK_SHA256}"
+          echo "Published SHA256: ${PUBLISHED_SHA256}"
+          echo "Expected size   : ${APK_SIZE}"
+          echo "Published size  : ${PUBLISHED_SIZE}"
+
+          if [ "${PUBLISHED_SHA256}" != "${APK_SHA256}" ]; then
+            echo "ERROR: Published release SHA256 does not match built APK."
+            exit 1
+          fi
+
+          if [ "${PUBLISHED_SIZE}" != "${APK_SIZE}" ]; then
+            echo "ERROR: Published release size does not match built APK."
+            exit 1
+          fi
+
+          echo ""
+          echo "Canonical download URL:"
+          echo "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_APK_NAME}"
+
+          echo ""
+          echo "Published APK release asset verified successfully."
 
       # ==========================================================
       # 26. FINAL BUILD SUMMARY
