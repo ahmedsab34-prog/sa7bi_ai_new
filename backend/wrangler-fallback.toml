@@ -1,0 +1,8 @@
+name = "sa7bi-ai-new-fallback"
+
+main = "src/fallback.js"
+
+compatibility_date = "2026-09-18"
+
+# Public workers.dev endpoint.
+workers_dev = true
