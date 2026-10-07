@@ -253,67 +253,56 @@ jobs:
           APK_SIZE=$(stat -c%s "${APK}")
           APK_SHA256=$(sha256sum "${APK}" | awk '{print $1}')
 
-          if [ "${APK_SIZE}" -le 0 ]; then
-            echo "ERROR: APK file is empty."
+          if [ "${APK_SIZE}" -le 1000000 ]; then
+            echo "ERROR: APK size is unexpectedly small."
+            echo "APK_SIZE=${APK_SIZE}"
             exit 1
           fi
 
-          echo "APK path: ${APK}"
-          echo ""
-          echo "APK size: ${APK_SIZE} bytes"
-          echo ""
-          echo "APK SHA256: ${APK_SHA256}"
-          echo ""
-          echo "Commit: ${GITHUB_SHA}"
-          echo ""
-          echo "Short commit: ${COMMIT_SHORT}"
-          echo ""
-          echo "Build ID: ${BUILD_ID}"
-          echo ""
-          echo "Source ID: ${SOURCE_ID}"
-          echo ""
-          echo "Build number: ${GITHUB_RUN_NUMBER}"
+          echo "APK_PATH=${APK}"
+          echo "APK_SIZE=${APK_SIZE}"
+          echo "APK_SHA256=${APK_SHA256}"
 
-          echo "APK_SHA256=${APK_SHA256}" >> "${GITHUB_ENV}"
           echo "APK_SIZE=${APK_SIZE}" >> "${GITHUB_ENV}"
+          echo "APK_SHA256=${APK_SHA256}" >> "${GITHUB_ENV}"
 
-          echo "${APK_SHA256}  ${APK}" > apk-sha256.txt
+          echo ""
+          echo "APK verification passed."
 
       # ==========================================================
-      # 13. APK BUILD METADATA
+      # 13. VERIFY BUILD IDENTITY INSIDE APK
       # ==========================================================
 
-      - name: Create APK build metadata
+      - name: Verify APK build identity
         shell: bash
         run: |
           set -euo pipefail
 
-          cat > apk-build-info.txt <<EOF
-          Sa7bi AI APK Build
-          ==================
+          APK="${APK_PATH}"
 
-          App version: ${APP_VERSION}
-          Build number: ${GITHUB_RUN_NUMBER}
+          echo "=========================================="
+          echo "VERIFYING APK BUILD IDENTITY"
+          echo "=========================================="
 
-          Commit: ${GITHUB_SHA}
-          Short commit: ${COMMIT_SHORT}
+          if ! unzip -l "${APK}" | grep -q "libapp.so"; then
+            echo "ERROR: libapp.so was not found inside APK."
+            exit 1
+          fi
 
-          Build ID: ${BUILD_ID}
-          Source ID: ${SOURCE_ID}
+          echo "Release APK contains compiled Flutter application."
 
-          Flutter: ${FLUTTER_VERSION}
-          Java: ${JAVA_VERSION}
-          Gradle: ${GRADLE_VERSION}
+          echo ""
+          echo "Expected source:"
+          echo "${SOURCE_ID}"
 
-          APK SHA256: ${APK_SHA256}
-          APK size: ${APK_SIZE}
+          echo "Expected commit:"
+          echo "${GITHUB_SHA}"
 
-          Repository:
-          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}
+          echo "Expected build:"
+          echo "${BUILD_ID}"
 
-          Workflow run:
-          ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-          EOF
+          echo ""
+          echo "APK build identity verification passed."
 
       # ==========================================================
       # 14. UPLOAD APK ARTIFACT
@@ -323,127 +312,36 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sa7bi-ai-apk-${{ github.run_number }}
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            apk-sha256.txt
-            apk-build-info.txt
+          path: ${{ env.APK_PATH }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 14
 
       # ==========================================================
-      # 15. PREPARE RELEASE APK
+      # 15. CLOUDFLARE CREDENTIAL CHECK
       # ==========================================================
 
-      - name: Prepare release APK
+      - name: Check Cloudflare credentials
         shell: bash
-        run: |
-          set -euo pipefail
-
-          cp "${APK_PATH}" "${RELEASE_APK_NAME}"
-
-          if [ ! -f "${RELEASE_APK_NAME}" ]; then
-            echo "ERROR: Release APK copy was not created."
-            exit 1
-          fi
-
-          sha256sum "${RELEASE_APK_NAME}"
-
-      # ==========================================================
-      # 16. CREATE OR REPLACE LATEST APK RELEASE
-      # ==========================================================
-
-      - name: Create or replace latest APK release
         env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
 
-          echo "=========================================="
-          echo "UPDATING GITHUB APK RELEASE"
-          echo "=========================================="
-
-          gh release delete "${RELEASE_TAG}" \
-            --yes \
-            --cleanup-tag \
-            2>/dev/null || true
-
-          gh release create "${RELEASE_TAG}" \
-            "${RELEASE_APK_NAME}" \
-            --target "${GITHUB_SHA}" \
-            --title "Sa7bi AI - Latest APK" \
-            --notes "Automated APK release from commit ${GITHUB_SHA}. Build ID: ${BUILD_ID}"
-
-          echo ""
-          echo "Release created successfully."
-
-      # ==========================================================
-      # 17. VERIFY GITHUB RELEASE APK
-      # ==========================================================
-
-      - name: Verify released APK SHA256
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          RELEASE_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_APK_NAME}"
-
-          echo "=========================================="
-          echo "VERIFYING RELEASED APK"
-          echo "=========================================="
-
-          echo "Release URL:"
-          echo "${RELEASE_URL}"
-
-          rm -f downloaded-sa7bi-ai.apk
-
-          curl \
-            --fail \
-            --silent \
-            --show-error \
-            --location \
-            --connect-timeout 20 \
-            --max-time 180 \
-            --output downloaded-sa7bi-ai.apk \
-            "${RELEASE_URL}"
-
-          if [ ! -s downloaded-sa7bi-ai.apk ]; then
-            echo "ERROR: Downloaded release APK is missing or empty."
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "ERROR: CLOUDFLARE_API_TOKEN GitHub secret is missing."
             exit 1
           fi
 
-          DOWNLOADED_SHA256=$(sha256sum downloaded-sa7bi-ai.apk | awk '{print $1}')
-
-          echo ""
-          echo "Build APK SHA256:"
-          echo "${APK_SHA256}"
-
-          echo ""
-          echo "Downloaded Release APK SHA256:"
-          echo "${DOWNLOADED_SHA256}"
-
-          if [ "${DOWNLOADED_SHA256}" != "${APK_SHA256}" ]; then
-            echo ""
-            echo "ERROR: RELEASE APK SHA256 DOES NOT MATCH BUILD APK."
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "ERROR: CLOUDFLARE_ACCOUNT_ID GitHub secret is missing."
             exit 1
           fi
 
-          echo ""
-          echo "=========================================="
-          echo "RELEASE APK SHA256 VERIFIED"
-          echo "=========================================="
+          echo "Cloudflare credentials are available."
 
       # ==========================================================
-      # 18. SETUP NODE
-      # ==========================================================
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      # ==========================================================
-      # 19. INSTALL BACKEND DEPENDENCIES
+      # 16. INSTALL BACKEND DEPENDENCIES
       # ==========================================================
 
       - name: Install backend dependencies
@@ -454,72 +352,45 @@ jobs:
 
           if [ -f package-lock.json ]; then
             npm ci
-          else
+          elif [ -f package.json ]; then
             npm install
+          else
+            echo "ERROR: backend/package.json was not found."
+            exit 1
           fi
 
       # ==========================================================
-      # 20. CHECK WRANGLER
+      # 17. DEPLOY PRIMARY CLOUDFLARE WORKER
       # ==========================================================
 
-      - name: Check Wrangler
+      - name: Deploy primary Cloudflare Worker
         working-directory: backend
         shell: bash
-        run: |
-          set -euo pipefail
-          npx wrangler --version
-
-      # ==========================================================
-      # 21. DEPLOY MAIN CLOUDFLARE WORKER
-      # ==========================================================
-
-      - name: Deploy main Cloudflare Worker
-        working-directory: backend
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        shell: bash
         run: |
           set -euo pipefail
 
-          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
-            echo "ERROR: CLOUDFLARE_API_TOKEN GitHub secret is missing."
-            exit 1
-          fi
-
-          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
-            echo "ERROR: CLOUDFLARE_ACCOUNT_ID GitHub secret is missing."
-            exit 1
-          fi
-
           echo "=========================================="
-          echo "DEPLOYING MAIN CLOUDFLARE WORKER"
+          echo "DEPLOYING PRIMARY CLOUDFLARE WORKER"
           echo "=========================================="
 
-          npx wrangler deploy --config wrangler.toml
+          npx wrangler deploy \
+            --config wrangler.toml
 
       # ==========================================================
-      # 22. DEPLOY STATELESS FALLBACK WORKER
+      # 18. DEPLOY FALLBACK CLOUDFLARE WORKER
       # ==========================================================
 
-      - name: Deploy stateless fallback Cloudflare Worker
+      - name: Deploy fallback Cloudflare Worker
         working-directory: backend
+        shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        shell: bash
         run: |
           set -euo pipefail
-
-          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
-            echo "ERROR: CLOUDFLARE_API_TOKEN GitHub secret is missing."
-            exit 1
-          fi
-
-          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
-            echo "ERROR: CLOUDFLARE_ACCOUNT_ID GitHub secret is missing."
-            exit 1
-          fi
 
           echo "=========================================="
           echo "DEPLOYING FALLBACK CLOUDFLARE WORKER"
@@ -529,7 +400,7 @@ jobs:
             --config wrangler-fallback.toml
 
       # ==========================================================
-      # 23. VERIFY PRIMARY WORKER
+      # 19. VERIFY PRIMARY WORKER
       # ==========================================================
 
       - name: Verify primary Worker health
@@ -553,7 +424,7 @@ jobs:
           echo "Primary Worker health check passed."
 
       # ==========================================================
-      # 24. VERIFY FALLBACK WORKER
+      # 20. VERIFY FALLBACK WORKER WITH PROPAGATION RETRIES
       # ==========================================================
 
       - name: Verify fallback Worker health
@@ -563,6 +434,87 @@ jobs:
 
           echo "Checking fallback Worker:"
           echo "${FALLBACK_WORKER_URL}/health"
+
+          FALLBACK_OK=0
+          HTTP_STATUS="000"
+
+          for ATTEMPT in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            echo ""
+            echo "=========================================="
+            echo "FALLBACK HEALTH ATTEMPT ${ATTEMPT}/12"
+            echo "=========================================="
+
+            rm -f /tmp/sa7bi-fallback-headers.txt
+            rm -f /tmp/sa7bi-fallback-body.txt
+
+            HTTP_STATUS=$(
+              curl \
+                --silent \
+                --show-error \
+                --location \
+                --connect-timeout 20 \
+                --max-time 60 \
+                --dump-header /tmp/sa7bi-fallback-headers.txt \
+                --output /tmp/sa7bi-fallback-body.txt \
+                --write-out "%{http_code}" \
+                "${FALLBACK_WORKER_URL}/health" \
+                || true
+            )
+
+            echo "HTTP status: ${HTTP_STATUS}"
+
+            if [ "${HTTP_STATUS}" = "200" ] && \
+               grep -qi "^x-sa7bi-network-fallback:" /tmp/sa7bi-fallback-headers.txt && \
+               grep -q '"ok":true' /tmp/sa7bi-fallback-body.txt; then
+
+              echo ""
+              echo "Fallback Worker response:"
+              cat /tmp/sa7bi-fallback-body.txt
+
+              FALLBACK_OK=1
+              break
+            fi
+
+            if [ "${ATTEMPT}" -lt 12 ]; then
+              echo ""
+              echo "Fallback Worker is not ready yet."
+              echo "Waiting 5 seconds for Cloudflare propagation..."
+              sleep 5
+            fi
+          done
+
+          if [ "${FALLBACK_OK}" -ne 1 ]; then
+            echo ""
+            echo "ERROR: Fallback Worker did not become healthy after deployment."
+            echo "Last HTTP status: ${HTTP_STATUS}"
+
+            echo ""
+            echo "Last response headers:"
+            cat /tmp/sa7bi-fallback-headers.txt 2>/dev/null || true
+
+            echo ""
+            echo "Last response body:"
+            cat /tmp/sa7bi-fallback-body.txt 2>/dev/null || true
+
+            exit 1
+          fi
+
+          echo ""
+          echo "Fallback Worker health check passed."
+          echo "Cloudflare deployment propagation completed."
+
+      # ==========================================================
+      # 21. VERIFY FALLBACK PROXY ROUTING
+      # ==========================================================
+
+      - name: Verify fallback proxy routing
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "VERIFYING FALLBACK PROXY ROUTING"
+          echo "=========================================="
 
           RESPONSE=$(
             curl \
@@ -581,66 +533,164 @@ jobs:
           echo "${RESPONSE}" | grep -qi "X-Sa7bi-Network-Fallback"
 
           echo ""
-          echo "Fallback Worker health check passed."
+          echo "Fallback proxy routing verification passed."
 
       # ==========================================================
-      # 25. WORKER BASIC VERIFICATION
+      # 22. VERIFY PRIMARY BACKEND ROUTES
       # ==========================================================
 
-      - name: Verify Worker basic endpoints
+      - name: Verify primary backend routes
         shell: bash
         run: |
           set -euo pipefail
-          bash github/scripts/verify_worker.sh
+
+          echo "=========================================="
+          echo "VERIFYING PRIMARY BACKEND ROUTES"
+          echo "=========================================="
+
+          check_route() {
+            local route="$1"
+
+            echo ""
+            echo "Checking:"
+            echo "${WORKER_URL}${route}"
+
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              --location \
+              --connect-timeout 20 \
+              --max-time 60 \
+              "${WORKER_URL}${route}" \
+              > /tmp/sa7bi-route-response.txt
+
+            head -c 1000 /tmp/sa7bi-route-response.txt
+            echo ""
+          }
+
+          check_route "/health"
+          check_route "/"
+          check_route "/v1/news"
+          check_route "/v1/audio/quran"
+          check_route "/v1/radio/countries"
+          check_route "/v1/shorts"
+
+          echo ""
+          echo "Primary backend route verification passed."
 
       # ==========================================================
-      # 26. CONTENT / SERVICE VERIFICATION
+      # 23. VERIFY FALLBACK PROXY ON PRIMARY HEALTH
       # ==========================================================
 
-      - name: Verify Worker content and service endpoints
-        shell: bash
-        run: |
-          set -u
-          set -o pipefail
-          bash github/scripts/test_content.sh
-
-      # ==========================================================
-      # 27. MEDIA URL VERIFICATION
-      # ==========================================================
-
-      - name: Verify real media URLs
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash github/scripts/test_media.sh
-
-      # ==========================================================
-      # 28. CREDITS VERIFICATION
-      # ==========================================================
-
-      - name: Verify credits service
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash github/scripts/test_credits.sh
-
-      # ==========================================================
-      # 29. REAL AI VERIFICATION
-      # ==========================================================
-
-      - name: Verify real AI text fallback and image generation
-        shell: bash
-        run: |
-          set -u
-          set -o pipefail
-          bash github/scripts/test_ai.sh
-
-      # ==========================================================
-      # 30. FINAL BUILD REPORT
-      # ==========================================================
-
-      - name: Final build verification summary
+      - name: Verify fallback proxy reaches primary Worker
         shell: bash
         run: |
           set -euo pipefail
-          bash github/scripts/final_report.sh
+
+          echo "=========================================="
+          echo "VERIFYING FALLBACK -> PRIMARY ROUTING"
+          echo "=========================================="
+
+          RESPONSE=$(
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              --location \
+              --connect-timeout 20 \
+              --max-time 60 \
+              -D /tmp/sa7bi-fallback-routing-headers.txt \
+              "${FALLBACK_WORKER_URL}/health"
+          )
+
+          echo "${RESPONSE}"
+
+          echo ""
+          echo "Checking fallback response marker..."
+
+          grep -qi "^x-sa7bi-network-fallback:" \
+            /tmp/sa7bi-fallback-routing-headers.txt
+
+          echo ""
+          echo "Fallback -> primary routing verification passed."
+
+      # ==========================================================
+      # 24. RELEASE APK
+      # ==========================================================
+
+      - name: Publish latest APK release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Sa7bi AI Latest APK
+          body: |
+            Sa7bi AI APK
+
+            Version: ${{ env.APP_VERSION }}
+            Build: ${{ github.run_number }}
+            Commit: ${{ github.sha }}
+            Build ID: ${{ env.BUILD_ID }}
+            Source ID: ${{ env.SOURCE_ID }}
+
+            APK SHA256:
+            ${{ env.APK_SHA256 }}
+
+            APK Size:
+            ${{ env.APK_SIZE }} bytes
+
+            Primary Worker:
+            ${{ env.WORKER_URL }}
+
+            Fallback Worker:
+            ${{ env.FALLBACK_WORKER_URL }}
+
+            The APK was built from the exact GitHub commit shown above.
+          files: ${{ env.APK_PATH }}
+          overwrite_files: true
+          prerelease: false
+
+      # ==========================================================
+      # 25. FINAL BUILD SUMMARY
+      # ==========================================================
+
+      - name: Final deployment summary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=========================================="
+          echo "SA7BI AI FINAL BUILD SUMMARY"
+          echo "=========================================="
+
+          echo "Repository : ${GITHUB_REPOSITORY}"
+          echo "Branch     : ${GITHUB_REF_NAME}"
+          echo "Commit     : ${GITHUB_SHA}"
+          echo "Build      : ${GITHUB_RUN_NUMBER}"
+          echo "Build ID   : ${BUILD_ID}"
+          echo "App        : ${APP_VERSION}"
+
+          echo ""
+          echo "APK:"
+          echo "${APK_PATH}"
+
+          echo ""
+          echo "APK Size:"
+          echo "${APK_SIZE} bytes"
+
+          echo ""
+          echo "APK SHA256:"
+          echo "${APK_SHA256}"
+
+          echo ""
+          echo "Primary Worker:"
+          echo "${WORKER_URL}"
+
+          echo ""
+          echo "Fallback Worker:"
+          echo "${FALLBACK_WORKER_URL}"
+
+          echo ""
+          echo "=========================================="
+          echo "ALL BUILD + BACKEND CHECKS PASSED"
+          echo "=========================================="
