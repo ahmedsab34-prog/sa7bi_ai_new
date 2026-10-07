@@ -2,6 +2,16 @@
 //
 // Sa7bi AI - Stateless Network Fallback
 //
+// FINAL ARCHITECTURE
+// ------------------
+// Flutter
+//    ↓
+// Fallback Worker
+//    ↓
+// Service Binding
+//    ↓
+// Primary Worker
+//
 // هذا Worker ليس Backend ثانيًا.
 // لا يحتوي:
 // - Gemini
@@ -12,17 +22,13 @@
 //
 // وظيفته الوحيدة:
 // استقبال طلب التطبيق من hostname بديل
-// وتمريره إلى الـWorker الأساسي.
+// وتمريره داخليًا إلى الـWorker الأساسي.
 //
-// الهدف:
-// معالجة الحالات التي يفشل فيها الوصول إلى hostname الأساسي
-// من شبكة معينة.
+// مهم:
+// الاتصال بين الـFallback والـPrimary يتم من خلال
+// Cloudflare Service Binding وليس عبر workers.dev.
+// لذلك لا يعتمد على DNS أو Internet routing بين الـWorkers.
 //
-// المصدر الحقيقي للبيانات والـAI يظل:
-// https://sa7bi-ai-new.ahmedsab34.workers.dev
-
-const PRIMARY_WORKER =
-  "https://sa7bi-ai-new.ahmedsab34.workers.dev";
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -37,32 +43,10 @@ const HOP_BY_HOP_HEADERS = new Set([
   "content-length",
 ]);
 
-function buildTargetUrl(request) {
-  const incoming =
-    new URL(request.url);
-
-  const target =
-    new URL(
-      PRIMARY_WORKER,
-    );
-
-  target.pathname =
-    incoming.pathname;
-
-  target.search =
-    incoming.search;
-
-  return target;
-}
-
 function buildHeaders(request) {
-  const headers =
-    new Headers();
+  const headers = new Headers();
 
-  for (const [
-    key,
-    value,
-  ] of request.headers) {
+  for (const [key, value] of request.headers) {
     if (
       HOP_BY_HOP_HEADERS.has(
         key.toLowerCase(),
@@ -71,27 +55,8 @@ function buildHeaders(request) {
       continue;
     }
 
-    headers.set(
-      key,
-      value,
-    );
+    headers.set(key, value);
   }
-
-  headers.set(
-    "X-Sa7bi-Network-Fallback",
-    "1",
-  );
-
-  return headers;
-}
-
-function withFallbackHeaders(
-  response,
-) {
-  const headers =
-    new Headers(
-      response.headers,
-    );
 
   headers.set(
     "X-Sa7bi-Network-Fallback",
@@ -103,14 +68,55 @@ function withFallbackHeaders(
     "sa7bi-ai-new",
   );
 
+  return headers;
+}
+
+function withFallbackHeaders(response) {
+  const responseHeaders = new Headers(
+    response.headers,
+  );
+
+  responseHeaders.set(
+    "X-Sa7bi-Network-Fallback",
+    "1",
+  );
+
+  responseHeaders.set(
+    "X-Sa7bi-Fallback-Target",
+    "sa7bi-ai-new",
+  );
+
   return new Response(
     response.body,
     {
-      status:
-        response.status,
-      statusText:
-        response.statusText,
-      headers,
+      status: response.status,
+      statusText: response.statusText,
+      headers: responseHeaders,
+    },
+  );
+}
+
+function errorResponse(error) {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: "FALLBACK_PROXY_ERROR",
+      message:
+        error?.message ||
+        "Fallback proxy failed.",
+    }),
+    {
+      status: 502,
+      headers: {
+        "Content-Type":
+          "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin":
+          "*",
+        "X-Sa7bi-Network-Fallback":
+          "1",
+        "X-Sa7bi-Fallback-Target":
+          "sa7bi-ai-new",
+      },
     },
   );
 }
@@ -118,6 +124,7 @@ function withFallbackHeaders(
 export default {
   async fetch(
     request,
+    env,
   ) {
     try {
       if (
@@ -135,69 +142,59 @@ export default {
                 "GET,POST,PUT,PATCH,DELETE,OPTIONS",
               "Access-Control-Allow-Headers":
                 "*",
+              "Access-Control-Max-Age":
+                "86400",
             },
           },
         );
       }
 
-      const target =
-        buildTargetUrl(
-          request,
+      if (
+        !env ||
+        !env.PRIMARY_WORKER ||
+        typeof env.PRIMARY_WORKER.fetch !==
+          "function"
+      ) {
+        return errorResponse(
+          new Error(
+            "PRIMARY_WORKER service binding is not configured.",
+          ),
         );
+      }
 
       const headers =
         buildHeaders(
           request,
         );
 
-      const init = {
-        method:
-          request.method,
-        headers,
-        redirect:
-          "follow",
-      };
+      const forwardedRequest =
+        new Request(
+          request,
+          {
+            headers,
+          },
+        );
 
-      if (
-        request.method !==
-          "GET" &&
-        request.method !==
-          "HEAD"
-      ) {
-        init.body =
-          request.body;
-      }
-
+      /*
+       * Service Binding:
+       *
+       * لا يوجد هنا fetch إلى:
+       * https://sa7bi-ai-new.ahmedsab34.workers.dev
+       *
+       * Cloudflare ينفذ الطلب مباشرة داخل
+       * الـPrimary Worker المرتبط بالخدمة.
+       */
       const response =
-        await fetch(
-          target.toString(),
-          init,
+        await env.PRIMARY_WORKER.fetch(
+          forwardedRequest,
         );
 
       return withFallbackHeaders(
         response,
       );
     } catch (error) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error:
-            "FALLBACK_PROXY_ERROR",
-          message:
-            error?.message ||
-            "Fallback proxy failed.",
-        }),
-        {
-          status: 502,
-          headers: {
-            "Content-Type":
-              "application/json; charset=utf-8",
-            "Access-Control-Allow-Origin":
-              "*",
-            "X-Sa7bi-Network-Fallback":
-              "1",
-          },
-        },
+      return errorResponse(
+        error,
       );
     }
   },
