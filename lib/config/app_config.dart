@@ -8,197 +8,234 @@
 /// - SA7BI_BUILD_NUMBER
 /// - SA7BI_COMMIT_SHA
 class AppConfig {
-AppConfig._();
+  AppConfig._();
 
-// ============================================================
-// APP
-// ============================================================
+  // ============================================================
+  // APP
+  // ============================================================
 
-static const String appName = 'صاحبي AI';
+  static const String appName = 'صاحبي AI';
 
-static const String appNameEnglish = 'Sa7bi AI';
+  static const String appNameEnglish = 'Sa7bi AI';
 
-static const String packageName =
-'com.example.sa7bi_ai_new';
+  static const String packageName =
+      'com.example.sa7bi_ai_new';
 
-/// رقم الإصدار الذي يظهر للمستخدم.
-///
-/// GitHub Actions يحقن القيمة الحقيقية أثناء البناء.
-static const String appVersion =
-String.fromEnvironment(
-'SA7BI_APP_VERSION',
-defaultValue: '1.0.1',
-);
+  /// رقم الإصدار الذي يظهر للمستخدم.
+  ///
+  /// GitHub Actions يحقن القيمة الحقيقية أثناء البناء.
+  static const String appVersion =
+      String.fromEnvironment(
+    'SA7BI_APP_VERSION',
+    defaultValue: '1.0.1',
+  );
 
-/// رقم Build الحقيقي الخاص بـGitHub Actions.
-static const String buildNumber =
-String.fromEnvironment(
-'SA7BI_BUILD_NUMBER',
-defaultValue: '0',
-);
+  /// رقم Build الحقيقي الخاص بـGitHub Actions.
+  static const String buildNumber =
+      String.fromEnvironment(
+    'SA7BI_BUILD_NUMBER',
+    defaultValue: '0',
+  );
 
-/// أول 7 أحرف من Commit الذي بُني منه الـAPK.
-static const String commitSha =
-String.fromEnvironment(
-'SA7BI_COMMIT_SHA',
-defaultValue: 'unknown',
-);
+  /// Commit الذي بُني منه الـAPK.
+  static const String commitSha =
+      String.fromEnvironment(
+    'SA7BI_COMMIT_SHA',
+    defaultValue: 'unknown',
+  );
 
-/// هوية النسخة كاملة.
-static String get buildIdentity =>
-'$appVersion+$buildNumber ($commitSha)';
+  /// هوية النسخة كاملة.
+  static String get buildIdentity =>
+      '$appVersion+$buildNumber ($commitSha)';
 
-// ============================================================
-// BACKEND
-// ============================================================
+  // ============================================================
+  // BACKEND
+  // ============================================================
 
-static const String backendBaseUrl =
-'https://sa7bi-ai-new.ahmedsab34.workers.dev';
+  /// الـWorker الأساسي.
+  ///
+  /// هذا يظل المصدر الرئيسي لكل خدمات التطبيق.
+  static const String backendBaseUrl =
+      'https://sa7bi-ai-new.ahmedsab34.workers.dev';
 
-static const String backendHealthEndpoint =
-'$backendBaseUrl/health';
+  /// Worker احتياطي Stateless.
+  ///
+  /// لا يملك قاعدة بيانات أو Credits مستقلة.
+  /// وظيفته فقط تمرير الطلب إلى الـWorker الأساسي.
+  ///
+  /// الهدف منه معالجة حالات فشل الوصول إلى hostname الأساسي
+  /// من بعض الشبكات.
+  static const String backendFallbackBaseUrl =
+      'https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev';
 
-static const String aiChatEndpoint =
-'$backendBaseUrl/v1/chat';
+  /// اسم الـhost الأساسي.
+  static const String backendPrimaryHost =
+      'sa7bi-ai-new.ahmedsab34.workers.dev';
 
-static const String imageGenerationEndpoint =
-'$backendBaseUrl/v1/image';
+  /// اسم الـhost الاحتياطي.
+  static const String backendFallbackHost =
+      'sa7bi-ai-new-fallback.ahmedsab34.workers.dev';
 
-static const String newsEndpoint =
-'$backendBaseUrl/v1/news';
+  static const String backendHealthEndpoint =
+      '$backendBaseUrl/health';
 
-static const String shortsEndpoint =
-'$backendBaseUrl/v1/shorts';
+  static const String aiChatEndpoint =
+      '$backendBaseUrl/v1/chat';
 
-static const String audioSearchEndpoint =
-'$backendBaseUrl/v1/audio/search-v4';
+  static const String imageGenerationEndpoint =
+      '$backendBaseUrl/v1/image';
 
-static const String quranEndpoint =
-'$backendBaseUrl/v1/audio/quran';
+  static const String newsEndpoint =
+      '$backendBaseUrl/v1/news';
 
-static const String radioCountriesEndpoint =
-'$backendBaseUrl/v1/radio/countries';
+  static const String shortsEndpoint =
+      '$backendBaseUrl/v1/shorts';
 
-static const String radioStationsEndpoint =
-'$backendBaseUrl/v1/radio/stations';
+  static const String audioSearchEndpoint =
+      '$backendBaseUrl/v1/audio/search-v4';
 
-/// هذا الرابط الآن هو بوابة تنزيل الـAPK الحقيقي.
-///
-/// الـWorker يعيد توجيهه إلى:
-/// GitHub Release → sa7bi-ai.apk
-static const String downloadEndpoint =
-'$backendBaseUrl/download';
+  static const String quranEndpoint =
+      '$backendBaseUrl/v1/audio/quran';
 
-static const String monetizationEndpoint =
-'$backendBaseUrl/v1/monetization';
+  static const String radioCountriesEndpoint =
+      '$backendBaseUrl/v1/radio/countries';
 
-// ============================================================
-// NETWORK LIMITS
-// ============================================================
+  static const String radioStationsEndpoint =
+      '$backendBaseUrl/v1/radio/stations';
 
-static const int maximumNetworkAttempts = 3;
+  /// هذا الرابط هو بوابة تنزيل الـAPK الحقيقي.
+  static const String downloadEndpoint =
+      '$backendBaseUrl/download';
 
-static const int networkTimeoutSeconds = 45;
+  static const String monetizationEndpoint =
+      '$backendBaseUrl/v1/monetization';
 
-static const int chatTimeoutSeconds = 90;
+  // ============================================================
+  // NETWORK LIMITS
+  // ============================================================
 
-static const int imageTimeoutSeconds = 120;
+  /// عدد محاولات الطلب على مستوى الخدمات التي تستخدم
+  /// هذا الإعداد.
+  static const int maximumNetworkAttempts = 3;
 
-// ============================================================
-// CHAT
-// ============================================================
+  static const int networkTimeoutSeconds = 45;
 
-static const int maximumChatMessages = 80;
+  static const int chatTimeoutSeconds = 90;
 
-static const int maximumContextMessages = 8;
+  static const int imageTimeoutSeconds = 120;
 
-static const int maximumMessageCharacters = 12000;
+  // ============================================================
+  // CHAT
+  // ============================================================
 
-// ============================================================
-// NEWS
-// ============================================================
+  static const int maximumChatMessages = 80;
 
-static const int newsBeforeShorts = 5;
+  static const int maximumContextMessages = 8;
 
-static const int maximumNewsItems = 30;
+  static const int maximumMessageCharacters = 12000;
 
-static const int maximumShortsItems = 20;
+  // ============================================================
+  // NEWS
+  // ============================================================
 
-// ============================================================
-// MEDIA
-// ============================================================
+  static const int newsBeforeShorts = 5;
 
-static const int maximumImageSizeMb = 5;
+  static const int maximumNewsItems = 30;
 
-static const int maximumVideoSizeMb = 50;
+  static const int maximumShortsItems = 20;
 
-static const int maximumVideoFrames = 4;
+  // ============================================================
+  // MEDIA
+  // ============================================================
 
-// ============================================================
-// AUDIO
-// ============================================================
+  static const int maximumImageSizeMb = 5;
 
-static const String audioChannelId =
-'com.sa7bi.ai.audio';
+  static const int maximumVideoSizeMb = 50;
 
-static const String audioChannelName =
-'صاحبي AI - الصوت';
+  static const int maximumVideoFrames = 4;
 
-// ============================================================
-// PROFILE
-// ============================================================
+  // ============================================================
+  // AUDIO
+  // ============================================================
 
-static const String defaultUserName =
-'صاحبي';
+  static const String audioChannelId =
+      'com.sa7bi.ai.audio';
 
-// ============================================================
-// FEATURES
-// ============================================================
+  static const String audioChannelName =
+      'صاحبي AI - الصوت';
 
-static const bool creditsEnabled = true;
+  // ============================================================
+  // PROFILE
+  // ============================================================
 
-static const bool imageGenerationEnabled = true;
+  static const String defaultUserName =
+      'صاحبي';
 
-static const bool imageAnalysisEnabled = true;
+  // ============================================================
+  // FEATURES
+  // ============================================================
 
-static const bool videoAnalysisEnabled = true;
+  static const bool creditsEnabled = true;
 
-static const bool khalasanaEnabled = true;
+  static const bool imageGenerationEnabled = true;
 
-static const bool newsEnabled = true;
+  static const bool imageAnalysisEnabled = true;
 
-static const bool shortsEnabled = true;
+  static const bool videoAnalysisEnabled = true;
 
-static const bool audioEnabled = true;
+  static const bool khalasanaEnabled = true;
 
-static const bool radioEnabled = true;
+  static const bool newsEnabled = true;
 
-// ============================================================
-// SECURITY
-// ============================================================
+  static const bool shortsEnabled = true;
 
-static const bool clientSideApiKeysAllowed = false;
+  static const bool audioEnabled = true;
 
-static const bool aiMustUseBackend = true;
+  static const bool radioEnabled = true;
 
-// ============================================================
-// URL HELPERS
-// ============================================================
+  // ============================================================
+  // SECURITY
+  // ============================================================
 
-static String buildBackendUrl(
-String path,
-) {
-final cleaned = path.trim();
+  static const bool clientSideApiKeysAllowed = false;
 
-if (cleaned.isEmpty) {
-  return backendBaseUrl;
-}
+  static const bool aiMustUseBackend = true;
 
-if (cleaned.startsWith('/')) {
-  return '$backendBaseUrl$cleaned';
-}
+  // ============================================================
+  // URL HELPERS
+  // ============================================================
 
-return '$backendBaseUrl/$cleaned';
+  /// يبني رابطًا على الـWorker الأساسي.
+  static String buildBackendUrl(
+    String path,
+  ) {
+    final cleaned = path.trim();
 
-}
+    if (cleaned.isEmpty) {
+      return backendBaseUrl;
+    }
+
+    if (cleaned.startsWith('/')) {
+      return '$backendBaseUrl$cleaned';
+    }
+
+    return '$backendBaseUrl/$cleaned';
+  }
+
+  /// يبني رابطًا على الـWorker الاحتياطي.
+  static String buildFallbackBackendUrl(
+    String path,
+  ) {
+    final cleaned = path.trim();
+
+    if (cleaned.isEmpty) {
+      return backendFallbackBaseUrl;
+    }
+
+    if (cleaned.startsWith('/')) {
+      return '$backendFallbackBaseUrl$cleaned';
+    }
+
+    return '$backendFallbackBaseUrl/$cleaned';
+  }
 }
