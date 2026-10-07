@@ -4,5 +4,30 @@ main = "src/fallback.js"
 
 compatibility_date = "2026-09-18"
 
-# Public workers.dev endpoint.
+# Public fallback endpoint for the Flutter application.
 workers_dev = true
+
+# ==========================================================
+# PRIMARY WORKER SERVICE BINDING
+# ==========================================================
+#
+# The fallback Worker communicates with the primary Worker
+# internally through Cloudflare Service Bindings.
+#
+# This avoids:
+# - DNS dependency between Workers
+# - public workers.dev routing
+# - Internet routing between Workers
+# - the 404 behavior observed in the previous deployment
+#
+# The primary Worker remains:
+# sa7bi-ai-new
+#
+# No second AI backend is created.
+# No second Credits system is created.
+# No API keys are duplicated.
+#
+
+[[services]]
+binding = "PRIMARY_WORKER"
+service = "sa7bi-ai-new"
