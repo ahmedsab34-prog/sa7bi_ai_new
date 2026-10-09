@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -8,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'app_diagnostics_screen.dart';
 import 'audio_center_screen.dart';
 import 'audio_player_service.dart';
+import 'chat_screen.dart';
+import 'config/service_keys.dart';
 import 'home_screen.dart';
 import 'khalasana_portal_screen.dart';
 import 'profile_screen.dart';
@@ -23,22 +24,16 @@ void main() {
   // UNIFIED NETWORK TRANSPORT
   // ============================================================
   //
-  // كل package:http top-level request داخل التطبيق:
+  // كل طلبات package:http تستخدم العميل الموحد:
   //
-  // http.get(...)
-  // http.post(...)
-  // http.put(...)
-  // http.delete(...)
-  // Client()
+  // Android -> Cronet مع آلية التحويل الاحتياطي.
+  // Other platforms -> IO fallback.
   //
-  // يستخدم العميل الموحد هنا.
+  // يجب أن يحيط runWithClient بـ runApp حتى تستخدم
+  // الطلبات داخل التطبيق عميل الشبكة الموحد.
   //
-  // Android -> Cronet
-  // Other platforms -> IO fallback
-  //
-  // مهم:
-  // runWithClient يجب أن يحيط بـrunApp حتى تكون Zone
-  // الخاصة بـpackage:http هي Zone التطبيق الأساسية.
+  // ============================================================
+
   http.runWithClient(
     () {
       WidgetsFlutterBinding.ensureInitialized();
@@ -65,7 +60,7 @@ Future<void> _initializeApplicationServices() async {
   try {
     await CreditsService.instance.initialize();
   } catch (_) {
-    // فشل Credits لا يمنع التطبيق من العمل.
+    // فشل خدمة الرصيد لا يمنع تشغيل التطبيق.
   }
 
   // ============================================================
@@ -99,7 +94,7 @@ Future<void> _initializeApplicationServices() async {
   try {
     await AudioController.initialize();
   } catch (_) {
-    // الصوت لا يمنع باقي التطبيق من العمل.
+    // فشل تهيئة الصوت لا يمنع بقية التطبيق من العمل.
   }
 
   // ============================================================
@@ -121,7 +116,7 @@ Future<void> _initializeApplicationServices() async {
       );
     }
   } catch (_) {
-    // فشل الإعلانات لا يمنع التطبيق من العمل.
+    // فشل الإعلانات لا يمنع بقية التطبيق من العمل.
   }
 }
 
@@ -130,7 +125,9 @@ Future<void> _initializeApplicationServices() async {
 // ============================================================
 
 class Sa7biAiApp extends StatelessWidget {
-  const Sa7biAiApp({super.key});
+  const Sa7biAiApp({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -141,10 +138,8 @@ class Sa7biAiApp extends StatelessWidget {
         brightness: Brightness.dark,
         scaffoldBackgroundColor:
             const Color(0xFF070A12),
-        colorScheme:
-            ColorScheme.fromSeed(
-          seedColor:
-              const Color(0xFFFFD76A),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFFFD76A),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
@@ -154,8 +149,7 @@ class Sa7biAiApp extends StatelessWidget {
         '/diagnostics': (_) =>
             const AppDiagnosticsScreen(),
       },
-      home:
-          const MainContainerScreen(),
+      home: const MainContainerScreen(),
     );
   }
 }
@@ -164,21 +158,21 @@ class Sa7biAiApp extends StatelessWidget {
 // MAIN CONTAINER
 // ============================================================
 
-class MainContainerScreen
-    extends StatefulWidget {
+class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({
     super.key,
   });
 
   @override
-  State<MainContainerScreen>
-      createState() =>
-          _MainContainerScreenState();
+  State<MainContainerScreen> createState() =>
+      _MainContainerScreenState();
 }
 
 class _MainContainerScreenState
     extends State<MainContainerScreen> {
-  // 0 = Home, 1 = Profile.
+  // 0 = الرئيسية.
+  // 1 = حسابي.
+  // 2 = الشات العام.
   int index = 0;
 
   // ==========================================================
@@ -202,8 +196,7 @@ class _MainContainerScreenState
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            const AudioCenterScreen(),
+        builder: (_) => const AudioCenterScreen(),
       ),
     );
   }
@@ -215,8 +208,7 @@ class _MainContainerScreenState
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            const KhalasanaPortalScreen(),
+        builder: (_) => const KhalasanaPortalScreen(),
       ),
     );
   }
@@ -226,8 +218,9 @@ class _MainContainerScreenState
       return;
     }
 
-    Navigator.of(context)
-        .pushNamed('/diagnostics');
+    Navigator.of(context).pushNamed(
+      '/diagnostics',
+    );
   }
 
   // ==========================================================
@@ -237,106 +230,147 @@ class _MainContainerScreenState
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
+      // --------------------------------------------------------
+      // PAGE 1: HOME
+      // --------------------------------------------------------
+
       HomeScreen(
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
+
+      // --------------------------------------------------------
+      // PAGE 2: PROFILE
+      // --------------------------------------------------------
+
       ProfileScreen(
         onAudio: openAudioCenter,
+      ),
+
+      // --------------------------------------------------------
+      // PAGE 3: GENERAL CHAT
+      // --------------------------------------------------------
+      //
+      // نستخدم ChatScreen الموجودة بالفعل.
+      // ServiceKeys.general يجعل المحادثة العامة مستقلة
+      // عن محادثة خلصانة AI وبقية الخدمات.
+      //
+      // --------------------------------------------------------
+
+      const ChatScreen(
+        serviceKey: ServiceKeys.general,
+        serviceTitle: 'المحادثة العامة',
+        serviceContext:
+            'أنت صاحبي AI، مساعد عربي عام. '
+            'أجب بوضوح وبشكل مفيد، '
+            'وحافظ على سياق المحادثة العامة.',
       ),
     ];
 
     return Scaffold(
-      backgroundColor:
-          const Color(0xFF070A12),
+      backgroundColor: const Color(0xFF070A12),
+
       body: SafeArea(
         child: Stack(
           children: [
+            // ----------------------------------------------------
+            // MAIN PAGES
+            // ----------------------------------------------------
+
             IndexedStack(
               index: index,
               children: pages,
             ),
 
-            const Positioned(
-              left: 10,
-              right: 10,
-              bottom: 8,
-              child: MiniAudioPlayer(),
-            ),
+            // ----------------------------------------------------
+            // MINI AUDIO PLAYER
+            // ----------------------------------------------------
+            //
+            // نخفي المشغل العائم في صفحة الشات حتى لا يغطي
+            // حقل الكتابة أو أزرار إرسال الرسائل.
+            //
+            // ----------------------------------------------------
 
-            // ==================================================
-            // DIAGNOSTICS ENTRY
-            // ==================================================
+            if (index != 2)
+              const Positioned(
+                left: 10,
+                right: 10,
+                bottom: 8,
+                child: MiniAudioPlayer(),
+              ),
 
-            Positioned(
-              left: 12,
-              bottom: 92,
-              child: Material(
-                color: Colors.transparent,
-                child: Tooltip(
-                  message: 'تشخيص التطبيق',
-                  child: InkWell(
-                    onTap: openDiagnostics,
-                    borderRadius:
-                        BorderRadius.circular(24),
-                    child: Container(
-                      width: 46,
-                      height: 46,
-                      decoration:
-                          BoxDecoration(
-                        color: const Color(
-                          0xFF11141D,
-                        ).withOpacity(0.96),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color:
-                              const Color(
-                            0x55FFD76A,
+            // ----------------------------------------------------
+            // DIAGNOSTICS BUTTON
+            // ----------------------------------------------------
+
+            if (index != 2)
+              Positioned(
+                left: 12,
+                bottom: 92,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Tooltip(
+                    message: 'تشخيص التطبيق',
+                    child: InkWell(
+                      onTap: openDiagnostics,
+                      borderRadius:
+                          BorderRadius.circular(24),
+                      child: Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF11141D)
+                              .withOpacity(0.96),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(
+                              0x55FFD76A,
+                            ),
                           ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x55000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        boxShadow:
-                            const [
-                          BoxShadow(
-                            color:
-                                Color(0x55000000),
-                            blurRadius: 12,
-                            offset:
-                                Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons
-                            .health_and_safety_outlined,
-                        color:
-                            Color(0xFFFFD76A),
-                        size: 23,
+                        child: const Icon(
+                          Icons.health_and_safety_outlined,
+                          color: Color(0xFFFFD76A),
+                          size: 23,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
 
-            Positioned(
-              right: 12,
-              bottom: 92,
-              child: KhalasanaPortal(
-                onTap: openKhalasana,
+            // ----------------------------------------------------
+            // KHALASANA FLOATING BUTTON
+            // ----------------------------------------------------
+
+            if (index != 2)
+              Positioned(
+                right: 12,
+                bottom: 92,
+                child: KhalasanaPortal(
+                  onTap: openKhalasana,
+                ),
               ),
-            ),
           ],
         ),
       ),
-      bottomNavigationBar:
-          NavigationBar(
-        backgroundColor:
-            const Color(0xFF11141D),
-        indicatorColor:
-            const Color(0x3348D8FF),
+
+      // ==========================================================
+      // BOTTOM NAVIGATION
+      // ==========================================================
+
+      bottomNavigationBar: NavigationBar(
+        backgroundColor: const Color(0xFF11141D),
+        indicatorColor: const Color(0x3348D8FF),
         selectedIndex: index,
-        onDestinationSelected:
-            (value) {
+        onDestinationSelected: (value) {
           if (!mounted) {
             return;
           }
@@ -346,6 +380,10 @@ class _MainContainerScreenState
           });
         },
         destinations: const [
+          // ------------------------------------------------------
+          // HOME
+          // ------------------------------------------------------
+
           NavigationDestination(
             icon: Icon(
               Icons.home_outlined,
@@ -355,6 +393,11 @@ class _MainContainerScreenState
             ),
             label: 'الرئيسية',
           ),
+
+          // ------------------------------------------------------
+          // PROFILE
+          // ------------------------------------------------------
+
           NavigationDestination(
             icon: Icon(
               Icons.person_outline_rounded,
@@ -363,6 +406,20 @@ class _MainContainerScreenState
               Icons.person_rounded,
             ),
             label: 'حسابي',
+          ),
+
+          // ------------------------------------------------------
+          // GENERAL CHAT
+          // ------------------------------------------------------
+
+          NavigationDestination(
+            icon: Icon(
+              Icons.chat_bubble_outline_rounded,
+            ),
+            selectedIcon: Icon(
+              Icons.chat_rounded,
+            ),
+            label: 'الشات',
           ),
         ],
       ),
@@ -374,26 +431,23 @@ class _MainContainerScreenState
 // MINI AUDIO PLAYER
 // ============================================================
 
-class MiniAudioPlayer
-    extends StatelessWidget {
-  const MiniAudioPlayer({super.key});
+class MiniAudioPlayer extends StatelessWidget {
+  const MiniAudioPlayer({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<MediaItem?>(
-      stream:
-          AudioController.handler?.mediaItem,
-      builder:
-          (context, mediaSnapshot) {
-        final item =
-            mediaSnapshot.data;
+      stream: AudioController.handler?.mediaItem,
+      builder: (context, mediaSnapshot) {
+        final item = mediaSnapshot.data;
 
         if (item == null) {
           return const SizedBox.shrink();
         }
 
-        final handler =
-            AudioController.handler;
+        final handler = AudioController.handler;
 
         if (handler == null) {
           return const SizedBox.shrink();
@@ -403,37 +457,33 @@ class MiniAudioPlayer
           color: Colors.transparent,
           child: Container(
             height: 62,
-            padding:
-                const EdgeInsets.symmetric(
+            padding: const EdgeInsets.symmetric(
               horizontal: 7,
             ),
-            decoration:
-                BoxDecoration(
-              color: const Color(
-                0xFF121720,
-              ).withOpacity(0.98),
-              borderRadius:
-                  BorderRadius.circular(19),
+            decoration: BoxDecoration(
+              color: const Color(0xFF121720)
+                  .withOpacity(0.98),
+              borderRadius: BorderRadius.circular(19),
               border: Border.all(
-                color:
-                    const Color(0x55FFD76A),
+                color: const Color(0x55FFD76A),
               ),
               boxShadow: const [
                 BoxShadow(
-                  color:
-                      Color(0x66000000),
+                  color: Color(0x66000000),
                   blurRadius: 19,
-                  offset:
-                      Offset(0, 6),
+                  offset: Offset(0, 6),
                 ),
               ],
             ),
             child: Row(
               children: [
+                // ------------------------------------------------
+                // OPEN AUDIO CENTER
+                // ------------------------------------------------
+
                 GestureDetector(
                   onTap: () {
-                    Navigator.of(context)
-                        .push(
+                    Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) =>
                             const AudioCenterScreen(),
@@ -443,11 +493,9 @@ class MiniAudioPlayer
                   child: Container(
                     width: 44,
                     height: 44,
-                    decoration:
-                        const BoxDecoration(
+                    decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient:
-                          LinearGradient(
+                      gradient: LinearGradient(
                         colors: [
                           Color(0xFFFFD76A),
                           Color(0xFF7164FF),
@@ -455,8 +503,7 @@ class MiniAudioPlayer
                       ),
                     ),
                     child: const Icon(
-                      Icons
-                          .graphic_eq_rounded,
+                      Icons.graphic_eq_rounded,
                       color: Colors.black,
                     ),
                   ),
@@ -464,11 +511,14 @@ class MiniAudioPlayer
 
                 const SizedBox(width: 8),
 
+                // ------------------------------------------------
+                // CURRENT AUDIO TITLE
+                // ------------------------------------------------
+
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      Navigator.of(context)
-                          .push(
+                      Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) =>
                               const AudioCenterScreen(),
@@ -477,11 +527,9 @@ class MiniAudioPlayer
                     },
                     child: Column(
                       mainAxisAlignment:
-                          MainAxisAlignment
-                              .center,
+                          MainAxisAlignment.center,
                       crossAxisAlignment:
-                          CrossAxisAlignment
-                              .end,
+                          CrossAxisAlignment.end,
                       children: [
                         Text(
                           item.title,
@@ -490,25 +538,20 @@ class MiniAudioPlayer
                           maxLines: 1,
                           overflow:
                               TextOverflow.ellipsis,
-                          style:
-                              const TextStyle(
-                            fontWeight:
-                                FontWeight.w900,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
                             fontSize: 11,
                           ),
                         ),
                         Text(
-                          item.artist ??
-                              'صاحبي AI',
+                          item.artist ?? 'صاحبي AI',
                           textDirection:
                               TextDirection.rtl,
                           maxLines: 1,
                           overflow:
                               TextOverflow.ellipsis,
-                          style:
-                              const TextStyle(
-                            color:
-                                Colors.white54,
+                          style: const TextStyle(
+                            color: Colors.white54,
                             fontSize: 9,
                           ),
                         ),
@@ -517,22 +560,19 @@ class MiniAudioPlayer
                   ),
                 ),
 
-                StreamBuilder<
-                    PlaybackState>(
-                  stream:
-                      handler.playbackState,
-                  builder:
-                      (context, snapshot) {
+                // ------------------------------------------------
+                // PLAY / PAUSE
+                // ------------------------------------------------
+
+                StreamBuilder<PlaybackState>(
+                  stream: handler.playbackState,
+                  builder: (context, snapshot) {
                     final playing =
-                        snapshot.data
-                                ?.playing ??
-                            false;
+                        snapshot.data?.playing ?? false;
 
                     return IconButton(
-                      padding:
-                          EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
                         minWidth: 40,
                         minHeight: 40,
                       ),
@@ -545,25 +585,22 @@ class MiniAudioPlayer
                       },
                       icon: Icon(
                         playing
-                            ? Icons
-                                .pause_rounded
-                            : Icons
-                                .play_arrow_rounded,
-                        color:
-                            const Color(
-                          0xFFFFD76A,
-                        ),
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        color: const Color(0xFFFFD76A),
                         size: 27,
                       ),
                     );
                   },
                 ),
 
+                // ------------------------------------------------
+                // STOP AUDIO
+                // ------------------------------------------------
+
                 IconButton(
-                  padding:
-                      EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
                     minWidth: 34,
                     minHeight: 40,
                   ),
@@ -572,8 +609,7 @@ class MiniAudioPlayer
                   },
                   icon: const Icon(
                     Icons.close_rounded,
-                    color:
-                        Colors.white54,
+                    color: Colors.white54,
                     size: 19,
                   ),
                 ),
