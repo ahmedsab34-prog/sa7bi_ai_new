@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -21,13 +22,23 @@ void main() {
   // ============================================================
   // UNIFIED NETWORK TRANSPORT
   // ============================================================
-
-  // كل طلبات package:http تستخدم العميل الموحد.
+  //
+  // كل package:http top-level request داخل التطبيق:
+  //
+  // http.get(...)
+  // http.post(...)
+  // http.put(...)
+  // http.delete(...)
+  // Client()
+  //
+  // يستخدم العميل الموحد هنا.
+  //
   // Android -> Cronet
   // Other platforms -> IO fallback
   //
-  // runWithClient يحيط بـ runApp حتى تكون Zone
-  // الخاصة بـ package:http هي Zone التطبيق الأساسية.
+  // مهم:
+  // runWithClient يجب أن يحيط بـrunApp حتى تكون Zone
+  // الخاصة بـpackage:http هي Zone التطبيق الأساسية.
   http.runWithClient(
     () {
       WidgetsFlutterBinding.ensureInitialized();
@@ -46,84 +57,68 @@ void main() {
   );
 }
 
-// ============================================================
-// APPLICATION SERVICES INITIALIZATION
-// ============================================================
-
 Future<void> _initializeApplicationServices() async {
-  // واجهة التطبيق تظهر أولًا، ثم تبدأ الخدمات المستقلة
-  // بالتوازي بدل انتظار كل خدمة قبل بدء التالية.
-  //
-  // كل خدمة لديها معالجة أخطاء مستقلة حتى لا يؤدي
-  // فشل خدمة واحدة إلى إيقاف الخدمات الأخرى.
-  await Future.wait<void>([
-    _initializeCredits(),
-    _initializeAiConnection(),
-    _initializeAudio(),
-    _initializeAds(),
-  ]);
-}
+  // ============================================================
+  // CREDITS
+  // ============================================================
 
-// ============================================================
-// CREDITS
-// ============================================================
-
-Future<void> _initializeCredits() async {
   try {
     await CreditsService.instance.initialize();
   } catch (_) {
     // فشل Credits لا يمنع التطبيق من العمل.
   }
-}
 
-// ============================================================
-// AI BACKEND CONNECTION
-// ============================================================
+  // ============================================================
+  // AI BACKEND CONNECTION
+  // ============================================================
 
-Future<void> _initializeAiConnection() async {
   try {
-    final backend = await AiRequestService.checkBackend();
+    final backend =
+        await AiRequestService.checkBackend();
 
     if (backend.isAvailable) {
-      await ProfileService.instance.markAiConnected();
+      await ProfileService.instance
+          .markAiConnected();
     } else {
-      await ProfileService.instance.markAiDisconnected();
+      await ProfileService.instance
+          .markAiDisconnected();
     }
   } catch (_) {
     try {
-      await ProfileService.instance.markAiDisconnected();
+      await ProfileService.instance
+          .markAiDisconnected();
     } catch (_) {
-      // فشل تحديث حالة الاتصال لا يوقف التطبيق.
+      // لا شيء.
     }
   }
-}
 
-// ============================================================
-// AUDIO
-// ============================================================
+  // ============================================================
+  // AUDIO
+  // ============================================================
 
-Future<void> _initializeAudio() async {
   try {
     await AudioController.initialize();
   } catch (_) {
-    // فشل الصوت لا يمنع باقي التطبيق من العمل.
+    // الصوت لا يمنع باقي التطبيق من العمل.
   }
-}
 
-// ============================================================
-// ADMOB
-// ============================================================
+  // ============================================================
+  // ADMOB
+  // ============================================================
 
-Future<void> _initializeAds() async {
   try {
     final ads = AdsService.instance;
 
     await ads.initialize();
 
     if (ads.isAdMobInitialized) {
-      // تحميل الإعلانات مسبقًا دون انتظار اكتمال التحميل.
-      unawaited(ads.loadInterstitial());
-      unawaited(ads.loadRewarded());
+      unawaited(
+        ads.loadInterstitial(),
+      );
+
+      unawaited(
+        ads.loadRewarded(),
+      );
     }
   } catch (_) {
     // فشل الإعلانات لا يمنع التطبيق من العمل.
@@ -144,18 +139,23 @@ class Sa7biAiApp extends StatelessWidget {
       title: 'صاحبي AI',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF070A12),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFFD76A),
+        scaffoldBackgroundColor:
+            const Color(0xFF070A12),
+        colorScheme:
+            ColorScheme.fromSeed(
+          seedColor:
+              const Color(0xFFFFD76A),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
         fontFamily: 'sans',
       ),
       routes: {
-        '/diagnostics': (_) => const AppDiagnosticsScreen(),
+        '/diagnostics': (_) =>
+            const AppDiagnosticsScreen(),
       },
-      home: const MainContainerScreen(),
+      home:
+          const MainContainerScreen(),
     );
   }
 }
@@ -164,14 +164,16 @@ class Sa7biAiApp extends StatelessWidget {
 // MAIN CONTAINER
 // ============================================================
 
-class MainContainerScreen extends StatefulWidget {
+class MainContainerScreen
+    extends StatefulWidget {
   const MainContainerScreen({
     super.key,
   });
 
   @override
-  State<MainContainerScreen> createState() =>
-      _MainContainerScreenState();
+  State<MainContainerScreen>
+      createState() =>
+          _MainContainerScreenState();
 }
 
 class _MainContainerScreenState
@@ -200,7 +202,8 @@ class _MainContainerScreenState
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const AudioCenterScreen(),
+        builder: (_) =>
+            const AudioCenterScreen(),
       ),
     );
   }
@@ -212,7 +215,8 @@ class _MainContainerScreenState
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const KhalasanaPortalScreen(),
+        builder: (_) =>
+            const KhalasanaPortalScreen(),
       ),
     );
   }
@@ -222,7 +226,8 @@ class _MainContainerScreenState
       return;
     }
 
-    Navigator.of(context).pushNamed('/diagnostics');
+    Navigator.of(context)
+        .pushNamed('/diagnostics');
   }
 
   // ==========================================================
@@ -242,7 +247,8 @@ class _MainContainerScreenState
     ];
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070A12),
+      backgroundColor:
+          const Color(0xFF070A12),
       body: SafeArea(
         child: Stack(
           children: [
@@ -271,28 +277,39 @@ class _MainContainerScreenState
                   message: 'تشخيص التطبيق',
                   child: InkWell(
                     onTap: openDiagnostics,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius:
+                        BorderRadius.circular(24),
                     child: Container(
                       width: 46,
                       height: 46,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF11141D)
-                            .withOpacity(0.96),
+                      decoration:
+                          BoxDecoration(
+                        color: const Color(
+                          0xFF11141D,
+                        ).withOpacity(0.96),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: const Color(0x55FFD76A),
+                          color:
+                              const Color(
+                            0x55FFD76A,
+                          ),
                         ),
-                        boxShadow: const [
+                        boxShadow:
+                            const [
                           BoxShadow(
-                            color: Color(0x55000000),
+                            color:
+                                Color(0x55000000),
                             blurRadius: 12,
-                            offset: Offset(0, 4),
+                            offset:
+                                Offset(0, 4),
                           ),
                         ],
                       ),
                       child: const Icon(
-                        Icons.health_and_safety_outlined,
-                        color: Color(0xFFFFD76A),
+                        Icons
+                            .health_and_safety_outlined,
+                        color:
+                            Color(0xFFFFD76A),
                         size: 23,
                       ),
                     ),
@@ -311,11 +328,15 @@ class _MainContainerScreenState
           ],
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        backgroundColor: const Color(0xFF11141D),
-        indicatorColor: const Color(0x3348D8FF),
+      bottomNavigationBar:
+          NavigationBar(
+        backgroundColor:
+            const Color(0xFF11141D),
+        indicatorColor:
+            const Color(0x3348D8FF),
         selectedIndex: index,
-        onDestinationSelected: (value) {
+        onDestinationSelected:
+            (value) {
           if (!mounted) {
             return;
           }
@@ -326,13 +347,21 @@ class _MainContainerScreenState
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
+            icon: Icon(
+              Icons.home_outlined,
+            ),
+            selectedIcon: Icon(
+              Icons.home_rounded,
+            ),
             label: 'الرئيسية',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
+            icon: Icon(
+              Icons.person_outline_rounded,
+            ),
+            selectedIcon: Icon(
+              Icons.person_rounded,
+            ),
             label: 'حسابي',
           ),
         ],
@@ -345,21 +374,26 @@ class _MainContainerScreenState
 // MINI AUDIO PLAYER
 // ============================================================
 
-class MiniAudioPlayer extends StatelessWidget {
+class MiniAudioPlayer
+    extends StatelessWidget {
   const MiniAudioPlayer({super.key});
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<MediaItem?>(
-      stream: AudioController.handler?.mediaItem,
-      builder: (context, mediaSnapshot) {
-        final item = mediaSnapshot.data;
+      stream:
+          AudioController.handler?.mediaItem,
+      builder:
+          (context, mediaSnapshot) {
+        final item =
+            mediaSnapshot.data;
 
         if (item == null) {
           return const SizedBox.shrink();
         }
 
-        final handler = AudioController.handler;
+        final handler =
+            AudioController.handler;
 
         if (handler == null) {
           return const SizedBox.shrink();
@@ -369,20 +403,28 @@ class MiniAudioPlayer extends StatelessWidget {
           color: Colors.transparent,
           child: Container(
             height: 62,
-            padding: const EdgeInsets.symmetric(
+            padding:
+                const EdgeInsets.symmetric(
               horizontal: 7,
             ),
-            decoration: BoxDecoration(
-              color: const Color(0xFF121720).withOpacity(0.98),
-              borderRadius: BorderRadius.circular(19),
+            decoration:
+                BoxDecoration(
+              color: const Color(
+                0xFF121720,
+              ).withOpacity(0.98),
+              borderRadius:
+                  BorderRadius.circular(19),
               border: Border.all(
-                color: const Color(0x55FFD76A),
+                color:
+                    const Color(0x55FFD76A),
               ),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0x66000000),
+                  color:
+                      Color(0x66000000),
                   blurRadius: 19,
-                  offset: Offset(0, 6),
+                  offset:
+                      Offset(0, 6),
                 ),
               ],
             ),
@@ -390,18 +432,22 @@ class MiniAudioPlayer extends StatelessWidget {
               children: [
                 GestureDetector(
                   onTap: () {
-                    Navigator.of(context).push(
+                    Navigator.of(context)
+                        .push(
                       MaterialPageRoute(
-                        builder: (_) => const AudioCenterScreen(),
+                        builder: (_) =>
+                            const AudioCenterScreen(),
                       ),
                     );
                   },
                   child: Container(
                     width: 44,
                     height: 44,
-                    decoration: const BoxDecoration(
+                    decoration:
+                        const BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
+                      gradient:
+                          LinearGradient(
                         colors: [
                           Color(0xFFFFD76A),
                           Color(0xFF7164FF),
@@ -409,7 +455,8 @@ class MiniAudioPlayer extends StatelessWidget {
                       ),
                     ),
                     child: const Icon(
-                      Icons.graphic_eq_rounded,
+                      Icons
+                          .graphic_eq_rounded,
                       color: Colors.black,
                     ),
                   ),
@@ -420,33 +467,48 @@ class MiniAudioPlayer extends StatelessWidget {
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
-                      Navigator.of(context).push(
+                      Navigator.of(context)
+                          .push(
                         MaterialPageRoute(
-                          builder: (_) => const AudioCenterScreen(),
+                          builder: (_) =>
+                              const AudioCenterScreen(),
                         ),
                       );
                     },
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment:
+                          MainAxisAlignment
+                              .center,
+                      crossAxisAlignment:
+                          CrossAxisAlignment
+                              .end,
                       children: [
                         Text(
                           item.title,
-                          textDirection: TextDirection.rtl,
+                          textDirection:
+                              TextDirection.rtl,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style:
+                              const TextStyle(
+                            fontWeight:
+                                FontWeight.w900,
                             fontSize: 11,
                           ),
                         ),
                         Text(
-                          item.artist ?? 'صاحبي AI',
-                          textDirection: TextDirection.rtl,
+                          item.artist ??
+                              'صاحبي AI',
+                          textDirection:
+                              TextDirection.rtl,
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white54,
+                          overflow:
+                              TextOverflow.ellipsis,
+                          style:
+                              const TextStyle(
+                            color:
+                                Colors.white54,
                             fontSize: 9,
                           ),
                         ),
@@ -455,15 +517,22 @@ class MiniAudioPlayer extends StatelessWidget {
                   ),
                 ),
 
-                StreamBuilder<PlaybackState>(
-                  stream: handler.playbackState,
-                  builder: (context, snapshot) {
+                StreamBuilder<
+                    PlaybackState>(
+                  stream:
+                      handler.playbackState,
+                  builder:
+                      (context, snapshot) {
                     final playing =
-                        snapshot.data?.playing ?? false;
+                        snapshot.data
+                                ?.playing ??
+                            false;
 
                     return IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
+                      padding:
+                          EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(
                         minWidth: 40,
                         minHeight: 40,
                       ),
@@ -476,9 +545,14 @@ class MiniAudioPlayer extends StatelessWidget {
                       },
                       icon: Icon(
                         playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: const Color(0xFFFFD76A),
+                            ? Icons
+                                .pause_rounded
+                            : Icons
+                                .play_arrow_rounded,
+                        color:
+                            const Color(
+                          0xFFFFD76A,
+                        ),
                         size: 27,
                       ),
                     );
@@ -486,8 +560,10 @@ class MiniAudioPlayer extends StatelessWidget {
                 ),
 
                 IconButton(
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
+                  padding:
+                      EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(
                     minWidth: 34,
                     minHeight: 40,
                   ),
@@ -496,7 +572,8 @@ class MiniAudioPlayer extends StatelessWidget {
                   },
                   icon: const Icon(
                     Icons.close_rounded,
-                    color: Colors.white54,
+                    color:
+                        Colors.white54,
                     size: 19,
                   ),
                 ),
