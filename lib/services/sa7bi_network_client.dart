@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 
@@ -17,12 +16,12 @@ import '../config/app_config.dart';
 ///      ↓ عند فشل الاتصال فقط
 ///   Fallback Worker باستخدام IOClient
 ///
-/// مهم:
+/// قواعد مهمة:
 /// - لا يوجد IP ثابت.
 /// - لا يوجد Socket.connect.
 /// - لا يوجد إجبار IPv4 أو IPv6.
-/// - لا توجد API Keys.
-/// - كل خدمات package:http تستفيد من نفس البوابة.
+/// - لا توجد مفاتيح API داخل التطبيق.
+/// - خدمات package:http تستخدم بوابة الشبكة الموحدة.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
@@ -38,6 +37,7 @@ class Sa7biNetworkClient {
 
   static bool _isCronet = false;
 
+  /// عميل الشبكة الموحد.
   static http.Client get client {
     final existing = _client;
 
@@ -51,45 +51,30 @@ class Sa7biNetworkClient {
     return created;
   }
 
+  /// هل يستخدم التطبيق Cronet؟
   static bool get isCronet => _isCronet;
 
+  /// اسم وسيلة الاتصال المستخدمة.
   static String get transportName {
     if (_isCronet) {
       return 'CRONET_ANDROID_WITH_IO_FAILOVER';
     }
 
-    return 'DART_IO_FALLBACK';
+    return 'DART_IO_WITH_FAILOVER';
   }
 
+  /// هل مسار الاتصال الاحتياطي مفعّل؟
   static bool get failoverEnabled => true;
 
+  /// يستخدمه http.runWithClient.
   static http.Client factory() => client;
 
   // ============================================================
-  // CLIENT CREATION
+  // إنشاء العملاء
   // ============================================================
 
   static http.Client _createClient() {
-    if (Platform.isAndroid) {
-      final primary = _createCronetClient();
-
-      // مسار نقل مستقل عن Cronet.
-      // إذا تعذر اتصال Cronet، نجرب Dart IO.
-      final fallback = _createIoClient();
-
-      _fallbackClient = fallback;
-      _isCronet = true;
-
-      return _FailoverClient(
-        primary: primary,
-        fallback: fallback,
-        fallbackTimeout: failoverTimeout,
-      );
-    }
-
-    _isCronet = false;
-
-    final primary = _createIoClient();
+    final primary = _createPrimaryClient();
     final fallback = _createIoClient();
 
     _fallbackClient = fallback;
@@ -101,8 +86,18 @@ class Sa7biNetworkClient {
     );
   }
 
+  static http.Client _createPrimaryClient() {
+    if (Platform.isAndroid) {
+      _isCronet = true;
+      return _createCronetClient();
+    }
+
+    _isCronet = false;
+    return _createIoClient();
+  }
+
   // ============================================================
-  // CRONET PRIMARY
+  // Cronet على Android
   // ============================================================
 
   static http.Client _createCronetClient() {
@@ -126,7 +121,7 @@ class Sa7biNetworkClient {
   }
 
   // ============================================================
-  // DART IO TRANSPORT
+  // Dart IO — مسار اتصال مستقل
   // ============================================================
 
   static http.Client _createIoClient() {
@@ -138,7 +133,7 @@ class Sa7biNetworkClient {
   }
 
   // ============================================================
-  // CLOSE
+  // إغلاق الاتصال
   // ============================================================
 
   static void close() {
@@ -161,7 +156,7 @@ class Sa7biNetworkClient {
 }
 
 // ================================================================
-// FAILOVER CLIENT
+// عميل الاتصال الأساسي والاحتياطي
 // ================================================================
 
 class _FailoverClient extends http.BaseClient {
@@ -179,13 +174,20 @@ class _FailoverClient extends http.BaseClient {
   Future<http.StreamedResponse> send(
     http.BaseRequest request,
   ) async {
-    final bodyBytes =
-        await request.finalize().toBytes();
+    final originalUri = request.url;
+
+    // لا نغيّر وجهة أي طلب خارج الخادم الأساسي المحدد.
+    final isPrimaryBackend =
+        originalUri.host == AppConfig.backendPrimaryHost;
+
+    // نحفظ بيانات الطلب حتى نستطيع إنشاء نسخة مستقلة
+    // عند الحاجة إلى مسار احتياطي.
+    final bodyBytes = await request.finalize().toBytes();
 
     final primaryRequest = _cloneRequest(
       request,
       bodyBytes,
-      AppConfig.backendBaseUrl,
+      originalUri,
     );
 
     try {
@@ -193,52 +195,106 @@ class _FailoverClient extends http.BaseClient {
           .send(primaryRequest)
           .timeout(fallbackTimeout);
     } on TimeoutException {
-      return _sendFallback(request, bodyBytes);
+      if (!_canRetrySafely(request)) {
+        rethrow;
+      }
+
+      return _sendFallback(
+        request,
+        bodyBytes,
+        isPrimaryBackend: isPrimaryBackend,
+      );
     } on SocketException {
-      return _sendFallback(request, bodyBytes);
+      if (!_canRetrySafely(request)) {
+        rethrow;
+      }
+
+      return _sendFallback(
+        request,
+        bodyBytes,
+        isPrimaryBackend: isPrimaryBackend,
+      );
     } on http.ClientException {
-      return _sendFallback(request, bodyBytes);
+      if (!_canRetrySafely(request)) {
+        rethrow;
+      }
+
+      return _sendFallback(
+        request,
+        bodyBytes,
+        isPrimaryBackend: isPrimaryBackend,
+      );
     } on IOException {
-      return _sendFallback(request, bodyBytes);
+      if (!_canRetrySafely(request)) {
+        rethrow;
+      }
+
+      return _sendFallback(
+        request,
+        bodyBytes,
+        isPrimaryBackend: isPrimaryBackend,
+      );
     }
+  }
+
+  /// نسمح بإعادة المحاولة التلقائية للطلبات الآمنة فقط.
+  ///
+  /// لا نعيد POST تلقائيًا؛ فقد يكون الخادم نفّذ الطلب
+  /// بالفعل قبل انقطاع الاتصال، وإعادته قد تكرر العملية
+  /// أو استهلاك الرصيد.
+  bool _canRetrySafely(http.BaseRequest request) {
+    final method = request.method.toUpperCase();
+
+    return method == 'GET' || method == 'HEAD';
   }
 
   Future<http.StreamedResponse> _sendFallback(
     http.BaseRequest original,
-    List<int> bodyBytes,
-  ) async {
+    List<int> bodyBytes, {
+    required bool isPrimaryBackend,
+  }) {
+    final fallbackUri = isPrimaryBackend
+        ? _replaceBackendHost(
+            original.url,
+            AppConfig.backendFallbackBaseUrl,
+          )
+        : original.url;
+
     final fallbackRequest = _cloneRequest(
       original,
       bodyBytes,
-      AppConfig.backendFallbackBaseUrl,
+      fallbackUri,
     );
 
     return fallback.send(fallbackRequest);
   }
 
+  static Uri _replaceBackendHost(
+    Uri originalUri,
+    String destinationBaseUrl,
+  ) {
+    final destination = Uri.parse(destinationBaseUrl);
+
+    return originalUri.replace(
+      scheme: destination.scheme,
+      host: destination.host,
+      port: destination.hasPort ? destination.port : null,
+    );
+  }
+
   static http.Request _cloneRequest(
     http.BaseRequest original,
     List<int> bodyBytes,
-    String baseUrl,
+    Uri destinationUri,
   ) {
-    final base = Uri.parse(baseUrl);
-
-    final uri =
-        original.url.host == AppConfig.backendPrimaryHost
-            ? original.url.replace(
-                scheme: base.scheme,
-                host: base.host,
-                port: base.hasPort ? base.port : null,
-              )
-            : original.url;
-
     final request = http.Request(
       original.method,
-      uri,
+      destinationUri,
     );
 
     request.headers.addAll(original.headers);
     request.headers.remove('content-length');
+    request.headers.remove('host');
 
     request.followRedirects = original.followRedirects;
     request.maxRedirects = original.maxRedirects;
@@ -247,5 +303,11 @@ class _FailoverClient extends http.BaseClient {
     request.bodyBytes = bodyBytes;
 
     return request;
+  }
+
+  @override
+  void close() {
+    primary.close();
+    fallback.close();
   }
 }
