@@ -1,7 +1,7 @@
+
 import 'dart:async';
 import 'dart:io';
 
-import 'package:cronet_http/cronet_http.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
@@ -9,107 +9,50 @@ import '../config/app_config.dart';
 
 /// بوابة الشبكة الموحدة لتطبيق صاحبي AI.
 ///
-/// Android:
-///   Cronet
-///      ↓ عند تعذر الاتصال
-///   Worker احتياطي + IO
+/// يستخدم التطبيق HttpClient القياسي بدل Cronet
+/// لعزل مشكلات النقل على أجهزة Android.
 ///
-/// المنصات الأخرى:
-///   IO
+/// طلبات GET وHEAD إلى الـWorker الأساسي يمكنها
+/// استخدام الـWorker الاحتياطي عند فشل الاتصال.
 ///
-/// قواعد الأمان:
-/// - لا توجد عناوين IP ثابتة أو تغييرات DNS قسرية.
-/// - لا توجد مفاتيح API داخل التطبيق.
-/// - لا تتم إعادة POST تلقائيًا لمجرد انتهاء المهلة.
-/// - يسمح بالمسار الاحتياطي لطلبات AI المحددة التي تحمل
-///   معرف طلب ثابتًا داخل المحاولة نفسها.
-/// - لا يتم استبدال عميل الواجهة عند إعادة تهيئة النقل.
+/// طلبات POST لا يعاد إرسالها بسبب انتهاء المهلة.
+/// يسمح بالمسار الاحتياطي لطلبات AI المحددة فقط
+/// عند وجود معرف الطلب ومعرف الجهاز.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
   static const String userAgent = 'Sa7biAI-Mobile/1.0';
 
-  static const int cacheSizeBytes = 2 * 1024 * 1024;
+  static const Duration connectionTimeout =
+      Duration(seconds: 20);
 
-  /// مهلة تجربة المسار الأساسي لطلبات GET وHEAD.
   static const Duration safeRequestTimeout =
       Duration(seconds: 12);
 
-  /// أقصى انتظار للمسار الاحتياطي لطلبات GET وHEAD.
   static const Duration fallbackRequestTimeout =
       Duration(seconds: 35);
 
-  static const Duration connectionTimeout =
-      Duration(seconds: 30);
-
   static http.Client? _client;
-  static http.Client? _transportClient;
 
-  static bool _isCronet = false;
-  static bool _isResetting = false;
+  static http.Client get client {
+    return _client ??= _createClient();
+  }
 
-  /// عميل واجهة ثابت.
-  static http.Client get client =>
-      _client ??= _RecoveringClient();
+  /// Cronet معطل في هذا الإصدار لعزل مسار النقل.
+  static bool get isCronet => false;
 
-  static bool get isCronet => _isCronet;
-
-  static String get transportName => _isCronet
-      ? 'CRONET_ANDROID_WITH_IO_FAILOVER'
-      : 'DART_IO_WITH_IO_FALLBACK';
+  static String get transportName =>
+      'DART_IO_WITH_WORKER_FAILOVER';
 
   static bool get failoverEnabled => true;
 
-  /// متوافق مع http.runWithClient في main.dart.
+  /// Factory متوافقة مع http.runWithClient في main.dart.
   static http.Client factory() => client;
 
-  static http.Client _getTransportClient() =>
-      _transportClient ??= _createClient();
-
   static http.Client _createClient() {
-    final primary = _createPrimaryClient();
-    final fallback = _createIoClient();
-
-    return _FailoverClient(
-      primary: primary,
-      fallback: fallback,
-      fallbackTimeout: safeRequestTimeout,
-      fallbackRequestTimeout: fallbackRequestTimeout,
-    );
-  }
-
-  static http.Client _createPrimaryClient() {
-    if (Platform.isAndroid) {
-      try {
-        final client = _createCronetClient();
-        _isCronet = true;
-        return client;
-      } catch (_) {
-        // استمرار العمل باستخدام IO إذا تعذر إنشاء Cronet.
-      }
-    }
-
-    _isCronet = false;
-    return _createIoClient();
-  }
-
-  static http.Client _createCronetClient() {
-    final engine = CronetEngine.build(
-      cacheMode: CacheMode.memory,
-      cacheMaxSize: cacheSizeBytes,
-      userAgent: userAgent,
-      enableHttp2: true,
-      enableQuic: true,
-      enableBrotli: true,
-      useBuiltInDnsResolver: false,
-      enableStaleDns: true,
-      useStaleOnNameNotResolved: true,
-      allowCrossNetworkUsage: true,
-    );
-
-    return CronetClient.fromCronetEngine(
-      engine,
-      closeEngine: true,
+    return _Sa7biFailoverClient(
+      primary: _createIoClient(),
+      fallback: _createIoClient(),
     );
   }
 
@@ -121,111 +64,221 @@ class Sa7biNetworkClient {
     return IOClient(ioClient);
   }
 
-  /// إعادة تهيئة عميل النقل فقط.
-  static void _resetTransport() {
-    if (_isResetting) return;
-
-    _isResetting = true;
-
-    final previous = _transportClient;
-
-    _transportClient = null;
-    _isCronet = false;
+  /// يغلق النقل الحالي ويتيح إنشاء عميل جديد لاحقًا.
+  static void close() {
+    final previous = _client;
+    _client = null;
 
     try {
       previous?.close();
     } catch (_) {
-      // تجاهل فشل الإغلاق.
-    } finally {
-      _isResetting = false;
+      // لا نسمح لفشل الإغلاق بإسقاط التطبيق.
     }
   }
+}
 
-  /// يحافظ على توافق الواجهة الحالية.
-  static void close() {
-    _resetTransport();
-  }
+class _Sa7biFailoverClient extends http.BaseClient {
+  _Sa7biFailoverClient({
+    required this.primary,
+    required this.fallback,
+  });
 
-  static Future<http.StreamedResponse> _send(
+  final http.Client primary;
+  final http.Client fallback;
+
+  bool _closed = false;
+
+  @override
+  Future<http.StreamedResponse> send(
     http.BaseRequest original,
   ) async {
+    if (_closed) {
+      throw http.ClientException(
+        'Network client is closed.',
+        original.url,
+      );
+    }
+
     final method = original.method.toUpperCase();
+    final host = original.url.host.toLowerCase();
 
-    final canRetry =
-        method == 'GET' || method == 'HEAD';
+    final isPrimaryBackend =
+        host ==
+        AppConfig.backendPrimaryHost.toLowerCase();
 
-    // تجهيز جسم الطلب مرة واحدة فقط.
-    final bodyBytes = await original.finalize().toBytes();
+    final canFallbackGet =
+        isPrimaryBackend &&
+        (method == 'GET' || method == 'HEAD');
+
+    final canFallbackAi =
+        isPrimaryBackend &&
+        method == 'POST' &&
+        _isIdentifiedAiRequest(original);
+
+    // تجهيز جسم الطلب مرة واحدة.
+    // لا نعيد استخدام BaseRequest بعد finalize.
+    final bodyBytes =
+        await original.finalize().toBytes();
 
     try {
       final request = _cloneRequest(
         original,
+        original.url,
         bodyBytes,
       );
 
-      return await _getTransportClient().send(request);
-    } on http.ClientException {
-      _resetTransport();
+      final responseFuture = primary.send(request);
 
-      if (!canRetry) rethrow;
+      // مهلة النقل القصيرة مخصصة لـ GET وHEAD فقط.
+      // لا نضيف مهلة عامة لطلبات AI.
+      if (canFallbackGet) {
+        return await responseFuture.timeout(
+          Sa7biNetworkClient.safeRequestTimeout,
+        );
+      }
 
-      return _retrySafeRequest(
+      return await responseFuture;
+    } on TimeoutException {
+      if (!canFallbackGet) {
+        rethrow;
+      }
+
+      return _sendFallback(
         original,
         bodyBytes,
       );
     } on SocketException {
-      _resetTransport();
+      if (!canFallbackGet && !canFallbackAi) {
+        rethrow;
+      }
 
-      if (!canRetry) rethrow;
-
-      return _retrySafeRequest(
+      return _sendFallback(
         original,
         bodyBytes,
       );
-    } on TimeoutException {
-      _resetTransport();
+    } on http.ClientException {
+      if (!canFallbackGet && !canFallbackAi) {
+        rethrow;
+      }
 
-      if (!canRetry) rethrow;
-
-      return _retrySafeRequest(
+      return _sendFallback(
         original,
         bodyBytes,
       );
     } on IOException {
-      _resetTransport();
+      if (!canFallbackGet && !canFallbackAi) {
+        rethrow;
+      }
 
-      if (!canRetry) rethrow;
-
-      return _retrySafeRequest(
+      return _sendFallback(
         original,
         bodyBytes,
       );
     }
   }
 
-  static Future<http.StreamedResponse> _retrySafeRequest(
+  bool _isIdentifiedAiRequest(
+    http.BaseRequest request,
+  ) {
+    final path = request.url.path;
+
+    final isAiEndpoint =
+        path == '/v1/chat' ||
+        path == '/v1/image';
+
+    if (!isAiEndpoint) {
+      return false;
+    }
+
+    String? headerValue(String name) {
+      for (final entry in request.headers.entries) {
+        if (entry.key.toLowerCase() == name) {
+          return entry.value.trim();
+        }
+      }
+
+      return null;
+    }
+
+    final requestId =
+        headerValue('x-sa7bi-request-id');
+
+    final deviceId =
+        headerValue('x-sa7bi-device-id');
+
+    return requestId != null &&
+        requestId.isNotEmpty &&
+        deviceId != null &&
+        deviceId.isNotEmpty;
+  }
+
+  Future<http.StreamedResponse> _sendFallback(
     http.BaseRequest original,
     List<int> bodyBytes,
-  ) {
+  ) async {
+    if (_closed) {
+      throw http.ClientException(
+        'Network client is closed.',
+        original.url,
+      );
+    }
+
+    // لا نغيّر وجهة الخدمات الخارجية.
+    // الاستبدال مسموح للـWorker الأساسي فقط.
+    if (original.url.host.toLowerCase() !=
+        AppConfig.backendPrimaryHost.toLowerCase()) {
+      throw http.ClientException(
+        'Fallback is only available for the primary Worker.',
+        original.url,
+      );
+    }
+
+    final fallbackBase = Uri.parse(
+      AppConfig.backendFallbackBaseUrl,
+    );
+
+    final fallbackUri = original.url.replace(
+      scheme: fallbackBase.scheme,
+      host: fallbackBase.host,
+      port: fallbackBase.hasPort
+          ? fallbackBase.port
+          : null,
+    );
+
     final request = _cloneRequest(
       original,
+      fallbackUri,
       bodyBytes,
     );
 
-    return _getTransportClient().send(request);
+    final future = fallback.send(request);
+
+    final method = original.method.toUpperCase();
+
+    if (method == 'GET' || method == 'HEAD') {
+      return future.timeout(
+        Sa7biNetworkClient.fallbackRequestTimeout,
+      );
+    }
+
+    // لا نضيف مهلة جديدة إلى POST.
+    // المهلة الأصلية يجب أن تظل تحت تحكم خدمة AI.
+    return future;
   }
 
   static http.Request _cloneRequest(
     http.BaseRequest original,
+    Uri uri,
     List<int> bodyBytes,
   ) {
     final request = http.Request(
       original.method,
-      original.url,
+      uri,
     );
 
     request.headers.addAll(original.headers);
 
+    // نترك مكتبة HTTP تحسب القيم المناسبة للوجهة الجديدة.
     request.headers.remove('content-length');
     request.headers.remove('host');
 
@@ -238,232 +291,26 @@ class Sa7biNetworkClient {
 
     return request;
   }
-}
-
-/// عميل واجهة ثابت لا يصبح مغلقًا نهائيًا.
-class _RecoveringClient extends http.BaseClient {
-  @override
-  Future<http.StreamedResponse> send(
-    http.BaseRequest request,
-  ) {
-    return Sa7biNetworkClient._send(request);
-  }
 
   @override
   void close() {
-    Sa7biNetworkClient._resetTransport();
-  }
-}
-
-/// عميل نقل أساسي مع مسار احتياطي مستقل.
-class _FailoverClient extends http.BaseClient {
-  final http.Client primary;
-  final http.Client fallback;
-
-  final Duration fallbackTimeout;
-  final Duration fallbackRequestTimeout;
-
-  _FailoverClient({
-    required this.primary,
-    required this.fallback,
-    required this.fallbackTimeout,
-    required this.fallbackRequestTimeout,
-  });
-
-  @override
-  Future<http.StreamedResponse> send(
-    http.BaseRequest original,
-  ) async {
-    final method = original.method.toUpperCase();
-
-    final canRetry =
-        method == 'GET' || method == 'HEAD';
-
-    final bodyBytes =
-        await original.finalize().toBytes();
-
-    final uri = original.url;
-
-    final isPrimaryBackend =
-        uri.host.toLowerCase() ==
-        AppConfig.backendPrimaryHost.toLowerCase();
-
-    final canFallbackAI =
-        isPrimaryBackend &&
-        _isIdempotentAIRequest(original);
-
-    final primaryRequest =
-        Sa7biNetworkClient._cloneRequest(
-      original,
-      bodyBytes,
-    );
-
-    try {
-      final primaryFuture =
-          primary.send(primaryRequest);
-
-      // لا نفرض مهلة 12 ثانية على طلب AI قد يستغرق
-      // وقتًا أطول بسبب ضعف الشبكة أو زمن الاستجابة.
-      //
-      // مهلة الشات أو الصور المحددة في الخدمة هي المرجع.
-      if (canRetry) {
-        return await primaryFuture.timeout(
-          fallbackTimeout,
-        );
-      }
-
-      return await primaryFuture;
-    } on TimeoutException {
-      // إعادة GET/HEAD آمنة نسبيًا.
-      // لا نكرر POST بسبب انتهاء المهلة؛ ربما وصل للخادم.
-      if (!canRetry) rethrow;
-
-      return _sendFallback(
-        original,
-        bodyBytes,
-        isPrimaryBackend: isPrimaryBackend,
-        canRetry: true,
-      );
-    } on SocketException {
-      if (!canRetry && !canFallbackAI) rethrow;
-
-      return _sendFallback(
-        original,
-        bodyBytes,
-        isPrimaryBackend: isPrimaryBackend,
-        canRetry: canRetry,
-      );
-    } on http.ClientException {
-      if (!canRetry && !canFallbackAI) rethrow;
-
-      return _sendFallback(
-        original,
-        bodyBytes,
-        isPrimaryBackend: isPrimaryBackend,
-        canRetry: canRetry,
-      );
-    } on IOException {
-      if (!canRetry && !canFallbackAI) rethrow;
-
-      return _sendFallback(
-        original,
-        bodyBytes,
-        isPrimaryBackend: isPrimaryBackend,
-        canRetry: canRetry,
-      );
-    }
-  }
-
-  /// يسمح بالمسار الاحتياطي فقط لطلبات AI المعروفة
-  /// التي تحمل X-Sa7bi-Request-Id.
-  ///
-  /// هذا لا يجعل إعادة POST آمنة في جميع الظروف؛
-  /// يجب أن يظل الخادم مسؤولًا عن منع تكرار العمليات.
-  bool _isIdempotentAIRequest(
-    http.BaseRequest request,
-  ) {
-    final path = request.url.path;
-
-    final isAIEndpoint =
-        path == '/v1/chat' ||
-        path == '/v1/image';
-
-    if (!isAIEndpoint) return false;
-
-    final hasRequestId =
-        request.headers.entries.any(
-      (entry) =>
-          entry.key.toLowerCase() ==
-              'x-sa7bi-request-id' &&
-          entry.value.trim().isNotEmpty,
-    );
-
-    final hasDeviceId =
-        request.headers.entries.any(
-      (entry) =>
-          entry.key.toLowerCase() ==
-              'x-sa7bi-device-id' &&
-          entry.value.trim().isNotEmpty,
-    );
-
-    return hasRequestId && hasDeviceId;
-  }
-
-  Future<http.StreamedResponse> _sendFallback(
-    http.BaseRequest original,
-    List<int> bodyBytes, {
-    required bool isPrimaryBackend,
-    required bool canRetry,
-  }) {
-    // لا نغير عناوين الخدمات الخارجية.
-    // نستبدل عنوان Worker الأساسي فقط.
-    final fallbackUri = isPrimaryBackend
-        ? _replaceBackendHost(
-            original.url,
-            AppConfig.backendFallbackBaseUrl,
-          )
-        : original.url;
-
-    final request =
-        Sa7biNetworkClient._cloneRequest(
-      original,
-      bodyBytes,
-    );
-
-    final fallbackRequest = http.Request(
-      request.method,
-      fallbackUri,
-    )
-      ..headers.addAll(request.headers)
-      ..followRedirects = request.followRedirects
-      ..maxRedirects = request.maxRedirects
-      ..persistentConnection =
-          request.persistentConnection
-      ..bodyBytes = bodyBytes;
-
-    final future = fallback.send(fallbackRequest);
-
-    // مهلة المسار الاحتياطي القصيرة مخصصة لطلبات GET/HEAD.
-    // لا نضيف مهلة جديدة إلى POST؛ الخدمة تحدد مهلتها.
-    if (canRetry) {
-      return future.timeout(
-        fallbackRequestTimeout,
-      );
+    if (_closed) {
+      return;
     }
 
-    return future;
-  }
+    _closed = true;
 
-  static Uri _replaceBackendHost(
-    Uri originalUri,
-    String destinationBaseUrl,
-  ) {
-    final destination = Uri.parse(
-      destinationBaseUrl,
-    );
-
-    return originalUri.replace(
-      scheme: destination.scheme,
-      host: destination.host,
-      port: destination.hasPort
-          ? destination.port
-          : null,
-    );
-  }
-
-  @override
-  void close() {
     try {
       primary.close();
     } catch (_) {
-      // تجاهل فشل الإغلاق.
+      // تجاهل خطأ الإغلاق.
     }
 
     if (!identical(primary, fallback)) {
       try {
         fallback.close();
       } catch (_) {
-        // تجاهل فشل الإغلاق.
+        // تجاهل خطأ الإغلاق.
       }
     }
   }
