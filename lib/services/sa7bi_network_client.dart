@@ -9,28 +9,26 @@ import '../config/app_config.dart';
 
 /// بوابة الشبكة الموحدة لتطبيق صاحبي AI.
 ///
-/// يستخدم التطبيق HttpClient القياسي بدل Cronet
-/// لعزل مشكلات النقل على أجهزة Android.
-///
-/// طلبات GET وHEAD إلى الـWorker الأساسي يمكنها
-/// استخدام الـWorker الاحتياطي عند فشل الاتصال.
-///
-/// طلبات POST لا يعاد إرسالها بسبب انتهاء المهلة.
-/// يسمح بالمسار الاحتياطي لطلبات AI المحددة فقط
-/// عند وجود معرف الطلب ومعرف الجهاز.
+/// - إعادة محاولة GET وHEAD ثلاث مرات.
+/// - انتظار تدريجي بين المحاولات.
+/// - تجربة Worker احتياطي بعد فشل الأساسي.
+/// - عدم إعادة إرسال طلبات AI تلقائيًا عند انتهاء المهلة؛
+///   لتجنب تكرار طلب مدفوع أو خصم رصيد مرتين.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
   static const String userAgent = 'Sa7biAI-Mobile/1.0';
 
   static const Duration connectionTimeout =
-      Duration(seconds: 20);
+      Duration(seconds: 30);
 
   static const Duration safeRequestTimeout =
-      Duration(seconds: 12);
+      Duration(seconds: 20);
 
   static const Duration fallbackRequestTimeout =
       Duration(seconds: 35);
+
+  static const int maximumAttempts = 3;
 
   static http.Client? _client;
 
@@ -38,15 +36,13 @@ class Sa7biNetworkClient {
     return _client ??= _createClient();
   }
 
-  /// Cronet معطل في هذا الإصدار لعزل مسار النقل.
   static bool get isCronet => false;
 
   static String get transportName =>
-      'DART_IO_WITH_WORKER_FAILOVER';
+      'DART_IO_WITH_WORKER_FAILOVER_RETRY';
 
   static bool get failoverEnabled => true;
 
-  /// Factory متوافقة مع http.runWithClient في main.dart.
   static http.Client factory() => client;
 
   static http.Client _createClient() {
@@ -64,7 +60,6 @@ class Sa7biNetworkClient {
     return IOClient(ioClient);
   }
 
-  /// يغلق النقل الحالي ويتيح إنشاء عميل جديد لاحقًا.
   static void close() {
     final previous = _client;
     _client = null;
@@ -103,8 +98,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
     final host = original.url.host.toLowerCase();
 
     final isPrimaryBackend =
-        host ==
-        AppConfig.backendPrimaryHost.toLowerCase();
+        host == AppConfig.backendPrimaryHost.toLowerCase();
 
     final canFallbackGet =
         isPrimaryBackend &&
@@ -115,10 +109,61 @@ class _Sa7biFailoverClient extends http.BaseClient {
         method == 'POST' &&
         _isIdentifiedAiRequest(original);
 
-    // تجهيز جسم الطلب مرة واحدة.
-    // لا نعيد استخدام BaseRequest بعد finalize.
+    // نجهز جسم الطلب مرة واحدة حتى نستطيع إنشاء طلب مستقل
+    // لكل محاولة، دون إعادة استخدام BaseRequest بعد finalize.
     final bodyBytes =
         await original.finalize().toBytes();
+
+    if (canFallbackGet) {
+      Object? lastError;
+
+      for (var attempt = 1;
+          attempt <= Sa7biNetworkClient.maximumAttempts;
+          attempt++) {
+        try {
+          final request = _cloneRequest(
+            original,
+            original.url,
+            bodyBytes,
+          );
+
+          return await primary
+              .send(request)
+              .timeout(
+                Sa7biNetworkClient.safeRequestTimeout,
+              );
+        } on TimeoutException catch (error) {
+          lastError = error;
+        } on SocketException catch (error) {
+          lastError = error;
+        } on http.ClientException catch (error) {
+          lastError = error;
+        } on IOException catch (error) {
+          lastError = error;
+        }
+
+        if (attempt < Sa7biNetworkClient.maximumAttempts) {
+          await Future<void>.delayed(
+            Duration(seconds: attempt),
+          );
+        }
+      }
+
+      // فشلت المحاولات الثلاث على الأساسي؛ نجرب الاحتياطي.
+      try {
+        return await _sendFallback(
+          original,
+          bodyBytes,
+        );
+      } catch (fallbackError) {
+        throw http.ClientException(
+          'فشل الاتصال بالخادم الأساسي والاحتياطي بعد '
+          '${Sa7biNetworkClient.maximumAttempts} محاولات. '
+          'آخر خطأ: $lastError. خطأ الاحتياطي: $fallbackError',
+          original.url,
+        );
+      }
+    }
 
     try {
       final request = _cloneRequest(
@@ -127,53 +172,20 @@ class _Sa7biFailoverClient extends http.BaseClient {
         bodyBytes,
       );
 
-      final responseFuture = primary.send(request);
-
-      // مهلة النقل القصيرة مخصصة لـ GET وHEAD فقط.
-      // لا نضيف مهلة عامة لطلبات AI.
-      if (canFallbackGet) {
-        return await responseFuture.timeout(
-          Sa7biNetworkClient.safeRequestTimeout,
-        );
-      }
-
-      return await responseFuture;
-    } on TimeoutException {
-      if (!canFallbackGet) {
-        rethrow;
-      }
-
-      return _sendFallback(
-        original,
-        bodyBytes,
-      );
+      // لا نضع مهلة نقل قصيرة على POST الخاص بالـAI.
+      return await primary.send(request);
     } on SocketException {
-      if (!canFallbackGet && !canFallbackAi) {
-        rethrow;
-      }
+      if (!canFallbackAi) rethrow;
 
-      return _sendFallback(
-        original,
-        bodyBytes,
-      );
+      return _sendFallback(original, bodyBytes);
     } on http.ClientException {
-      if (!canFallbackGet && !canFallbackAi) {
-        rethrow;
-      }
+      if (!canFallbackAi) rethrow;
 
-      return _sendFallback(
-        original,
-        bodyBytes,
-      );
+      return _sendFallback(original, bodyBytes);
     } on IOException {
-      if (!canFallbackGet && !canFallbackAi) {
-        rethrow;
-      }
+      if (!canFallbackAi) rethrow;
 
-      return _sendFallback(
-        original,
-        bodyBytes,
-      );
+      return _sendFallback(original, bodyBytes);
     }
   }
 
@@ -186,9 +198,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
         path == '/v1/chat' ||
         path == '/v1/image';
 
-    if (!isAiEndpoint) {
-      return false;
-    }
+    if (!isAiEndpoint) return false;
 
     String? headerValue(String name) {
       for (final entry in request.headers.entries) {
@@ -223,8 +233,6 @@ class _Sa7biFailoverClient extends http.BaseClient {
       );
     }
 
-    // لا نغيّر وجهة الخدمات الخارجية.
-    // الاستبدال مسموح للـWorker الأساسي فقط.
     if (original.url.host.toLowerCase() !=
         AppConfig.backendPrimaryHost.toLowerCase()) {
       throw http.ClientException(
@@ -261,8 +269,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
       );
     }
 
-    // لا نضيف مهلة جديدة إلى POST.
-    // المهلة الأصلية يجب أن تظل تحت تحكم خدمة AI.
+    // لا نعيد إرسال POST بسبب انتهاء المهلة.
     return future;
   }
 
@@ -278,7 +285,6 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
     request.headers.addAll(original.headers);
 
-    // نترك مكتبة HTTP تحسب القيم المناسبة للوجهة الجديدة.
     request.headers.remove('content-length');
     request.headers.remove('host');
 
@@ -294,9 +300,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
   @override
   void close() {
-    if (_closed) {
-      return;
-    }
+    if (_closed) return;
 
     _closed = true;
 
