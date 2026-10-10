@@ -16,6 +16,9 @@ import '../config/app_config.dart';
 /// - تجربة الخادم الاحتياطي بعد فشل الاتصال الأساسي.
 /// - طلبات AI محددة بوجود Request ID وDevice ID.
 /// - لا نعيد إرسال طلب AI بسبب Timeout لتجنب تكرار التنفيذ أو الخصم.
+///
+/// IMPORTANT: factory() MUST be called within http.runWithClient() zone
+/// to ensure the custom client is properly integrated with the http package.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
@@ -36,9 +39,16 @@ class Sa7biNetworkClient {
 
   static http.Client? _client;
   static bool _usingCronet = false;
+  static bool _initialized = false;
 
   static http.Client get client {
-    return _client ??= _createClient();
+    if (_client == null) {
+      throw StateError(
+        'Sa7biNetworkClient not initialized. '
+        'Ensure factory() is called within http.runWithClient() zone.',
+      );
+    }
+    return _client!;
   }
 
   static bool get isCronet => _usingCronet;
@@ -49,41 +59,67 @@ class Sa7biNetworkClient {
 
   static bool get failoverEnabled => true;
 
-  static http.Client factory() => client;
+  static bool get isInitialized => _initialized;
+
+  /// Factory function that MUST be called within http.runWithClient() zone.
+  /// This ensures the custom client integrates properly with the http package.
+  static http.Client factory() {
+    if (_client == null) {
+      _client = _createClient();
+      _initialized = true;
+      _logInitialization();
+    }
+    return _client!;
+  }
 
   static http.Client _createClient() {
-    if (Platform.isAndroid) {
-      try {
-        final engine = CronetEngine.build(
-          cacheMode: CacheMode.memory,
-          cacheMaxSize: 2 * 1024 * 1024,
-          userAgent: userAgent,
-        );
+    http.Client? primary;
+    http.Client? fallback;
 
-        final cronetClient = CronetClient.fromCronetEngine(
-          engine,
-          closeEngine: true,
-        );
+    try {
+      if (Platform.isAndroid) {
+        try {
+          final engine = CronetEngine.build(
+            cacheMode: CacheMode.memory,
+            cacheMaxSize: 2 * 1024 * 1024,
+            userAgent: userAgent,
+          );
 
-        _usingCronet = true;
+          final cronetClient = CronetClient.fromCronetEngine(
+            engine,
+            closeEngine: true,
+          );
 
-        return _Sa7biFailoverClient(
-          primary: cronetClient,
-          fallback: cronetClient,
-        );
-      } catch (_) {
-        // إذا تعذر إنشاء Cronet، نستخدم IOClient.
-        _usingCronet = false;
+          _usingCronet = true;
+          primary = cronetClient;
+
+          // Create a separate fallback client for redundancy.
+          fallback = _createIoClient();
+
+          return _Sa7biFailoverClient(
+            primary: primary,
+            fallback: fallback,
+          );
+        } catch (e) {
+          // إذا تعذر إنشاء Cronet، نستخدم IOClient.
+          _usingCronet = false;
+        }
       }
+
+      // Non-Android or Cronet creation failed: use IOClient for both.
+      primary = _createIoClient();
+      fallback = _createIoClient();
+
+      return _Sa7biFailoverClient(
+        primary: primary,
+        fallback: fallback,
+      );
+    } catch (e) {
+      // Fatal: log and rethrow to prevent silent failures.
+      throw StateError(
+        'Failed to initialize Sa7biNetworkClient: $e',
+      );
     }
-
-    final ioClient = _createIoClient();
-    _usingCronet = false;
-
-    return _Sa7biFailoverClient(
-      primary: ioClient,
-      fallback: ioClient,
-    );
   }
 
   static http.Client _createIoClient() {
@@ -94,9 +130,19 @@ class Sa7biNetworkClient {
     return IOClient(ioClient);
   }
 
+  static void _logInitialization() {
+    // In production, this could be sent to an analytics service.
+    // For now, this is a placeholder for debugging.
+    final message = 'Sa7biNetworkClient initialized: '
+        'transport=$transportName, '
+        'failoverEnabled=$failoverEnabled';
+    // print(message); // Uncomment for debugging.
+  }
+
   static void close() {
     final previous = _client;
     _client = null;
+    _initialized = false;
 
     try {
       previous?.close();
