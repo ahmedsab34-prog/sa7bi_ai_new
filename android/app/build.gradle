@@ -28,8 +28,10 @@ android {
         minSdk 24
         targetSdk 36
 
-        versionCode 1
-        versionName "1.0.0"
+        // استخدام الإصدار ورقم البناء اللذين يحددهما Flutter.
+        // GitHub Actions يمررهما أثناء إنشاء APK.
+        versionCode flutter.versionCode
+        versionName flutter.versionName
     }
 
     buildTypes {
