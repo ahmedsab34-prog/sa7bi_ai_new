@@ -4,12 +4,14 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'sa7bi_network_client.dart';
 
 part 'diagnostics/app_diagnostics_models.dart';
 part 'diagnostics/app_diagnostics_network.dart';
 part 'diagnostics/app_diagnostics_content.dart';
+part 'diagnostics/app_diagnostics_storage.dart';
 
 class AppDiagnosticsService {
   AppDiagnosticsService({
@@ -192,6 +194,14 @@ class AppDiagnosticsService {
       'NETWORK',
       'Network timeout configuration',
       _checkTimeoutConfiguration,
+    );
+
+    // LOCAL STORAGE / OFFLINE FOUNDATION
+
+    await run(
+      'OFFLINE',
+      'Local storage write/read/delete',
+      _checkLocalStorageRoundTrip,
     );
 
     // DEVICE
