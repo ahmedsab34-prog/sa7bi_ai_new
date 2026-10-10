@@ -9,23 +9,14 @@ import '../config/app_config.dart';
 
 /// بوابة الشبكة الموحدة لتطبيق صاحبي AI.
 ///
-/// Android:
-///   Cronet
-///      ↓ عند فشل GET/HEAD
-///   IO fallback
-///
-/// قواعد مهمة:
-/// - لا يوجد IP ثابت.
-/// - لا يوجد Socket.connect.
-/// - لا يوجد إجبار IPv4 أو IPv6.
-/// - لا توجد مفاتيح API داخل التطبيق.
-/// - يظل عميل الواجهة ثابتًا حتى عند إعادة إنشاء النقل.
-/// - لا تعاد طلبات POST المدفوعة تلقائيًا.
+/// Android: Cronet مع مسار احتياطي IO.
+/// المنصات الأخرى: IO.
+/// لا تتم إعادة محاولات POST تلقائيًا لتجنب تكرار
+/// الطلبات المدفوعة أو تكرار العمليات على الخادم.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
   static const String userAgent = 'Sa7biAI-Mobile/1.0';
-
   static const int cacheSizeBytes = 2 * 1024 * 1024;
 
   static const Duration failoverTimeout =
@@ -34,51 +25,28 @@ class Sa7biNetworkClient {
   static const Duration connectionTimeout =
       Duration(seconds: 30);
 
-  /// عميل الواجهة الذي تستخدمه خدمات التطبيق.
-  ///
-  /// لا نعيد استبداله عند تعطل اتصال داخلي؛ بل يعيد
-  /// توجيه الطلبات إلى عميل النقل الحالي.
   static http.Client? _client;
-
-  /// عميل النقل الفعلي، ويمكن إعادة إنشائه.
   static http.Client? _transportClient;
-
   static bool _isCronet = false;
-
   static bool _isResetting = false;
 
-  /// عميل الشبكة الموحد.
-  static http.Client get client {
-    return _client ??= _RecoveringClient();
-  }
+  /// عميل واجهة ثابت لا يصبح مغلقًا نهائيًا عند إعادة التهيئة.
+  static http.Client get client =>
+      _client ??= _RecoveringClient();
 
-  /// هل يستخدم التطبيق Cronet؟
   static bool get isCronet => _isCronet;
 
-  /// اسم وسيلة الاتصال المستخدمة.
-  static String get transportName {
-    if (_isCronet) {
-      return 'CRONET_ANDROID_WITH_IO_FAILOVER';
-    }
+  static String get transportName => _isCronet
+      ? 'CRONET_ANDROID_WITH_IO_FAILOVER'
+      : 'DART_IO_WITH_FAILOVER';
 
-    return 'DART_IO_WITH_FAILOVER';
-  }
-
-  /// هل مسار الاتصال الاحتياطي مفعّل؟
   static bool get failoverEnabled => true;
 
-  /// يستخدمه http.runWithClient.
-  ///
-  /// يعيد عميل الواجهة الثابت، لا عميل النقل الداخلي.
+  /// يستخدمه http.runWithClient في main.dart.
   static http.Client factory() => client;
 
-  // ============================================================
-  // إنشاء عميل النقل
-  // ============================================================
-
-  static http.Client _getTransportClient() {
-    return _transportClient ??= _createClient();
-  }
+  static http.Client _getTransportClient() =>
+      _transportClient ??= _createClient();
 
   static http.Client _createClient() {
     final primary = _createPrimaryClient();
@@ -98,17 +66,13 @@ class Sa7biNetworkClient {
         _isCronet = true;
         return client;
       } catch (_) {
-        // إذا تعذر إنشاء Cronet، نستخدم IO.
+        // استمرار التشغيل باستخدام IO إذا تعذر إنشاء Cronet.
       }
     }
 
     _isCronet = false;
     return _createIoClient();
   }
-
-  // ============================================================
-  // Cronet على Android
-  // ============================================================
 
   static http.Client _createCronetClient() {
     final engine = CronetEngine.build(
@@ -124,20 +88,11 @@ class Sa7biNetworkClient {
       allowCrossNetworkUsage: true,
     );
 
-    try {
-      return CronetClient.fromCronetEngine(
-        engine,
-        closeEngine: true,
-      );
-    } catch (_) {
-      engine.shutdown();
-      rethrow;
-    }
+    return CronetClient.fromCronetEngine(
+      engine,
+      closeEngine: true,
+    );
   }
-
-  // ============================================================
-  // Dart IO
-  // ============================================================
 
   static http.Client _createIoClient() {
     final ioClient = HttpClient()
@@ -147,131 +102,76 @@ class Sa7biNetworkClient {
     return IOClient(ioClient);
   }
 
-  // ============================================================
-  // إعادة تهيئة النقل
-  // ============================================================
-
-  /// يتخلص من عميل النقل المعطل فقط.
-  ///
-  /// لا يغلق عميل الواجهة الثابت؛ لذلك تظل مراجع
-  /// http.runWithClient صالحة بعد إعادة التهيئة.
+  /// إعادة إنشاء عميل النقل فقط، دون إبطال عميل الواجهة.
   static void _resetTransport() {
-    if (_isResetting) {
-      return;
-    }
+    if (_isResetting) return;
 
     _isResetting = true;
-
     final previous = _transportClient;
+
     _transportClient = null;
     _isCronet = false;
 
     try {
       previous?.close();
     } catch (_) {
-      // لا نسمح لفشل الإغلاق بمنع إنشاء عميل جديد.
+      // فشل الإغلاق لا يمنع محاولة إنشاء اتصال جديد.
     } finally {
       _isResetting = false;
     }
   }
 
-  /// يسمح لبقية التطبيق بطلب إعادة تهيئة الاتصال.
-  ///
-  /// لا يستبدل عميل الواجهة الذي تحتفظ به zone.
+  /// يحافظ على توافق الواجهة مع الاستدعاءات الموجودة.
   static void close() {
     _resetTransport();
   }
 
-  // ============================================================
-  // إرسال الطلب مع الاسترداد
-  // ============================================================
-
   static Future<http.StreamedResponse> _send(
     http.BaseRequest original,
   ) async {
-    // نقرأ جسم الطلب مرة واحدة وننشئ نسخة مستقلة.
-    final bodyBytes = await original.finalize().toBytes();
-
     final method = original.method.toUpperCase();
     final canRetry = method == 'GET' || method == 'HEAD';
 
-    final firstRequest = _cloneRequest(
-      original,
-      bodyBytes,
-      original.url,
-    );
+    // قراءة الجسم مرة واحدة قبل إنشاء أي نسخ من الطلب.
+    final bodyBytes = await original.finalize().toBytes();
 
     try {
-      return await _getTransportClient().send(firstRequest);
+      final request = _cloneRequest(original, bodyBytes);
+      return await _getTransportClient().send(request);
     } on http.ClientException {
       _resetTransport();
-
-      if (!canRetry) {
-        rethrow;
-      }
-
-      return _retrySafeRequest(
-        original,
-        bodyBytes,
-      );
+      if (!canRetry) rethrow;
+      return _retrySafeRequest(original, bodyBytes);
     } on SocketException {
       _resetTransport();
-
-      if (!canRetry) {
-        rethrow;
-      }
-
-      return _retrySafeRequest(
-        original,
-        bodyBytes,
-      );
+      if (!canRetry) rethrow;
+      return _retrySafeRequest(original, bodyBytes);
     } on TimeoutException {
       _resetTransport();
-
-      if (!canRetry) {
-        rethrow;
-      }
-
-      return _retrySafeRequest(
-        original,
-        bodyBytes,
-      );
+      if (!canRetry) rethrow;
+      return _retrySafeRequest(original, bodyBytes);
     } on IOException {
       _resetTransport();
-
-      if (!canRetry) {
-        rethrow;
-      }
-
-      return _retrySafeRequest(
-        original,
-        bodyBytes,
-      );
+      if (!canRetry) rethrow;
+      return _retrySafeRequest(original, bodyBytes);
     }
   }
 
   static Future<http.StreamedResponse> _retrySafeRequest(
     http.BaseRequest original,
     List<int> bodyBytes,
-  ) async {
-    final retryRequest = _cloneRequest(
-      original,
-      bodyBytes,
-      original.url,
-    );
-
-    // محاولة واحدة فقط بعد إعادة إنشاء النقل.
-    return _getTransportClient().send(retryRequest);
+  ) {
+    final request = _cloneRequest(original, bodyBytes);
+    return _getTransportClient().send(request);
   }
 
   static http.Request _cloneRequest(
     http.BaseRequest original,
     List<int> bodyBytes,
-    Uri destinationUri,
   ) {
     final request = http.Request(
       original.method,
-      destinationUri,
+      original.url,
     );
 
     request.headers.addAll(original.headers);
@@ -282,47 +182,29 @@ class Sa7biNetworkClient {
     request.maxRedirects = original.maxRedirects;
     request.persistentConnection =
         original.persistentConnection;
-
     request.bodyBytes = bodyBytes;
 
     return request;
   }
 }
 
-// ================================================================
-// عميل واجهة ثابت
-// ================================================================
-
+/// واجهة مستقرة؛ استدعاء close يعيد تهيئة النقل فقط.
+/// لا تحتفظ الواجهة بحالة closed دائمة.
 class _RecoveringClient extends http.BaseClient {
-  bool _closed = false;
-
   @override
   Future<http.StreamedResponse> send(
     http.BaseRequest request,
-  ) async {
-    if (_closed) {
-      throw http.ClientException(
-        'Network facade is closed.',
-        request.url,
-      );
-    }
-
+  ) {
     return Sa7biNetworkClient._send(request);
   }
 
   @override
   void close() {
-    // لا نغلق عميل النقل من خلال عميل الواجهة.
-    // إعادة التهيئة تتم عن طريق Sa7biNetworkClient.close().
-    _closed = true;
     Sa7biNetworkClient._resetTransport();
   }
 }
 
-// ================================================================
-// عميل النقل الأساسي والاحتياطي
-// ================================================================
-
+/// يجرّب Cronet أولًا، ثم IO للطلبات الآمنة فقط.
 class _FailoverClient extends http.BaseClient {
   final http.Client primary;
   final http.Client fallback;
@@ -338,17 +220,18 @@ class _FailoverClient extends http.BaseClient {
   Future<http.StreamedResponse> send(
     http.BaseRequest request,
   ) async {
-    final originalUri = request.url;
-
+    final uri = request.url;
     final isPrimaryBackend =
-        originalUri.host == AppConfig.backendPrimaryHost;
+        uri.host == AppConfig.backendPrimaryHost;
 
+    final method = request.method.toUpperCase();
+    final canRetry = method == 'GET' || method == 'HEAD';
     final bodyBytes = await request.finalize().toBytes();
 
-    final primaryRequest = Sa7biNetworkClient._cloneRequest(
+    final primaryRequest =
+        Sa7biNetworkClient._cloneRequest(
       request,
       bodyBytes,
-      originalUri,
     );
 
     try {
@@ -356,51 +239,34 @@ class _FailoverClient extends http.BaseClient {
           .send(primaryRequest)
           .timeout(fallbackTimeout);
     } on TimeoutException {
-      if (!_canRetrySafely(request)) {
-        rethrow;
-      }
-
+      if (!canRetry) rethrow;
       return _sendFallback(
         request,
         bodyBytes,
         isPrimaryBackend: isPrimaryBackend,
       );
     } on SocketException {
-      if (!_canRetrySafely(request)) {
-        rethrow;
-      }
-
+      if (!canRetry) rethrow;
       return _sendFallback(
         request,
         bodyBytes,
         isPrimaryBackend: isPrimaryBackend,
       );
     } on http.ClientException {
-      if (!_canRetrySafely(request)) {
-        rethrow;
-      }
-
+      if (!canRetry) rethrow;
       return _sendFallback(
         request,
         bodyBytes,
         isPrimaryBackend: isPrimaryBackend,
       );
     } on IOException {
-      if (!_canRetrySafely(request)) {
-        rethrow;
-      }
-
+      if (!canRetry) rethrow;
       return _sendFallback(
         request,
         bodyBytes,
         isPrimaryBackend: isPrimaryBackend,
       );
     }
-  }
-
-  bool _canRetrySafely(http.BaseRequest request) {
-    final method = request.method.toUpperCase();
-    return method == 'GET' || method == 'HEAD';
   }
 
   Future<http.StreamedResponse> _sendFallback(
@@ -415,13 +281,25 @@ class _FailoverClient extends http.BaseClient {
           )
         : original.url;
 
-    final fallbackRequest = Sa7biNetworkClient._cloneRequest(
+    final fallbackRequest =
+        Sa7biNetworkClient._cloneRequest(
       original,
       bodyBytes,
-      fallbackUri,
     );
 
-    return fallback.send(fallbackRequest);
+    // الحفاظ على المسار والاستعلام مع تغيير المضيف فقط.
+    final request = http.Request(
+      fallbackRequest.method,
+      fallbackUri,
+    )
+      ..headers.addAll(fallbackRequest.headers)
+      ..followRedirects = fallbackRequest.followRedirects
+      ..maxRedirects = fallbackRequest.maxRedirects
+      ..persistentConnection =
+          fallbackRequest.persistentConnection
+      ..bodyBytes = bodyBytes;
+
+    return fallback.send(request);
   }
 
   static Uri _replaceBackendHost(
@@ -439,10 +317,18 @@ class _FailoverClient extends http.BaseClient {
 
   @override
   void close() {
-    primary.close();
+    try {
+      primary.close();
+    } catch (_) {
+      // تجاهل خطأ الإغلاق.
+    }
 
     if (!identical(primary, fallback)) {
-      fallback.close();
+      try {
+        fallback.close();
+      } catch (_) {
+        // تجاهل خطأ الإغلاق.
+      }
     }
   }
 }
