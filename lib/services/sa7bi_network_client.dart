@@ -10,26 +10,29 @@ import '../config/app_config.dart';
 
 /// بوابة الشبكة الموحدة لتطبيق صاحبي AI.
 ///
-/// - استخدام Cronet على Android عند توفره.
-/// - الرجوع إلى IOClient إذا تعذر إنشاء Cronet.
-/// - إعادة محاولة طلبات GET وHEAD.
-/// - تجربة عنوان Worker الاحتياطي عند فشل الاتصال.
-/// - عدم إعادة إرسال طلبات AI المدفوعة بسبب انتهاء المهلة.
+/// سياسة الاتصال:
+/// - Cronet على Android عند توفره، وإلا IOClient.
+/// - محاولتان كحد أقصى لطلبات GET/HEAD على الخادم الأساسي.
+/// - تجربة الخادم الاحتياطي بعد فشل الاتصال الأساسي.
+/// - طلبات AI محددة بوجود Request ID وDevice ID.
+/// - لا نعيد إرسال طلب AI بسبب Timeout لتجنب تكرار التنفيذ أو الخصم.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
   static const String userAgent = 'Sa7biAI-Mobile/1.0';
 
   static const Duration connectionTimeout =
-      Duration(seconds: 30);
-
-  static const Duration safeRequestTimeout =
       Duration(seconds: 20);
 
-  static const Duration fallbackRequestTimeout =
-      Duration(seconds: 35);
+  /// مهلة كل محاولة عادية إلى الخادم الأساسي.
+  static const Duration safeRequestTimeout =
+      Duration(seconds: 15);
 
-  static const int maximumAttempts = 3;
+  /// مهلة الخادم الاحتياطي؛ أطول قليلًا للشبكات البطيئة.
+  static const Duration fallbackRequestTimeout =
+      Duration(seconds: 30);
+
+  static const int maximumAttempts = 2;
 
   static http.Client? _client;
   static bool _usingCronet = false;
@@ -41,8 +44,8 @@ class Sa7biNetworkClient {
   static bool get isCronet => _usingCronet;
 
   static String get transportName => _usingCronet
-      ? 'ANDROID_CRONET_WITH_WORKER_FAILOVER_RETRY'
-      : 'DART_IO_WITH_WORKER_FAILOVER_RETRY';
+      ? 'ANDROID_CRONET_WITH_WORKER_FAILOVER'
+      : 'DART_IO_WITH_WORKER_FAILOVER';
 
   static bool get failoverEnabled => true;
 
@@ -69,7 +72,7 @@ class Sa7biNetworkClient {
           fallback: cronetClient,
         );
       } catch (_) {
-        // الرجوع إلى IOClient إذا تعذر إنشاء Cronet.
+        // إذا تعذر إنشاء Cronet، نستخدم IOClient.
         _usingCronet = false;
       }
     }
@@ -138,8 +141,8 @@ class _Sa7biFailoverClient extends http.BaseClient {
         method == 'POST' &&
         _isIdentifiedAiRequest(original);
 
-    // تجهيز جسم الطلب مرة واحدة حتى يمكن إنشاء طلب مستقل
-    // لكل محاولة دون إعادة استخدام BaseRequest بعد finalize.
+    // نجهز جسم الطلب مرة واحدة؛ لأن BaseRequest لا يمكن
+    // إعادة finalize له بعد إرسال المحاولة الأولى.
     final bodyBytes = await original.finalize().toBytes();
 
     if (canFallbackGet) {
@@ -174,7 +177,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
         if (attempt < Sa7biNetworkClient.maximumAttempts) {
           await Future<void>.delayed(
-            Duration(seconds: attempt),
+            const Duration(seconds: 1),
           );
         }
       }
@@ -186,10 +189,10 @@ class _Sa7biFailoverClient extends http.BaseClient {
         );
       } catch (fallbackError) {
         throw http.ClientException(
-          'فشل الاتصال بالخادم الأساسي والاحتياطي بعد '
+          'فشل الاتصال بالخادم الأساسي بعد '
           '${Sa7biNetworkClient.maximumAttempts} محاولات. '
-          'آخر خطأ: $lastError. '
-          'خطأ الاحتياطي: $fallbackError',
+          'آخر خطأ أساسي: $lastError. '
+          'خطأ الخادم الاحتياطي: $fallbackError',
           original.url,
         );
       }
@@ -202,21 +205,30 @@ class _Sa7biFailoverClient extends http.BaseClient {
         bodyBytes,
       );
 
-      // لا نعيد إرسال POST الخاص بالذكاء الاصطناعي
-      // تلقائيًا بسبب انتهاء المهلة؛ لتجنب تكرار الطلب المدفوع.
+      // لا نضيف مهلة قصيرة هنا على طلب AI؛ لأن خدمة AI
+      // نفسها تحدد مهلة الطلب حسب نوع العملية.
       return await primary.send(request);
     } on SocketException {
       if (!canFallbackAi) rethrow;
 
-      return _sendFallback(original, bodyBytes);
+      return _sendFallback(
+        original,
+        bodyBytes,
+      );
     } on http.ClientException {
       if (!canFallbackAi) rethrow;
 
-      return _sendFallback(original, bodyBytes);
+      return _sendFallback(
+        original,
+        bodyBytes,
+      );
     } on IOException {
       if (!canFallbackAi) rethrow;
 
-      return _sendFallback(original, bodyBytes);
+      return _sendFallback(
+        original,
+        bodyBytes,
+      );
     }
   }
 
@@ -294,7 +306,8 @@ class _Sa7biFailoverClient extends http.BaseClient {
       );
     }
 
-    // لا نعيد إرسال POST بسبب انتهاء المهلة.
+    // طلبات POST لا تُعاد بسبب Timeout.
+    // قد يكون الخادم استلم الطلب وبدأ تنفيذه بالفعل.
     return future;
   }
 
