@@ -85,7 +85,7 @@ extension AppDiagnosticsContentChecks
   }
 
   // ============================================================
-  // ROUTE PROBE
+  // ROUTE PROBE (GET-only for idempotent endpoints)
   // ============================================================
 
   Future<DiagnosticResult> _probeRoute({
@@ -98,6 +98,10 @@ extension AppDiagnosticsContentChecks
     try {
       final uri = _buildUri(path);
 
+      // POST endpoints like /v1/chat and /v1/image cannot be safely probed
+      // with GET. Instead, we check if the route responds to a safe method.
+      // For POST-only endpoints, we expect 405 (Method Not Allowed) which means
+      // the route exists but requires a POST.
       final response = await Sa7biNetworkClient.client
           .get(
             uri,
@@ -116,37 +120,52 @@ extension AppDiagnosticsContentChecks
         allowMalformed: true,
       );
 
-      // هذا اختبار وصول فقط، وليس تنفيذًا لطلب AI مدفوع.
-      // استجابة 404 أو 5xx لا تعني أن المسار يعمل.
+      // For POST-only routes like /v1/chat and /v1/image:
+      // - 405 (Method Not Allowed) indicates the route exists but requires POST.
+      // - 200-299 indicates the route accepts GET (unexpected for POST-only routes).
+      // - 400-403 indicates the route exists but needs valid auth/data.
+      // - 404 indicates the route does not exist.
+      final routeExists = status == 405 ||
+          (status >= 200 && status < 300) ||
+          status == 400 ||
+          status == 401 ||
+          status == 403;
+
       final success = status >= 200 && status < 300;
+      final methodNotAllowed = status == 405;
       final validationResponse =
           status == 400 ||
           status == 401 ||
-          status == 403 ||
-          status == 405;
+          status == 403;
 
       return DiagnosticResult(
         name: name,
         category: category,
-        success: success,
+        success: success || methodNotAllowed,
         severity: success
             ? 'PASS'
-            : validationResponse
-                ? 'WARN'
-                : 'FAIL',
+            : methodNotAllowed
+                ? 'PASS'
+                : validationResponse
+                    ? 'WARN'
+                    : 'FAIL',
         status: success
             ? 'ROUTE_HTTP_OK'
-            : validationResponse
-                ? 'ROUTE_REQUIRES_VALID_REQUEST_OR_AUTH'
-                : _statusForHttpCode(status),
+            : methodNotAllowed
+                ? 'ROUTE_REQUIRES_POST'
+                : validationResponse
+                    ? 'ROUTE_REQUIRES_VALID_REQUEST_OR_AUTH'
+                    : _statusForHttpCode(status),
         httpStatus: status,
         details:
             'path=${uri.path}; HTTP=$status; '
-            'routeProbeOnly=true; '
+            'probeMethod=GET; '
+            'routeExists=$routeExists; '
             'paidGenerationExecuted=false; '
+            'note=POST-only routes expected to return 405; '
             '${_summarizeBody(body)}',
         durationMs: stopwatch.elapsedMilliseconds,
-        repairable: !success,
+        repairable: !success && !methodNotAllowed && !validationResponse,
       );
     } catch (error) {
       stopwatch.stop();
