@@ -11,10 +11,10 @@ import '../config/app_config.dart';
 /// بوابة الشبكة الموحدة لتطبيق صاحبي AI.
 ///
 /// - استخدام Cronet على Android عند توفره.
-/// - الرجوع إلى IOClient عند تعذر إنشاء Cronet.
-/// - إعادة محاولة GET وHEAD.
-/// - استخدام Worker احتياطي عند فشل الاتصال.
-/// - عدم إعادة إرسال طلبات AI بسبب انتهاء المهلة.
+/// - الرجوع إلى IOClient إذا تعذر إنشاء Cronet.
+/// - إعادة محاولة طلبات GET وHEAD.
+/// - تجربة عنوان Worker الاحتياطي عند فشل الاتصال.
+/// - عدم إعادة إرسال طلبات AI المدفوعة بسبب انتهاء المهلة.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
@@ -131,24 +131,25 @@ class _Sa7biFailoverClient extends http.BaseClient {
     final isPrimaryBackend =
         host == AppConfig.backendPrimaryHost.toLowerCase();
 
-    final canFallbackGet =
-        isPrimaryBackend &&
+    final canFallbackGet = isPrimaryBackend &&
         (method == 'GET' || method == 'HEAD');
 
-    final canFallbackAi =
-        isPrimaryBackend &&
+    final canFallbackAi = isPrimaryBackend &&
         method == 'POST' &&
         _isIdentifiedAiRequest(original);
 
-    // تجهيز جسم الطلب مرة واحدة قبل إنشاء المحاولات.
+    // تجهيز جسم الطلب مرة واحدة حتى يمكن إنشاء طلب مستقل
+    // لكل محاولة دون إعادة استخدام BaseRequest بعد finalize.
     final bodyBytes = await original.finalize().toBytes();
 
     if (canFallbackGet) {
       Object? lastError;
 
-      for (var attempt = 1;
-          attempt <= maximumAttempts;
-          attempt++) {
+      for (
+        var attempt = 1;
+        attempt <= Sa7biNetworkClient.maximumAttempts;
+        attempt++
+      ) {
         try {
           final request = _cloneRequest(
             original,
@@ -158,7 +159,9 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
           return await primary
               .send(request)
-              .timeout(safeRequestTimeout);
+              .timeout(
+                Sa7biNetworkClient.safeRequestTimeout,
+              );
         } on TimeoutException catch (error) {
           lastError = error;
         } on SocketException catch (error) {
@@ -169,7 +172,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
           lastError = error;
         }
 
-        if (attempt < maximumAttempts) {
+        if (attempt < Sa7biNetworkClient.maximumAttempts) {
           await Future<void>.delayed(
             Duration(seconds: attempt),
           );
@@ -184,8 +187,9 @@ class _Sa7biFailoverClient extends http.BaseClient {
       } catch (fallbackError) {
         throw http.ClientException(
           'فشل الاتصال بالخادم الأساسي والاحتياطي بعد '
-          '$maximumAttempts محاولات. '
-          'آخر خطأ: $lastError. خطأ الاحتياطي: $fallbackError',
+          '${Sa7biNetworkClient.maximumAttempts} محاولات. '
+          'آخر خطأ: $lastError. '
+          'خطأ الاحتياطي: $fallbackError',
           original.url,
         );
       }
@@ -198,16 +202,20 @@ class _Sa7biFailoverClient extends http.BaseClient {
         bodyBytes,
       );
 
-      // لا نعيد إرسال POST المدفوع بسبب انتهاء المهلة.
+      // لا نعيد إرسال POST الخاص بالذكاء الاصطناعي
+      // تلقائيًا بسبب انتهاء المهلة؛ لتجنب تكرار الطلب المدفوع.
       return await primary.send(request);
     } on SocketException {
       if (!canFallbackAi) rethrow;
+
       return _sendFallback(original, bodyBytes);
     } on http.ClientException {
       if (!canFallbackAi) rethrow;
+
       return _sendFallback(original, bodyBytes);
     } on IOException {
       if (!canFallbackAi) rethrow;
+
       return _sendFallback(original, bodyBytes);
     }
   }
@@ -281,9 +289,12 @@ class _Sa7biFailoverClient extends http.BaseClient {
     final method = original.method.toUpperCase();
 
     if (method == 'GET' || method == 'HEAD') {
-      return future.timeout(fallbackRequestTimeout);
+      return future.timeout(
+        Sa7biNetworkClient.fallbackRequestTimeout,
+      );
     }
 
+    // لا نعيد إرسال POST بسبب انتهاء المهلة.
     return future;
   }
 
@@ -292,7 +303,10 @@ class _Sa7biFailoverClient extends http.BaseClient {
     Uri uri,
     List<int> bodyBytes,
   ) {
-    final request = http.Request(original.method, uri);
+    final request = http.Request(
+      original.method,
+      uri,
+    );
 
     request.headers.addAll(original.headers);
     request.headers.remove('content-length');
