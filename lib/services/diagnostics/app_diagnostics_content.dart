@@ -1,3 +1,4 @@
+
 part of '../app_diagnostics_service.dart';
 
 extension AppDiagnosticsContentChecks
@@ -11,76 +12,60 @@ extension AppDiagnosticsContentChecks
     required String category,
     required String path,
   }) async {
-    final stopwatch =
-        Stopwatch()..start();
+    final stopwatch = Stopwatch()..start();
 
     try {
-      final uri =
-          _buildUri(path);
+      final uri = _buildUri(path);
 
-      final response =
-          await Sa7biNetworkClient.client
-              .get(
-        uri,
-        headers: const {
-          'Accept':
-              'application/json',
-          'Cache-Control':
-              'no-cache',
-        },
-      )
-              .timeout(
-        AppDiagnosticsService
-            .defaultTimeout,
-      );
+      final response = await Sa7biNetworkClient.client
+          .get(
+            uri,
+            headers: const {
+              'Accept': 'application/json',
+              'Cache-Control': 'no-cache',
+            },
+          )
+          .timeout(AppDiagnosticsService.defaultTimeout);
 
       stopwatch.stop();
 
-      final status =
-          response.statusCode;
-
-      final body =
-          utf8.decode(
+      final status = response.statusCode;
+      final body = utf8.decode(
         response.bodyBytes,
         allowMalformed: true,
       );
 
-      final reachable =
-          status >= 200 &&
-          status < 500;
-
-      final expectedValidation =
+      // لا نعتبر 404 أو أخطاء الخادم نجاحًا.
+      // بعض المسارات قد تحتاج بيانات أو صلاحيات؛ نسجلها كتحذير
+      // بدل اعتبارها اختبارًا وظيفيًا ناجحًا.
+      final success = status >= 200 && status < 300;
+      final validationResponse =
           status == 400 ||
           status == 401 ||
           status == 403 ||
           status == 405;
 
+      final severity = success
+          ? 'PASS'
+          : validationResponse
+              ? 'WARN'
+              : 'FAIL';
+
       return DiagnosticResult(
         name: name,
         category: category,
-        success: reachable,
-        severity:
-            reachable
-                ? (
-                    expectedValidation
-                        ? 'WARN'
-                        : 'PASS'
-                  )
-                : 'FAIL',
-        status:
-            _statusForHttpCode(status),
+        success: success,
+        severity: severity,
+        status: _statusForHttpCode(status),
         httpStatus: status,
         details:
-            'HTTP $status. '
+            'method=GET; path=${uri.path}; '
+            'HTTP=$status; '
+            'functionalSuccess=$success; '
             '${_summarizeBody(body)}',
-        durationMs:
-            stopwatch.elapsedMilliseconds,
-        repairable:
-            !reachable &&
-            (
-              category == 'WORKER' ||
-              category == 'AI'
-            ),
+        durationMs: stopwatch.elapsedMilliseconds,
+        repairable: !success &&
+            (category == 'WORKER' || category == 'AI'),
       );
     } catch (error) {
       stopwatch.stop();
@@ -90,14 +75,11 @@ extension AppDiagnosticsContentChecks
         category: category,
         success: false,
         severity: 'FAIL',
-        status:
-            _classifyException(error),
-        details: _safeError(error),
-        durationMs:
-            stopwatch.elapsedMilliseconds,
-        repairable:
-            category == 'WORKER' ||
-            category == 'AI',
+        status: _classifyException(error),
+        details:
+            'GET $path failed: ${_safeError(error)}',
+        durationMs: stopwatch.elapsedMilliseconds,
+        repairable: category == 'WORKER' || category == 'AI',
       );
     }
   }
@@ -106,64 +88,65 @@ extension AppDiagnosticsContentChecks
   // ROUTE PROBE
   // ============================================================
 
-  Future<DiagnosticResult>
-      _probeRoute({
+  Future<DiagnosticResult> _probeRoute({
     required String name,
     required String category,
     required String path,
   }) async {
-    final stopwatch =
-        Stopwatch()..start();
+    final stopwatch = Stopwatch()..start();
 
     try {
-      final response =
-          await Sa7biNetworkClient.client
-              .get(
-        _buildUri(path),
-        headers: const {
-          'Accept':
-              'application/json',
-          'Cache-Control':
-              'no-cache',
-        },
-      )
-              .timeout(
-        AppDiagnosticsService
-            .defaultTimeout,
-      );
+      final uri = _buildUri(path);
+
+      final response = await Sa7biNetworkClient.client
+          .get(
+            uri,
+            headers: const {
+              'Accept': 'application/json',
+              'Cache-Control': 'no-cache',
+            },
+          )
+          .timeout(AppDiagnosticsService.defaultTimeout);
 
       stopwatch.stop();
 
-      final reachable =
-          response.statusCode >= 200 &&
-          response.statusCode < 500;
-
-      final body =
-          utf8.decode(
+      final status = response.statusCode;
+      final body = utf8.decode(
         response.bodyBytes,
         allowMalformed: true,
       );
 
+      // هذا اختبار وصول فقط، وليس تنفيذًا لطلب AI مدفوع.
+      // استجابة 404 أو 5xx لا تعني أن المسار يعمل.
+      final success = status >= 200 && status < 300;
+      final validationResponse =
+          status == 400 ||
+          status == 401 ||
+          status == 403 ||
+          status == 405;
+
       return DiagnosticResult(
         name: name,
         category: category,
-        success: reachable,
-        severity:
-            reachable ? 'PASS' : 'FAIL',
-        status:
-            reachable
-                ? 'ROUTE_REACHABLE'
-                : 'ROUTE_UNREACHABLE',
-        httpStatus:
-            response.statusCode,
+        success: success,
+        severity: success
+            ? 'PASS'
+            : validationResponse
+                ? 'WARN'
+                : 'FAIL',
+        status: success
+            ? 'ROUTE_HTTP_OK'
+            : validationResponse
+                ? 'ROUTE_REQUIRES_VALID_REQUEST_OR_AUTH'
+                : _statusForHttpCode(status),
+        httpStatus: status,
         details:
-            'HTTP ${response.statusCode}. '
-            'Route reachability only; '
-            'no paid AI generation executed. '
+            'path=${uri.path}; HTTP=$status; '
+            'routeProbeOnly=true; '
+            'paidGenerationExecuted=false; '
             '${_summarizeBody(body)}',
-        durationMs:
-            stopwatch.elapsedMilliseconds,
-        repairable: !reachable,
+        durationMs: stopwatch.elapsedMilliseconds,
+        repairable: !success,
       );
     } catch (error) {
       stopwatch.stop();
@@ -173,11 +156,11 @@ extension AppDiagnosticsContentChecks
         category: category,
         success: false,
         severity: 'FAIL',
-        status:
-            _classifyException(error),
-        details: _safeError(error),
-        durationMs:
-            stopwatch.elapsedMilliseconds,
+        status: _classifyException(error),
+        details:
+            'Route probe failed for $path: '
+            '${_safeError(error)}',
+        durationMs: stopwatch.elapsedMilliseconds,
         repairable: true,
       );
     }
@@ -187,73 +170,53 @@ extension AppDiagnosticsContentChecks
   // MEDIA URL HANDLING
   // ============================================================
 
-  Future<DiagnosticResult>
-      _checkMediaUrlHandling() async {
-    final stopwatch =
-        Stopwatch()..start();
+  Future<DiagnosticResult> _checkMediaUrlHandling() async {
+    final stopwatch = Stopwatch()..start();
 
     try {
-      final radio =
-          _buildUri(
-        '/v1/radio/stations'
-        '?country=EG',
+      final radio = _buildUri(
+        '/v1/radio/stations?country=EG',
       );
 
-      final audio =
-          _buildUri(
-        '/v1/audio/search-v4'
-        '?q=diagnostic',
+      final audio = _buildUri(
+        '/v1/audio/search-v4?q=diagnostic',
       );
 
-      final podcast =
-          _buildUri(
-        '/v1/podcasts/search'
-        '?q=diagnostic',
+      final podcast = _buildUri(
+        '/v1/podcasts/search?q=diagnostic',
       );
 
       final valid =
-          radio.queryParameters[
-                  'country'] ==
-              'EG' &&
-          audio.queryParameters['q'] ==
-              'diagnostic' &&
-          podcast.queryParameters['q'] ==
-              'diagnostic';
+          radio.queryParameters['country'] == 'EG' &&
+          audio.queryParameters['q'] == 'diagnostic' &&
+          podcast.queryParameters['q'] == 'diagnostic';
 
       stopwatch.stop();
 
       return DiagnosticResult(
-        name:
-            'Media URL handling',
+        name: 'Media URL handling',
         category: 'MEDIA',
         success: valid,
-        severity:
-            valid ? 'PASS' : 'FAIL',
-        status:
-            valid ? 'OK' : 'INVALID',
+        severity: valid ? 'PASS' : 'FAIL',
+        status: valid ? 'URL_PARAMETERS_OK' : 'URL_PARAMETERS_INVALID',
         details:
-            'country='
-            '${radio.queryParameters['country']}; '
-            'audioQ='
-            '${audio.queryParameters['q']}; '
-            'podcastQ='
-            '${podcast.queryParameters['q']}.',
-        durationMs:
-            stopwatch.elapsedMilliseconds,
+            'radioCountry=${radio.queryParameters['country']}; '
+            'audioQ=${audio.queryParameters['q']}; '
+            'podcastQ=${podcast.queryParameters['q']}; '
+            'networkRequestExecuted=false.',
+        durationMs: stopwatch.elapsedMilliseconds,
       );
     } catch (error) {
       stopwatch.stop();
 
       return DiagnosticResult(
-        name:
-            'Media URL handling',
+        name: 'Media URL handling',
         category: 'MEDIA',
         success: false,
         severity: 'FAIL',
-        status: 'INVALID',
+        status: 'URL_PARAMETERS_INVALID',
         details: _safeError(error),
-        durationMs:
-            stopwatch.elapsedMilliseconds,
+        durationMs: stopwatch.elapsedMilliseconds,
       );
     }
   }
@@ -262,41 +225,28 @@ extension AppDiagnosticsContentChecks
   // MONETIZATION
   // ============================================================
 
-  Future<DiagnosticResult>
-      _checkMonetization() async {
-    final credits =
-        await _httpGet(
+  Future<DiagnosticResult> _checkMonetization() async {
+    final credits = await _httpGet(
       name: 'Credits endpoint',
       category: 'MONETIZATION',
       path: '/v1/credits',
     );
 
-    final success =
-        credits.success;
-
     return DiagnosticResult(
-      name:
-          'Monetization endpoints',
+      name: 'Monetization endpoints',
       category: 'MONETIZATION',
-      success: success,
-      severity:
-          success ? 'PASS' : 'WARN',
-      status:
-          success
-              ? 'CREDITS_REACHABLE'
-              : 'NOT_CONFIRMED',
-      httpStatus:
-          credits.httpStatus,
+      success: credits.success,
+      severity: credits.success ? 'PASS' : 'WARN',
+      status: credits.success
+          ? 'CREDITS_HTTP_OK'
+          : 'CREDITS_NOT_CONFIRMED',
+      httpStatus: credits.httpStatus,
       details:
-          '/v1/credits='
-          '${credits.status}. '
-          'AdMob itself is not tested '
-          'through Worker.',
-      durationMs:
-          credits.durationMs,
-      repairable: !success,
-      blocked:
-          credits.blocked,
+          '/v1/credits=${credits.status}; '
+          'AdMob itself is not tested through Worker.',
+      durationMs: credits.durationMs,
+      repairable: !credits.success,
+      blocked: credits.blocked,
     );
   }
 }
