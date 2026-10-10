@@ -352,6 +352,10 @@ export async function handleCreditsBalance(
  *
  * Credits are therefore not permanently consumed merely
  * because a request started.
+ *
+ * Duplicate protection:
+ * If the same request ID already has an active reservation,
+ * do not allow the caller to start the AI operation again.
  */
 export async function reserveAIRequestCredits(
   request,
@@ -414,9 +418,7 @@ export async function reserveAIRequestCredits(
       },
     );
 
-  return {
-    ...result,
-
+  const metadata = {
     deviceId:
       identity.deviceId,
 
@@ -428,6 +430,33 @@ export async function reserveAIRequestCredits(
 
     creditCost:
       cost,
+  };
+
+  // IMPORTANT:
+  // credits.js returns alreadyReserved=true when this
+  // request ID already has a live reservation.
+  // Treat that as a conflict so index.js returns HTTP 409
+  // instead of running the AI provider a second time.
+  if (
+    result?.ok === true &&
+    result?.alreadyReserved === true
+  ) {
+    return {
+      ok: false,
+
+      error:
+        "REQUEST_ALREADY_FINALIZED",
+
+      message:
+        "A request with this ID already has an active reservation. Do not execute it again.",
+
+      ...metadata,
+    };
+  }
+
+  return {
+    ...result,
+    ...metadata,
   };
 }
 
@@ -581,10 +610,8 @@ export function buildCreditContext(
   ) {
     return {
       ok: false,
-
       error:
         "UNKNOWN_CREDIT_OPERATION",
-
       operation:
         normalizedOperation,
     };
