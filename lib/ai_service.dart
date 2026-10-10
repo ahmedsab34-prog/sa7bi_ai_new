@@ -451,10 +451,8 @@ class AiService {
               raw['storeUrl']?.toString() ?? '',
           text: raw['text']?.toString() ?? '',
           repeat: raw['repeat']?.toString() ?? '',
-          collection:
-              raw['collection']?.toString() ?? '',
-          feedUrl:
-              raw['feedUrl']?.toString() ?? '',
+          collection: raw['collection']?.toString() ?? '',
+          feedUrl: raw['feedUrl']?.toString() ?? '',
         );
 
         if (item.title.trim().isEmpty) {
@@ -701,8 +699,7 @@ class AiService {
 
         result.add(
           TafsirItem(
-            id:
-                raw['id']?.toString() ?? '',
+            id: raw['id']?.toString() ?? '',
             tafsirId:
                 int.tryParse(
                       raw['tafsirId']?.toString() ??
@@ -710,15 +707,13 @@ class AiService {
                     ) ??
                     tafsirId,
             tafsirName:
-                raw['tafsirName']?.toString() ??
-                    '',
+                raw['tafsirName']?.toString() ?? '',
             sura: suraNumber,
             suraName:
                 raw['suraName']?.toString() ??
                     'سورة $suraNumber',
             audioUrl:
-                raw['audioUrl']?.toString() ??
-                    '',
+                raw['audioUrl']?.toString() ?? '',
           ),
         );
       }
