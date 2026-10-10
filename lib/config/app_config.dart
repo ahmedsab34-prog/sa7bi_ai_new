@@ -30,14 +30,14 @@ class AppConfig {
     defaultValue: '1.0.1',
   );
 
-  /// رقم Build الحقيقي الخاص بـGitHub Actions.
+  /// رقم Build الحقيقي الخاص بـ GitHub Actions.
   static const String buildNumber =
       String.fromEnvironment(
     'SA7BI_BUILD_NUMBER',
     defaultValue: '0',
   );
 
-  /// Commit الذي بُني منه الـAPK.
+  /// Commit الذي بُني منه الـ APK.
   static const String commitSha =
       String.fromEnvironment(
     'SA7BI_COMMIT_SHA',
@@ -52,7 +52,7 @@ class AppConfig {
   // BACKEND
   // ============================================================
 
-  /// الـWorker الأساسي.
+  /// الـ Worker الأساسي.
   ///
   /// هذا يظل المصدر الرئيسي لكل خدمات التطبيق.
   static const String backendBaseUrl =
@@ -61,18 +61,18 @@ class AppConfig {
   /// Worker احتياطي Stateless.
   ///
   /// لا يملك قاعدة بيانات أو Credits مستقلة.
-  /// وظيفته فقط تمرير الطلب إلى الـWorker الأساسي.
+  /// وظيفته فقط تمرير الطلب إلى الـ Worker الأساسي.
   ///
   /// الهدف منه معالجة حالات فشل الوصول إلى hostname الأساسي
   /// من بعض الشبكات.
   static const String backendFallbackBaseUrl =
       'https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev';
 
-  /// اسم الـhost الأساسي.
+  /// اسم الـ host الأساسي.
   static const String backendPrimaryHost =
       'sa7bi-ai-new.ahmedsab34.workers.dev';
 
-  /// اسم الـhost الاحتياطي.
+  /// اسم الـ host الاحتياطي.
   static const String backendFallbackHost =
       'sa7bi-ai-new-fallback.ahmedsab34.workers.dev';
 
@@ -103,7 +103,7 @@ class AppConfig {
   static const String radioStationsEndpoint =
       '$backendBaseUrl/v1/radio/stations';
 
-  /// هذا الرابط هو بوابة تنزيل الـAPK الحقيقي.
+  /// هذا الرابط هو بوابة تنزيل الـ APK الحقيقي.
   static const String downloadEndpoint =
       '$backendBaseUrl/download';
 
@@ -118,7 +118,9 @@ class AppConfig {
   /// هذا الإعداد.
   static const int maximumNetworkAttempts = 3;
 
-  static const int networkTimeoutSeconds = 45;
+  /// المهلة العامة يجب أن تسمح بمحاولات الشبكة والانتقال
+  /// إلى الخادم الاحتياطي دون أن ينتهي فحص الخدمة مبكرًا.
+  static const int networkTimeoutSeconds = 105;
 
   static const int chatTimeoutSeconds = 90;
 
@@ -205,7 +207,7 @@ class AppConfig {
   // URL HELPERS
   // ============================================================
 
-  /// يبني رابطًا على الـWorker الأساسي.
+  /// يبني رابطًا على الـ Worker الأساسي.
   static String buildBackendUrl(
     String path,
   ) {
@@ -222,7 +224,7 @@ class AppConfig {
     return '$backendBaseUrl/$cleaned';
   }
 
-  /// يبني رابطًا على الـWorker الاحتياطي.
+  /// يبني رابطًا على الـ Worker الاحتياطي.
   static String buildFallbackBackendUrl(
     String path,
   ) {
