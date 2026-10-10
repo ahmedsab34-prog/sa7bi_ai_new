@@ -26,7 +26,7 @@ class AppDiagnosticsService {
       Duration(seconds: 8);
 
   static const String diagnosticVersion =
-      '4.2.0';
+      '4.3.0';
 
   static const String buildId =
       String.fromEnvironment(
@@ -130,9 +130,7 @@ class AppDiagnosticsService {
       onResult?.call(result);
     }
 
-    // ============================================================
     // BUILD
-    // ============================================================
 
     await run(
       'BUILD',
@@ -152,9 +150,7 @@ class AppDiagnosticsService {
       _checkBuildSourceIdentity,
     );
 
-    // ============================================================
-    // NETWORK TRANSPORT
-    // ============================================================
+    // NETWORK
 
     await run(
       'NETWORK',
@@ -166,6 +162,12 @@ class AppDiagnosticsService {
       'NETWORK',
       'Internet HTTPS control',
       _checkInternetHttps,
+    );
+
+    await run(
+      'NETWORK',
+      'Network speed and stability',
+      _checkNetworkQuality,
     );
 
     await run(
@@ -192,9 +194,7 @@ class AppDiagnosticsService {
       _checkTimeoutConfiguration,
     );
 
-    // ============================================================
     // DEVICE
-    // ============================================================
 
     await run(
       'DEVICE',
@@ -214,9 +214,7 @@ class AppDiagnosticsService {
       _checkNetworkInterfaces,
     );
 
-    // ============================================================
     // WORKER
-    // ============================================================
 
     await run(
       'WORKER',
@@ -248,9 +246,7 @@ class AppDiagnosticsService {
       ),
     );
 
-    // ============================================================
-    // AI
-    // ============================================================
+    // AI: route reachability only; no paid generation.
 
     await run(
       'AI',
@@ -282,9 +278,7 @@ class AppDiagnosticsService {
       ),
     );
 
-    // ============================================================
     // CONTENT
-    // ============================================================
 
     await run(
       'NEWS',
@@ -372,8 +366,7 @@ class AppDiagnosticsService {
       () => _httpGet(
         name: 'Egypt radio stations',
         category: 'RADIO',
-        path:
-            '/v1/radio/stations?country=EG',
+        path: '/v1/radio/stations?country=EG',
       ),
     );
 
@@ -383,8 +376,7 @@ class AppDiagnosticsService {
       () => _httpGet(
         name: 'Audio search route',
         category: 'AUDIO',
-        path:
-            '/v1/audio/search-v4?q=diagnostic',
+        path: '/v1/audio/search-v4?q=diagnostic',
       ),
     );
 
@@ -394,8 +386,7 @@ class AppDiagnosticsService {
       () => _httpGet(
         name: 'Podcast search route',
         category: 'PODCAST',
-        path:
-            '/v1/podcasts/search?q=diagnostic',
+        path: '/v1/podcasts/search?q=diagnostic',
       ),
     );
 
@@ -409,9 +400,7 @@ class AppDiagnosticsService {
       ),
     );
 
-    // ============================================================
     // MEDIA
-    // ============================================================
 
     await run(
       'MEDIA',
@@ -419,9 +408,7 @@ class AppDiagnosticsService {
       _checkMediaUrlHandling,
     );
 
-    // ============================================================
     // MONETIZATION
-    // ============================================================
 
     await run(
       'MONETIZATION',
@@ -433,6 +420,168 @@ class AppDiagnosticsService {
       startedAt: startedAt,
       finishedAt: DateTime.now(),
       results: results,
+    );
+  }
+
+  // ============================================================
+  // NETWORK QUALITY
+  // ============================================================
+
+  Future<DiagnosticResult> _checkNetworkQuality() async {
+    const probeUrl =
+        'https://www.cloudflare.com/cdn-cgi/trace';
+    const sampleCount = 3;
+    const perSampleTimeout =
+        Duration(seconds: 4);
+
+    final latencies = <int>[];
+    final httpStatuses = <int>[];
+    final errors = <String>[];
+    final overall = Stopwatch()..start();
+
+    for (var i = 0; i < sampleCount; i++) {
+      final sample = Stopwatch()..start();
+
+      try {
+        final response =
+            await Sa7biNetworkClient.client
+                .get(
+          Uri.parse(probeUrl),
+          headers: const {
+            'Accept': 'text/plain',
+            'Cache-Control': 'no-cache',
+          },
+        ).timeout(perSampleTimeout);
+
+        sample.stop();
+        latencies.add(
+          sample.elapsedMilliseconds,
+        );
+        httpStatuses.add(response.statusCode);
+      } catch (error) {
+        sample.stop();
+        errors.add(_classifyException(error));
+      }
+    }
+
+    overall.stop();
+
+    final successCount = latencies.length;
+    final failureCount = errors.length;
+
+    final averageMs = successCount == 0
+        ? null
+        : (latencies.reduce((a, b) => a + b) /
+                successCount)
+            .round();
+
+    final minMs = successCount == 0
+        ? null
+        : latencies.reduce(
+            (a, b) => a < b ? a : b,
+          );
+
+    final maxMs = successCount == 0
+        ? null
+        : latencies.reduce(
+            (a, b) => a > b ? a : b,
+          );
+
+    final spreadMs =
+        minMs == null || maxMs == null
+            ? null
+            : maxMs - minMs;
+
+    final serverErrorCount =
+        httpStatuses.where(
+      (status) => status >= 500,
+    ).length;
+
+    final isUnreliable = successCount < 2;
+    final isSlow =
+        averageMs != null && averageMs >= 2000;
+    final isUnstable =
+        spreadMs != null && spreadMs >= 1500;
+    final hasServerErrors = serverErrorCount > 0;
+
+    final success = !isUnreliable &&
+        averageMs != null &&
+        averageMs < 3500 &&
+        !hasServerErrors;
+
+    final severity = isUnreliable
+        ? 'FAIL'
+        : (
+            isSlow ||
+                    isUnstable ||
+                    failureCount > 0 ||
+                    hasServerErrors
+                ? 'WARN'
+                : 'PASS'
+          );
+
+    final status = isUnreliable
+        ? 'NETWORK_UNRELIABLE'
+        : (
+            isSlow
+                ? 'NETWORK_SLOW'
+                : (
+                    isUnstable || failureCount > 0
+                        ? 'NETWORK_UNSTABLE'
+                        : (
+                            hasServerErrors
+                                ? 'CONTROL_SERVER_ERROR'
+                                : 'NETWORK_OK'
+                          )
+                  )
+          );
+
+    final advice = isUnreliable
+        ? 'نجح أقل من اختبارين. جرّب تبديل الواي فاي '
+            'وبيانات الهاتف، ثم أعد الفحص.'
+        : (
+            isSlow
+                ? 'الاستجابة بطيئة. أوقف تنزيلات الخلفية، '
+                    'وقرّب الجهاز من الراوتر أو جرّب بيانات الهاتف.'
+                : (
+                    isUnstable || failureCount > 0
+                        ? 'الاتصال متذبذب. أعد الاختبار على الشبكة '
+                            'نفسها ثم قارن بالشبكة الأخرى.'
+                        : (
+                            hasServerErrors
+                                ? 'تم الوصول إلى خادم الاختبار لكنه '
+                                    'أعاد خطأ خادم؛ أعد المحاولة لاحقًا.'
+                                : 'زمن الاستجابة وثبات الاختبارات '
+                                    'ضمن الحدود المقبولة.'
+                          )
+                  )
+          );
+
+    final details = <String>[
+      'Probe=Cloudflare HTTPS control',
+      'samples=$sampleCount',
+      'responses=$successCount',
+      'transportFailures=$failureCount',
+      'latencyMs=${latencies.isEmpty ? 'none' : latencies.join(',')}',
+      'averageMs=${averageMs ?? 'none'}',
+      'spreadMs=${spreadMs ?? 'none'}',
+      'httpStatuses=${httpStatuses.isEmpty ? 'none' : httpStatuses.join(',')}',
+      if (errors.isNotEmpty)
+        'errors=${errors.join(',')}',
+      advice,
+    ].join('; ');
+
+    return DiagnosticResult(
+      name: 'Network speed and stability',
+      category: 'NETWORK',
+      success: success,
+      severity: severity,
+      status: status,
+      httpStatus:
+          httpStatuses.isEmpty ? null : httpStatuses.last,
+      details: details,
+      durationMs: overall.elapsedMilliseconds,
+      repairable: false,
     );
   }
 
@@ -570,32 +719,22 @@ class AppDiagnosticsService {
       return 'TIMEOUT';
     }
 
-    if (value.contains(
-          'failed host lookup',
-        ) ||
-        value.contains(
-          'no address associated',
-        )) {
+    if (value.contains('failed host lookup') ||
+        value.contains('no address associated')) {
       return 'DNS_ERROR';
     }
 
-    if (value.contains(
-          'certificate',
-        ) ||
+    if (value.contains('certificate') ||
         value.contains('tls') ||
         value.contains('ssl')) {
       return 'TLS_ERROR';
     }
 
-    if (value.contains(
-      'connection refused',
-    )) {
+    if (value.contains('connection refused')) {
       return 'CONNECTION_REFUSED';
     }
 
-    if (value.contains(
-      'network is unreachable',
-    )) {
+    if (value.contains('network is unreachable')) {
       return 'NETWORK_UNREACHABLE';
     }
 
@@ -650,8 +789,7 @@ class AppDiagnosticsService {
       return '${(bytes / 1024).toStringAsFixed(1)} KB';
     }
 
-    if (bytes <
-        1024 * 1024 * 1024) {
+    if (bytes < 1024 * 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
 
