@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 
@@ -9,36 +8,24 @@ import 'package:http/io_client.dart';
 import '../config/app_config.dart';
 
 /// بوابة الشبكة الموحدة لتطبيق صاحبي AI.
-///
-/// سياسة الاتصال:
-/// - Cronet على Android عند توفره، وإلا IOClient.
-/// - محاولتان كحد أقصى لطلبات GET/HEAD على الخادم الأساسي.
-/// - تجربة الخادم الاحتياطي بعد فشل الاتصال الأساسي.
-/// - طلبات AI محددة بوجود Request ID وDevice ID.
-/// - لا نعيد إرسال طلب AI بسبب Timeout لتجنب تكرار التنفيذ أو الخصم.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
   static const String userAgent = 'Sa7biAI-Mobile/1.0';
 
-  static const Duration connectionTimeout =
-      Duration(seconds: 20);
-
-  /// مهلة كل محاولة عادية إلى الخادم الأساسي.
-  static const Duration safeRequestTimeout =
-      Duration(seconds: 15);
-
-  /// مهلة الخادم الاحتياطي؛ أطول قليلًا للشبكات البطيئة.
-  static const Duration fallbackRequestTimeout =
-      Duration(seconds: 30);
+  static const Duration connectionTimeout = Duration(seconds: 20);
+  static const Duration safeRequestTimeout = Duration(seconds: 15);
+  static const Duration fallbackRequestTimeout = Duration(seconds: 30);
 
   static const int maximumAttempts = 2;
 
   static http.Client? _client;
   static bool _usingCronet = false;
+  static bool _initialized = false;
 
   static http.Client get client {
-    return _client ??= _createClient();
+    _ensureClient();
+    return _client!;
   }
 
   static bool get isCronet => _usingCronet;
@@ -49,41 +36,87 @@ class Sa7biNetworkClient {
 
   static bool get failoverEnabled => true;
 
-  static http.Client factory() => client;
+  static bool get isInitialized => _initialized;
+
+  /// يُستخدم داخل http.runWithClient.
+  static http.Client factory() {
+    _ensureClient();
+    return _client!;
+  }
+
+  /// إصلاح دورة حياة العميل:
+  /// إذا أُغلق العميل المشترك، ننشئ عميلًا جديدًا تلقائيًا.
+  static void _ensureClient() {
+    final current = _client;
+    final wasClosed =
+        current is _Sa7biFailoverClient && current.isClosed;
+
+    if (current == null || wasClosed) {
+      if (current != null) {
+        try {
+          current.close();
+        } catch (_) {
+          // تجاهل أخطاء إغلاق العميل القديم.
+        }
+      }
+
+      _client = _createClient();
+      _initialized = true;
+      _logInitialization();
+    }
+  }
 
   static http.Client _createClient() {
-    if (Platform.isAndroid) {
-      try {
-        final engine = CronetEngine.build(
-          cacheMode: CacheMode.memory,
-          cacheMaxSize: 2 * 1024 * 1024,
-          userAgent: userAgent,
-        );
+    http.Client? primary;
+    http.Client? fallback;
 
-        final cronetClient = CronetClient.fromCronetEngine(
-          engine,
-          closeEngine: true,
-        );
+    try {
+      if (Platform.isAndroid) {
+        try {
+          final engine = CronetEngine.build(
+            cacheMode: CacheMode.memory,
+            cacheMaxSize: 2 * 1024 * 1024,
+            userAgent: userAgent,
+          );
 
-        _usingCronet = true;
+          final cronetClient = CronetClient.fromCronetEngine(
+            engine,
+            closeEngine: true,
+          );
 
-        return _Sa7biFailoverClient(
-          primary: cronetClient,
-          fallback: cronetClient,
-        );
-      } catch (_) {
-        // إذا تعذر إنشاء Cronet، نستخدم IOClient.
-        _usingCronet = false;
+          _usingCronet = true;
+          primary = cronetClient;
+          fallback = _createIoClient();
+
+          return _Sa7biFailoverClient(
+            primary: primary,
+            fallback: fallback,
+          );
+        } catch (_) {
+          _usingCronet = false;
+        }
       }
+
+      primary = _createIoClient();
+      fallback = _createIoClient();
+
+      return _Sa7biFailoverClient(
+        primary: primary,
+        fallback: fallback,
+      );
+    } catch (e) {
+      try {
+        primary?.close();
+      } catch (_) {}
+
+      try {
+        fallback?.close();
+      } catch (_) {}
+
+      throw StateError(
+        'Failed to initialize Sa7biNetworkClient: $e',
+      );
     }
-
-    final ioClient = _createIoClient();
-    _usingCronet = false;
-
-    return _Sa7biFailoverClient(
-      primary: ioClient,
-      fallback: ioClient,
-    );
   }
 
   static http.Client _createIoClient() {
@@ -94,9 +127,18 @@ class Sa7biNetworkClient {
     return IOClient(ioClient);
   }
 
+  static void _logInitialization() {
+    final message = 'Sa7biNetworkClient initialized: '
+        'transport=$transportName, '
+        'failoverEnabled=$failoverEnabled';
+    // يمكن تفعيل الطباعة عند الحاجة للتشخيص.
+    // print(message);
+  }
+
   static void close() {
     final previous = _client;
     _client = null;
+    _initialized = false;
 
     try {
       previous?.close();
@@ -116,6 +158,8 @@ class _Sa7biFailoverClient extends http.BaseClient {
   final http.Client fallback;
 
   bool _closed = false;
+
+  bool get isClosed => _closed;
 
   @override
   Future<http.StreamedResponse> send(
@@ -141,8 +185,6 @@ class _Sa7biFailoverClient extends http.BaseClient {
         method == 'POST' &&
         _isIdentifiedAiRequest(original);
 
-    // نجهز جسم الطلب مرة واحدة؛ لأن BaseRequest لا يمكن
-    // إعادة finalize له بعد إرسال المحاولة الأولى.
     final bodyBytes = await original.finalize().toBytes();
 
     if (canFallbackGet) {
@@ -162,9 +204,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
           return await primary
               .send(request)
-              .timeout(
-                Sa7biNetworkClient.safeRequestTimeout,
-              );
+              .timeout(Sa7biNetworkClient.safeRequestTimeout);
         } on TimeoutException catch (error) {
           lastError = error;
         } on SocketException catch (error) {
@@ -183,10 +223,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
       }
 
       try {
-        return await _sendFallback(
-          original,
-          bodyBytes,
-        );
+        return await _sendFallback(original, bodyBytes);
       } catch (fallbackError) {
         throw http.ClientException(
           'فشل الاتصال بالخادم الأساسي بعد '
@@ -205,41 +242,23 @@ class _Sa7biFailoverClient extends http.BaseClient {
         bodyBytes,
       );
 
-      // لا نضيف مهلة قصيرة هنا على طلب AI؛ لأن خدمة AI
-      // نفسها تحدد مهلة الطلب حسب نوع العملية.
       return await primary.send(request);
     } on SocketException {
       if (!canFallbackAi) rethrow;
-
-      return _sendFallback(
-        original,
-        bodyBytes,
-      );
+      return _sendFallback(original, bodyBytes);
     } on http.ClientException {
       if (!canFallbackAi) rethrow;
-
-      return _sendFallback(
-        original,
-        bodyBytes,
-      );
+      return _sendFallback(original, bodyBytes);
     } on IOException {
       if (!canFallbackAi) rethrow;
-
-      return _sendFallback(
-        original,
-        bodyBytes,
-      );
+      return _sendFallback(original, bodyBytes);
     }
   }
 
-  bool _isIdentifiedAiRequest(
-    http.BaseRequest request,
-  ) {
+  bool _isIdentifiedAiRequest(http.BaseRequest request) {
     final path = request.url.path;
-
     final isAiEndpoint =
-        path == '/v1/chat' ||
-        path == '/v1/image';
+        path == '/v1/chat' || path == '/v1/image';
 
     if (!isAiEndpoint) return false;
 
@@ -249,7 +268,6 @@ class _Sa7biFailoverClient extends http.BaseClient {
           return entry.value.trim();
         }
       }
-
       return null;
     }
 
@@ -306,8 +324,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
       );
     }
 
-    // طلبات POST لا تُعاد بسبب Timeout.
-    // قد يكون الخادم استلم الطلب وبدأ تنفيذه بالفعل.
+    // لا نعيد إرسال POST بسبب Timeout؛ لتجنب تكرار عملية مدفوعة.
     return future;
   }
 
@@ -316,10 +333,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
     Uri uri,
     List<int> bodyBytes,
   ) {
-    final request = http.Request(
-      original.method,
-      uri,
-    );
+    final request = http.Request(original.method, uri);
 
     request.headers.addAll(original.headers);
     request.headers.remove('content-length');
@@ -341,16 +355,12 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
     try {
       primary.close();
-    } catch (_) {
-      // تجاهل خطأ الإغلاق.
-    }
+    } catch (_) {}
 
     if (!identical(primary, fallback)) {
       try {
         fallback.close();
-      } catch (_) {
-        // تجاهل خطأ الإغلاق.
-      }
+      } catch (_) {}
     }
   }
 }
