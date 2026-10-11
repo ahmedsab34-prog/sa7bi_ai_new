@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -8,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+import 'sa7bi_network_client.dart';
 
 /// نقطة الاتصال الموحدة بخدمات الذكاء الاصطناعي.
 class AiRequestService {
@@ -90,7 +92,7 @@ class AiRequestService {
 
   static Future<BackendConnectionResult> checkBackend() async {
     try {
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(
             Uri.parse(AppConfig.backendHealthEndpoint),
             headers: const {
@@ -143,7 +145,7 @@ class AiRequestService {
     final deviceId = await getDeviceId();
 
     try {
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(
             Uri.parse(creditsEndpoint),
             headers: {
@@ -597,7 +599,7 @@ class AiRequestService {
       final deviceId = await getDeviceId();
       final requestId = _newRequestId();
 
-      return await http
+      return await Sa7biNetworkClient.client
           .post(
             Uri.parse(endpoint),
             headers: {
