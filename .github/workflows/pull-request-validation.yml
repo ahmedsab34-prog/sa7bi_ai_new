@@ -1,0 +1,78 @@
+name: Pull request validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "lib/**"
+      - "android/**"
+      - "backend/**"
+      - "pubspec.yaml"
+      - ".github/workflows/pull-request-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Analyze and build without deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: stable
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve Flutter dependencies
+        run: flutter pub get
+
+      - name: Flutter analyze
+        shell: bash
+        run: |
+          set -u
+          set -o pipefail
+          set +e
+          flutter analyze 2>&1 | tee flutter-analyze-report.txt
+          ANALYZE_STATUS=${PIPESTATUS[0]}
+          set -e
+          ERROR_COUNT=$(grep -c "error •" flutter-analyze-report.txt || true)
+          WARNING_COUNT=$(grep -c "warning •" flutter-analyze-report.txt || true)
+          INFO_COUNT=$(grep -c "info •" flutter-analyze-report.txt || true)
+          if [ "$ERROR_COUNT" -gt 0 ]; then exit 1; fi
+          if [ "$ANALYZE_STATUS" -ne 0 ] && [ "$WARNING_COUNT" -eq 0 ] && [ "$INFO_COUNT" -eq 0 ]; then exit 1; fi
+
+      - name: Build release APK (no publish)
+        run: flutter build apk --release --build-name=1.0.1 --build-number=${{ github.run_number }}
+
+      - name: Check backend JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find backend/src -type f -name '*.js' -print0)
+
+      - name: Upload validation APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-ai-pr-${{ github.event.pull_request.number }}
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 7

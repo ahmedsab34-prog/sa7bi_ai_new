@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart' as dio;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,6 +36,20 @@ class AiRequestService {
 
   static const Duration connectionTimeout =
       Duration(seconds: AppConfig.networkTimeoutSeconds);
+
+  // Dio transport budgets for AI requests.
+  static const Duration dioConnectTimeout = Duration(seconds: 60);
+  static const Duration dioSendTimeout = Duration(seconds: 60);
+  static const Duration dioReceiveTimeout = Duration(seconds: 60);
+
+  static final dio.Dio _dio = dio.Dio(
+    dio.BaseOptions(
+      connectTimeout: dioConnectTimeout,
+      sendTimeout: dioSendTimeout,
+      receiveTimeout: dioReceiveTimeout,
+      responseType: dio.ResponseType.plain,
+    ),
+  );
 
   // مهلة أطول للشبكات البطيئة دون إعادة إرسال طلب AI تلقائيًا.
   static const Duration chatTimeout = Duration(seconds: 150);
@@ -275,16 +290,22 @@ class AiRequestService {
     String? serviceContext,
     String? serviceTitle,
   }) async {
+    final fileSize = await file.length();
+
+    if (fileSize <= 0) {
+      throw const AiRequestException('الصورة لم يتم قراءتها.');
+    }
+
+    if (fileSize > maxImageBytes) {
+      throw const AiRequestException(
+        'الصورة كبيرة جدًا. ابعت صورة أصغر من 5 ميجابايت.',
+      );
+    }
+
     final bytes = await file.readAsBytes();
 
     if (bytes.isEmpty) {
       throw const AiRequestException('الصورة لم يتم قراءتها.');
-    }
-
-    if (bytes.length > maxImageBytes) {
-      throw const AiRequestException(
-        'الصورة كبيرة جدًا. ابعت صورة أصغر من 5 ميجابايت.',
-      );
     }
 
     return analyzeImageBytes(
@@ -594,29 +615,74 @@ class AiRequestService {
     required Map<String, dynamic> body,
     required Duration timeout,
   }) async {
+    final requestTimer = Stopwatch()..start();
+
     try {
       final deviceId = await getDeviceId();
       final requestId = _newRequestId();
+      final uri = Uri.parse(endpoint);
+      final encodedBody = jsonEncode(body);
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        deviceIdHeader: deviceId,
+        requestIdHeader: requestId,
+      };
 
-      return await Sa7biNetworkClient.client
-          .post(
-            Uri.parse(endpoint),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Cache-Control': 'no-cache',
-              'Pragma': 'no-cache',
-              deviceIdHeader: deviceId,
-              requestIdHeader: requestId,
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(timeout);
+      Future<http.Response> send(Uri target, Duration remaining) async {
+        if (remaining.inMicroseconds <= 0) {
+          throw TimeoutException('AI request deadline exceeded.');
+        }
+
+        final response = await _dio
+            .postUri<String>(
+              target,
+              data: encodedBody,
+              options: dio.Options(
+                headers: headers,
+                contentType: dio.Headers.jsonContentType,
+                responseType: dio.ResponseType.plain,
+                connectTimeout: dioConnectTimeout,
+                sendTimeout: dioSendTimeout,
+                receiveTimeout: timeout,
+                validateStatus: (_) => true,
+              ),
+            )
+            .timeout(remaining);
+
+        return http.Response(
+          response.data ?? '',
+          response.statusCode ?? 500,
+          request: http.Request('POST', target),
+        );
+      }
+
+      try {
+        return await send(uri, timeout);
+      } on dio.DioException catch (error) {
+        if (!_canFailover(error, uri)) {
+          rethrow;
+        }
+
+        // Reuse the request ID and preserve one overall deadline.
+        // A response timeout is never retried: the server may have charged it.
+        final remaining = timeout - requestTimer.elapsed;
+        final fallbackBase = Uri.parse(AppConfig.backendFallbackBaseUrl);
+        final fallbackUri = uri.replace(
+          scheme: fallbackBase.scheme,
+          host: fallbackBase.host,
+          port: fallbackBase.hasPort ? fallbackBase.port : null,
+        );
+        return await send(fallbackUri, remaining);
+      }
     } on TimeoutException {
       throw const AiRequestException(
         'الاتصال بالخادم استغرق وقتًا أطول من اللازم. '
         'قد يكون الخادم استلم الطلب بالفعل؛ لا تعِد طلبًا مدفوعًا بسرعة.',
       );
+    } on dio.DioException catch (error) {
+      throw AiRequestException(_connectionError(error));
     } on http.ClientException catch (error) {
       throw AiRequestException(
         'تعذر الاتصال بالخادم: ${error.message}',
@@ -630,6 +696,14 @@ class AiRequestService {
     } catch (error) {
       throw AiRequestException(_connectionError(error));
     }
+  }
+
+  static bool _canFailover(dio.DioException error, Uri uri) {
+    final primaryHost = Uri.parse(AppConfig.backendBaseUrl).host.toLowerCase();
+    if (uri.host.toLowerCase() != primaryHost) return false;
+
+    return error.type == dio.DioExceptionType.connectionError ||
+        error.type == dio.DioExceptionType.connectionTimeout;
   }
 
   static Map<String, dynamic>? _decodeMap(String body) {
