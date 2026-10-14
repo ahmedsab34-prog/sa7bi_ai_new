@@ -1,3 +1,4 @@
+
 name: Sa7bi AI - Branch Verification
 
 on:
@@ -102,12 +103,65 @@ jobs:
         run: flutter pub get
 
       - name: Increase Gradle heap
+        shell: bash
         run: |
+          set -euo pipefail
           sed -i 's/-Xmx2048M/-Xmx4G -XX:MaxMetaspaceSize=1G/' android/gradle.properties
           grep '^org.gradle.jvmargs=' android/gradle.properties
 
       - name: Build Android debug APK
         run: flutter build apk --debug --no-pub
 
-      - name: Verify APK exists
-        run: test -s build/app/outputs/flutter-apk/app-debug.apk
+      - name: Verify APK exists and calculate SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="build/app/outputs/flutter-apk/app-debug.apk"
+
+          if [ ! -s "$APK" ]; then
+            echo "ERROR: APK was not created or is empty."
+            exit 1
+          fi
+
+          APK_SIZE=$(stat -c%s "$APK")
+          APK_SHA256=$(sha256sum "$APK" | awk '{print $1}')
+
+          echo "APK_PATH=$APK"
+          echo "APK_SIZE=$APK_SIZE"
+          echo "APK_SHA256=$APK_SHA256"
+
+          echo "APK_SIZE=$APK_SIZE" >> "$GITHUB_ENV"
+          echo "APK_SHA256=$APK_SHA256" >> "$GITHUB_ENV"
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-ai-debug-${{ github.sha }}
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Create build identity report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "Repository: ${GITHUB_REPOSITORY}"
+            echo "Branch: ${GITHUB_REF_NAME}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo "Run ID: ${GITHUB_RUN_ID}"
+            echo "Attempt: ${GITHUB_RUN_ATTEMPT}"
+            echo "APK path: build/app/outputs/flutter-apk/app-debug.apk"
+            echo "APK size: ${APK_SIZE:-not-built}"
+            echo "APK SHA256: ${APK_SHA256:-not-built}"
+          } > build-identity-report.txt
+
+      - name: Upload build identity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-ai-build-report-${{ github.run_id }}
+          path: build-identity-report.txt
+          if-no-files-found: warn
+          retention-days: 7
