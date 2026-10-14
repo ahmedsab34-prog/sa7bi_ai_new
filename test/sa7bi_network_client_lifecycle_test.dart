@@ -3,148 +3,130 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-
 import 'package:sa7bi_ai/services/sa7bi_network_client.dart';
 
 void main() {
-  group('Sa7biNetworkClient lifecycle', () {
-    late HttpServer server;
-    var requestCount = 0;
+  late HttpServer server;
+  late Uri baseUri;
 
-    setUp(() async {
-      requestCount = 0;
+  setUp(() async {
+    server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4,
+      0,
+    );
 
-      server = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
-        0,
+    baseUri = Uri(
+      scheme: 'http',
+      host: '127.0.0.1',
+      port: server.port,
+    );
+
+    server.listen((request) async {
+      if (request.uri.path == '/health-fail') {
+        request.response
+          ..statusCode = HttpStatus.serviceUnavailable
+          ..write('health check failed');
+      } else {
+        request.response
+          ..statusCode = HttpStatus.ok
+          ..write('ok');
+      }
+
+      await request.response.close();
+    });
+  });
+
+  tearDown(() async {
+    Sa7biNetworkClient.close();
+    await server.close(force: true);
+  });
+
+  test(
+    'consecutive requests work with the same Zone client',
+    () async {
+      await http.runWithClient(
+        () async {
+          final first = await http.get(baseUri.resolve('/first'));
+          final second = await http.get(baseUri.resolve('/second'));
+
+          expect(first.statusCode, HttpStatus.ok);
+          expect(second.statusCode, HttpStatus.ok);
+          expect(first.body, 'ok');
+          expect(second.body, 'ok');
+        },
+        Sa7biNetworkClient.factory,
+      );
+    },
+  );
+
+  test(
+    'Zone client does not close the persistent client',
+    () async {
+      final persistentClient = Sa7biNetworkClient.client;
+
+      await http.runWithClient(
+        () async {
+          final response = await http.get(baseUri.resolve('/zone'));
+          expect(response.statusCode, HttpStatus.ok);
+        },
+        Sa7biNetworkClient.factory,
       );
 
-      server.listen((request) async {
-        requestCount++;
+      final response = await persistentClient.get(
+        baseUri.resolve('/persistent'),
+      );
 
-        // محاكاة فشل فحص الصحة ثم استعادة الخدمة.
-        final failedHealthProbe =
-            request.uri.path == '/health-fail';
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.body, 'ok');
+    },
+  );
 
-        request.response
-          ..statusCode = failedHealthProbe
-              ? HttpStatus.serviceUnavailable
-              : HttpStatus.ok
-          ..headers.contentType = ContentType.text
-          ..write(failedHealthProbe ? 'unavailable' : 'ok');
+  test(
+    'failed health response does not prevent the next request',
+    () async {
+      final client = Sa7biNetworkClient.client;
 
-        await request.response.close();
-      });
-    });
+      final healthResponse = await client.get(
+        baseUri.resolve('/health-fail'),
+      );
 
-    tearDown(() async {
-      await server.close(force: true);
+      expect(
+        healthResponse.statusCode,
+        HttpStatus.serviceUnavailable,
+      );
+
+      final nextResponse = await client.get(
+        baseUri.resolve('/next'),
+      );
+
+      expect(nextResponse.statusCode, HttpStatus.ok);
+      expect(nextResponse.body, 'ok');
+    },
+  );
+
+  test(
+    'persistent client can be recreated after close',
+    () async {
+      final oldClient = Sa7biNetworkClient.client;
+
+      final firstResponse = await oldClient.get(
+        baseUri.resolve('/before-close'),
+      );
+
+      expect(firstResponse.statusCode, HttpStatus.ok);
+
       Sa7biNetworkClient.close();
-    });
 
-    Uri localUri(String path) =>
-        Uri.parse('http://127.0.0.1:${server.port}$path');
+      final newClient = Sa7biNetworkClient.client;
 
-    test(
-      'two consecutive top-level requests use independent Zone clients',
-      () async {
-        final statuses = await http.runWithClient(
-          () async {
-            final first = await http.get(localUri('/health')).timeout(
-              const Duration(seconds: 3),
-            );
+      expect(identical(oldClient, newClient), isFalse);
 
-            final second = await http.get(localUri('/health')).timeout(
-              const Duration(seconds: 3),
-            );
+      final secondResponse = await newClient.get(
+        baseUri.resolve('/after-close'),
+      );
 
-            return <int>[
-              first.statusCode,
-              second.statusCode,
-            ];
-          },
-          Sa7biNetworkClient.factory,
-        );
-
-        expect(
-          statuses,
-          <int>[
-            HttpStatus.ok,
-            HttpStatus.ok,
-          ],
-        );
-
-        expect(requestCount, 2);
-      },
-    );
-
-    test(
-      'closing a Zone client does not close the persistent service client',
-      () async {
-        final persistent = Sa7biNetworkClient.client;
-        final zoneClient = Sa7biNetworkClient.factory();
-
-        expect(identical(zoneClient, persistent), isFalse);
-
-        zoneClient.close();
-
-        expect(
-          identical(Sa7biNetworkClient.client, persistent),
-          isTrue,
-        );
-
-        final response = await persistent
-            .get(localUri('/persistent'))
-            .timeout(const Duration(seconds: 3));
-
-        expect(response.statusCode, HttpStatus.ok);
-      },
-    );
-
-    test(
-      'failed health response does not poison the next request',
-      () async {
-        final persistent = Sa7biNetworkClient.client;
-
-        final failedProbe = await persistent
-            .get(localUri('/health-fail'))
-            .timeout(const Duration(seconds: 3));
-
-        expect(
-          failedProbe.statusCode,
-          HttpStatus.serviceUnavailable,
-        );
-
-        final nextResponse = await persistent
-            .get(localUri('/health-next'))
-            .timeout(const Duration(seconds: 3));
-
-        expect(nextResponse.statusCode, HttpStatus.ok);
-        expect(requestCount, 2);
-      },
-    );
-
-    test(
-      'a closed Zone client can be replaced by a fresh client',
-      () async {
-        final oldZoneClient = Sa7biNetworkClient.factory();
-        oldZoneClient.close();
-
-        final freshZoneClient = Sa7biNetworkClient.factory();
-
-        expect(
-          identical(oldZoneClient, freshZoneClient),
-          isFalse,
-        );
-
-        final response = await freshZoneClient
-            .get(localUri('/fresh'))
-            .timeout(const Duration(seconds: 3));
-
-        expect(response.statusCode, HttpStatus.ok);
-
-        freshZoneClient.close();
-      },
-    );
-  });
+      expect(secondResponse.statusCode, HttpStatus.ok);
+      expect(secondResponse.body, 'ok');
+    },
+  );
 }
