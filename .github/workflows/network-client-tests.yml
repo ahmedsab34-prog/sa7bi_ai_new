@@ -1,46 +1,66 @@
 
-name: Sa7bi AI Network Client Tests
+name: Sa7bi AI - Branch Verification
 
 on:
   push:
     branches:
-      - fix/build-692-network-client-lifecycle
+      - "**"
     paths:
       - ".github/workflows/network-client-tests.yml"
-      - "lib/services/sa7bi_network_client.dart"
-      - "lib/config/app_config.dart"
-      - "test/sa7bi_network_client_lifecycle_test.dart"
+      - "lib/**"
+      - "test/**"
       - "pubspec.yaml"
       - "pubspec.lock"
+      - "android/**"
+
+  pull_request:
+    branches:
+      - "**"
+    paths:
+      - ".github/workflows/network-client-tests.yml"
+      - "lib/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "android/**"
+
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: sa7bi-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.38.1"
+  JAVA_VERSION: "17"
+
 jobs:
-  network-client-tests:
-    name: Test Network Client Lifecycle
+  analyze-and-test:
+    name: Analyze and Test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
-      - name: Checkout repository
+      - name: Checkout exact commit
         uses: actions/checkout@v4
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: ${{ env.JAVA_VERSION }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.38.1"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
-      - name: Show toolchain versions
+      - name: Show versions
         run: |
           flutter --version
           dart --version
@@ -48,11 +68,44 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Check network lifecycle test exists
+      - name: Verify network test exists
         run: |
           test -f test/sa7bi_network_client_lifecycle_test.dart
 
-      - name: Run network client lifecycle tests
+      - name: Analyze Dart code
+        run: flutter analyze --no-pub
+
+      - name: Run all Flutter tests
+        run: flutter test --reporter expanded
+
+  android-debug-build:
+    name: Verify Android Debug Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug --no-pub
+
+      - name: Verify APK exists
         run: |
-          flutter test --reporter expanded \
-            test/sa7bi_network_client_lifecycle_test.dart
+          test -s build/app/outputs/flutter-apk/app-debug.apk
