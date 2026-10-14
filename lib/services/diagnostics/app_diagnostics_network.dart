@@ -1,4 +1,3 @@
-
 part of '../app_diagnostics_service.dart';
 
 extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
@@ -101,7 +100,7 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
 
       stopwatch.stop();
 
-      // 2xx و3xx يعني שהגענו إلى خادم HTTPS صالح.
+      // 2xx و3xx يعني الوصول إلى خادم HTTPS صالح.
       // 4xx لا يُعتبر نجاحًا لاختبار الاتصال العام.
       final success =
           response.statusCode >= 200 && response.statusCode < 400;
