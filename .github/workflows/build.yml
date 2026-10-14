@@ -677,7 +677,7 @@ jobs:
           fi
 
           if [ "${RELEASE_APK_SHA256}" != "${APK_SHA256}" ]; then
-            echo "ERROR: Release APK SHA256 does not match built APK SHA256."
+            echo "ERROR: Release APK SHA256 does not match built APK."
             exit 1
           fi
 
