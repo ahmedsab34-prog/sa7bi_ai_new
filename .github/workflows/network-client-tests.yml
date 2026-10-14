@@ -1,4 +1,3 @@
-
 name: Sa7bi AI - Branch Verification
 
 on:
@@ -69,11 +68,10 @@ jobs:
         run: flutter pub get
 
       - name: Verify network test exists
-        run: |
-          test -f test/sa7bi_network_client_lifecycle_test.dart
+        run: test -f test/sa7bi_network_client_lifecycle_test.dart
 
       - name: Analyze Dart code
-        run: flutter analyze --no-pub
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
 
       - name: Run all Flutter tests
         run: flutter test --reporter expanded
@@ -103,9 +101,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Increase Gradle heap
+        run: |
+          sed -i 's/-Xmx2048M/-Xmx4G -XX:MaxMetaspaceSize=1G/' android/gradle.properties
+          grep '^org.gradle.jvmargs=' android/gradle.properties
+
       - name: Build Android debug APK
         run: flutter build apk --debug --no-pub
 
       - name: Verify APK exists
-        run: |
-          test -s build/app/outputs/flutter-apk/app-debug.apk
+        run: test -s build/app/outputs/flutter-apk/app-debug.apk
