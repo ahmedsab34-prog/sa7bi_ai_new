@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -20,20 +21,6 @@ import 'services/sa7bi_network_client.dart';
 import 'widgets/khalasana_portal.dart';
 
 void main() {
-  // ============================================================
-  // UNIFIED NETWORK TRANSPORT
-  // ============================================================
-  //
-  // كل طلبات package:http تستخدم العميل الموحد:
-  //
-  // Android -> Cronet مع آلية التحويل الاحتياطي.
-  // Other platforms -> IO fallback.
-  //
-  // يجب أن يحيط runWithClient بـ runApp حتى تستخدم
-  // الطلبات داخل التطبيق عميل الشبكة الموحد.
-  //
-  // ============================================================
-
   http.runWithClient(
     () {
       WidgetsFlutterBinding.ensureInitialized();
@@ -42,9 +29,7 @@ void main() {
 
       WidgetsBinding.instance.addPostFrameCallback(
         (_) {
-          unawaited(
-            _initializeApplicationServices(),
-          );
+          unawaited(_initializeApplicationServices());
         },
       );
     },
@@ -53,81 +38,49 @@ void main() {
 }
 
 Future<void> _initializeApplicationServices() async {
-  // ============================================================
-  // CREDITS
-  // ============================================================
-
   try {
     await CreditsService.instance.initialize();
   } catch (_) {
-    // فشل خدمة الرصيد لا يمنع تشغيل التطبيق.
+    // فشل الرصيد لا يمنع تشغيل التطبيق.
   }
 
-  // ============================================================
-  // AI BACKEND CONNECTION
-  // ============================================================
-
   try {
-    final backend =
-        await AiRequestService.checkBackend();
+    final backend = await AiRequestService.checkBackend();
 
     if (backend.isAvailable) {
-      await ProfileService.instance
-          .markAiConnected();
+      await ProfileService.instance.markAiConnected();
     } else {
-      await ProfileService.instance
-          .markAiDisconnected();
+      await ProfileService.instance.markAiDisconnected();
     }
   } catch (_) {
     try {
-      await ProfileService.instance
-          .markAiDisconnected();
+      await ProfileService.instance.markAiDisconnected();
     } catch (_) {
-      // لا شيء.
+      // فشل تحديث حالة الاتصال لا يوقف التطبيق.
     }
   }
-
-  // ============================================================
-  // AUDIO
-  // ============================================================
 
   try {
     await AudioController.initialize();
   } catch (_) {
-    // فشل تهيئة الصوت لا يمنع بقية التطبيق من العمل.
+    // فشل تهيئة الصوت لا يمنع بقية التطبيق.
   }
-
-  // ============================================================
-  // ADMOB
-  // ============================================================
 
   try {
     final ads = AdsService.instance;
-
     await ads.initialize();
 
     if (ads.isAdMobInitialized) {
-      unawaited(
-        ads.loadInterstitial(),
-      );
-
-      unawaited(
-        ads.loadRewarded(),
-      );
+      unawaited(ads.loadInterstitial());
+      unawaited(ads.loadRewarded());
     }
   } catch (_) {
-    // فشل الإعلانات لا يمنع بقية التطبيق من العمل.
+    // فشل الإعلانات لا يمنع بقية التطبيق.
   }
 }
 
-// ============================================================
-// APP
-// ============================================================
-
 class Sa7biAiApp extends StatelessWidget {
-  const Sa7biAiApp({
-    super.key,
-  });
+  const Sa7biAiApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -136,8 +89,7 @@ class Sa7biAiApp extends StatelessWidget {
       title: 'صاحبي AI',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor:
-            const Color(0xFF070A12),
+        scaffoldBackgroundColor: const Color(0xFF070A12),
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFFFD76A),
           brightness: Brightness.dark,
@@ -146,53 +98,38 @@ class Sa7biAiApp extends StatelessWidget {
         fontFamily: 'sans',
       ),
       routes: {
-        '/diagnostics': (_) =>
-            const AppDiagnosticsScreen(),
+        '/diagnostics': (_) => const AppDiagnosticsScreen(),
       },
       home: const MainContainerScreen(),
     );
   }
 }
 
-// ============================================================
-// MAIN CONTAINER
-// ============================================================
-
 class MainContainerScreen extends StatefulWidget {
-  const MainContainerScreen({
-    super.key,
-  });
+  const MainContainerScreen({super.key});
 
   @override
   State<MainContainerScreen> createState() =>
       _MainContainerScreenState();
 }
 
-class _MainContainerScreenState
-    extends State<MainContainerScreen> {
-  // 0 = الرئيسية.
-  // 1 = حسابي.
-  // 2 = الشات العام.
+class _MainContainerScreenState extends State<MainContainerScreen> {
+  // ترتيب التبويبات:
+  // 0 = الرئيسية
+  // 1 = الشات العام
+  // 2 = حسابي
   int index = 0;
 
-  // ==========================================================
-  // NAVIGATION
-  // ==========================================================
-
   void openProfile() {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     setState(() {
-      index = 1;
+      index = 2;
     });
   }
 
   void openAudioCenter() {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -202,9 +139,7 @@ class _MainContainerScreenState
   }
 
   void openKhalasana() {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -214,49 +149,22 @@ class _MainContainerScreenState
   }
 
   void openDiagnostics() {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
-    Navigator.of(context).pushNamed(
-      '/diagnostics',
-    );
+    Navigator.of(context).pushNamed('/diagnostics');
   }
-
-  // ==========================================================
-  // BUILD
-  // ==========================================================
 
   @override
   Widget build(BuildContext context) {
+    // يجب أن يطابق ترتيب الصفحات ترتيب شريط التنقل.
     final pages = <Widget>[
-      // --------------------------------------------------------
-      // PAGE 1: HOME
-      // --------------------------------------------------------
-
+      // 0: الرئيسية
       HomeScreen(
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
 
-      // --------------------------------------------------------
-      // PAGE 2: PROFILE
-      // --------------------------------------------------------
-
-      ProfileScreen(
-        onAudio: openAudioCenter,
-      ),
-
-      // --------------------------------------------------------
-      // PAGE 3: GENERAL CHAT
-      // --------------------------------------------------------
-      //
-      // نستخدم ChatScreen الموجودة بالفعل.
-      // ServiceKeys.general يجعل المحادثة العامة مستقلة
-      // عن محادثة خلصانة AI وبقية الخدمات.
-      //
-      // --------------------------------------------------------
-
+      // 1: الشات العام
       const ChatScreen(
         serviceKey: ServiceKeys.general,
         serviceTitle: 'المحادثة العامة',
@@ -265,33 +173,27 @@ class _MainContainerScreenState
             'أجب بوضوح وبشكل مفيد، '
             'وحافظ على سياق المحادثة العامة.',
       ),
+
+      // 2: حسابي
+      ProfileScreen(
+        onAudio: openAudioCenter,
+      ),
     ];
+
+    final isChatTab = index == 1;
 
     return Scaffold(
       backgroundColor: const Color(0xFF070A12),
-
       body: SafeArea(
         child: Stack(
           children: [
-            // ----------------------------------------------------
-            // MAIN PAGES
-            // ----------------------------------------------------
-
             IndexedStack(
               index: index,
               children: pages,
             ),
 
-            // ----------------------------------------------------
-            // MINI AUDIO PLAYER
-            // ----------------------------------------------------
-            //
-            // نخفي المشغل العائم في صفحة الشات حتى لا يغطي
-            // حقل الكتابة أو أزرار إرسال الرسائل.
-            //
-            // ----------------------------------------------------
-
-            if (index != 2)
+            // لا نغطي الشات بالمشغل أو الأزرار العائمة.
+            if (!isChatTab)
               const Positioned(
                 left: 10,
                 right: 10,
@@ -299,11 +201,7 @@ class _MainContainerScreenState
                 child: MiniAudioPlayer(),
               ),
 
-            // ----------------------------------------------------
-            // DIAGNOSTICS BUTTON
-            // ----------------------------------------------------
-
-            if (index != 2)
+            if (!isChatTab)
               Positioned(
                 left: 12,
                 bottom: 92,
@@ -313,8 +211,7 @@ class _MainContainerScreenState
                     message: 'تشخيص التطبيق',
                     child: InkWell(
                       onTap: openDiagnostics,
-                      borderRadius:
-                          BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(24),
                       child: Container(
                         width: 46,
                         height: 46,
@@ -323,9 +220,7 @@ class _MainContainerScreenState
                               .withOpacity(0.96),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: const Color(
-                              0x55FFD76A,
-                            ),
+                            color: const Color(0x55FFD76A),
                           ),
                           boxShadow: const [
                             BoxShadow(
@@ -346,11 +241,7 @@ class _MainContainerScreenState
                 ),
               ),
 
-            // ----------------------------------------------------
-            // KHALASANA FLOATING BUTTON
-            // ----------------------------------------------------
-
-            if (index != 2)
+            if (!isChatTab)
               Positioned(
                 right: 12,
                 bottom: 92,
@@ -361,65 +252,32 @@ class _MainContainerScreenState
           ],
         ),
       ),
-
-      // ==========================================================
-      // BOTTOM NAVIGATION
-      // ==========================================================
-
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF11141D),
         indicatorColor: const Color(0x3348D8FF),
         selectedIndex: index,
         onDestinationSelected: (value) {
-          if (!mounted) {
-            return;
-          }
+          if (!mounted) return;
 
           setState(() {
             index = value;
           });
         },
         destinations: const [
-          // ------------------------------------------------------
-          // HOME
-          // ------------------------------------------------------
-
           NavigationDestination(
-            icon: Icon(
-              Icons.home_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.home_rounded,
-            ),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
             label: 'الرئيسية',
           ),
-
-          // ------------------------------------------------------
-          // PROFILE
-          // ------------------------------------------------------
-
           NavigationDestination(
-            icon: Icon(
-              Icons.person_outline_rounded,
-            ),
-            selectedIcon: Icon(
-              Icons.person_rounded,
-            ),
-            label: 'حسابي',
-          ),
-
-          // ------------------------------------------------------
-          // GENERAL CHAT
-          // ------------------------------------------------------
-
-          NavigationDestination(
-            icon: Icon(
-              Icons.chat_bubble_outline_rounded,
-            ),
-            selectedIcon: Icon(
-              Icons.chat_rounded,
-            ),
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_rounded),
             label: 'الشات',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'حسابي',
           ),
         ],
       ),
@@ -427,14 +285,8 @@ class _MainContainerScreenState
   }
 }
 
-// ============================================================
-// MINI AUDIO PLAYER
-// ============================================================
-
 class MiniAudioPlayer extends StatelessWidget {
-  const MiniAudioPlayer({
-    super.key,
-  });
+  const MiniAudioPlayer({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -457,12 +309,9 @@ class MiniAudioPlayer extends StatelessWidget {
           color: Colors.transparent,
           child: Container(
             height: 62,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 7,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF121720)
-                  .withOpacity(0.98),
+              color: const Color(0xFF121720).withOpacity(0.98),
               borderRadius: BorderRadius.circular(19),
               border: Border.all(
                 color: const Color(0x55FFD76A),
@@ -477,16 +326,11 @@ class MiniAudioPlayer extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // ------------------------------------------------
-                // OPEN AUDIO CENTER
-                // ------------------------------------------------
-
                 GestureDetector(
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) =>
-                            const AudioCenterScreen(),
+                        builder: (_) => const AudioCenterScreen(),
                       ),
                     );
                   },
@@ -508,36 +352,25 @@ class MiniAudioPlayer extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // ------------------------------------------------
-                // CURRENT AUDIO TITLE
-                // ------------------------------------------------
-
                 Expanded(
                   child: GestureDetector(
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              const AudioCenterScreen(),
+                          builder: (_) => const AudioCenterScreen(),
                         ),
                       );
                     },
                     child: Column(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      crossAxisAlignment:
-                          CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
                           item.title,
-                          textDirection:
-                              TextDirection.rtl,
+                          textDirection: TextDirection.rtl,
                           maxLines: 1,
-                          overflow:
-                              TextOverflow.ellipsis,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 11,
@@ -545,11 +378,9 @@ class MiniAudioPlayer extends StatelessWidget {
                         ),
                         Text(
                           item.artist ?? 'صاحبي AI',
-                          textDirection:
-                              TextDirection.rtl,
+                          textDirection: TextDirection.rtl,
                           maxLines: 1,
-                          overflow:
-                              TextOverflow.ellipsis,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: Colors.white54,
                             fontSize: 9,
@@ -559,16 +390,10 @@ class MiniAudioPlayer extends StatelessWidget {
                     ),
                   ),
                 ),
-
-                // ------------------------------------------------
-                // PLAY / PAUSE
-                // ------------------------------------------------
-
                 StreamBuilder<PlaybackState>(
                   stream: handler.playbackState,
                   builder: (context, snapshot) {
-                    final playing =
-                        snapshot.data?.playing ?? false;
+                    final playing = snapshot.data?.playing ?? false;
 
                     return IconButton(
                       padding: EdgeInsets.zero,
@@ -593,11 +418,6 @@ class MiniAudioPlayer extends StatelessWidget {
                     );
                   },
                 ),
-
-                // ------------------------------------------------
-                // STOP AUDIO
-                // ------------------------------------------------
-
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
