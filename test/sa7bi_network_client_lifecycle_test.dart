@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -8,6 +9,8 @@ void main() {
   group('Sa7biNetworkClient lifecycle', () {
     late HttpServer server;
     late Uri baseUri;
+    late StreamSubscription<HttpRequest> serverSubscription;
+
     final requestPaths = <String>[];
 
     setUp(() async {
@@ -24,25 +27,40 @@ void main() {
         port: server.port,
       );
 
-      server.listen((request) async {
+      serverSubscription = server.listen((request) async {
         requestPaths.add(request.uri.path);
 
         if (request.uri.path == '/health-fail') {
           request.response
             ..statusCode = HttpStatus.serviceUnavailable
             ..write('health check failed');
+        } else if (request.uri.path == '/slow') {
+          await Future<void>.delayed(
+            const Duration(milliseconds: 300),
+          );
+
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..write('slow response');
         } else {
           request.response
             ..statusCode = HttpStatus.ok
             ..write('ok');
         }
 
-        await request.response.close();
+        try {
+          await request.response.close();
+        } on HttpException {
+          // The test server may already have been closed.
+        } on SocketException {
+          // The client or server may have disconnected.
+        }
       });
     });
 
     tearDown(() async {
       Sa7biNetworkClient.close();
+      await serverSubscription.cancel();
       await server.close(force: true);
     });
 
@@ -137,6 +155,29 @@ void main() {
 
         expect(after.statusCode, HttpStatus.ok);
         expect(after.body, 'ok');
+      },
+    );
+
+    test(
+      'a timed-out request does not stop the next request',
+      () async {
+        final client = Sa7biNetworkClient.client;
+
+        await expectLater(
+          client
+              .get(baseUri.resolve('/slow'))
+              .timeout(const Duration(milliseconds: 50)),
+          throwsA(isA<TimeoutException>()),
+        );
+
+        final next = await client
+            .get(baseUri.resolve('/after-timeout'))
+            .timeout(const Duration(seconds: 5));
+
+        expect(next.statusCode, HttpStatus.ok);
+        expect(next.body, 'ok');
+        expect(requestPaths, contains('/slow'));
+        expect(requestPaths, contains('/after-timeout'));
       },
     );
   });
