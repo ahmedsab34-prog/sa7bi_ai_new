@@ -11,31 +11,33 @@ import '../config/app_config.dart';
 /// بوابة الشبكة الموحدة لتطبيق صاحبي AI.
 ///
 /// - Cronet على Android عند توفره.
-/// - IOClient كوسيلة احتياطية.
-/// - محاولتان لطلبات GET/HEAD على الخادم الأساسي.
-/// - تحويل إلى Worker الاحتياطي عند فشل الاتصال.
-/// - عدم إعادة طلب AI بسبب Timeout لتجنب تكرار التنفيذ أو الخصم.
+/// - IOClient كوسيلة احتياطية مستقلة.
+/// - ثلاث محاولات للطلبات الآمنة GET/HEAD.
+/// - الانتقال إلى Worker احتياطي عند فشل الاتصال الأساسي.
+/// - لا يعاد تنفيذ طلبات AI لمجرد انتهاء المهلة.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
   static const String userAgent = 'Sa7biAI-Mobile/1.0';
 
   static const Duration connectionTimeout =
-      Duration(seconds: 20);
+      Duration(seconds: 12);
 
+  /// مهلة كل محاولة GET/HEAD على الخادم الأساسي.
   static const Duration safeRequestTimeout =
-      Duration(seconds: 15);
+      Duration(seconds: 8);
 
+  /// مهلة GET/HEAD على الخادم الاحتياطي.
   static const Duration fallbackRequestTimeout =
-      Duration(seconds: 30);
+      Duration(seconds: 10);
 
-  static const int maximumAttempts = 2;
+  static const int maximumAttempts = 3;
 
-  /// عميل دائم للخدمات التي تستخدم Sa7biNetworkClient.client.
   static http.Client? _client;
   static bool _usingCronet = false;
   static bool _initialized = false;
 
+  /// عميل دائم يعاد إنشاؤه عند إغلاقه.
   static http.Client get client {
     if (_client == null) {
       _client = _createClient();
@@ -56,9 +58,8 @@ class Sa7biNetworkClient {
 
   static bool get isInitialized => _initialized;
 
-  /// مهم: كل استدعاء ينشئ عميلًا مستقلًا.
-  /// لا تستخدم _client هنا؛ لأن دوال http المساعدة قد تغلق
-  /// عميل Zone بعد انتهاء الطلب.
+  /// ينشئ عميلًا مستقلًا لكل Zone.
+  /// لا تشارك العميل الدائم مع عمليات Zone التي قد تغلقه.
   static http.Client factory() => _createClient();
 
   static http.Client _createClient() {
@@ -135,12 +136,14 @@ class Sa7biNetworkClient {
   static void _logInitialization() {
     final message = 'Sa7biNetworkClient initialized: '
         'transport=$transportName, '
-        'failoverEnabled=$failoverEnabled';
+        'failoverEnabled=$failoverEnabled, '
+        'maximumAttempts=$maximumAttempts';
 
     assert(message.isNotEmpty);
   }
 
   /// يغلق العميل الدائم فقط.
+  /// يمكن إنشاء عميل جديد بعد الإغلاق.
   static void close() {
     final previous = _client;
 
@@ -190,6 +193,8 @@ class _Sa7biFailoverClient extends http.BaseClient {
         method == 'POST' &&
         _isIdentifiedAiRequest(original);
 
+    // نقرأ الجسم مرة واحدة فقط؛ حتى يمكن إنشاء طلب مستقل
+    // لكل محاولة من غير استهلاك جسم الطلب الأصلي مرتين.
     final bodyBytes = await original.finalize().toBytes();
 
     if (canFallbackGet) {
@@ -230,7 +235,10 @@ class _Sa7biFailoverClient extends http.BaseClient {
       }
 
       try {
-        return await _sendFallback(original, bodyBytes);
+        return await _sendFallback(
+          original,
+          bodyBytes,
+        );
       } catch (fallbackError) {
         throw http.ClientException(
           'فشل الاتصال بالخادم الأساسي بعد '
@@ -249,9 +257,11 @@ class _Sa7biFailoverClient extends http.BaseClient {
         bodyBytes,
       );
 
+      // لا نفرض مهلة قصيرة على POST الخاص بالذكاء الاصطناعي؛
+      // فقد يستغرق توليد الإجابة أو الصورة وقتًا أطول.
       return await primary.send(request);
     } on TimeoutException {
-      // لا نعيد طلب AI عند Timeout.
+      // لا نكرر طلب AI بسبب Timeout.
       rethrow;
     } on SocketException {
       if (!canFallbackAi) rethrow;
@@ -336,7 +346,8 @@ class _Sa7biFailoverClient extends http.BaseClient {
       );
     }
 
-    // لا نكرر POST عند Timeout لتجنب تنفيذ عملية AI مرتين.
+    // لا نعيد POST تلقائيًا عند Timeout.
+    // قد يكون الخادم الأساسي نفذ الطلب بالفعل.
     return future;
   }
 
@@ -345,7 +356,10 @@ class _Sa7biFailoverClient extends http.BaseClient {
     Uri uri,
     List<int> bodyBytes,
   ) {
-    final request = http.Request(original.method, uri);
+    final request = http.Request(
+      original.method,
+      uri,
+    );
 
     request.headers.addAll(original.headers);
     request.headers.remove('content-length');
