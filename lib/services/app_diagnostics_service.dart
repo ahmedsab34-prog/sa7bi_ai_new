@@ -12,6 +12,7 @@ part 'diagnostics/app_diagnostics_models.dart';
 part 'diagnostics/app_diagnostics_network.dart';
 part 'diagnostics/app_diagnostics_content.dart';
 part 'diagnostics/app_diagnostics_storage.dart';
+part 'diagnostics/app_diagnostics_direct_hosts.dart';
 
 class AppDiagnosticsService {
   AppDiagnosticsService({
@@ -132,7 +133,9 @@ class AppDiagnosticsService {
       onResult?.call(result);
     }
 
+    // ==========================================================
     // BUILD
+    // ==========================================================
 
     await run(
       'BUILD',
@@ -152,7 +155,9 @@ class AppDiagnosticsService {
       _checkBuildSourceIdentity,
     );
 
+    // ==========================================================
     // NETWORK
+    // ==========================================================
 
     await run(
       'NETWORK',
@@ -184,6 +189,26 @@ class AppDiagnosticsService {
       _checkWorkerHttpsHealth,
     );
 
+    // اختبار مستقل للـ Worker الأساسي.
+    // يستخدم اتصال Dart IO جديدًا ولا يعتمد على
+    // Sa7biNetworkClient أو عميل التحويل التلقائي.
+
+    await run(
+      'NETWORK',
+      'Primary Worker direct HTTPS',
+      () => this._checkPrimaryDirectHttps(),
+    );
+
+    // اختبار مستقل للـ Worker الاحتياطي.
+    // النتيجة تساعد في معرفة هل المشكلة في المضيف
+    // الأساسي فقط أم في المضيفين معًا.
+
+    await run(
+      'NETWORK',
+      'Fallback Worker direct HTTPS',
+      () => this._checkFallbackDirectHttps(),
+    );
+
     await run(
       'NETWORK',
       'HTTP error classification',
@@ -196,7 +221,9 @@ class AppDiagnosticsService {
       _checkTimeoutConfiguration,
     );
 
+    // ==========================================================
     // LOCAL STORAGE / OFFLINE FOUNDATION
+    // ==========================================================
 
     await run(
       'OFFLINE',
@@ -204,7 +231,9 @@ class AppDiagnosticsService {
       _checkLocalStorageRoundTrip,
     );
 
+    // ==========================================================
     // DEVICE
+    // ==========================================================
 
     await run(
       'DEVICE',
@@ -224,7 +253,9 @@ class AppDiagnosticsService {
       _checkNetworkInterfaces,
     );
 
+    // ==========================================================
     // WORKER
+    // ==========================================================
 
     await run(
       'WORKER',
@@ -256,7 +287,10 @@ class AppDiagnosticsService {
       ),
     );
 
-    // AI: route reachability only; no paid generation.
+    // ==========================================================
+    // AI
+    // اختبارات الوصول للمسارات فقط، دون توليد مدفوع.
+    // ==========================================================
 
     await run(
       'AI',
@@ -288,7 +322,9 @@ class AppDiagnosticsService {
       ),
     );
 
+    // ==========================================================
     // CONTENT
+    // ==========================================================
 
     await run(
       'NEWS',
@@ -410,7 +446,9 @@ class AppDiagnosticsService {
       ),
     );
 
+    // ==========================================================
     // MEDIA
+    // ==========================================================
 
     await run(
       'MEDIA',
@@ -418,7 +456,9 @@ class AppDiagnosticsService {
       _checkMediaUrlHandling,
     );
 
+    // ==========================================================
     // MONETIZATION
+    // ==========================================================
 
     await run(
       'MONETIZATION',
@@ -464,9 +504,11 @@ class AppDiagnosticsService {
         ).timeout(perSampleTimeout);
 
         sample.stop();
+
         latencies.add(
           sample.elapsedMilliseconds,
         );
+
         httpStatuses.add(response.statusCode);
       } catch (error) {
         sample.stop();
