@@ -1,0 +1,127 @@
+name: Sa7bi AI - Verified Release APK Only
+
+on:
+workflow_dispatch:
+
+permissions:
+contents: read
+
+concurrency:
+group: sa7bi-release-apk-only
+cancel-in-progress: false
+
+env:
+APP_VERSION: "1.0.1"
+FLUTTER_VERSION: "3.38.1"
+JAVA_VERSION: "17"
+
+jobs:
+build-release:
+name: Analyze, Test and Build Release APK
+runs-on: ubuntu-latest
+timeout-minutes: 45
+
+steps:
+  - name: Checkout exact source commit
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 1
+
+  - name: Setup Java
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: ${{ env.JAVA_VERSION }}
+
+  - name: Setup Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      flutter-version: ${{ env.FLUTTER_VERSION }}
+      channel: stable
+      cache: true
+
+  - name: Setup Gradle
+    uses: gradle/actions/setup-gradle@v4
+
+  - name: Set build identity
+    shell: bash
+    run: |
+      set -euo pipefail
+      echo "BUILD_ID=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+      echo "SOURCE_ID=${GITHUB_REPOSITORY}@${GITHUB_SHA}" >> "$GITHUB_ENV"
+
+  - name: Show exact source and toolchain
+    shell: bash
+    run: |
+      set -euo pipefail
+      echo "Repository: ${GITHUB_REPOSITORY}"
+      echo "Branch: ${GITHUB_REF_NAME}"
+      echo "Commit: ${GITHUB_SHA}"
+      echo "Run ID: ${GITHUB_RUN_ID}"
+      flutter --version
+      dart --version
+
+  - name: Clean old build outputs
+    run: flutter clean
+
+  - name: Install dependencies
+    run: flutter pub get
+
+  - name: Analyze Dart code
+    run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
+
+  - name: Run Flutter tests
+    run: flutter test --reporter expanded
+
+  - name: Build Release APK with identity
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      flutter build apk \
+        --release \
+        --build-name="${APP_VERSION}" \
+        --build-number="${GITHUB_RUN_NUMBER}" \
+        --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
+        --dart-define="SA7BI_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" \
+        --dart-define="SA7BI_COMMIT_SHA=${GITHUB_SHA}" \
+        --dart-define="APP_BUILD_ID=${BUILD_ID}" \
+        --dart-define="APP_SOURCE_ID=${SOURCE_ID}"
+
+  - name: Verify APK and record SHA256
+    shell: bash
+    run: |
+      set -euo pipefail
+
+      APK="build/app/outputs/flutter-apk/app-release.apk"
+
+      test -s "$APK"
+      unzip -t "$APK"
+      unzip -l "$APK" | grep -q "libapp.so"
+
+      APK_SIZE=$(stat -c%s "$APK")
+      APK_SHA256=$(sha256sum "$APK" | awk '{print $1}')
+
+      {
+        echo "Repository=${GITHUB_REPOSITORY}"
+        echo "Branch=${GITHUB_REF_NAME}"
+        echo "Commit=${GITHUB_SHA}"
+        echo "RunID=${GITHUB_RUN_ID}"
+        echo "BuildID=${BUILD_ID}"
+        echo "SourceID=${SOURCE_ID}"
+        echo "AppVersion=${APP_VERSION}"
+        echo "BuildNumber=${GITHUB_RUN_NUMBER}"
+        echo "APKPath=${APK}"
+        echo "APKSize=${APK_SIZE}"
+        echo "APK_SHA256=${APK_SHA256}"
+      } | tee build-identity-report.txt
+
+  - name: Upload verified Release APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: sa7bi-ai-release-${{ github.run_id }}
+      path: |
+        build/app/outputs/flutter-apk/app-release.apk
+        build-identity-report.txt
+      if-no-files-found: error
+      retention-days: 14
