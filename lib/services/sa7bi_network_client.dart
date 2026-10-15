@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 
@@ -20,18 +19,18 @@ class Sa7biNetworkClient {
 
   static const String userAgent = 'Sa7biAI-Mobile/1.0';
 
-  static const Duration connectionTimeout =
-      Duration(seconds: 12);
+  static const Duration connectionTimeout = Duration(seconds: 12);
 
   /// مهلة كل محاولة GET/HEAD على الخادم الأساسي.
-  static const Duration safeRequestTimeout =
-      Duration(seconds: 8);
+  /// ضبطت لتتناسب مع مهلة فحص التشخيص البالغة 15 ثانية.
+  static const Duration safeRequestTimeout = Duration(seconds: 3);
 
   /// مهلة GET/HEAD على الخادم الاحتياطي.
-  static const Duration fallbackRequestTimeout =
-      Duration(seconds: 10);
+  static const Duration fallbackRequestTimeout = Duration(seconds: 4);
 
   static const int maximumAttempts = 3;
+
+  static const Duration retryDelay = Duration(milliseconds: 500);
 
   static http.Client? _client;
   static bool _usingCronet = false;
@@ -193,8 +192,8 @@ class _Sa7biFailoverClient extends http.BaseClient {
         method == 'POST' &&
         _isIdentifiedAiRequest(original);
 
-    // نقرأ الجسم مرة واحدة فقط؛ حتى يمكن إنشاء طلب مستقل
-    // لكل محاولة من غير استهلاك جسم الطلب الأصلي مرتين.
+    // نقرأ الجسم مرة واحدة فقط حتى يمكن إنشاء طلب مستقل
+    // لكل محاولة دون استهلاك جسم الطلب الأصلي مرتين.
     final bodyBytes = await original.finalize().toBytes();
 
     if (canFallbackGet) {
@@ -229,7 +228,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
         if (attempt < Sa7biNetworkClient.maximumAttempts) {
           await Future<void>.delayed(
-            const Duration(seconds: 1),
+            Sa7biNetworkClient.retryDelay,
           );
         }
       }
@@ -346,8 +345,8 @@ class _Sa7biFailoverClient extends http.BaseClient {
       );
     }
 
-    // لا نعيد POST تلقائيًا عند Timeout.
-    // قد يكون الخادم الأساسي نفذ الطلب بالفعل.
+    // لا نعيد POST تلقائيًا عند Timeout؛
+    // فقد يكون الخادم الأساسي نفذ الطلب بالفعل.
     return future;
   }
 
