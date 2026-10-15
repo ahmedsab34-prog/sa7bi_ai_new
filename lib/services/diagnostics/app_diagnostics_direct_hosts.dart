@@ -2,15 +2,8 @@ part of '../app_diagnostics_service.dart';
 
 /// Independent HTTPS probes for the primary and fallback Workers.
 ///
-/// These checks intentionally bypass Sa7biNetworkClient and its
-/// automatic failover by using a fresh dart:io HttpClient.
-///
-/// Purpose:
-/// - Determine whether the primary hostname is reachable directly.
-/// - Determine whether the fallback hostname is reachable directly.
-/// - Compare these results with the app's existing network diagnostics.
-///
-/// These checks do not send AI generation requests or spend credits.
+/// These probes use a fresh dart:io HttpClient directly.
+/// They do not use Sa7biNetworkClient and do not send AI requests.
 extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
   static const String _fallbackWorkerUrl =
       'https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev';
@@ -41,7 +34,7 @@ extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
   }) async {
     final stopwatch = Stopwatch()..start();
 
-    final Uri uri;
+    late final Uri uri;
 
     try {
       uri = Uri.parse(baseUrl).replace(
@@ -49,6 +42,12 @@ extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
         query: null,
         fragment: null,
       );
+
+      if (uri.scheme != 'https' || uri.host.isEmpty) {
+        throw const FormatException(
+          'Worker URL must use HTTPS and include a host.',
+        );
+      }
     } catch (error) {
       stopwatch.stop();
 
@@ -63,29 +62,37 @@ extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
       );
     }
 
-    final ioHttpClient = HttpClient()
+    final directClient = HttpClient()
       ..connectionTimeout = _directConnectTimeout
       ..userAgent = Sa7biNetworkClient.userAgent;
 
-    final directClient = http.IOClient(ioHttpClient);
-
     try {
-      final response = await directClient
-          .get(
-            uri,
-            headers: const {
-              'Accept': 'application/json',
-              'Cache-Control': 'no-cache',
-            },
+      final request = await directClient
+          .getUrl(uri)
+          .timeout(_directProbeTimeout);
+
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/json',
+      );
+
+      request.headers.set(
+        HttpHeaders.cacheControlHeader,
+        'no-cache',
+      );
+
+      final response = await request
+          .close()
+          .timeout(_directProbeTimeout);
+
+      final responseBody = await response
+          .transform(
+            const Utf8Decoder(allowMalformed: true),
           )
+          .join()
           .timeout(_directProbeTimeout);
 
       stopwatch.stop();
-
-      final responseBody = utf8.decode(
-        response.bodyBytes,
-        allowMalformed: true,
-      );
 
       final success =
           response.statusCode >= 200 &&
@@ -127,7 +134,7 @@ extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
         durationMs: stopwatch.elapsedMilliseconds,
       );
     } finally {
-      directClient.close();
+      directClient.close(force: true);
     }
   }
 }
