@@ -28,35 +28,29 @@ class AppDiagnosticsService {
   static const Duration deepTimeout =
       Duration(seconds: 8);
 
-  static const String diagnosticVersion =
-      '4.3.0';
+  static const String diagnosticVersion = '4.3.0';
 
-  static const String buildId =
-      String.fromEnvironment(
+  static const String buildId = String.fromEnvironment(
     'APP_BUILD_ID',
     defaultValue: 'NOT_INJECTED',
   );
 
-  static const String sourceId =
-      String.fromEnvironment(
+  static const String sourceId = String.fromEnvironment(
     'APP_SOURCE_ID',
     defaultValue: 'NOT_INJECTED',
   );
 
-  static const String appVersion =
-      String.fromEnvironment(
+  static const String appVersion = String.fromEnvironment(
     'SA7BI_APP_VERSION',
     defaultValue: 'NOT_INJECTED',
   );
 
-  static const String buildNumber =
-      String.fromEnvironment(
+  static const String buildNumber = String.fromEnvironment(
     'SA7BI_BUILD_NUMBER',
     defaultValue: 'NOT_INJECTED',
   );
 
-  static const String commitSha =
-      String.fromEnvironment(
+  static const String commitSha = String.fromEnvironment(
     'SA7BI_COMMIT_SHA',
     defaultValue: 'NOT_INJECTED',
   );
@@ -93,8 +87,7 @@ class AppDiagnosticsService {
               details:
                   'الاختبار تجاوز مهلة '
                   '${defaultTimeout.inSeconds} ثانية.',
-              durationMs:
-                  defaultTimeout.inMilliseconds,
+              durationMs: defaultTimeout.inMilliseconds,
             );
           },
         );
@@ -106,8 +99,7 @@ class AppDiagnosticsService {
           severity: 'FAIL',
           status: _classifyException(error),
           details: _safeError(error),
-          durationMs:
-              stopwatch.elapsedMilliseconds,
+          durationMs: stopwatch.elapsedMilliseconds,
         );
       }
 
@@ -121,8 +113,7 @@ class AppDiagnosticsService {
           status: result.status,
           details: result.details,
           httpStatus: result.httpStatus,
-          durationMs:
-              stopwatch.elapsedMilliseconds,
+          durationMs: stopwatch.elapsedMilliseconds,
           severity: result.severity,
           repairable: result.repairable,
           blocked: result.blocked,
@@ -200,13 +191,118 @@ class AppDiagnosticsService {
     );
 
     // اختبار مستقل للـ Worker الاحتياطي.
-    // النتيجة تساعد في معرفة هل المشكلة في المضيف
-    // الأساسي فقط أم في المضيفين معًا.
 
     await run(
       'NETWORK',
       'Fallback Worker direct HTTPS',
       () => this._checkFallbackDirectHttps(),
+    );
+
+    // ==========================================================
+    // COMBINED WORKER DIAGNOSIS
+    // ==========================================================
+
+    await run(
+      'NETWORK',
+      'Primary/fallback Worker diagnosis',
+      () async {
+        DiagnosticResult? primary;
+        DiagnosticResult? fallback;
+
+        for (final item in results) {
+          if (item.name == 'Primary Worker direct HTTPS') {
+            primary = item;
+          } else if (item.name ==
+              'Fallback Worker direct HTTPS') {
+            fallback = item;
+          }
+        }
+
+        if (primary == null || fallback == null) {
+          return DiagnosticResult(
+            name: 'Primary/fallback Worker diagnosis',
+            category: 'NETWORK',
+            success: false,
+            severity: 'FAIL',
+            status: 'DIRECT_PROBE_RESULT_MISSING',
+            details:
+                'نتيجة اختبار الخادم الأساسي أو الاحتياطي '
+                'غير موجودة؛ تعذر تحديد سبب المشكلة.',
+            durationMs: 0,
+          );
+        }
+
+        final primaryResult = primary!;
+        final fallbackResult = fallback!;
+
+        if (primaryResult.success &&
+            fallbackResult.success) {
+          return DiagnosticResult(
+            name: 'Primary/fallback Worker diagnosis',
+            category: 'NETWORK',
+            success: true,
+            severity: 'PASS',
+            status: 'BOTH_WORKERS_REACHABLE',
+            details:
+                'الخادم الأساسي والاحتياطي يستجيبان عبر HTTPS. '
+                'إذا استمرت أخطاء التطبيق، افحص دورة حياة '
+                'عميل الشبكة ومسار تحويل الطلبات. '
+                'primary=${primaryResult.status}; '
+                'fallback=${fallbackResult.status}.',
+            durationMs: 0,
+          );
+        }
+
+        if (!primaryResult.success &&
+            fallbackResult.success) {
+          return DiagnosticResult(
+            name: 'Primary/fallback Worker diagnosis',
+            category: 'NETWORK',
+            success: false,
+            severity: 'WARN',
+            status: 'PRIMARY_FAILED_FALLBACK_OK',
+            details:
+                'الخادم الاحتياطي يستجيب، لكن الأساسي فشل. '
+                'افحص عنوان الخادم الأساسي وإعداده، '
+                'وتأكد من أن التطبيق يستطيع التحويل للاحتياطي. '
+                'primary=${primaryResult.status}; '
+                'fallback=${fallbackResult.status}.',
+            durationMs: 0,
+          );
+        }
+
+        if (primaryResult.success &&
+            !fallbackResult.success) {
+          return DiagnosticResult(
+            name: 'Primary/fallback Worker diagnosis',
+            category: 'NETWORK',
+            success: false,
+            severity: 'WARN',
+            status: 'PRIMARY_OK_FALLBACK_FAILED',
+            details:
+                'الخادم الأساسي يستجيب، لكن الاحتياطي فشل. '
+                'افحص عنوان الخادم الاحتياطي وإعداده. '
+                'primary=${primaryResult.status}; '
+                'fallback=${fallbackResult.status}.',
+            durationMs: 0,
+          );
+        }
+
+        return DiagnosticResult(
+          name: 'Primary/fallback Worker diagnosis',
+          category: 'NETWORK',
+          success: false,
+          severity: 'FAIL',
+          status: 'BOTH_WORKERS_UNREACHABLE',
+          details:
+              'فشل الوصول المباشر إلى الخادمين. '
+              'قارن النتائج بين الواي فاي وبيانات الهاتف، '
+              'وافحص DNS وHTTPS قبل تغيير كود التطبيق. '
+              'primary=${primaryResult.status}; '
+              'fallback=${fallbackResult.status}.',
+          durationMs: 0,
+        );
+      },
     );
 
     await run(
@@ -481,8 +577,7 @@ class AppDiagnosticsService {
     const probeUrl =
         'https://www.cloudflare.com/cdn-cgi/trace';
     const sampleCount = 3;
-    const perSampleTimeout =
-        Duration(seconds: 4);
+    const perSampleTimeout = Duration(seconds: 4);
 
     final latencies = <int>[];
     final httpStatuses = <int>[];
@@ -505,10 +600,7 @@ class AppDiagnosticsService {
 
         sample.stop();
 
-        latencies.add(
-          sample.elapsedMilliseconds,
-        );
-
+        latencies.add(sample.elapsedMilliseconds);
         httpStatuses.add(response.statusCode);
       } catch (error) {
         sample.stop();
@@ -544,8 +636,7 @@ class AppDiagnosticsService {
             ? null
             : maxMs - minMs;
 
-    final serverErrorCount =
-        httpStatuses.where(
+    final serverErrorCount = httpStatuses.where(
       (status) => status >= 500,
     ).length;
 
@@ -618,8 +709,7 @@ class AppDiagnosticsService {
       'averageMs=${averageMs ?? 'none'}',
       'spreadMs=${spreadMs ?? 'none'}',
       'httpStatuses=${httpStatuses.isEmpty ? 'none' : httpStatuses.join(',')}',
-      if (errors.isNotEmpty)
-        'errors=${errors.join(',')}',
+      if (errors.isNotEmpty) 'errors=${errors.join(',')}',
       advice,
     ].join('; ');
 
@@ -654,8 +744,7 @@ class AppDiagnosticsService {
       );
     }
 
-    final networkFailure =
-        report.results.any(
+    final networkFailure = report.results.any(
       (item) =>
           item.category == 'NETWORK' &&
           !item.success &&
@@ -683,8 +772,7 @@ class AppDiagnosticsService {
         success: true,
         changed: false,
         title: 'لا يوجد إصلاح محلي مؤكد',
-        details:
-            'لم يتم تنفيذ أي تغيير محلي.',
+        details: 'لم يتم تنفيذ أي تغيير محلي.',
       );
     }
 
@@ -716,16 +804,13 @@ class AppDiagnosticsService {
 
     return base.replace(
       path: parsed.path,
-      queryParameters:
-          parsed.queryParameters.isEmpty
-              ? null
-              : parsed.queryParameters,
+      queryParameters: parsed.queryParameters.isEmpty
+          ? null
+          : parsed.queryParameters,
     );
   }
 
-  String _statusForHttpCode(
-    int statusCode,
-  ) {
+  String _statusForHttpCode(int statusCode) {
     if (statusCode == 401) {
       return 'HTTP_401_AUTH_REQUIRED';
     }
@@ -761,11 +846,8 @@ class AppDiagnosticsService {
     return 'HTTP_$statusCode';
   }
 
-  String _classifyException(
-    Object error,
-  ) {
-    final value =
-        error.toString().toLowerCase();
+  String _classifyException(Object error) {
+    final value = error.toString().toLowerCase();
 
     if (value.contains('timeout')) {
       return 'TIMEOUT';
@@ -804,21 +886,13 @@ class AppDiagnosticsService {
   String _safeError(Object error) {
     return error
         .toString()
-        .replaceAll(
-          RegExp(r'\s+'),
-          ' ',
-        )
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
 
-  String _summarizeBody(
-    String body,
-  ) {
+  String _summarizeBody(String body) {
     final cleaned = body
-        .replaceAll(
-          RegExp(r'\s+'),
-          ' ',
-        )
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
     if (cleaned.isEmpty) {
