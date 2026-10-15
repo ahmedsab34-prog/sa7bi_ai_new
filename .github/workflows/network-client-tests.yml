@@ -1,3 +1,4 @@
+
 name: Sa7bi AI - Branch Verification
 
 on:
@@ -101,6 +102,40 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Read version and build identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION_LINE="$(sed -n 's/^version: *//p' pubspec.yaml | head -n 1)"
+          VERSION_NAME="${VERSION_LINE%%+*}"
+          VERSION_CODE="${VERSION_LINE##*+}"
+
+          if [ -z "$VERSION_LINE" ] || [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
+            echo "ERROR: Could not read version from pubspec.yaml"
+            exit 1
+          fi
+
+          BUILD_NUMBER="${VERSION_CODE}.${GITHUB_RUN_NUMBER}"
+          BUILD_ID="${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+
+          {
+            echo "SA7BI_APP_VERSION=$VERSION_NAME"
+            echo "SA7BI_BUILD_NUMBER=$BUILD_NUMBER"
+            echo "SA7BI_COMMIT_SHA=$GITHUB_SHA"
+            echo "APP_BUILD_ID=$BUILD_ID"
+            echo "APP_SOURCE_ID=$GITHUB_SHA"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "App version: $VERSION_NAME"
+            echo "Build number: $BUILD_NUMBER"
+            echo "Build ID: $BUILD_ID"
+            echo "Source commit: $GITHUB_SHA"
+            echo "Branch: $GITHUB_REF_NAME"
+            echo "Run ID: $GITHUB_RUN_ID"
+          } | tee build-identity-input.txt
+
       - name: Increase Gradle heap
         shell: bash
         run: |
@@ -108,8 +143,17 @@ jobs:
           sed -i 's/-Xmx2048M/-Xmx4G -XX:MaxMetaspaceSize=1G/' android/gradle.properties
           grep '^org.gradle.jvmargs=' android/gradle.properties
 
-      - name: Build Android debug APK
-        run: flutter build apk --debug --no-pub
+      - name: Build Android debug APK with identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          flutter build apk --debug --no-pub \
+            --dart-define="SA7BI_APP_VERSION=$SA7BI_APP_VERSION" \
+            --dart-define="SA7BI_BUILD_NUMBER=$SA7BI_BUILD_NUMBER" \
+            --dart-define="SA7BI_COMMIT_SHA=$SA7BI_COMMIT_SHA" \
+            --dart-define="APP_BUILD_ID=$APP_BUILD_ID" \
+            --dart-define="APP_SOURCE_ID=$APP_SOURCE_ID"
 
       - name: Verify APK exists and calculate SHA256
         shell: bash
@@ -130,8 +174,10 @@ jobs:
           echo "APK_SIZE=$APK_SIZE"
           echo "APK_SHA256=$APK_SHA256"
 
-          echo "APK_SIZE=$APK_SIZE" >> "$GITHUB_ENV"
-          echo "APK_SHA256=$APK_SHA256" >> "$GITHUB_ENV"
+          {
+            echo "APK_SIZE=$APK_SIZE"
+            echo "APK_SHA256=$APK_SHA256"
+          } >> "$GITHUB_ENV"
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
@@ -151,6 +197,10 @@ jobs:
             echo "Commit: ${GITHUB_SHA}"
             echo "Run ID: ${GITHUB_RUN_ID}"
             echo "Attempt: ${GITHUB_RUN_ATTEMPT}"
+            echo "App version: ${SA7BI_APP_VERSION:-not-injected}"
+            echo "Build number: ${SA7BI_BUILD_NUMBER:-not-injected}"
+            echo "App build ID: ${APP_BUILD_ID:-not-injected}"
+            echo "App source ID: ${APP_SOURCE_ID:-not-injected}"
             echo "APK path: build/app/outputs/flutter-apk/app-debug.apk"
             echo "APK size: ${APK_SIZE:-not-built}"
             echo "APK SHA256: ${APK_SHA256:-not-built}"
@@ -161,6 +211,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sa7bi-ai-build-report-${{ github.run_id }}
-          path: build-identity-report.txt
+          path: |
+            build-identity-report.txt
+            build-identity-input.txt
           if-no-files-found: warn
           retention-days: 7
