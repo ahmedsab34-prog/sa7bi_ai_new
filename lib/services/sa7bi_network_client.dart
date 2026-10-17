@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:io';
 
@@ -8,35 +9,38 @@ import 'package:http/io_client.dart';
 import '../config/app_config.dart';
 
 /// بوابة الشبكة الموحدة لتطبيق صاحبي AI.
-///
 /// - Cronet على Android عند توفره.
 /// - IOClient كوسيلة احتياطية مستقلة.
-/// - ثلاث محاولات للطلبات الآمنة GET/HEAD.
-/// - الانتقال إلى Worker احتياطي عند فشل الاتصال الأساسي.
-/// - لا يعاد تنفيذ طلبات AI لمجرد انتهاء المهلة.
+/// - مهلات مختلفة حسب نوع الطلب.
+/// - الانتقال إلى Worker احتياطي عند فشل الاتصال.
+/// - لا يعاد تنفيذ طلب AI لمجرد انتهاء المهلة.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
 
   static const String userAgent = 'Sa7biAI-Mobile/1.0';
 
-  static const Duration connectionTimeout = Duration(seconds: 12);
+  static const Duration connectionTimeout =
+      Duration(seconds: 12);
 
-  /// مهلة كل محاولة GET/HEAD على الخادم الأساسي.
-  /// ضبطت لتتناسب مع مهلة فحص التشخيص البالغة 15 ثانية.
-  static const Duration safeRequestTimeout = Duration(seconds: 3);
+  /// المهلة الافتراضية لطلبات GET/HEAD.
+  static const Duration safeRequestTimeout =
+      Duration(seconds: 4);
 
   /// مهلة GET/HEAD على الخادم الاحتياطي.
-  static const Duration fallbackRequestTimeout = Duration(seconds: 4);
+  static const Duration fallbackRequestTimeout =
+      Duration(seconds: 6);
 
-  static const int maximumAttempts = 3;
+  /// الحد الافتراضي لمحاولات GET/HEAD الآمنة.
+  static const int maximumAttempts = 2;
 
-  static const Duration retryDelay = Duration(milliseconds: 500);
+  static const Duration retryDelay =
+      Duration(milliseconds: 500);
 
   static http.Client? _client;
   static bool _usingCronet = false;
   static bool _initialized = false;
 
-  /// عميل دائم يعاد إنشاؤه عند إغلاقه.
+  /// عميل دائم يعاد إنشاؤه بعد الإغلاق.
   static http.Client get client {
     if (_client == null) {
       _client = _createClient();
@@ -57,8 +61,7 @@ class Sa7biNetworkClient {
 
   static bool get isInitialized => _initialized;
 
-  /// ينشئ عميلًا مستقلًا لكل Zone.
-  /// لا تشارك العميل الدائم مع عمليات Zone التي قد تغلقه.
+  /// عميل مستقل لكل Zone.
   static http.Client factory() => _createClient();
 
   static http.Client _createClient() {
@@ -142,7 +145,6 @@ class Sa7biNetworkClient {
   }
 
   /// يغلق العميل الدائم فقط.
-  /// يمكن إنشاء عميل جديد بعد الإغلاق.
   static void close() {
     final previous = _client;
 
@@ -192,18 +194,31 @@ class _Sa7biFailoverClient extends http.BaseClient {
         method == 'POST' &&
         _isIdentifiedAiRequest(original);
 
-    // نقرأ الجسم مرة واحدة فقط حتى يمكن إنشاء طلب مستقل
-    // لكل محاولة دون استهلاك جسم الطلب الأصلي مرتين.
+    // نقرأ جسم الطلب مرة واحدة لإنشاء طلب مستقل لكل محاولة.
     final bodyBytes = await original.finalize().toBytes();
 
     if (canFallbackGet) {
       Object? lastError;
 
-      for (
-        var attempt = 1;
-        attempt <= Sa7biNetworkClient.maximumAttempts;
-        attempt++
-      ) {
+      final path = original.url.path.toLowerCase();
+
+      final isNewsRequest = path == '/v1/news';
+
+      final isHadithRequest = path == '/v1/hadith' ||
+          path.startsWith('/v1/hadith/');
+
+      final requestTimeout = isNewsRequest
+          ? const Duration(seconds: 10)
+          : isHadithRequest
+              ? const Duration(seconds: 5)
+              : Sa7biNetworkClient.safeRequestTimeout;
+
+      // الأخبار والحديث لا يكرران الطلب على الأساسي.
+      final attempts = (isNewsRequest || isHadithRequest)
+          ? 1
+          : Sa7biNetworkClient.maximumAttempts;
+
+      for (var attempt = 1; attempt <= attempts; attempt++) {
         try {
           final request = _cloneRequest(
             original,
@@ -213,9 +228,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
           return await primary
               .send(request)
-              .timeout(
-                Sa7biNetworkClient.safeRequestTimeout,
-              );
+              .timeout(requestTimeout);
         } on TimeoutException catch (error) {
           lastError = error;
         } on SocketException catch (error) {
@@ -226,7 +239,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
           lastError = error;
         }
 
-        if (attempt < Sa7biNetworkClient.maximumAttempts) {
+        if (attempt < attempts) {
           await Future<void>.delayed(
             Sa7biNetworkClient.retryDelay,
           );
@@ -234,14 +247,11 @@ class _Sa7biFailoverClient extends http.BaseClient {
       }
 
       try {
-        return await _sendFallback(
-          original,
-          bodyBytes,
-        );
+        return await _sendFallback(original, bodyBytes);
       } catch (fallbackError) {
         throw http.ClientException(
           'فشل الاتصال بالخادم الأساسي بعد '
-          '${Sa7biNetworkClient.maximumAttempts} محاولات. '
+          '$attempts محاولة/محاولات. '
           'آخر خطأ أساسي: $lastError. '
           'خطأ الخادم الاحتياطي: $fallbackError',
           original.url,
@@ -256,11 +266,10 @@ class _Sa7biFailoverClient extends http.BaseClient {
         bodyBytes,
       );
 
-      // لا نفرض مهلة قصيرة على POST الخاص بالذكاء الاصطناعي؛
-      // فقد يستغرق توليد الإجابة أو الصورة وقتًا أطول.
+      // لا نفرض مهلة قصيرة على طلبات AI.
       return await primary.send(request);
     } on TimeoutException {
-      // لا نكرر طلب AI بسبب Timeout.
+      // لا نكرر POST بسبب انتهاء المهلة.
       rethrow;
     } on SocketException {
       if (!canFallbackAi) rethrow;
@@ -345,8 +354,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
       );
     }
 
-    // لا نعيد POST تلقائيًا عند Timeout؛
-    // فقد يكون الخادم الأساسي نفذ الطلب بالفعل.
+    // لا نعيد POST تلقائيًا عند انتهاء المهلة.
     return future;
   }
 
