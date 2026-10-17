@@ -1,0 +1,299 @@
+
+name: Sa7bi AI - Comprehensive Worker Diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "fix/build-692-network-client-lifecycle"
+    paths:
+      - ".github/workflows/worker-network-diagnostics.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa7bi-worker-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Diagnose Worker connectivity and API routes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      PRIMARY: https://sa7bi-ai-new.ahmedsab34.workers.dev
+      FALLBACK: https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev
+      REPEAT_COUNT: "3"
+
+    steps:
+      - name: Collect environment and DNS evidence
+        shell: bash
+        run: |
+          set +e
+          mkdir -p diagnostic-report
+
+          {
+            echo "SA7BI AI - COMPREHENSIVE READ-ONLY DIAGNOSTIC"
+            echo "UTC: $(date -u +%FT%TZ)"
+            echo "Repository: $GITHUB_REPOSITORY"
+            echo "Ref: $GITHUB_REF"
+            echo "Commit: $GITHUB_SHA"
+            echo "Runner: $(uname -a)"
+            echo
+            echo "=== DNS ==="
+
+            for host in \
+              sa7bi-ai-new.ahmedsab34.workers.dev \
+              sa7bi-ai-new-fallback.ahmedsab34.workers.dev \
+              example.com
+            do
+              echo "--- $host"
+              getent ahosts "$host" 2>&1 | sort -u
+              echo "DNS command exit: ${PIPESTATUS[0]}"
+            done
+
+            echo
+            echo "=== Tool versions ==="
+            curl --version | head -n 2
+            openssl version
+          } | tee diagnostic-report/environment.txt
+
+      - name: Probe both Workers three times
+        shell: bash
+        run: |
+          set +e
+
+          REPORT="diagnostic-report/results.tsv"
+          DETAILS="diagnostic-report/details.txt"
+
+          printf 'host\tpath\tattempt\tcurl_exit\thttp_status\tdns_s\ttcp_s\ttls_s\ttotal_s\tremote_ip\terror\n' > "$REPORT"
+          : > "$DETAILS"
+
+          probe() {
+            local host_label="$1"
+            local base_url="$2"
+            local path="$3"
+            local attempt="$4"
+            local url="${base_url}${path}"
+            local headers body error metrics
+            local rc status dns tcp tls total ip
+
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            error="$(mktemp)"
+
+            metrics=$(curl \
+              --silent \
+              --show-error \
+              --connect-timeout 10 \
+              --max-time 25 \
+              --max-redirs 5 \
+              --location \
+              --dump-header "$headers" \
+              --output "$body" \
+              --write-out $'%{http_code}\t%{time_namelookup}\t%{time_connect}\t%{time_appconnect}\t%{time_total}\t%{remote_ip}' \
+              "$url" 2>"$error")
+
+            rc=$?
+            IFS=$'\t' read -r status dns tcp tls total ip <<< "$metrics"
+
+            status="${status:-000}"
+            dns="${dns:-NA}"
+            tcp="${tcp:-NA}"
+            tls="${tls:-NA}"
+            total="${total:-NA}"
+            ip="${ip:-NA}"
+
+            error_text="$(tr '\t\r\n' '   ' < "$error" | cut -c1-250)"
+            [ -n "$error_text" ] || error_text="none"
+
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$host_label" "$path" "$attempt" "$rc" "$status" \
+              "$dns" "$tcp" "$tls" "$total" "$ip" "$error_text" \
+              >> "$REPORT"
+
+            {
+              echo
+              echo "=================================================="
+              echo "HOST=$host_label PATH=$path ATTEMPT=$attempt"
+              echo "URL=$url"
+              echo "curl_exit=$rc HTTP=$status"
+              echo "DNS=${dns}s TCP=${tcp}s TLS=${tls}s TOTAL=${total}s IP=$ip"
+              echo "ERROR=$error_text"
+              echo "--- Response headers (last response block, truncated)"
+              tail -n 30 "$headers" | head -n 30
+              echo "--- Body (first 1000 bytes)"
+              head -c 1000 "$body"
+              echo
+            } >> "$DETAILS"
+
+            echo "$host_label $path attempt $attempt -> HTTP $status, curl exit $rc"
+
+            rm -f "$headers" "$body" "$error"
+          }
+
+          for spec in \
+            "primary|$PRIMARY" \
+            "fallback|$FALLBACK"
+          do
+            label="${spec%%|*}"
+            base="${spec#*|}"
+
+            for path in \
+              /health \
+              / \
+              /v1/service-status \
+              /v1/diagnostics
+            do
+              for attempt in 1 2 3; do
+                probe "$label" "$base" "$path" "$attempt"
+                sleep 1
+              done
+            done
+          done
+
+          for path in \
+            /v1/news \
+            /v1/audio/quran \
+            /v1/tafsir \
+            /v1/tafsir/books \
+            /v1/hadith \
+            /v1/hadith/books \
+            /v1/radio/health \
+            /v1/radio/countries \
+            '/v1/radio/stations?country=EG' \
+            '/v1/audio/search-v4?q=diagnostic' \
+            '/v1/podcasts/search?q=diagnostic' \
+            /v1/shorts
+          do
+            for attempt in 1 2 3; do
+              probe "primary" "$PRIMARY" "$path" "$attempt"
+              sleep 1
+            done
+          done
+
+          {
+            echo
+            echo "=== TLS HANDSHAKE CHECKS ==="
+
+            for host in \
+              sa7bi-ai-new.ahmedsab34.workers.dev \
+              sa7bi-ai-new-fallback.ahmedsab34.workers.dev
+            do
+              echo "--- $host"
+              timeout 15 openssl s_client \
+                -connect "$host:443" \
+                -servername "$host" \
+                -brief </dev/null 2>&1 | head -n 30
+              echo "TLS pipeline exit: ${PIPESTATUS[0]}"
+            done
+          } >> "$DETAILS" 2>&1
+
+      - name: Generate diagnosis and recommended actions
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY' > diagnostic-report/diagnosis.txt
+          import csv
+          from collections import defaultdict
+
+          filename = "diagnostic-report/results.tsv"
+          try:
+              with open(filename, newline="") as f:
+                  rows = list(csv.DictReader(f, delimiter="\t"))
+          except FileNotFoundError:
+              rows = []
+
+          print("SA7BI AI - DIAGNOSIS AND NEXT ACTIONS")
+          print("=====================================")
+
+          if not rows:
+              print("RESULT: No probe results were recorded.")
+              print("ACTION: Inspect the workflow logs for a script or runner failure.")
+              raise SystemExit(0)
+
+          groups = defaultdict(list)
+          for row in rows:
+              groups[(row["host"], row["path"])].append(row)
+
+          core_hosts = ("primary", "fallback")
+          for host in core_hosts:
+              core = [
+                  r for (h, p), values in groups.items()
+                  if h == host and p in ("/health", "/")
+                  for r in values
+              ]
+              http = [r for r in core if r["http_status"] not in ("000", "")]
+              ok = [r for r in core if r["http_status"] == "200"]
+              failures = [r for r in core if r["http_status"] == "000"]
+
+              print()
+              print(f"HOST: {host}")
+              print(f"Core probes: {len(core)}; HTTP responses: {len(http)}; HTTP 200: {len(ok)}; no HTTP response: {len(failures)}")
+
+              if not core:
+                  print("ACTION: Core probes are missing; inspect earlier workflow steps.")
+              elif not http:
+                  exits = sorted({r["curl_exit"] for r in failures})
+                  errors = sorted({r["error"] for r in failures if r["error"] != "none"})
+                  print("LIKELY CLASS: DNS, TCP, TLS, timeout, or connection-level failure.")
+                  print("curl exit codes:", ", ".join(exits) or "not recorded")
+                  print("Observed errors:", " | ".join(errors[:5]) or "see details.txt")
+                  print("NEXT: Use DNS output, TCP/TLS timings, and OpenSSL results to isolate the failing layer.")
+              elif not ok:
+                  statuses = sorted({r["http_status"] for r in http})
+                  print("LIKELY CLASS: The endpoint is reachable, but the core route did not return HTTP 200.")
+                  print("Observed HTTP statuses:", ", ".join(statuses))
+                  print("NEXT: Inspect response body and headers. Check route mapping, Worker deployment, and runtime errors.")
+              else:
+                  print("RESULT: At least one core probe returned HTTP 200 from the GitHub runner.")
+                  if failures:
+                      print("WARNING: Some attempts had no HTTP response; investigate intermittent connectivity.")
+                  print("NEXT: Compare these results with the Android diagnostic and phone browser results.")
+
+          print()
+          print("ROUTE SUMMARY")
+          for (host, path), values in sorted(groups.items()):
+              statuses = [r["http_status"] for r in values]
+              count_200 = statuses.count("200")
+              count_no_response = statuses.count("000")
+              if count_200 == len(values):
+                  state = "PASS: HTTP 200 on every attempt"
+              elif count_200:
+                  state = "INTERMITTENT/MIXED: some attempts returned HTTP 200"
+              elif count_no_response == len(values):
+                  state = "CONNECTION FAILURE: no HTTP response on any attempt"
+              else:
+                  state = "HTTP RESPONSE BUT NOT 200: inspect endpoint-specific status/body"
+              print(f"{host} {path}: {state}; statuses={','.join(statuses)}")
+
+          print()
+          print("INTERPRETATION GUIDE")
+          print("- curl exit 6: hostname resolution failed; inspect DNS and hostname.")
+          print("- curl exit 7: TCP connection failed; inspect reachability and port 443.")
+          print("- curl exit 28: connection or overall timeout; inspect timings and network path.")
+          print("- curl exit 35 or 60: TLS handshake or certificate verification problem.")
+          print("- HTTP 401/403: server was reached; inspect access policy or authentication.")
+          print("- HTTP 404: server was reached; inspect route/path or deployment version.")
+          print("- HTTP 5xx: server was reached; inspect Worker logs/runtime/dependencies.")
+          print("- HTTP 200 proves an HTTP response, not correctness of all business logic.")
+          print()
+          print("SAFETY")
+          print("- This workflow does not deploy or modify either Worker.")
+          print("- It does not send chat/image POST requests or alter credits.")
+          print("- A diagnosis is evidence-based guidance, not proof of a specific source-code line.")
+          print("- No source-code changes are made automatically.")
+          PY
+
+          cat diagnostic-report/diagnosis.txt
+
+      - name: Upload complete report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-worker-diagnostic-${{ github.run_id }}
+          path: diagnostic-report/
+          if-no-files-found: warn
+          retention-days: 14
