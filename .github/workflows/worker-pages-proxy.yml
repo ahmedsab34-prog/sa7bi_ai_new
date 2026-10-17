@@ -1,0 +1,183 @@
+
+name: Sa7bi AI - Test alternate Pages API hostname
+
+on:
+  push:
+    branches:
+      - "fix/build-692-network-client-lifecycle"
+    paths:
+      - ".github/workflows/worker-pages-proxy.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa7bi-pages-proxy-probe
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-test:
+    name: Deploy isolated pages.dev proxy and test health
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PAGES_PROJECT: sa7bi-ai-edge-gateway
+      PRIMARY_WORKER: sa7bi-ai-new
+
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Wrangler
+        run: npm install --global wrangler@4
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          echo "Cloudflare credentials are available."
+
+      - name: Create isolated Pages proxy files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PUBLIC_DIR="$RUNNER_TEMP/sa7bi-pages-public"
+          CONFIG_DIR="$RUNNER_TEMP/sa7bi-pages-config"
+          mkdir -p "$PUBLIC_DIR" "$CONFIG_DIR"
+
+          cat > "$PUBLIC_DIR/_worker.js" <<'JS'
+          export default {
+            async fetch(request, env) {
+              try {
+                if (
+                  !env?.PRIMARY_WORKER ||
+                  typeof env.PRIMARY_WORKER.fetch !== "function"
+                ) {
+                  return new Response(JSON.stringify({
+                    ok: false,
+                    error: "PRIMARY_WORKER_BINDING_MISSING"
+                  }), {
+                    status: 502,
+                    headers: {
+                      "content-type": "application/json; charset=utf-8",
+                      "access-control-allow-origin": "*"
+                    }
+                  });
+                }
+
+                const response =
+                  await env.PRIMARY_WORKER.fetch(request);
+
+                const headers = new Headers(response.headers);
+                headers.set("X-Sa7bi-Pages-Proxy", "1");
+
+                return new Response(response.body, {
+                  status: response.status,
+                  statusText: response.statusText,
+                  headers
+                });
+              } catch (error) {
+                return new Response(JSON.stringify({
+                  ok: false,
+                  error: "PAGES_PROXY_ERROR",
+                  message: error?.message || "Proxy request failed"
+                }), {
+                  status: 502,
+                  headers: {
+                    "content-type": "application/json; charset=utf-8",
+                    "access-control-allow-origin": "*",
+                    "X-Sa7bi-Pages-Proxy": "1"
+                  }
+                });
+              }
+            }
+          };
+          JS
+
+          cat > "$CONFIG_DIR/wrangler.toml" <<TOML
+          name = "$PAGES_PROJECT"
+          compatibility_date = "2026-09-18"
+          pages_build_output_dir = "../sa7bi-pages-public"
+
+          [[services]]
+          binding = "PRIMARY_WORKER"
+          service = "$PRIMARY_WORKER"
+          TOML
+
+          echo "Temporary proxy files created."
+          echo "Existing Workers and Flutter files remain unchanged."
+
+      - name: Create Pages project if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if npx wrangler pages project list 2>&1 |
+             tee "$RUNNER_TEMP/pages-projects.txt" |
+             grep -Fq "$PAGES_PROJECT"; then
+            echo "Pages project already exists."
+          else
+            npx wrangler pages project create \
+              "$PAGES_PROJECT" \
+              --production-branch main
+          fi
+
+      - name: Deploy alternate pages.dev hostname
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npx wrangler pages deploy \
+            "$RUNNER_TEMP/sa7bi-pages-public" \
+            --project-name "$PAGES_PROJECT" \
+            --branch main \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-message "Test alternate pages.dev API hostname" \
+            --config "$RUNNER_TEMP/sa7bi-pages-config/wrangler.toml"
+
+      - name: Verify Pages proxy health
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          URL="https://$PAGES_PROJECT.pages.dev"
+          echo "Testing: $URL/health"
+
+          for attempt in 1 2 3 4 5 6; do
+            status=$(curl --silent --show-error \
+              --connect-timeout 10 --max-time 20 \
+              -D "$RUNNER_TEMP/pages-headers.txt" \
+              -o "$RUNNER_TEMP/pages-body.json" \
+              -w "%{http_code}" "$URL/health" || true)
+
+            echo "Attempt $attempt/6: HTTP $status"
+
+            if [ "$status" = "200" ] &&
+               grep -q '"ok":true' "$RUNNER_TEMP/pages-body.json" &&
+               grep -qi '^x-sa7bi-pages-proxy: 1' \
+                 "$RUNNER_TEMP/pages-headers.txt"; then
+              cat "$RUNNER_TEMP/pages-body.json"
+              echo
+              echo "PASS: alternate host and service binding work."
+              echo "PHONE_TEST_URL=$URL/health"
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "FAIL: alternate host did not return expected health response."
+          cat "$RUNNER_TEMP/pages-headers.txt" 2>/dev/null || true
+          cat "$RUNNER_TEMP/pages-body.json" 2>/dev/null || true
+          exit 1
