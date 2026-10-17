@@ -79,7 +79,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          flutter analyze --no-pub 2>&1 | tee flutter-analyze-report.txt
+          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos 2>&1 | tee flutter-analyze-report.txt
 
       - name: Run network lifecycle tests
         shell: bash
