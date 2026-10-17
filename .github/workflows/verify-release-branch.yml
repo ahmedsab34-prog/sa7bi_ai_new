@@ -66,6 +66,7 @@ jobs:
             echo "Run attempt: ${GITHUB_RUN_ATTEMPT}"
             echo "Expected app version: ${APP_VERSION}"
             echo "Expected package ID: ${EXPECTED_APPLICATION_ID}"
+            echo "Expected Android version code: $((1000 + GITHUB_RUN_NUMBER))"
             echo
             flutter --version
             dart --version
@@ -79,7 +80,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos 2>&1 | tee flutter-analyze-report.txt
+          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos \
+            2>&1 | tee flutter-analyze-report.txt
 
       - name: Run network lifecycle tests
         shell: bash
@@ -96,12 +98,13 @@ jobs:
           set -euo pipefail
           BUILD_ID="run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
           SOURCE_ID="${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+          BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
 
           flutter build apk --release \
             --build-name="${APP_VERSION}" \
-            --build-number="${GITHUB_RUN_NUMBER}" \
+            --build-number="${BUILD_NUMBER}" \
             --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
-            --dart-define="SA7BI_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" \
+            --dart-define="SA7BI_BUILD_NUMBER=${BUILD_NUMBER}" \
             --dart-define="SA7BI_COMMIT_SHA=${GITHUB_SHA}" \
             --dart-define="APP_BUILD_ID=${BUILD_ID}" \
             --dart-define="APP_SOURCE_ID=${SOURCE_ID}"
@@ -111,6 +114,8 @@ jobs:
         run: |
           set -euo pipefail
           APK="${APK_PATH}"
+          EXPECTED_BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
+
           test -s "${APK}" || {
             echo "ERROR: APK missing or empty"
             exit 1
@@ -135,7 +140,8 @@ jobs:
 
           echo "Application ID: ${ACTUAL_ID}"
           echo "Version name: ${ACTUAL_VERSION}"
-          echo "Version code: ${ACTUAL_CODE}"
+          echo "Expected version code: ${EXPECTED_BUILD_NUMBER}"
+          echo "Actual version code: ${ACTUAL_CODE}"
           echo "APK bytes: ${APK_BYTES}"
           echo "APK SHA-256: ${APK_SHA256}"
 
@@ -149,8 +155,8 @@ jobs:
             exit 1
           fi
 
-          if [ "${ACTUAL_CODE}" != "${GITHUB_RUN_NUMBER}" ]; then
-            echo "ERROR: APK version code differs from workflow run."
+          if [ "${ACTUAL_CODE}" != "${EXPECTED_BUILD_NUMBER}" ]; then
+            echo "ERROR: APK version code differs from expected build number."
             exit 1
           fi
 
