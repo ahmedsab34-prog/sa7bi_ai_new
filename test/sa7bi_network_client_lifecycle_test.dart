@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:io';
 
@@ -64,121 +65,106 @@ void main() {
       await server.close(force: true);
     });
 
-    test(
-      'consecutive requests work in the same Zone',
-      () async {
-        await http.runWithClient(
-          () async {
-            final first = await http
-                .get(baseUri.resolve('/first'))
-                .timeout(const Duration(seconds: 5));
+    test('consecutive requests work in the same Zone', () async {
+      await http.runWithClient(
+        () async {
+          final first = await http
+              .get(baseUri.resolve('/first'))
+              .timeout(const Duration(seconds: 5));
 
-            final second = await http
-                .get(baseUri.resolve('/second'))
-                .timeout(const Duration(seconds: 5));
+          final second = await http
+              .get(baseUri.resolve('/second'))
+              .timeout(const Duration(seconds: 5));
 
-            expect(first.statusCode, HttpStatus.ok);
-            expect(second.statusCode, HttpStatus.ok);
-            expect(first.body, 'ok');
-            expect(second.body, 'ok');
-          },
-          Sa7biNetworkClient.factory,
-        );
+          expect(first.statusCode, HttpStatus.ok);
+          expect(second.statusCode, HttpStatus.ok);
+          expect(first.body, 'ok');
+          expect(second.body, 'ok');
+        },
+        Sa7biNetworkClient.factory,
+      );
 
-        expect(requestPaths, contains('/first'));
-        expect(requestPaths, contains('/second'));
-      },
-    );
+      expect(requestPaths, contains('/first'));
+      expect(requestPaths, contains('/second'));
+    });
 
-    test(
-      'Zone client is independent from persistent client',
-      () async {
-        final persistent = Sa7biNetworkClient.client;
-        final zoneClient = Sa7biNetworkClient.factory();
+    test('Zone client is independent from persistent client', () async {
+      final persistent = Sa7biNetworkClient.client;
+      final zoneClient = Sa7biNetworkClient.factory();
 
-        expect(identical(zoneClient, persistent), isFalse);
+      expect(identical(zoneClient, persistent), isFalse);
 
-        zoneClient.close();
+      zoneClient.close();
 
-        final response = await persistent
-            .get(baseUri.resolve('/persistent'))
-            .timeout(const Duration(seconds: 5));
+      final response = await persistent
+          .get(baseUri.resolve('/persistent'))
+          .timeout(const Duration(seconds: 5));
 
-        expect(response.statusCode, HttpStatus.ok);
-        expect(response.body, 'ok');
-      },
-    );
+      expect(response.statusCode, HttpStatus.ok);
+      expect(response.body, 'ok');
+    });
 
-    test(
-      'HTTP 503 does not prevent the next request',
-      () async {
-        final client = Sa7biNetworkClient.client;
+    test('HTTP 503 does not prevent the next request', () async {
+      final client = Sa7biNetworkClient.client;
 
-        final failedHealth = await client
-            .get(baseUri.resolve('/health-fail'))
-            .timeout(const Duration(seconds: 5));
+      final failedHealth = await client
+          .get(baseUri.resolve('/health-fail'))
+          .timeout(const Duration(seconds: 5));
 
-        expect(
-          failedHealth.statusCode,
-          HttpStatus.serviceUnavailable,
-        );
+      expect(
+        failedHealth.statusCode,
+        HttpStatus.serviceUnavailable,
+      );
 
-        final next = await client
-            .get(baseUri.resolve('/next'))
-            .timeout(const Duration(seconds: 5));
+      final next = await client
+          .get(baseUri.resolve('/next'))
+          .timeout(const Duration(seconds: 5));
 
-        expect(next.statusCode, HttpStatus.ok);
-        expect(next.body, 'ok');
-      },
-    );
+      expect(next.statusCode, HttpStatus.ok);
+      expect(next.body, 'ok');
+    });
 
-    test(
-      'persistent client can be recreated after close',
-      () async {
-        final oldClient = Sa7biNetworkClient.client;
+    test('persistent client can be recreated after close', () async {
+      final oldClient = Sa7biNetworkClient.client;
 
-        final before = await oldClient
-            .get(baseUri.resolve('/before-close'))
-            .timeout(const Duration(seconds: 5));
+      final before = await oldClient
+          .get(baseUri.resolve('/before-close'))
+          .timeout(const Duration(seconds: 5));
 
-        expect(before.statusCode, HttpStatus.ok);
+      expect(before.statusCode, HttpStatus.ok);
 
-        Sa7biNetworkClient.close();
+      Sa7biNetworkClient.close();
 
-        final newClient = Sa7biNetworkClient.client;
+      final newClient = Sa7biNetworkClient.client;
 
-        expect(identical(oldClient, newClient), isFalse);
+      expect(identical(oldClient, newClient), isFalse);
 
-        final after = await newClient
-            .get(baseUri.resolve('/after-close'))
-            .timeout(const Duration(seconds: 5));
+      final after = await newClient
+          .get(baseUri.resolve('/after-close'))
+          .timeout(const Duration(seconds: 5));
 
-        expect(after.statusCode, HttpStatus.ok);
-        expect(after.body, 'ok');
-      },
-    );
+      expect(after.statusCode, HttpStatus.ok);
+      expect(after.body, 'ok');
+    });
 
-    test(
-      'a timed-out request does not stop the next request',
-      () async {
-        final client = Sa7biNetworkClient.client;
+    test('a timed-out request does not stop the next request', () async {
+      final client = Sa7biNetworkClient.client;
 
-        await expectLater(
-          client
-              .get(baseUri.resolve('/slow'))
-              .timeout(const Duration(milliseconds: 50)),
-          throwsA(isA<TimeoutException>()),
-        );
+      await expectLater(
+        client
+            .get(baseUri.resolve('/slow'))
+            .timeout(const Duration(milliseconds: 50)),
+        throwsA(isA<TimeoutException>()),
+      );
 
-        final next = await client
-            .get(baseUri.resolve('/after-timeout'))
-            .timeout(const Duration(seconds: 5));
+      final next = await client
+          .get(baseUri.resolve('/after-timeout'))
+          .timeout(const Duration(seconds: 5));
 
-        expect(next.statusCode, HttpStatus.ok);
-        expect(next.body, 'ok');
-        expect(requestPaths, contains('/slow'));
-        expect(requestPaths, contains('/after-timeout'));
-      },
-    );
+      expect(next.statusCode, HttpStatus.ok);
+      expect(next.body, 'ok');
+      expect(requestPaths, contains('/slow'));
+      expect(requestPaths, contains('/after-timeout'));
+    });
   });
 }
