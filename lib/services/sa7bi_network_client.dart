@@ -12,7 +12,7 @@ import '../config/app_config.dart';
 /// - Cronet على Android عند توفره.
 /// - IOClient كوسيلة احتياطية مستقلة.
 /// - مهلات مختلفة حسب نوع الطلب.
-/// - الانتقال إلى Worker احتياطي عند فشل الاتصال.
+/// - الانتقال إلى Worker احتياطي عند فشل الاتصال أو أخطاء الخادم 5xx.
 /// - لا يعاد تنفيذ طلب AI لمجرد انتهاء المهلة.
 class Sa7biNetworkClient {
   Sa7biNetworkClient._();
@@ -22,15 +22,12 @@ class Sa7biNetworkClient {
   static const Duration connectionTimeout =
       Duration(seconds: 12);
 
-  /// المهلة الافتراضية لطلبات GET/HEAD.
   static const Duration safeRequestTimeout =
       Duration(seconds: 4);
 
-  /// مهلة GET/HEAD على الخادم الاحتياطي.
   static const Duration fallbackRequestTimeout =
       Duration(seconds: 6);
 
-  /// الحد الافتراضي لمحاولات GET/HEAD الآمنة.
   static const int maximumAttempts = 2;
 
   static const Duration retryDelay =
@@ -40,7 +37,6 @@ class Sa7biNetworkClient {
   static bool _usingCronet = false;
   static bool _initialized = false;
 
-  /// عميل دائم يعاد إنشاؤه بعد الإغلاق.
   static http.Client get client {
     if (_client == null) {
       _client = _createClient();
@@ -226,9 +222,28 @@ class _Sa7biFailoverClient extends http.BaseClient {
             bodyBytes,
           );
 
-          return await primary
+          final response = await primary
               .send(request)
               .timeout(requestTimeout);
+
+          // 5xx يعني أن الخادم لم يستطع معالجة الطلب.
+          // نستهلك جسم الرد قبل المحاولة الاحتياطية حتى لا
+          // نترك اتصالًا أو stream مفتوحًا.
+          if (response.statusCode >= 500 &&
+              response.statusCode <= 599) {
+            try {
+              await response.stream.drain<void>();
+            } catch (_) {}
+
+            throw http.ClientException(
+              'Primary Worker returned HTTP '
+              '${response.statusCode}.',
+              original.url,
+            );
+          }
+
+          // لا ننتقل للاحتياطي بسبب 4xx مثل 401 أو 404 أو 429.
+          return response;
         } on TimeoutException catch (error) {
           lastError = error;
         } on SocketException catch (error) {
@@ -247,7 +262,25 @@ class _Sa7biFailoverClient extends http.BaseClient {
       }
 
       try {
-        return await _sendFallback(original, bodyBytes);
+        final response = await _sendFallback(
+          original,
+          bodyBytes,
+        );
+
+        if (response.statusCode >= 500 &&
+            response.statusCode <= 599) {
+          try {
+            await response.stream.drain<void>();
+          } catch (_) {}
+
+          throw http.ClientException(
+            'Fallback Worker returned HTTP '
+            '${response.statusCode}.',
+            response.request?.url ?? original.url,
+          );
+        }
+
+        return response;
       } catch (fallbackError) {
         throw http.ClientException(
           'فشل الاتصال بالخادم الأساسي بعد '
