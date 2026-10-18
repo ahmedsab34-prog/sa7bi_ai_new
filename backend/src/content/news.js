@@ -8,12 +8,9 @@ import {
 
 const BACKEND_VERSION = "6.4.1";
 const MAX_ITEMS = 40;
-const MAX_IMAGE_ENRICH = 8;
-const RSS_TIMEOUT_MS = 7000;
-const ARTICLE_TIMEOUT_MS = 2500;
+const RSS_TIMEOUT_MS = 5000;
 
-/* RSS parsing */
-
+/* Parse RSS items */
 function parseRssItems(xml, fallbackSource = "News") {
   const blocks =
     String(xml || "").match(/<item\b[\s\S]*?<\/item>/gi) || [];
@@ -73,7 +70,6 @@ function parseRssItems(xml, fallbackSource = "News") {
 }
 
 /* URL helpers */
-
 function cleanUrl(value) {
   let result = String(value || "").trim();
 
@@ -99,16 +95,13 @@ function decodeXml(value) {
     .replace(/&gt;/gi, ">");
 }
 
-/* Bounded RSS fetch */
-
+/* Fetch a feed with a strict timeout */
 async function fetchRssFeed(url) {
   const response = await fetch(url, {
     method: "GET",
     headers: {
       "User-Agent": "Sa7bi-AI/6.4.1",
       Accept: "application/rss+xml, application/xml, text/xml, */*",
-      "Cache-Control": "no-cache",
-      Pragma: "no-cache",
     },
     redirect: "follow",
     signal: AbortSignal.timeout(RSS_TIMEOUT_MS),
@@ -121,8 +114,7 @@ async function fetchRssFeed(url) {
   return response.text();
 }
 
-/* Parallel provider feeds */
-
+/* Fetch feeds concurrently and deduplicate results */
 async function fetchFeedsInParallel(feeds, sourceName) {
   const results = await Promise.allSettled(
     feeds.map(async (url) => {
@@ -172,69 +164,7 @@ async function fetchBingNews() {
   return fetchFeedsInParallel(feeds, "Bing News");
 }
 
-/* Optional article image extraction */
-
-async function fetchArticleImage(url) {
-  if (!url) return "";
-
-  try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Sa7bi-AI/6.4.1)",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(ARTICLE_TIMEOUT_MS),
-    });
-
-    if (!response.ok) return "";
-
-    const html = (await response.text()).slice(0, 400000);
-
-    const patterns = [
-      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
-      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
-      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
-    ];
-
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      const image = cleanUrl(match?.[1]);
-
-      if (image) return image;
-    }
-  } catch (_) {
-    // Images are optional; an image failure must not fail news.
-  }
-
-  return "";
-}
-
-async function enrichImages(items) {
-  const result = [...items];
-
-  const targets = result
-    .filter((item) => !item.image && !item.imageUrl && item.link)
-    .slice(0, MAX_IMAGE_ENRICH);
-
-  await Promise.all(
-    targets.map(async (item) => {
-      const image = await fetchArticleImage(item.link);
-
-      if (image) {
-        item.image = image;
-        item.imageUrl = image;
-      }
-    }),
-  );
-
-  return result;
-}
-
-/* Aggregate providers concurrently */
-
+/* Aggregate both providers */
 async function fetchAllNews() {
   const [googleResult, bingResult] = await Promise.allSettled([
     fetchGoogleNews(),
@@ -261,8 +191,15 @@ async function fetchAllNews() {
   return combined;
 }
 
-/* Public endpoint */
-
+/*
+ * Important:
+ * Do not fetch each article page just to discover an optional image
+ * before returning the news list. That extra work can cause timeouts
+ * on weak mobile data or Wi-Fi.
+ *
+ * Images already present in RSS remain available. Missing images
+ * are optional and must not block the news response.
+ */
 export async function handleNews() {
   try {
     const items = await fetchAllNews();
@@ -278,18 +215,25 @@ export async function handleNews() {
           backendVersion: BACKEND_VERSION,
         },
         502,
+        {
+          "Cache-Control": "no-store",
+        },
       );
     }
 
-    // Return news promptly; image extraction is bounded and optional.
-    const enriched = await enrichImages(items);
-
-    return json({
-      ok: true,
-      items: enriched,
-      count: enriched.length,
-      backendVersion: BACKEND_VERSION,
-    });
+    return json(
+      {
+        ok: true,
+        items,
+        count: items.length,
+        backendVersion: BACKEND_VERSION,
+      },
+      200,
+      {
+        "Cache-Control":
+          "public, max-age=30, s-maxage=60, stale-while-revalidate=180",
+      },
+    );
   } catch (error) {
     return json(
       {
@@ -301,6 +245,9 @@ export async function handleNews() {
         backendVersion: BACKEND_VERSION,
       },
       502,
+      {
+        "Cache-Control": "no-store",
+      },
     );
   }
 }
@@ -310,8 +257,6 @@ export {
   fetchRssFeed,
   fetchGoogleNews,
   fetchBingNews,
-  fetchArticleImage,
-  enrichImages,
   fetchAllNews,
 };
 
