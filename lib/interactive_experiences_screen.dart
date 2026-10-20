@@ -3,6 +3,34 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'monetization_config.dart';
+import 'services/ads_service.dart';
+import 'widgets/rewarded_ad_button.dart';
+
+/// يعرض الإعلان البيني عند نقطة طبيعية فقط، بعد كل خمس جولات مكتملة.
+/// إعدادات التفعيل وخدمة AdMob الحالية هي المصدر الوحيد للتحكم.
+Future<void> _maybeShowInterstitialAfterGame(
+  BuildContext context,
+) async {
+  if (!MonetizationConfig.admobEnabled ||
+      !MonetizationConfig.interstitialEnabled) {
+    return;
+  }
+
+  try {
+    final ads = AdsService.instance;
+    final shouldShow = await ads.registerInterstitialOpportunity(
+      every: 5,
+    );
+
+    if (!shouldShow) return;
+
+    await ads.showInterstitial();
+  } catch (_) {
+    // تعطل الإعلان لا يعطل اللعبة ولا يمنع المستخدم من إكمالها.
+  }
+}
+
 class InteractiveExperiencesScreen extends StatefulWidget {
   const InteractiveExperiencesScreen({super.key, this.onShareResult});
 
@@ -91,6 +119,11 @@ class _GamesList extends StatelessWidget {
               'أجهزة مختلفة يحتاج إلى خدمة خادم ومزامنة.',
         ),
         const SizedBox(height: 12),
+        if (MonetizationConfig.admobEnabled &&
+            MonetizationConfig.rewardedAdsEnabled) ...[
+          const _RewardedCreditsPromo(),
+          const SizedBox(height: 14),
+        ],
         _MenuTile(
           icon: Icons.grid_3x3_rounded,
           title: 'إكس أو',
@@ -151,6 +184,11 @@ class _ExperimentsList extends StatelessWidget {
           body: 'تعلم من خلال أنشطة بسيطة تستطيع التحكم فيها.',
         ),
         const SizedBox(height: 12),
+        if (MonetizationConfig.admobEnabled &&
+            MonetizationConfig.rewardedAdsEnabled) ...[
+          const _RewardedCreditsPromo(),
+          const SizedBox(height: 14),
+        ],
         _MenuTile(
           icon: Icons.brightness_7_rounded,
           title: 'رحلة حياة النجوم',
@@ -418,6 +456,10 @@ class _TicTacToeScreenState extends State<_TicTacToeScreen> {
         _turn = _turn == 'X' ? 'O' : 'X';
       }
     });
+
+    if (_winner != null) {
+      _maybeShowInterstitialAfterGame(context);
+    }
   }
 
   void _reset() {
@@ -525,6 +567,9 @@ class _RpsScreenState extends State<_RpsScreen> {
       _status = 'أنت ${_symbols[player]} — الكمبيوتر ${_symbols[computer]} — '
           '${draw ? 'تعادل' : win ? 'فزت' : 'خسرت'}';
     });
+
+    // كل جولة مكتملة تُحسب فرصة واحدة؛ الإعلان لا يظهر إلا بعد خمس جولات.
+    _maybeShowInterstitialAfterGame(context);
   }
 
   void _reset() {
@@ -618,14 +663,20 @@ class _QuizScreenState extends State<_QuizScreen> {
   }
 
   void _next() {
+    final completedQuiz = _index == _questions.length - 1;
+
     setState(() {
-      if (_index == _questions.length - 1) {
+      if (completedQuiz) {
         _finished = true;
       } else {
         _index++;
         _selected = null;
       }
     });
+
+    if (completedQuiz) {
+      _maybeShowInterstitialAfterGame(context);
+    }
   }
 
   void _reset() {
@@ -1075,6 +1126,118 @@ class _OffsideExperimentScreenState
               color: Colors.white54,
               height: 1.4,
               fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// بطاقة مكافأة موحّدة تستخدم خدمة AdMob والرصيد الموجودة بالفعل.
+/// لا تمنح أي Credits محليًا؛ التحقق والمكافأة يظلان داخل RewardedAdButton.
+class _RewardedCreditsPromo extends StatelessWidget {
+  const _RewardedCreditsPromo();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            const Color(0xFFFFD76A).withValues(alpha: 0.13),
+            const Color(0xFF7C4DFF).withValues(alpha: 0.10),
+            const Color(0xFF111827),
+          ],
+        ),
+        border: Border.all(
+          color: const Color(0xFFFFD76A).withValues(alpha: 0.32),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFD76A).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.card_giftcard_rounded,
+                  color: Color(0xFFFFD76A),
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 11),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'هديتك من صاحبي AI',
+                      textDirection: TextDirection.rtl,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'شاهد بإرادتك واكسب رصيدًا إضافيًا',
+                      textDirection: TextDirection.rtl,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFD76A).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Text(
+                  '+10',
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    color: Color(0xFFFFD76A),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          const RewardedAdButton(
+            label: 'شاهد إعلانًا واكسب 10 Credits',
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            'المكافأة تُضاف بعد تأكيدها من الخادم، بحد أقصى 5 مكافآت يوميًا.',
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 10,
+              height: 1.4,
             ),
           ),
         ],
