@@ -1,9 +1,12 @@
-```dart
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 /// شاشة مستقلة للألعاب والتجارب التفاعلية في صاحبي AI.
+///
+/// الألعاب في هذه النسخة محلية على الجهاز؛ اللعب بين أجهزة مختلفة
+/// يتطلب خدمة اجتماعية ومزامنة آمنة على الخادم.
 class InteractiveExperiencesScreen extends StatefulWidget {
   const InteractiveExperiencesScreen({super.key, this.onShareResult});
 
@@ -50,8 +53,14 @@ class _InteractiveExperiencesScreenState
             bottom: TabBar(
               controller: _tabs,
               tabs: const [
-                Tab(icon: Icon(Icons.sports_esports_rounded), text: 'الألعاب'),
-                Tab(icon: Icon(Icons.auto_awesome_rounded), text: 'التجارب'),
+                Tab(
+                  icon: Icon(Icons.sports_esports_rounded),
+                  text: 'الألعاب',
+                ),
+                Tab(
+                  icon: Icon(Icons.auto_awesome_rounded),
+                  text: 'التجارب',
+                ),
               ],
             ),
           ),
@@ -68,6 +77,7 @@ class _InteractiveExperiencesScreenState
 
 class _GamesList extends StatelessWidget {
   const _GamesList({required this.onShare});
+
   final ValueChanged<String> onShare;
 
   @override
@@ -77,33 +87,39 @@ class _GamesList extends StatelessWidget {
           const _IntroCard(
             icon: Icons.groups_rounded,
             title: 'اللعب داخل الشات',
-            body: 'هذه بداية واجهة الألعاب. الألعاب الحالية محلية؛ اللعب المباشر '
-                'بين أجهزة مختلفة يتطلب تفعيل خدمة الشات الاجتماعي أولًا.',
+            body: 'الألعاب الحالية محلية؛ اللعب المباشر بين أجهزة مختلفة '
+                'يتطلب تفعيل خدمة الشات الاجتماعي أولًا.',
           ),
           const SizedBox(height: 12),
           _MenuTile(
             icon: Icons.grid_3x3_rounded,
             title: 'إكس أو — لاعبان على جهاز واحد',
             subtitle: 'تناوب على X و O لتكوين ثلاثة رموز على خط واحد.',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _TicTacToeScreen(onShare: onShare),
-            )),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => _TicTacToeScreen(onShare: onShare),
+              ),
+            ),
           ),
           _MenuTile(
             icon: Icons.back_hand_rounded,
             title: 'حجر ورقة مقص',
             subtitle: 'العب جولات سريعة ضد الكمبيوتر وسجّل نتيجتك.',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _RpsScreen(onShare: onShare),
-            )),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => _RpsScreen(onShare: onShare),
+              ),
+            ),
           ),
           _MenuTile(
             icon: Icons.quiz_rounded,
             title: 'تحدي المعلومات العامة',
             subtitle: 'أسئلة اختيار من متعدد مع نتيجة في نهاية الجولة.',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _QuizScreen(onShare: onShare),
-            )),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => _QuizScreen(onShare: onShare),
+              ),
+            ),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -120,6 +136,7 @@ class _GamesList extends StatelessWidget {
 
 class _ExperimentsList extends StatelessWidget {
   const _ExperimentsList({required this.onShare});
+
   final ValueChanged<String> onShare;
 
   @override
@@ -129,33 +146,39 @@ class _ExperimentsList extends StatelessWidget {
           const _IntroCard(
             icon: Icons.science_rounded,
             title: 'مختبر التجارب المرئية',
-            body: 'أنشطة تعليمية مبسطة تتفاعل مع اختيارات المستخدم، ويمكن لاحقًا '
-                'تحويلها إلى تحديات مشتركة داخل الشات.',
+            body: 'أنشطة تعليمية مبسطة تتفاعل مع اختيارات المستخدم، '
+                'ويمكن لاحقًا تحويلها إلى تحديات مشتركة داخل الشات.',
           ),
           const SizedBox(height: 12),
           _MenuTile(
             icon: Icons.brightness_7_rounded,
             title: 'رحلة حياة النجوم',
             subtitle: 'حرّك المؤشر بين مراحل تطور النجم.',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => const _StarExperimentScreen(),
-            )),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const _StarExperimentScreen(),
+              ),
+            ),
           ),
           _MenuTile(
             icon: Icons.restaurant_menu_rounded,
             title: 'المطبخ التفاعلي',
             subtitle: 'غيّر عدد الأشخاص وشاهد المقادير تتغير.',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => const _KitchenExperimentScreen(),
-            )),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const _KitchenExperimentScreen(),
+              ),
+            ),
           ),
           _MenuTile(
             icon: Icons.sports_soccer_rounded,
             title: 'قاعدة التسلل',
             subtitle: 'حرّك المهاجم لفهم الفكرة الأساسية للتسلل.',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => const _OffsideExperimentScreen(),
-            )),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const _OffsideExperimentScreen(),
+              ),
+            ),
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
@@ -248,8 +271,10 @@ class _MenuTile extends StatelessWidget {
         ),
         child: ListTile(
           onTap: onTap,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 15, vertical: 7),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 15,
+            vertical: 7,
+          ),
           leading: CircleAvatar(
             backgroundColor: const Color(0x22FFD76A),
             child: Icon(icon, color: const Color(0xFFFFD76A)),
@@ -265,11 +290,16 @@ class _MenuTile extends StatelessWidget {
             padding: const EdgeInsets.only(top: 5),
             child: Text(
               subtitle,
-              style: const TextStyle(color: Colors.white60, height: 1.4),
+              style: const TextStyle(
+                color: Colors.white60,
+                height: 1.4,
+              ),
             ),
           ),
-          trailing:
-              const Icon(Icons.chevron_left_rounded, color: Colors.white70),
+          trailing: const Icon(
+            Icons.chevron_left_rounded,
+            color: Colors.white70,
+          ),
         ),
       );
 }
@@ -341,6 +371,7 @@ class _GamePage extends StatelessWidget {
 
 class _TicTacToeScreen extends StatefulWidget {
   const _TicTacToeScreen({required this.onShare});
+
   final ValueChanged<String> onShare;
 
   @override
@@ -389,7 +420,9 @@ class _TicTacToeScreenState extends State<_TicTacToeScreen> {
   Widget build(BuildContext context) {
     final status = _winner == null
         ? 'دور اللاعب $_turn'
-        : (_winner == 'تعادل' ? 'انتهت المباراة بالتعادل' : 'اللاعب $_winner فاز!');
+        : (_winner == 'تعادل'
+            ? 'انتهت المباراة بالتعادل'
+            : 'اللاعب $_winner فاز!');
 
     return _GamePage(
       title: 'إكس أو',
@@ -434,6 +467,7 @@ class _TicTacToeScreenState extends State<_TicTacToeScreen> {
 
 class _RpsScreen extends StatefulWidget {
   const _RpsScreen({required this.onShare});
+
   final ValueChanged<String> onShare;
 
   @override
@@ -441,9 +475,16 @@ class _RpsScreen extends StatefulWidget {
 }
 
 class _RpsScreenState extends State<_RpsScreen> {
-  static const _symbols = {'حجر': '✊', 'ورقة': '✋', 'مقص': '✌️'};
+  static const _symbols = {
+    'حجر': '✊',
+    'ورقة': '✋',
+    'مقص': '✌️',
+  };
+
   final _random = math.Random();
-  int _wins = 0, _losses = 0, _draws = 0;
+  int _wins = 0;
+  int _losses = 0;
+  int _draws = 0;
   String _status = 'اختر حركتك لبدء اللعب';
 
   void _choose(String player) {
@@ -464,7 +505,8 @@ class _RpsScreenState extends State<_RpsScreen> {
       }
 
       _status =
-          'أنت ${_symbols[player]} — الكمبيوتر ${_symbols[cpu]} — ${draw ? 'تعادل' : win ? 'فزت' : 'خسرت'}';
+          'أنت ${_symbols[player]} — الكمبيوتر ${_symbols[cpu]} — '
+          '${draw ? 'تعادل' : win ? 'فزت' : 'خسرت'}';
     });
   }
 
@@ -513,6 +555,7 @@ class _RpsScreenState extends State<_RpsScreen> {
 
 class _QuizScreen extends StatefulWidget {
   const _QuizScreen({required this.onShare});
+
   final ValueChanged<String> onShare;
 
   @override
@@ -531,16 +574,22 @@ class _QuizScreenState extends State<_QuizScreen> {
   static const _questions = <_Question>[
     _Question('ما أكبر كواكب المجموعة الشمسية؟', ['الأرض', 'المشتري', 'المريخ'], 1),
     _Question('كم ضلعًا للمثلث؟', ['ثلاثة', 'أربعة', 'خمسة'], 0),
-    _Question('ما الغاز الذي تمتصه النباتات في البناء الضوئي؟', ['الأكسجين', 'النيتروجين', 'ثاني أكسيد الكربون'], 2),
+    _Question(
+      'ما الغاز الذي تمتصه النباتات في البناء الضوئي؟',
+      ['الأكسجين', 'النيتروجين', 'ثاني أكسيد الكربون'],
+      2,
+    ),
     _Question('كم دقيقة في الساعة؟', ['30', '60', '100'], 1),
   ];
 
-  int _index = 0, _score = 0;
+  int _index = 0;
+  int _score = 0;
   int? _selected;
   bool _finished = false;
 
   void _answer(int i) {
     if (_selected != null || _finished) return;
+
     setState(() {
       _selected = i;
       if (i == _questions[_index].correct) _score++;
@@ -667,7 +716,10 @@ class _StarExperimentScreenState extends State<_StarExperimentScreen> {
     ('نجم أولي', 'تنكمش المادة بفعل الجاذبية وترتفع درجة حرارتها.'),
     ('النسق الأساسي', 'يحدث الاندماج النووي في قلب النجم خلال معظم عمره.'),
     ('عملاق أحمر', 'يتمدد النجم في مرحلة متأخرة من تطوره.'),
-    ('النهاية', 'تختلف النهاية حسب كتلة النجم؛ قد يصبح قزمًا أبيض أو يمر بانفجار مستعر أعظم.'),
+    (
+      'النهاية',
+      'تختلف النهاية حسب كتلة النجم؛ قد يصبح قزمًا أبيض أو يمر بانفجار مستعر أعظم.',
+    ),
   ];
 
   @override
@@ -694,8 +746,10 @@ class _StarExperimentScreenState extends State<_StarExperimentScreen> {
             label: stage.$1,
             onChanged: (v) => setState(() => _value = v),
           ),
-          Text('${i + 1} من ${_stages.length}',
-              style: const TextStyle(color: Colors.white54)),
+          Text(
+            '${i + 1} من ${_stages.length}',
+            style: const TextStyle(color: Colors.white54),
+          ),
           const SizedBox(height: 12),
           Text(
             stage.$1,
@@ -774,7 +828,7 @@ class _KitchenExperimentScreenState extends State<_KitchenExperimentScreen> {
           ),
           _IngredientRow(
             name: 'زيت زيتون',
-            amount: '${people} ملعقة صغيرة تقريبًا',
+            amount: '$people ملعقة صغيرة تقريبًا',
           ),
           const SizedBox(height: 12),
           const Text(
@@ -930,8 +984,8 @@ class _OffsideExperimentScreenState extends State<_OffsideExperimentScreen> {
           ),
           Text(
             ahead
-                ? 'قد يكون اللاعب في موقف تسلل عند لعب الكرة إذا كان أقرب لخط '
-                    'المرمى من الكرة والمدافع الثاني الأخير.'
+                ? 'قد يكون اللاعب في موقف تسلل عند لعب الكرة إذا كان أقرب '
+                    'لخط المرمى من الكرة والمدافع الثاني الأخير.'
                 : 'وفق الرسم المبسط، المهاجم ليس متقدمًا عن خط المدافع المحدد.',
             style: TextStyle(
               color: ahead ? Colors.orangeAccent : Colors.greenAccent,
@@ -943,7 +997,11 @@ class _OffsideExperimentScreenState extends State<_OffsideExperimentScreen> {
             'موقف التسلل وحده ليس مخالفة؛ تُحتسب المخالفة عند مشاركة اللاعب '
             'في اللعب وفق القانون. الرسم للتوضيح وليس محاكاة كاملة للقانون.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white54, height: 1.4, fontSize: 12),
+            style: TextStyle(
+              color: Colors.white54,
+              height: 1.4,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
