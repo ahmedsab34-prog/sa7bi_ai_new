@@ -1,31 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../interactive_experiences_screen.dart';
 import 'chat_toolbar.dart';
 
 /// شريط كتابة المحادثة وأدواتها.
-///
-/// مسؤول عن:
-/// - إدخال النص.
-/// - زر الإرسال.
-/// - الكاميرا.
-/// - المعرض.
-/// - الفيديو.
-/// - تشغيل/إيقاف الصوت.
-/// - تحويل الكلام إلى نص.
-/// - توليد الصور.
-///
-/// لا يحتوي على منطق AI نفسه؛
-/// ChatScreen والخدمات هي المسؤولة عن التنفيذ.
+/// يحافظ على أدوات الوسائط الحالية ويضيف فتح الألعاب والتجارب،
+/// وتعود نتيجة التجربة إلى مربع الكتابة دون إرسالها تلقائيًا.
 class ChatComposer extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
-
   final bool isLoading;
   final bool isListening;
   final bool isGeneratingImage;
-
   final VoidCallback onSend;
-
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
   final VoidCallback? onVideo;
@@ -61,7 +48,6 @@ class _ChatComposerState extends State<ChatComposer> {
   @override
   void initState() {
     super.initState();
-
     widget.controller.addListener(_onTextChanged);
     _hasText = widget.controller.text.trim().isNotEmpty;
   }
@@ -74,42 +60,45 @@ class _ChatComposerState extends State<ChatComposer> {
 
   void _onTextChanged() {
     final hasText = widget.controller.text.trim().isNotEmpty;
-
-    if (hasText == _hasText || !mounted) {
-      return;
-    }
-
-    setState(() {
-      _hasText = hasText;
-    });
+    if (hasText == _hasText || !mounted) return;
+    setState(() => _hasText = hasText);
   }
 
   void _send() {
-    if (widget.isLoading || widget.isGeneratingImage) {
-      return;
-    }
-
-    if (widget.controller.text.trim().isEmpty) {
-      return;
-    }
-
+    if (widget.isLoading || widget.isGeneratingImage) return;
+    if (widget.controller.text.trim().isEmpty) return;
     widget.onSend();
+  }
+
+  Future<void> _openExperiences() async {
+    if (widget.isLoading || widget.isGeneratingImage) return;
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => InteractiveExperiencesScreen(
+          onShareResult: (message) {
+            final text = message.trim();
+            if (text.isEmpty || !mounted) return;
+
+            widget.controller.text = text;
+            widget.controller.selection = TextSelection.collapsed(
+              offset: widget.controller.text.length,
+            );
+            widget.focusNode.requestFocus();
+          },
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final disabled =
-        widget.isLoading || widget.isGeneratingImage;
+    final disabled = widget.isLoading || widget.isGeneratingImage;
 
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(
-          8,
-          6,
-          8,
-          8,
-        ),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.25),
           border: Border(
@@ -122,31 +111,20 @@ class _ChatComposerState extends State<ChatComposer> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // =====================================================
-            // أدوات المحادثة
-            // =====================================================
-
             ChatToolbar(
               onCamera: disabled ? null : widget.onCamera,
               onGallery: disabled ? null : widget.onGallery,
               onVideo: disabled ? null : widget.onVideo,
               onVoice: disabled ? null : widget.onVoice,
               onText: disabled ? null : widget.onText,
-              onSpeechToText:
-                  disabled ? null : widget.onSpeechToText,
-              onImageGeneration:
-                  disabled ? null : widget.onImageGeneration,
+              onSpeechToText: disabled ? null : widget.onSpeechToText,
+              onImageGeneration: disabled ? null : widget.onImageGeneration,
+              onExperiences: disabled ? null : _openExperiences,
               enabled: !disabled,
               isListening: widget.isListening,
               isGeneratingImage: widget.isGeneratingImage,
             ),
-
             const SizedBox(height: 5),
-
-            // =====================================================
-            // مربع الكتابة + زر الإرسال
-            // =====================================================
-
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -164,14 +142,11 @@ class _ChatComposerState extends State<ChatComposer> {
                         color: _hasText
                             ? Colors.white.withValues(alpha: 0.24)
                             : Colors.white.withValues(alpha: 0.13),
-                        width: 1,
                       ),
                       boxShadow: _hasText
                           ? [
                               BoxShadow(
-                                color: Colors.white.withValues(
-                                  alpha: 0.05,
-                                ),
+                                color: Colors.white.withValues(alpha: 0.05),
                                 blurRadius: 12,
                                 spreadRadius: 1,
                               ),
@@ -204,27 +179,18 @@ class _ChatComposerState extends State<ChatComposer> {
                           fontSize: 15,
                         ),
                         border: InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(
+                        contentPadding: const EdgeInsets.symmetric(
                           horizontal: 18,
                           vertical: 13,
                         ),
                       ),
                       onSubmitted: (_) {
-                        if (!disabled && _hasText) {
-                          _send();
-                        }
+                        if (!disabled && _hasText) _send();
                       },
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
-                // =================================================
-                // زر الإرسال
-                // =================================================
-
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -284,9 +250,7 @@ class _ChatComposerState extends State<ChatComposer> {
                               Icons.arrow_upward_rounded,
                               color: _hasText && !disabled
                                   ? Colors.black
-                                  : Colors.white.withValues(
-                                      alpha: 0.30,
-                                    ),
+                                  : Colors.white.withValues(alpha: 0.30),
                               size: 26,
                             ),
                     ),
