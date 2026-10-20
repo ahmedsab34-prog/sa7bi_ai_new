@@ -1,18 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// شريط أدوات المحادثة.
-///
-/// الأدوات:
-/// - الكاميرا
-/// - المعرض
-/// - الفيديو
-/// - الصوت
-/// - الكتابة
-/// - تحويل الكلام إلى نص
-/// - توليد الصور
-///
-/// المنطق الحقيقي للأدوات موجود داخل ChatScreen والخدمات.
-/// هذا الملف مسؤول عن الواجهة والاستدعاءات فقط.
+/// شريط أدوات المحادثة، مع الحفاظ على أدوات الوسائط وإضافة الألعاب والتجارب.
 class ChatToolbar extends StatelessWidget {
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
@@ -21,6 +9,7 @@ class ChatToolbar extends StatelessWidget {
   final VoidCallback? onText;
   final VoidCallback? onSpeechToText;
   final VoidCallback? onImageGeneration;
+  final VoidCallback? onExperiences;
 
   final bool enabled;
   final bool isListening;
@@ -35,6 +24,7 @@ class ChatToolbar extends StatelessWidget {
     this.onText,
     this.onSpeechToText,
     this.onImageGeneration,
+    this.onExperiences,
     this.enabled = true,
     this.isListening = false,
     this.isGeneratingImage = false,
@@ -45,16 +35,8 @@ class ChatToolbar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(
-          8,
-          4,
-          8,
-          6,
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 5,
-          vertical: 6,
-        ),
+        margin: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.075),
           borderRadius: BorderRadius.circular(24),
@@ -70,48 +52,37 @@ class ChatToolbar extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: _ToolButton(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _ToolButton(
                 icon: Icons.camera_alt_rounded,
                 tooltip: 'الكاميرا',
                 onPressed: enabled ? onCamera : null,
               ),
-            ),
-            Expanded(
-              child: _ToolButton(
+              _ToolButton(
                 icon: Icons.photo_library_rounded,
                 tooltip: 'الصور والمعرض',
                 onPressed: enabled ? onGallery : null,
               ),
-            ),
-            Expanded(
-              child: _ToolButton(
+              _ToolButton(
                 icon: Icons.videocam_rounded,
                 tooltip: 'فيديو',
                 onPressed: enabled ? onVideo : null,
               ),
-            ),
-            Expanded(
-              child: _ToolButton(
+              _ToolButton(
                 icon: Icons.mic_rounded,
-                tooltip: isListening
-                    ? 'إيقاف التسجيل'
-                    : 'صوت',
+                tooltip: isListening ? 'إيقاف التسجيل' : 'صوت',
                 active: isListening,
                 onPressed: enabled ? onVoice : null,
               ),
-            ),
-            Expanded(
-              child: _ToolButton(
+              _ToolButton(
                 icon: Icons.keyboard_rounded,
                 tooltip: 'كتابة',
                 onPressed: enabled ? onText : null,
               ),
-            ),
-            Expanded(
-              child: _ToolButton(
+              _ToolButton(
                 icon: isListening
                     ? Icons.stop_circle_rounded
                     : Icons.graphic_eq_rounded,
@@ -119,12 +90,9 @@ class ChatToolbar extends StatelessWidget {
                     ? 'إيقاف تحويل الكلام'
                     : 'تحويل الكلام إلى نص',
                 active: isListening,
-                onPressed:
-                    enabled ? onSpeechToText : null,
+                onPressed: enabled ? onSpeechToText : null,
               ),
-            ),
-            Expanded(
-              child: _ToolButton(
+              _ToolButton(
                 icon: isGeneratingImage
                     ? Icons.hourglass_top_rounded
                     : Icons.auto_awesome_rounded,
@@ -133,13 +101,18 @@ class ChatToolbar extends StatelessWidget {
                     : 'توليد صورة',
                 active: isGeneratingImage,
                 emphasized: true,
-                onPressed:
-                    enabled && !isGeneratingImage
-                        ? onImageGeneration
-                        : null,
+                onPressed: enabled && !isGeneratingImage
+                    ? onImageGeneration
+                    : null,
               ),
-            ),
-          ],
+              _ToolButton(
+                icon: Icons.sports_esports_rounded,
+                tooltip: 'الألعاب والتجارب التفاعلية',
+                emphasized: true,
+                onPressed: enabled ? onExperiences : null,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -195,8 +168,7 @@ class _ToolButton extends StatelessWidget {
                 boxShadow: active
                     ? [
                         BoxShadow(
-                          color:
-                              Colors.white.withValues(alpha: 0.12),
+                          color: Colors.white.withValues(alpha: 0.12),
                           blurRadius: 8,
                           spreadRadius: 1,
                         ),
@@ -204,8 +176,7 @@ class _ToolButton extends StatelessWidget {
                     : emphasized && !disabled
                         ? [
                             BoxShadow(
-                              color:
-                                  Colors.amber.withValues(alpha: 0.12),
+                              color: Colors.amber.withValues(alpha: 0.12),
                               blurRadius: 8,
                               spreadRadius: 1,
                             ),
