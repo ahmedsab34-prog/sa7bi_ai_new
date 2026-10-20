@@ -11,6 +11,7 @@ import 'audio_player_service.dart';
 import 'chat_screen.dart';
 import 'config/service_keys.dart';
 import 'home_screen.dart';
+import 'interactive_experiences_screen.dart';
 import 'khalasana_portal_screen.dart';
 import 'profile_screen.dart';
 import 'services/ads_service.dart';
@@ -109,22 +110,22 @@ class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
 
   @override
-  State<MainContainerScreen> createState() =>
-      _MainContainerScreenState();
+  State<MainContainerScreen> createState() => _MainContainerScreenState();
 }
 
 class _MainContainerScreenState extends State<MainContainerScreen> {
   // ترتيب التبويبات:
   // 0 = الرئيسية
   // 1 = الشات العام
-  // 2 = حسابي
+  // 2 = الألعاب والتجارب
+  // 3 = حسابي
   int index = 0;
 
   void openProfile() {
     if (!mounted) return;
 
     setState(() {
-      index = 2;
+      index = 3;
     });
   }
 
@@ -174,7 +175,10 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             'وحافظ على سياق المحادثة العامة.',
       ),
 
-      // 2: حسابي
+      // 2: الألعاب والتجارب التفاعلية
+      const InteractiveExperiencesScreen(),
+
+      // 3: حسابي
       ProfileScreen(
         onAudio: openAudioCenter,
       ),
@@ -241,6 +245,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 ),
               ),
 
+            // تظل خلصانة عائمة خارج الشات.
             if (!isChatTab)
               Positioned(
                 right: 12,
@@ -273,6 +278,11 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             icon: Icon(Icons.chat_bubble_outline_rounded),
             selectedIcon: Icon(Icons.chat_rounded),
             label: 'الشات',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sports_esports_outlined),
+            selectedIcon: Icon(Icons.sports_esports_rounded),
+            label: 'الألعاب',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
