@@ -34,9 +34,6 @@ extension AppDiagnosticsContentChecks
         allowMalformed: true,
       );
 
-      // لا نعتبر 404 أو أخطاء الخادم نجاحًا.
-      // بعض المسارات قد تحتاج بيانات أو صلاحيات؛ نسجلها كتحذير
-      // بدل اعتبارها اختبارًا وظيفيًا ناجحًا.
       final success = status >= 200 && status < 300;
       final validationResponse =
           status == 400 ||
@@ -97,10 +94,7 @@ extension AppDiagnosticsContentChecks
     try {
       final uri = _buildUri(path);
 
-      // هذه المسارات POST-only. نرسل طلبًا فارغًا متعمدًا:
-      // /v1/chat يعيد EMPTY_MESSAGE قبل حجز الرصيد أو استدعاء AI.
-      // /v1/image يعيد EMPTY_PROMPT قبل حجز الرصيد أو توليد صورة.
-      // لذلك الاختبار لا ينفذ توليدًا مدفوعًا ولا يكرر طلب المستخدم.
+      // طلب فارغ آمن لا ينفذ توليدًا مدفوعًا.
       final Map<String, dynamic> probeBody =
           path == '/v1/image'
               ? <String, dynamic>{'prompt': ''}
@@ -140,8 +134,6 @@ extension AppDiagnosticsContentChecks
           status == 405 ||
           status == 422;
 
-      // 400 مع EMPTY_MESSAGE/EMPTY_PROMPT يثبت أن المسار موجود
-      // وأنه وصل إلى التحقق من الطلب، وليس خطأ اتصال أو 404.
       final routeResponded =
           ordinarySuccess || expectedValidation;
 
