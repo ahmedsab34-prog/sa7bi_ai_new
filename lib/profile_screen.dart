@@ -371,13 +371,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ? const Center(
                     child: CircularProgressIndicator(),
                   )
-                : SingleChildScrollView(
-                    physics:
-                        const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(
-                      bottom: 8,
-                    ),
-                    child: _buildProfileContent(),
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      // ملاءمة محتوى الصفحة للشاشة دون تمرير رأسي.
+                      // عند ضيق المساحة يصغر المحتوى بدل قصّ الأزرار.
+                      return SizedBox(
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: constraints.maxWidth,
+                            child: _buildProfileContent(),
+                          ),
+                        ),
+                      );
+                    },
                   ),
           ),
         ],
