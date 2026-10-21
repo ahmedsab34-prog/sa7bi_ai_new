@@ -1,3 +1,4 @@
+
 part of '../app_diagnostics_service.dart';
 
 extension AppDiagnosticsContentChecks
