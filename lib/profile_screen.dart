@@ -25,8 +25,7 @@ class ProfileScreen extends StatefulWidget {
       _ProfileScreenState();
 }
 
-class _ProfileScreenState
-    extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen> {
   final ProfileService _profileService =
       ProfileService.instance;
 
@@ -107,23 +106,12 @@ class _ProfileScreenState
     }
 
     setState(() {
-      _photo =
-          _profileService.photoBytes;
-
-      _displayName =
-          _profileService.displayName;
-
-      _reelName =
-          _profileService.reelName;
-
-      _bio =
-          _profileService.bio;
-
-      _status =
-          _profileService.status;
-
-      _aiConnected =
-          _profileService.aiConnected;
+      _photo = _profileService.photoBytes;
+      _displayName = _profileService.displayName;
+      _reelName = _profileService.reelName;
+      _bio = _profileService.bio;
+      _status = _profileService.status;
+      _aiConnected = _profileService.aiConnected;
     });
   }
 
@@ -150,8 +138,7 @@ class _ProfileScreenState
       final connected =
           await AiService.checkConnection();
 
-      await _profileService
-          .saveAiConnection(
+      await _profileService.saveAiConnection(
         connected,
       );
 
@@ -173,8 +160,7 @@ class _ProfileScreenState
         _checkingAi = false;
       });
 
-      await _profileService
-          .saveAiConnection(false);
+      await _profileService.saveAiConnection(false);
     }
   }
 
@@ -204,8 +190,7 @@ class _ProfileScreenState
   }
 
   void _showMessage(String message) {
-    if (!mounted ||
-        message.trim().isEmpty) {
+    if (!mounted || message.trim().isEmpty) {
       return;
     }
 
@@ -215,50 +200,40 @@ class _ProfileScreenState
         SnackBar(
           content: Text(
             message,
-            textDirection:
-                TextDirection.rtl,
+            textDirection: TextDirection.rtl,
           ),
-          behavior:
-              SnackBarBehavior.floating,
-          duration:
-              const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
         ),
       );
   }
 
   Widget _buildAiStatusBar() {
-    final connected =
-        _aiConnected;
+    final connected = _aiConnected;
 
-    final statusColor =
-        connected
-            ? Colors.greenAccent
-            : Colors.orangeAccent;
+    final statusColor = connected
+        ? Colors.greenAccent
+        : Colors.orangeAccent;
 
     return Container(
-      margin:
-          const EdgeInsets.fromLTRB(
+      margin: const EdgeInsets.fromLTRB(
         6,
         0,
         6,
         5,
       ),
-      padding:
-          const EdgeInsets.symmetric(
+      padding: const EdgeInsets.symmetric(
         horizontal: 10,
         vertical: 6,
       ),
-      decoration:
-          BoxDecoration(
+      decoration: BoxDecoration(
         color: Theme.of(context)
             .colorScheme
             .surfaceContainerHighest
             .withValues(alpha: 0.55),
-        borderRadius:
-            BorderRadius.circular(13),
+        borderRadius: BorderRadius.circular(13),
         border: Border.all(
-          color:
-              statusColor.withValues(
+          color: statusColor.withValues(
             alpha: 0.30,
           ),
         ),
@@ -269,28 +244,21 @@ class _ProfileScreenState
             SizedBox(
               width: 9,
               height: 9,
-              child:
-                  CircularProgressIndicator(
+              child: CircularProgressIndicator(
                 strokeWidth: 1.7,
-                color:
-                    statusColor,
+                color: statusColor,
               ),
             )
           else
             Container(
               width: 8,
               height: 8,
-              decoration:
-                  BoxDecoration(
-                shape:
-                    BoxShape.circle,
-                color:
-                    statusColor,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: statusColor,
                 boxShadow: [
                   BoxShadow(
-                    color:
-                        statusColor
-                            .withValues(
+                    color: statusColor.withValues(
                       alpha: 0.35,
                     ),
                     blurRadius: 6,
@@ -304,47 +272,34 @@ class _ProfileScreenState
               connected
                   ? 'صاحبي AI متصل وجاهز'
                   : 'صاحبي AI غير متصل',
-              textDirection:
-                  TextDirection.rtl,
-              style:
-                  const TextStyle(
+              textDirection: TextDirection.rtl,
+              style: const TextStyle(
                 fontSize: 11,
-                fontWeight:
-                    FontWeight.w800,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
           Icon(
             connected
-                ? Icons
-                    .cloud_done_rounded
-                : Icons
-                    .cloud_off_rounded,
+                ? Icons.cloud_done_rounded
+                : Icons.cloud_off_rounded,
             size: 17,
-            color:
-                statusColor,
+            color: statusColor,
           ),
           const SizedBox(width: 1),
           IconButton(
             onPressed:
-                _checkingAi
-                    ? null
-                    : _checkAiConnection,
-            tooltip:
-                'فحص الاتصال',
-            padding:
-                EdgeInsets.zero,
-            constraints:
-                const BoxConstraints(
+                _checkingAi ? null : _checkAiConnection,
+            tooltip: 'فحص الاتصال',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
               minWidth: 30,
               minHeight: 30,
             ),
             icon: Icon(
-              Icons
-                  .refresh_rounded,
+              Icons.refresh_rounded,
               size: 17,
-              color:
-                  statusColor,
+              color: statusColor,
             ),
           ),
         ],
@@ -354,8 +309,7 @@ class _ProfileScreenState
 
   Widget _buildCreditsSection() {
     return Padding(
-      padding:
-          const EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         6,
         0,
         6,
@@ -364,11 +318,9 @@ class _ProfileScreenState
       child: Row(
         children: [
           const Expanded(
-            child:
-                CreditsStatus(
+            child: CreditsStatus(
               compact: true,
-              showRewardButton:
-                  false,
+              showRewardButton: false,
             ),
           ),
           const SizedBox(width: 6),
@@ -382,35 +334,24 @@ class _ProfileScreenState
 
   Widget _buildProfileContent() {
     return Column(
-      mainAxisSize:
-          MainAxisSize.min,
+      mainAxisSize: MainAxisSize.min,
       children: [
         ProfileHeader(
           photo: _photo,
-          displayName:
-              _displayName,
-          reelName:
-              _reelName,
-          onChanged:
-              _syncProfile,
-          onMessage:
-              _showMessage,
+          displayName: _displayName,
+          reelName: _reelName,
+          onChanged: _syncProfile,
+          onMessage: _showMessage,
         ),
-
         ProfileBioStatus(
           bio: _bio,
           status: _status,
-          onProfileChanged:
-              _syncProfile,
+          onProfileChanged: _syncProfile,
         ),
-
         _buildAiStatusBar(),
-
         _buildCreditsSection(),
-
         ProfileActions(
-          onMessage:
-              _showMessage,
+          onMessage: _showMessage,
         ),
       ],
     );
@@ -421,47 +362,22 @@ class _ProfileScreenState
     return SafeArea(
       child: Column(
         children: [
-          // الهيدر الرئيسي لا يتغير.
+          // الهيدر ثابت أعلى الصفحة ولا يتكرر في محتواها.
           AppHeader(
-            onAudioTap:
-                widget.onAudio,
+            onAudioTap: widget.onAudio,
           ),
-
           Expanded(
             child: _loading
                 ? const Center(
-                    child:
-                        CircularProgressIndicator(),
+                    child: CircularProgressIndicator(),
                   )
-                : LayoutBuilder(
-                    builder: (
-                      context,
-                      constraints,
-                    ) {
-                      const scale =
-                          0.78;
-
-                      return ClipRect(
-                        child: Align(
-                          alignment:
-                              Alignment.topCenter,
-                          child:
-                              Transform.scale(
-                            scale: scale,
-                            alignment:
-                                Alignment.topCenter,
-                            child:
-                                SizedBox(
-                              width:
-                                  constraints.maxWidth /
-                                      scale,
-                              child:
-                                  _buildProfileContent(),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                : SingleChildScrollView(
+                    physics:
+                        const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(
+                      bottom: 8,
+                    ),
+                    child: _buildProfileContent(),
                   ),
           ),
         ],
