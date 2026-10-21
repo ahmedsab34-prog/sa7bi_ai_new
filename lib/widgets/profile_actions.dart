@@ -26,9 +26,7 @@ class ProfileActions extends StatelessWidget {
   void _openSettings(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) {
-          return const SettingsScreen();
-        },
+        builder: (context) => const SettingsScreen(),
       ),
     );
   }
@@ -42,24 +40,24 @@ class ProfileActions extends StatelessWidget {
         8,
         7,
       ),
-      child: Column(
+      child: Row(
         children: [
-          _buildActionTile(
-            context: context,
-            icon: Icons.share_rounded,
-            title: 'مشاركة التطبيق',
-            subtitle:
-                'شارك رابط صاحبي AI مع أصدقائك',
-            onTap: _shareApp,
+          Expanded(
+            child: _buildActionTile(
+              context: context,
+              icon: Icons.share_rounded,
+              title: 'مشاركة التطبيق',
+              onTap: _shareApp,
+            ),
           ),
-          const SizedBox(height: 8),
-          _buildActionTile(
-            context: context,
-            icon: Icons.settings_rounded,
-            title: 'الإعدادات',
-            subtitle:
-                'إعدادات التطبيق والاتصال بالذكاء الاصطناعي',
-            onTap: () => _openSettings(context),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildActionTile(
+              context: context,
+              icon: Icons.settings_rounded,
+              title: 'الإعدادات',
+              onTap: () => _openSettings(context),
+            ),
           ),
         ],
       ),
@@ -70,78 +68,69 @@ class ProfileActions extends StatelessWidget {
     required BuildContext context,
     required IconData icon,
     required String title,
-    required String subtitle,
     required VoidCallback onTap,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white.withValues(
-            alpha: 0.07,
-          ),
-        ),
-      ),
-      child: ListTile(
+    final colors = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colors.surfaceContainerHighest
+          .withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
         onTap: onTap,
-        contentPadding:
-            const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 3,
-        ),
-        leading: Container(
-          width: 44,
-          height: 44,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          constraints: const BoxConstraints(
+            minHeight: 58,
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 7,
+          ),
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFFFFD54F),
-                Color(0xFFB45CFF),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: colors.outlineVariant
+                  .withValues(alpha: 0.35),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFFD54F)
-                    .withValues(alpha: 0.14),
-                blurRadius: 10,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFFFFD54F),
+                      Color(0xFFB45CFF),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: Colors.black,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  title,
+                  textDirection: TextDirection.rtl,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ],
           ),
-          child: Icon(
-            icon,
-            color: Colors.black,
-            size: 22,
-          ),
-        ),
-        title: Text(
-          title,
-          textDirection: TextDirection.rtl,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        subtitle: Text(
-          subtitle,
-          textDirection: TextDirection.rtl,
-          style: TextStyle(
-            fontSize: 10,
-            color: Theme.of(context)
-                .colorScheme
-                .onSurface
-                .withValues(alpha: 0.58),
-          ),
-        ),
-        trailing: const Icon(
-          Icons.chevron_left_rounded,
-          size: 22,
         ),
       ),
     );
