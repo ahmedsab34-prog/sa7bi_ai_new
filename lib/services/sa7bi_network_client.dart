@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 
@@ -226,9 +225,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
               .send(request)
               .timeout(requestTimeout);
 
-          // 5xx يعني أن الخادم لم يستطع معالجة الطلب.
-          // نستهلك جسم الرد قبل المحاولة الاحتياطية حتى لا
-          // نترك اتصالًا أو stream مفتوحًا.
+          // نستهلك جسم الرد قبل المحاولة الاحتياطية.
           if (response.statusCode >= 500 &&
               response.statusCode <= 599) {
             try {
@@ -242,7 +239,7 @@ class _Sa7biFailoverClient extends http.BaseClient {
             );
           }
 
-          // لا ننتقل للاحتياطي بسبب 4xx مثل 401 أو 404 أو 429.
+          // لا ننتقل للاحتياطي بسبب 4xx.
           return response;
         } on TimeoutException catch (error) {
           lastError = error;
