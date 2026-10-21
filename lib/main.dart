@@ -22,10 +22,10 @@ import 'services/sa7bi_network_client.dart';
 import 'widgets/khalasana_portal.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
   http.runWithClient(
     () {
-      WidgetsFlutterBinding.ensureInitialized();
-
       runApp(const Sa7biAiApp());
 
       WidgetsBinding.instance.addPostFrameCallback(
@@ -110,22 +110,22 @@ class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
 
   @override
-  State<MainContainerScreen> createState() => _MainContainerScreenState();
+  State<MainContainerScreen> createState() =>
+      _MainContainerScreenState();
 }
 
 class _MainContainerScreenState extends State<MainContainerScreen> {
   // ترتيب التبويبات:
   // 0 = الرئيسية
   // 1 = الشات العام
-  // 2 = الألعاب والتجارب
-  // 3 = حسابي
+  // 2 = حسابي
   int index = 0;
 
   void openProfile() {
     if (!mounted) return;
 
     setState(() {
-      index = 3;
+      index = 2;
     });
   }
 
@@ -149,6 +149,16 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
     );
   }
 
+  void openGames() {
+    if (!mounted) return;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const InteractiveExperiencesScreen(),
+      ),
+    );
+  }
+
   void openDiagnostics() {
     if (!mounted) return;
 
@@ -157,15 +167,11 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // يجب أن يطابق ترتيب الصفحات ترتيب شريط التنقل.
     final pages = <Widget>[
-      // 0: الرئيسية
       HomeScreen(
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
-
-      // 1: الشات العام
       const ChatScreen(
         serviceKey: ServiceKeys.general,
         serviceTitle: 'المحادثة العامة',
@@ -174,11 +180,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             'أجب بوضوح وبشكل مفيد، '
             'وحافظ على سياق المحادثة العامة.',
       ),
-
-      // 2: الألعاب والتجارب التفاعلية
-      const InteractiveExperiencesScreen(),
-
-      // 3: حسابي
       ProfileScreen(
         onAudio: openAudioCenter,
       ),
@@ -196,7 +197,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
               children: pages,
             ),
 
-            // لا نغطي الشات بالمشغل أو الأزرار العائمة.
             if (!isChatTab)
               const Positioned(
                 left: 10,
@@ -245,13 +245,53 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 ),
               ),
 
-            // تظل خلصانة عائمة خارج الشات.
             if (!isChatTab)
               Positioned(
                 right: 12,
                 bottom: 92,
                 child: KhalasanaPortal(
                   onTap: openKhalasana,
+                ),
+              ),
+
+            // الألعاب متاحة من زر مستقل، دون تبويب رابع.
+            if (!isChatTab)
+              Positioned(
+                right: 12,
+                bottom: 146,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Tooltip(
+                    message: 'الألعاب والتجارب',
+                    child: InkWell(
+                      onTap: openGames,
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF11141D)
+                              .withOpacity(0.96),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0x5563E6FF),
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x55000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.sports_esports_rounded,
+                          color: Color(0xFF63E6FF),
+                          size: 23,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -278,11 +318,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             icon: Icon(Icons.chat_bubble_outline_rounded),
             selectedIcon: Icon(Icons.chat_rounded),
             label: 'الشات',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.sports_esports_outlined),
-            selectedIcon: Icon(Icons.sports_esports_rounded),
-            label: 'الألعاب',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
