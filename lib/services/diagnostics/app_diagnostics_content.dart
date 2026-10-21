@@ -1,4 +1,3 @@
-
 part of '../app_diagnostics_service.dart';
 
 extension AppDiagnosticsContentChecks
@@ -85,7 +84,7 @@ extension AppDiagnosticsContentChecks
   }
 
   // ============================================================
-  // ROUTE PROBE (GET-only for idempotent endpoints)
+  // SAFE POST ROUTE PROBE
   // ============================================================
 
   Future<DiagnosticResult> _probeRoute({
@@ -98,17 +97,24 @@ extension AppDiagnosticsContentChecks
     try {
       final uri = _buildUri(path);
 
-      // POST endpoints like /v1/chat and /v1/image cannot be safely probed
-      // with GET. Instead, we check if the route responds to a safe method.
-      // For POST-only endpoints, we expect 405 (Method Not Allowed) which means
-      // the route exists but requires a POST.
+      // هذه المسارات POST-only. نرسل طلبًا فارغًا متعمدًا:
+      // /v1/chat يعيد EMPTY_MESSAGE قبل حجز الرصيد أو استدعاء AI.
+      // /v1/image يعيد EMPTY_PROMPT قبل حجز الرصيد أو توليد صورة.
+      // لذلك الاختبار لا ينفذ توليدًا مدفوعًا ولا يكرر طلب المستخدم.
+      final Map<String, dynamic> probeBody =
+          path == '/v1/image'
+              ? <String, dynamic>{'prompt': ''}
+              : <String, dynamic>{'messages': <dynamic>[]};
+
       final response = await Sa7biNetworkClient.client
-          .get(
+          .post(
             uri,
             headers: const {
               'Accept': 'application/json',
+              'Content-Type': 'application/json',
               'Cache-Control': 'no-cache',
             },
+            body: jsonEncode(probeBody),
           )
           .timeout(AppDiagnosticsService.defaultTimeout);
 
@@ -119,53 +125,56 @@ extension AppDiagnosticsContentChecks
         response.bodyBytes,
         allowMalformed: true,
       );
+      final lowerBody = body.toLowerCase();
 
-      // For POST-only routes like /v1/chat and /v1/image:
-      // - 405 (Method Not Allowed) indicates the route exists but requires POST.
-      // - 200-299 indicates the route accepts GET (unexpected for POST-only routes).
-      // - 400-403 indicates the route exists but needs valid auth/data.
-      // - 404 indicates the route does not exist.
-      final routeExists = status == 405 ||
-          (status >= 200 && status < 300) ||
-          status == 400 ||
-          status == 401 ||
-          status == 403;
+      final expectedValidation =
+          status == 400 &&
+          (lowerBody.contains('empty_message') ||
+              lowerBody.contains('empty_prompt'));
 
-      final success = status >= 200 && status < 300;
-      final methodNotAllowed = status == 405;
+      final ordinarySuccess = status >= 200 && status < 300;
       final validationResponse =
           status == 400 ||
           status == 401 ||
-          status == 403;
+          status == 403 ||
+          status == 405 ||
+          status == 422;
+
+      // 400 مع EMPTY_MESSAGE/EMPTY_PROMPT يثبت أن المسار موجود
+      // وأنه وصل إلى التحقق من الطلب، وليس خطأ اتصال أو 404.
+      final routeResponded =
+          ordinarySuccess || expectedValidation;
+
+      final severity = routeResponded
+          ? 'PASS'
+          : validationResponse
+              ? 'WARN'
+              : 'FAIL';
+
+      final routeStatus = ordinarySuccess
+          ? 'ROUTE_HTTP_OK'
+          : expectedValidation
+              ? 'ROUTE_EXISTS_VALIDATION_REACHED'
+              : validationResponse
+                  ? 'ROUTE_REQUIRES_VALID_REQUEST_OR_AUTH'
+                  : _statusForHttpCode(status);
 
       return DiagnosticResult(
         name: name,
         category: category,
-        success: success || methodNotAllowed,
-        severity: success
-            ? 'PASS'
-            : methodNotAllowed
-                ? 'PASS'
-                : validationResponse
-                    ? 'WARN'
-                    : 'FAIL',
-        status: success
-            ? 'ROUTE_HTTP_OK'
-            : methodNotAllowed
-                ? 'ROUTE_REQUIRES_POST'
-                : validationResponse
-                    ? 'ROUTE_REQUIRES_VALID_REQUEST_OR_AUTH'
-                    : _statusForHttpCode(status),
+        success: routeResponded,
+        severity: severity,
+        status: routeStatus,
         httpStatus: status,
         details:
             'path=${uri.path}; HTTP=$status; '
-            'probeMethod=GET; '
-            'routeExists=$routeExists; '
+            'probeMethod=POST; '
+            'routeResponded=$routeResponded; '
+            'expectedEmptyPayload=true; '
             'paidGenerationExecuted=false; '
-            'note=POST-only routes expected to return 405; '
             '${_summarizeBody(body)}',
         durationMs: stopwatch.elapsedMilliseconds,
-        repairable: !success && !methodNotAllowed && !validationResponse,
+        repairable: !routeResponded && !validationResponse,
       );
     } catch (error) {
       stopwatch.stop();
@@ -177,7 +186,7 @@ extension AppDiagnosticsContentChecks
         severity: 'FAIL',
         status: _classifyException(error),
         details:
-            'Route probe failed for $path: '
+            'POST route probe failed for $path: '
             '${_safeError(error)}',
         durationMs: stopwatch.elapsedMilliseconds,
         repairable: true,
