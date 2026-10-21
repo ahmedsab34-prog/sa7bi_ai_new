@@ -1,10 +1,7 @@
+
 part of '../app_diagnostics_service.dart';
 
 extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
-  // ============================================================
-  // BUILD IDENTITY
-  // ============================================================
-
   Future<DiagnosticResult> _checkRuntimeIdentity() async {
     final release = kReleaseMode;
 
@@ -61,10 +58,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
     );
   }
 
-  // ============================================================
-  // TRANSPORT IDENTITY
-  // ============================================================
-
   Future<DiagnosticResult> _checkNetworkTransportIdentity() async {
     final name = Sa7biNetworkClient.transportName;
     final cronet = Sa7biNetworkClient.isCronet;
@@ -79,10 +72,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
       durationMs: 0,
     );
   }
-
-  // ============================================================
-  // GENERAL INTERNET HTTPS
-  // ============================================================
 
   Future<DiagnosticResult> _checkInternetHttps() async {
     final stopwatch = Stopwatch()..start();
@@ -100,8 +89,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
 
       stopwatch.stop();
 
-      // 2xx و3xx يعني الوصول إلى خادم HTTPS صالح.
-      // 4xx لا يُعتبر نجاحًا لاختبار الاتصال العام.
       final success =
           response.statusCode >= 200 && response.statusCode < 400;
 
@@ -135,10 +122,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
     }
   }
 
-  // ============================================================
-  // PRIMARY WORKER DNS
-  // ============================================================
-
   Future<DiagnosticResult> _checkDns() async {
     final stopwatch = Stopwatch()..start();
 
@@ -148,10 +131,7 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
 
       stopwatch.stop();
 
-      final values = addresses
-          .map((item) => item.address)
-          .toList();
-
+      final values = addresses.map((item) => item.address).toList();
       final success = values.isNotEmpty;
 
       return DiagnosticResult(
@@ -180,10 +160,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
     }
   }
 
-  // ============================================================
-  // PRIMARY WORKER HTTPS HEALTH
-  // ============================================================
-
   Future<DiagnosticResult> _checkWorkerHttpsHealth() async {
     final stopwatch = Stopwatch()..start();
 
@@ -207,8 +183,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
         allowMalformed: true,
       );
 
-      // اختبار الصحة يحتاج استجابة ناجحة من الخادم،
-      // وليس مجرد وصول HTTP مثل 404.
       final success =
           response.statusCode >= 200 && response.statusCode < 300;
 
@@ -243,10 +217,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
       );
     }
   }
-
-  // ============================================================
-  // DEVICE
-  // ============================================================
 
   Future<DiagnosticResult> _checkRuntimeMemory() async {
     return DiagnosticResult(
@@ -316,10 +286,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
     }
   }
 
-  // ============================================================
-  // CONTROLLED 404 TEST
-  // ============================================================
-
   Future<DiagnosticResult> _checkErrorClassification() async {
     final stopwatch = Stopwatch()..start();
 
@@ -336,8 +302,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
 
       stopwatch.stop();
 
-      // هذا المسار غير موجود عمدًا.
-      // النجاح هنا هو أن الخادم أعاد 404 كما هو متوقع.
       final expected = response.statusCode == 404;
 
       return DiagnosticResult(
@@ -370,10 +334,6 @@ extension AppDiagnosticsNetworkChecks on AppDiagnosticsService {
       );
     }
   }
-
-  // ============================================================
-  // TIMEOUT CONFIGURATION
-  // ============================================================
 
   Future<DiagnosticResult> _checkTimeoutConfiguration() async {
     final valid =
