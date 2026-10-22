@@ -1,3 +1,4 @@
+
 name = "sa7bi-ai-new"
 main = "src/index.js"
 compatibility_date = "2026-09-18"
@@ -16,11 +17,21 @@ WORKERS_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 [ai]
 binding = "AI"
 
+# Existing credits Durable Object — preserved.
 [[durable_objects.bindings]]
 name = "SA7BI_CREDITS"
 class_name = "Sa7biCredits"
 
+# Social accounts and multiplayer game rooms.
+[[durable_objects.bindings]]
+name = "SA7BI_SOCIAL"
+class_name = "Sa7biSocial"
+
 [exports.Sa7biCredits]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.Sa7biSocial]
 type = "durable-object"
 storage = "sqlite"
 
