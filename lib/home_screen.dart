@@ -12,345 +12,396 @@ import 'widgets/affiliate_carousel.dart';
 import 'widgets/app_header.dart';
 
 class HomeScreen extends StatefulWidget {
-  final VoidCallback onProfile;
-  final VoidCallback onAudio;
+  final VoidCallback? onProfile;
+  final VoidCallback? onAudio;
 
   const HomeScreen({
     super.key,
-    required this.onProfile,
-    required this.onAudio,
+    this.onProfile,
+    this.onAudio,
   });
 
   @override
-  State<HomeScreen> createState() =>
-      _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen>
-    with AutomaticKeepAliveClientMixin {
-  final ScrollController _scrollController =
-      ScrollController();
+class _HomeScreenState extends State<HomeScreen> {
+  final ScrollController _scrollController = ScrollController();
 
-  bool loadingNews = true;
-
-  List<NewsItem> news = [];
-
-  double _savedScrollOffset = 0;
-
-  @override
-  bool get wantKeepAlive => true;
+  List<dynamic> _news = [];
+  bool _loading = true;
+  bool _refreshing = false;
+  String? _error;
+  DateTime? _lastUpdated;
 
   @override
   void initState() {
     super.initState();
-
-    _scrollController.addListener(
-      _rememberScrollPosition,
-    );
-
-    unawaited(
-      loadNews(
-        showLoading: true,
-        restorePosition: false,
-      ),
-    );
+    _loadNews();
   }
-
-  // ============================================================
-  // SCROLL POSITION
-  // ============================================================
-
-  void _rememberScrollPosition() {
-    if (!_scrollController.hasClients) {
-      return;
-    }
-
-    _savedScrollOffset =
-        _scrollController.offset;
-  }
-
-  void _restoreScrollPosition() {
-    if (!_scrollController.hasClients) {
-      return;
-    }
-
-    final max =
-        _scrollController.position.maxScrollExtent;
-
-    final target =
-        _savedScrollOffset.clamp(0.0, max);
-
-    _scrollController.jumpTo(target);
-  }
-
-  // ============================================================
-  // NEWS
-  // ============================================================
-
-  Future<void> loadNews({
-    bool showLoading = true,
-    bool restorePosition = true,
-  }) async {
-    if (showLoading && mounted) {
-      setState(() {
-        loadingNews = true;
-      });
-    }
-
-    try {
-      final result =
-          await AiService.getNews();
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        news = result;
-        loadingNews = false;
-      });
-
-      if (restorePosition) {
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) {
-          if (!mounted) {
-            return;
-          }
-
-          _restoreScrollPosition();
-        });
-      }
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        loadingNews = false;
-      });
-    }
-  }
-
-  Future<void> _refreshNews() async {
-    await loadNews(
-      showLoading: false,
-      restorePosition: true,
-    );
-  }
-
-  // ============================================================
-  // OPEN NEWS
-  // ============================================================
-
-  void openNews(
-    String url,
-    String title,
-  ) {
-    final cleanUrl = url.trim();
-
-    if (cleanUrl.isEmpty) {
-      return;
-    }
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => NewsWebViewScreen(
-          url: cleanUrl,
-          title: title,
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // OPEN SHORTS
-  // ============================================================
-
-  void _openShorts() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            const ShortsFeedScreen(),
-      ),
-    );
-  }
-
-  // ============================================================
-  // DISPOSE
-  // ============================================================
 
   @override
   void dispose() {
-    _scrollController.removeListener(
-      _rememberScrollPosition,
-    );
-
     _scrollController.dispose();
-
     super.dispose();
   }
 
-  // ============================================================
-  // BUILD
-  // ============================================================
+  Future<void> _loadNews({bool pullToRefresh = false}) async {
+    if (!mounted) return;
+
+    setState(() {
+      if (pullToRefresh) {
+        _refreshing = true;
+      } else {
+        _loading = true;
+      }
+      _error = null;
+    });
+
+    try {
+      final result = await AiService.getNews().timeout(
+        const Duration(seconds: 25),
+      );
+
+      if (!mounted) return;
+
+      final normalized = _normalizeNews(result);
+
+      setState(() {
+        _news = normalized;
+        _lastUpdated = DateTime.now();
+        _error = normalized.isEmpty
+            ? 'مفيش أخبار متاحة دلوقتي. جرّب تحدّث الصفحة بعد شوية.'
+            : null;
+      });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        if (_news.isEmpty) {
+          _error =
+              'الاتصال بالأخبار اتأخر. اتأكد من الإنترنت وحاول تاني.';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (_news.isEmpty) {
+          _error =
+              'مش قادرين نحمّل الأخبار دلوقتي. اتأكد من الإنترنت وحاول تاني.';
+        }
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _refreshing = false;
+        });
+      }
+    }
+  }
+
+  List<dynamic> _normalizeNews(dynamic result) {
+    if (result is List) return result;
+
+    if (result is Map) {
+      final dynamic data =
+          result['news'] ?? result['articles'] ?? result['data'];
+
+      if (data is List) return data;
+    }
+
+    return <dynamic>[];
+  }
+
+  String _readString(
+    dynamic item,
+    List<String> keys, {
+    String fallback = '',
+  }) {
+    if (item is! Map) return fallback;
+
+    for (final key in keys) {
+      final value = item[key];
+      if (value != null && value.toString().trim().isNotEmpty) {
+        return value.toString().trim();
+      }
+    }
+
+    return fallback;
+  }
+
+  String _formatUpdatedAt(DateTime? value) {
+    if (value == null) return 'لم يتم التحديث بعد';
+
+    final local = value.toLocal();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+
+    return 'آخر تحديث $hour:$minute';
+  }
+
+  Future<void> _openNews(dynamic item) async {
+    final url = _readString(
+      item,
+      ['url', 'link', 'articleUrl', 'web_url'],
+    );
+
+    if (url.isEmpty || !mounted) return;
+
+    final title = _readString(
+      item,
+      ['title', 'headline', 'name'],
+      fallback: 'الأخبار',
+    );
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NewsWebViewScreen(
+          title: title,
+          url: url,
+        ),
+      ),
+    );
+  }
+
+  void _openReels() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const ShortsFeedScreen(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-
-    return RefreshIndicator(
-      color: const Color(0xFFFFD76A),
-      backgroundColor:
-          const Color(0xFF151923),
-      displacement: 35,
-      onRefresh: _refreshNews,
-      child: ListView(
-        controller: _scrollController,
-        physics:
-            const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          14,
-          8,
-          14,
-          125,
-        ),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Column(
         children: [
-          // ====================================================
-          // HEADER
-          // ====================================================
-
           AppHeader(
-            onProfileTap: widget.onProfile,
-            onAudioTap: widget.onAudio,
+            onProfile: widget.onProfile,
+            onAudio: widget.onAudio,
           ),
-
-          const SizedBox(height: 8),
-
-          // ====================================================
-          // REAL ADMOB BANNER
-          // مباشرة تحت الهيدر
-          // ====================================================
-
-          const _HomeAdBanner(),
-
-          const SizedBox(height: 8),
-
-          // ====================================================
-          // AFFILIATE / SHOPPING STRIP
-          // ====================================================
-
-          const AffiliateCarousel(),
-
-          const SizedBox(height: 15),
-
-          // ====================================================
-          // NEWS HEADER
-          // ====================================================
-
-          Row(
-            children: [
-              IconButton(
-                onPressed: () {
-                  unawaited(
-                    loadNews(
-                      showLoading: true,
-                      restorePosition: true,
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => _loadNews(pullToRefresh: true),
+              child: ListView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 112),
+                children: [
+                  _buildWelcomeCard(),
+                  const SizedBox(height: 12),
+                  const _HomeAdBanner(),
+                  const SizedBox(height: 14),
+                  _buildNewsHeader(),
+                  const SizedBox(height: 10),
+                  if (_loading && _news.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 38),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
                     ),
-                  );
-                },
-                tooltip: 'تحديث الأخبار',
-                icon: const Icon(
-                  Icons.refresh_rounded,
-                  color:
-                      Color(0xFFFFD76A),
-                ),
+                  if (_error != null && _news.isEmpty)
+                    _buildErrorCard(),
+                  if (_news.isEmpty && !_loading && _error == null)
+                    _buildEmptyCard(),
+                  ..._buildNewsItems(),
+                  const SizedBox(height: 14),
+                  _buildReelsEntry(),
+                  const SizedBox(height: 14),
+                  const AffiliateCarousel(),
+                  const SizedBox(height: 14),
+                  _buildFooter(),
+                ],
               ),
-
-              const Spacer(),
-
-              const Text(
-                'آخر الأخبار',
-                textDirection:
-                    TextDirection.rtl,
-                textAlign:
-                    TextAlign.right,
-                style: TextStyle(
-                  fontSize: 21,
-                  fontWeight:
-                      FontWeight.w900,
-                ),
-              ),
-            ],
+            ),
           ),
-
-          const SizedBox(height: 4),
-
-          // ====================================================
-          // NEWS
-          // ====================================================
-
-          if (loadingNews)
-            const Padding(
-              padding:
-                  EdgeInsets.all(28),
-              child: Center(
-                child:
-                    CircularProgressIndicator(
-                  color:
-                      Color(0xFFFFD76A),
-                ),
-              ),
-            )
-          else if (news.isEmpty)
-            _EmptyNews(
-              onRetry: () {
-                unawaited(
-                  loadNews(
-                    showLoading: true,
-                    restorePosition: true,
-                  ),
-                );
-              },
-            )
-          else
-            ..._buildNewsList(),
-
-          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  // ============================================================
-  // BUILD NEWS LIST
-  // ============================================================
+  Widget _buildWelcomeCard() {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            Color(0xFF202B43),
+            Color(0xFF111827),
+            Color(0xFF11141D),
+          ],
+        ),
+        border: Border.all(
+          color: const Color(0x33FFD76A),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFFFFD76A),
+                  Color(0xFFEF9F45),
+                ],
+              ),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Color(0xFF17130A),
+              size: 26,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'أهلاً بيك في صاحبي AI',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  'أخبارك، صوتك، مساعدك الذكي وترفيهك في مكان واحد.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.6,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  List<Widget> _buildNewsList() {
+  Widget _buildNewsHeader() {
+    return Row(
+      children: [
+        const Icon(
+          Icons.newspaper_rounded,
+          color: Color(0xFFFFD76A),
+          size: 23,
+        ),
+        const SizedBox(width: 8),
+        const Expanded(
+          child: Text(
+            'آخر الأخبار',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        if (_refreshing)
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else
+          Text(
+            _formatUpdatedAt(_lastUpdated),
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 10,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildErrorCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF251A1A),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0x66FF7979),
+        ),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.wifi_off_rounded,
+            color: Color(0xFFFF8B8B),
+            size: 30,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _error ?? 'تعذّر تحميل الأخبار.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => _loadNews(),
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('إعادة المحاولة'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF11141D),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: const Text(
+        'الأخبار هتظهر هنا لما تكون متاحة.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.white70,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildNewsItems() {
     final widgets = <Widget>[];
 
-    for (int i = 0; i < news.length; i++) {
-      final item = news[i];
+    for (var i = 0; i < _news.length; i++) {
+      final item = _news[i];
 
       widgets.add(
-        _NewsCard(
-          item: item,
-          onTap: () {
-            openNews(
-              item.link,
-              item.title,
-            );
-          },
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: _buildNewsCard(item, i),
         ),
       );
 
-      // ========================================================
-      // REELS AFTER EVERY 5 NEWS ITEMS
-      // ========================================================
-
       if ((i + 1) % 5 == 0) {
         widgets.add(
-          _ShortsEntryCard(
-            onTap: _openShorts,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildCompactReelsCard(),
           ),
         );
       }
@@ -358,527 +409,73 @@ class _HomeScreenState extends State<HomeScreen>
 
     return widgets;
   }
-}
 
-// ============================================================
-// ADMOB HOME BANNER
-// ============================================================
-
-class _HomeAdBanner
-    extends StatefulWidget {
-  const _HomeAdBanner();
-
-  @override
-  State<_HomeAdBanner> createState() =>
-      _HomeAdBannerState();
-}
-
-class _HomeAdBannerState
-    extends State<_HomeAdBanner> {
-  BannerAd? _bannerAd;
-
-  bool _loading = true;
-
-  int _attempt = 0;
-
-  bool _retryScheduled = false;
-
-  @override
-  void initState() {
-    super.initState();
-
-    unawaited(
-      _loadBanner(),
+  Widget _buildNewsCard(dynamic item, int index) {
+    final title = _readString(
+      item,
+      ['title', 'headline', 'name'],
+      fallback: 'خبر ${index + 1}',
     );
-  }
 
-  Future<void> _loadBanner() async {
-    if (!MonetizationConfig.admobEnabled) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
-      return;
-    }
-
-    if (!MonetizationConfig.homeBannerEnabled) {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _loading = true;
-      });
-    }
-
-    try {
-      final ad =
-          await AdsService.instance.loadBanner(
-        adSize: AdSize.banner,
-      );
-
-      if (!mounted) {
-        ad?.dispose();
-        return;
-      }
-
-      if (ad != null) {
-        _bannerAd?.dispose();
-
-        setState(() {
-          _bannerAd = ad;
-          _loading = false;
-          _attempt = 0;
-          _retryScheduled = false;
-        });
-
-        return;
-      }
-
-      _scheduleRetry();
-    } catch (_) {
-      _scheduleRetry();
-    }
-  }
-
-  void _scheduleRetry() {
-    if (!mounted) {
-      return;
-    }
-
-    if (_retryScheduled) {
-      return;
-    }
-
-    if (_attempt >= 3) {
-      setState(() {
-        _loading = false;
-        _retryScheduled = false;
-      });
-      return;
-    }
-
-    _attempt++;
-
-    _retryScheduled = true;
-
-    final delaySeconds =
-        _attempt * 5;
-
-    Future<void>.delayed(
-      Duration(seconds: delaySeconds),
-      () {
-        if (!mounted) {
-          return;
-        }
-
-        _retryScheduled = false;
-
-        unawaited(
-          _loadBanner(),
-        );
-      },
+    final description = _readString(
+      item,
+      ['description', 'summary', 'content', 'excerpt'],
+      fallback: 'اضغط لقراءة تفاصيل الخبر.',
     );
-  }
 
-  @override
-  void dispose() {
-    _bannerAd?.dispose();
-
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!MonetizationConfig.admobEnabled ||
-        !MonetizationConfig
-            .homeBannerEnabled) {
-      return const SizedBox.shrink();
-    }
-
-    final banner = _bannerAd;
-
-    if (banner == null) {
-      if (_loading) {
-        return const SizedBox(
-          height: 12,
-        );
-      }
-
-      return const SizedBox.shrink();
-    }
-
-    return Center(
-      child: Container(
-        width:
-            banner.size.width.toDouble(),
-        height:
-            banner.size.height.toDouble(),
-        margin:
-            const EdgeInsets.symmetric(
-          vertical: 2,
-        ),
-        decoration:
-            BoxDecoration(
-          borderRadius:
-              BorderRadius.circular(8),
-          color:
-              const Color(0xFF10131C),
-        ),
-        clipBehavior:
-            Clip.antiAlias,
-        child: AdWidget(
-          ad: banner,
-        ),
-      ),
+    final source = _readString(
+      item,
+      ['source', 'publisher', 'author'],
+      fallback: 'مصدر إخباري',
     );
-  }
-}
 
-// ============================================================
-// NEWS CARD
-// ============================================================
+    final imageUrl = _readString(
+      item,
+      ['image', 'imageUrl', 'image_url', 'thumbnail'],
+    );
 
-class _NewsCard
-    extends StatelessWidget {
-  final NewsItem item;
-  final VoidCallback onTap;
-
-  const _NewsCard({
-    required this.item,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasImage =
-        item.imageUrl.trim().isNotEmpty;
-
-    return Container(
-      margin:
-          const EdgeInsets.only(
-        bottom: 8,
-      ),
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(0xFF11141D),
-        borderRadius:
-            BorderRadius.circular(18),
-        border:
-            Border.all(
-          color: Colors.white10,
-        ),
-      ),
+    return Material(
+      color: const Color(0xFF11141D),
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
-        borderRadius:
-            BorderRadius.circular(18),
-        child: Padding(
-          padding:
-              const EdgeInsets.all(10),
-          child: Row(
-            children: [
-              const Icon(
-                Icons
-                    .arrow_back_ios_new_rounded,
-                color:
-                    Color(0xFFFFD76A),
-                size: 16,
-              ),
-
-              const SizedBox(width: 9),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment
-                          .end,
-                  children: [
-                    Text(
-                      item.title,
-                      textDirection:
-                          TextDirection.rtl,
-                      textAlign:
-                          TextAlign.right,
-                      maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
-                      style:
-                          const TextStyle(
-                        fontWeight:
-                            FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-
-                    const SizedBox(
-                      height: 5,
-                    ),
-
-                    Text(
-                      item.source,
-                      textDirection:
-                          TextDirection.rtl,
-                      maxLines: 1,
-                      overflow:
-                          TextOverflow.ellipsis,
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.white54,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(
-                  13,
-                ),
-                child: Container(
-                  width: 68,
-                  height: 58,
-                  color:
-                      const Color(
-                    0xFF1A2030,
-                  ),
-                  child: hasImage
-                      ? Image.network(
-                          item.imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (
-                            _,
-                            __,
-                            ___,
-                          ) {
-                            return const Icon(
-                              Icons
-                                  .newspaper_rounded,
-                              color:
-                                  Color(
-                                0xFF63E6FF,
-                              ),
-                              size: 25,
-                            );
-                          },
-                        )
-                      : const Icon(
-                          Icons
-                              .newspaper_rounded,
-                          color:
-                              Color(
-                            0xFF63E6FF,
-                          ),
-                          size: 25,
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// EMPTY NEWS
-// ============================================================
-
-class _EmptyNews
-    extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _EmptyNews({
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.all(17),
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(0xFF11141D),
-        borderRadius:
-            BorderRadius.circular(17),
-        border:
-            Border.all(
-          color: Colors.white10,
-        ),
-      ),
-      child: Column(
-        children: [
-          const Text(
-            'الأخبار مش متاحة دلوقتي 📡',
-            textDirection:
-                TextDirection.rtl,
-            style: TextStyle(
-              fontWeight:
-                  FontWeight.w700,
-            ),
-          ),
-
-          const SizedBox(height: 5),
-
-          TextButton(
-            onPressed: onRetry,
-            child:
-                const Text('حاول تاني'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================
-// SHORTS ENTRY
-// ============================================================
-
-class _ShortsEntryCard
-    extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _ShortsEntryCard({
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin:
-          const EdgeInsets.only(
-        top: 4,
-        bottom: 13,
-      ),
-      height: 100,
-      decoration:
-          BoxDecoration(
-        borderRadius:
-            BorderRadius.circular(20),
-        gradient:
-            const LinearGradient(
-          begin:
-              Alignment.topRight,
-          end:
-              Alignment.bottomLeft,
-          colors: [
-            Color(0xFF2C1C42),
-            Color(0xFF121725),
-          ],
-        ),
-        border:
-            Border.all(
-          color:
-              Color(0x4463E6FF),
-        ),
-      ),
-      child: InkWell(
-        borderRadius:
-            BorderRadius.circular(20),
-        onTap: onTap,
-        child: Row(
+        onTap: () => _openNews(item),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(width: 12),
-
-            Container(
-              width: 62,
-              height: 72,
-              decoration:
-                  BoxDecoration(
-                borderRadius:
-                    BorderRadius.circular(
-                  17,
+            if (imageUrl.isNotEmpty)
+              SizedBox(
+                height: 155,
+                width: double.infinity,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) =>
+                      _buildNewsImagePlaceholder(),
                 ),
-                gradient:
-                    const LinearGradient(
-                  colors: [
-                    Color(0xFF63E6FF),
-                    Color(0xFFB45CFF),
-                  ],
-                ),
-              ),
-              child: const Icon(
-                Icons
-                    .play_arrow_rounded,
-                color:
-                    Colors.black,
-                size: 34,
-              ),
-            ),
-
-            const SizedBox(width: 12),
-
-            const Expanded(
+              )
+            else
+              _buildNewsImagePlaceholder(),
+            Padding(
+              padding: const EdgeInsets.all(13),
               child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment
-                        .center,
-                crossAxisAlignment:
-                    CrossAxisAlignment
-                        .end,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'ريلز صاحبي',
-                    textDirection:
-                        TextDirection.rtl,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight:
-                          FontWeight.w900,
+                    source,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFFFD76A),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-
-                  SizedBox(height: 5),
-
+                  const SizedBox(height: 7),
                   Text(
-                    'شاهد الفيديوهات القصيرة واكتشف محتوى جديد',
-                    textDirection:
-                        TextDirection.rtl,
-                    textAlign:
-                        TextAlign.right,
-                    maxLines: 2,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color:
-                          Colors.white60,
-                      fontSize: 10.5,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(width: 10),
-
-            const Icon(
-              Icons
-                  .arrow_back_ios_new_rounded,
-              color:
-                  Color(0xFFFFD76A),
-              size: 16,
-            ),
-
-            const SizedBox(width: 10),
-          ],
-        ),
-      ),
-    );
-  }
-}
+                    title,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14
