@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: sa7bi-branch-verification-${{ github.ref }}
@@ -109,10 +109,11 @@ jobs:
             --dart-define="APP_BUILD_ID=${BUILD_ID}" \
             --dart-define="APP_SOURCE_ID=${SOURCE_ID}"
 
-      - name: Verify APK package, version, size, and checksum
+      - name: Verify APK identity and checksum
         shell: bash
         run: |
           set -euo pipefail
+
           APK="${APK_PATH}"
           EXPECTED_BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
 
@@ -156,7 +157,7 @@ jobs:
           fi
 
           if [ "${ACTUAL_CODE}" != "${EXPECTED_BUILD_NUMBER}" ]; then
-            echo "ERROR: APK version code differs from expected build number."
+            echo "ERROR: Wrong APK version code."
             exit 1
           fi
 
@@ -186,15 +187,73 @@ jobs:
 
           sha256sum "${APK}" > app-release.apk.sha256
 
+          # Prepare the permanent download filename only after verification.
+          cp "${APK}" sa7bi-ai.apk
+
       - name: Upload verified APK and reports
         uses: actions/upload-artifact@v4
         with:
           name: sa7bi-ai-verified-release-${{ github.run_number }}-${{ github.sha }}
           path: |
             build/app/outputs/flutter-apk/app-release.apk
+            sa7bi-ai.apk
             build-provenance.txt
             app-release.apk.sha256
             flutter-analyze-report.txt
             network-client-test-report.txt
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish verified APK to permanent download link
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          APK="sa7bi-ai.apk"
+          EXPECTED_SIZE="$(stat -c%s "${APK}")"
+
+          test -s "${APK}"
+
+          # Replace the existing asset without changing the public URL.
+          gh release upload apk-latest "${APK}" --clobber
+
+          NOTES="$(cat <<EOF
+          Automated verified APK release.
+
+          Source branch: ${GITHUB_REF_NAME}
+          Source commit: ${GITHUB_SHA}
+          Build ID: run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}
+          App version: ${APP_VERSION}
+          APK size: ${EXPECTED_SIZE} bytes
+          APK SHA-256: $(sha256sum "${APK}" | awk '{print $1}')
+
+          Permanent download:
+          https://github.com/${GITHUB_REPOSITORY}/releases/download/apk-latest/sa7bi-ai.apk
+
+          This asset is published only after project analysis, network lifecycle tests,
+          APK build, and package/version/checksum verification succeed.
+          EOF
+          )"
+
+          gh release edit apk-latest \
+            --title "Sa7bi AI - Latest APK" \
+            --notes "${NOTES}"
+
+          REMOTE_SIZE="$(
+            gh release view apk-latest \
+              --json assets \
+              --jq '.assets[] | select(.name == "sa7bi-ai.apk") | .size'
+          )"
+
+          if [ "${REMOTE_SIZE}" != "${EXPECTED_SIZE}" ]; then
+            echo "ERROR: Published APK size does not match the verified APK."
+            echo "Local size: ${EXPECTED_SIZE}"
+            echo "Remote size: ${REMOTE_SIZE}"
+            exit 1
+          fi
+
+          echo "Permanent APK link updated and asset size verified."
+          echo "Source commit: ${GITHUB_SHA}"
+          echo "APK size: ${REMOTE_SIZE}"
