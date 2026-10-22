@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'social_games_hub_screen.dart';
 import 'monetization_config.dart';
 import 'services/ads_service.dart';
 import 'widgets/rewarded_ad_button.dart';
@@ -124,6 +125,22 @@ class _GamesList extends StatelessWidget {
           const _RewardedCreditsPromo(),
           const SizedBox(height: 14),
         ],
+
+        // مركز الألعاب الجماعية الجديد.
+        _MenuTile(
+          icon: Icons.groups_rounded,
+          title: 'الألعاب الجماعية مع الأصدقاء',
+          subtitle:
+              'أنشئ غرفة أو انضم برمز دعوة، واستكمل مبارياتك المحفوظة.',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => SocialGamesHubScreen(
+                onShareInvite: onShare,
+              ),
+            ),
+          ),
+        ),
+
         _MenuTile(
           icon: Icons.grid_3x3_rounded,
           title: 'إكس أو',
