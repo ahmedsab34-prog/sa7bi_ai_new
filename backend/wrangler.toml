@@ -6,7 +6,6 @@ compatibility_date = "2026-09-18"
 workers_dev = true
 
 [vars]
-
 GEMINI_TEXT_MODEL = "gemini-3.8-flash"
 GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image"
 
@@ -21,7 +20,15 @@ binding = "AI"
 name = "SA7BI_CREDITS"
 class_name = "Sa7biCredits"
 
+[[durable_objects.bindings]]
+name = "SA7BI_SOCIAL"
+class_name = "Sa7biSocial"
+
 [exports.Sa7biCredits]
+type = "durable-object"
+storage = "sqlite"
+
+[exports.Sa7biSocial]
 type = "durable-object"
 storage = "sqlite"
 
