@@ -21,10 +21,12 @@ import 'services/sa7bi_network_client.dart';
 import 'widgets/khalasana_portal.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
   http.runWithClient(
     () {
+      WidgetsFlutterBinding.ensureInitialized();
+
       runApp(const Sa7biAiApp());
+
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => unawaited(_initializeApplicationServices()),
       );
@@ -40,6 +42,7 @@ Future<void> _initializeApplicationServices() async {
 
   try {
     final backend = await AiRequestService.checkBackend();
+
     if (backend.isAvailable) {
       await ProfileService.instance.markAiConnected();
     } else {
@@ -58,6 +61,7 @@ Future<void> _initializeApplicationServices() async {
   try {
     final ads = AdsService.instance;
     await ads.initialize();
+
     if (ads.isAdMobInitialized) {
       unawaited(ads.loadInterstitial());
       unawaited(ads.loadRewarded());
@@ -110,6 +114,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
   void openAudioCenter() {
     if (!mounted) return;
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const AudioCenterScreen(),
@@ -119,6 +124,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
   void openKhalasana() {
     if (!mounted) return;
+
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const KhalasanaPortalScreen(),
@@ -146,7 +152,9 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             'وحافظ على سياق المحادثة العامة.',
       ),
       const InteractiveExperiencesScreen(),
-      ProfileScreen(onAudio: openAudioCenter),
+      ProfileScreen(
+        onAudio: openAudioCenter,
+      ),
     ];
 
     final isChatTab = index == 1;
