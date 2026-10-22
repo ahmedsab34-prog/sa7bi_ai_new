@@ -20,15 +20,7 @@ binding = "AI"
 name = "SA7BI_CREDITS"
 class_name = "Sa7biCredits"
 
-[[durable_objects.bindings]]
-name = "SA7BI_SOCIAL"
-class_name = "Sa7biSocial"
-
 [exports.Sa7biCredits]
-type = "durable-object"
-storage = "sqlite"
-
-[exports.Sa7biSocial]
 type = "durable-object"
 storage = "sqlite"
 
