@@ -26,9 +26,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final ScrollController _scrollController = ScrollController();
-
-  List<dynamic> _news = [];
+  List<NewsItem> _news = [];
   bool _loading = true;
   bool _refreshing = false;
   String? _error;
@@ -40,13 +38,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadNews();
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadNews({bool pullToRefresh = false}) async {
+  Future<void> _loadNews({
+    bool pullToRefresh = false,
+  }) async {
     if (!mounted) return;
 
     setState(() {
@@ -65,30 +59,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      final normalized = _normalizeNews(result);
-
       setState(() {
-        _news = normalized;
+        _news = result;
         _lastUpdated = DateTime.now();
-        _error = normalized.isEmpty
-            ? 'مفيش أخبار متاحة دلوقتي. جرّب تحدّث الصفحة بعد شوية.'
+        _error = result.isEmpty
+            ? 'لا توجد أخبار متاحة حاليًا. حاول التحديث بعد قليل.'
             : null;
       });
     } on TimeoutException {
       if (!mounted) return;
+
       setState(() {
-        if (_news.isEmpty) {
-          _error =
-              'الاتصال بالأخبار اتأخر. اتأكد من الإنترنت وحاول تاني.';
-        }
+        _error = _news.isEmpty
+            ? 'تأخر تحميل الأخبار. تحقق من الإنترنت وحاول مرة أخرى.'
+            : null;
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
-        if (_news.isEmpty) {
-          _error =
-              'مش قادرين نحمّل الأخبار دلوقتي. اتأكد من الإنترنت وحاول تاني.';
-        }
+        _error = _news.isEmpty
+            ? 'تعذر تحميل الأخبار حاليًا. تحقق من الإنترنت وحاول مرة أخرى.'
+            : null;
       });
     } finally {
       if (mounted) {
@@ -98,36 +90,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     }
-  }
-
-  List<dynamic> _normalizeNews(dynamic result) {
-    if (result is List) return result;
-
-    if (result is Map) {
-      final dynamic data =
-          result['news'] ?? result['articles'] ?? result['data'];
-
-      if (data is List) return data;
-    }
-
-    return <dynamic>[];
-  }
-
-  String _readString(
-    dynamic item,
-    List<String> keys, {
-    String fallback = '',
-  }) {
-    if (item is! Map) return fallback;
-
-    for (final key in keys) {
-      final value = item[key];
-      if (value != null && value.toString().trim().isNotEmpty) {
-        return value.toString().trim();
-      }
-    }
-
-    return fallback;
   }
 
   String _formatUpdatedAt(DateTime? value) {
@@ -140,25 +102,21 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'آخر تحديث $hour:$minute';
   }
 
-  Future<void> _openNews(dynamic item) async {
-    final url = _readString(
-      item,
-      ['url', 'link', 'articleUrl', 'web_url'],
-    );
-
+  Future<void> _openNews(NewsItem item) async {
+    final url = item.link.trim();
     if (url.isEmpty || !mounted) return;
 
-    final title = _readString(
-      item,
-      ['title', 'headline', 'name'],
-      fallback: 'الأخبار',
-    );
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        (uri.scheme != 'https' && uri.scheme != 'http')) {
+      return;
+    }
 
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => NewsWebViewScreen(
-          title: title,
-          url: url,
+          title: item.title,
+          url: uri.toString(),
         ),
       ),
     );
@@ -179,14 +137,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         children: [
           AppHeader(
-            onProfile: widget.onProfile,
-            onAudio: widget.onAudio,
+            onProfileTap: widget.onProfile,
+            onAudioTap: widget.onAudio,
           ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => _loadNews(pullToRefresh: true),
               child: ListView(
-                controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 112),
                 children: [
@@ -213,7 +170,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 14),
                   const AffiliateCarousel(),
                   const SizedBox(height: 14),
-                  _buildFooter(),
+                  Center(
+                    child: Text(
+                      _formatUpdatedAt(_lastUpdated),
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -347,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            _error ?? 'تعذّر تحميل الأخبار.',
+            _error ?? 'تعذر تحميل الأخبار.',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
@@ -410,29 +375,20 @@ class _HomeScreenState extends State<HomeScreen> {
     return widgets;
   }
 
-  Widget _buildNewsCard(dynamic item, int index) {
-    final title = _readString(
-      item,
-      ['title', 'headline', 'name'],
-      fallback: 'خبر ${index + 1}',
-    );
+  Widget _buildNewsCard(NewsItem item, int index) {
+    final title = item.title.trim().isEmpty
+        ? 'خبر ${index + 1}'
+        : item.title.trim();
 
-    final description = _readString(
-      item,
-      ['description', 'summary', 'content', 'excerpt'],
-      fallback: 'اضغط لقراءة تفاصيل الخبر.',
-    );
+    final description = item.description.trim().isEmpty
+        ? 'اضغط لقراءة تفاصيل الخبر.'
+        : item.description.trim();
 
-    final source = _readString(
-      item,
-      ['source', 'publisher', 'author'],
-      fallback: 'مصدر إخباري',
-    );
+    final source = item.source.trim().isEmpty
+        ? 'مصدر إخباري'
+        : item.source.trim();
 
-    final imageUrl = _readString(
-      item,
-      ['image', 'imageUrl', 'image_url', 'thumbnail'],
-    );
+    final imageUrl = item.imageUrl.trim();
 
     return Material(
       color: const Color(0xFF11141D),
@@ -478,4 +434,335 @@ class _HomeScreenState extends State<HomeScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 14
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      height: 1.6,
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        'اقرأ التفاصيل',
+                        style: TextStyle(
+                          color: Color(0xFF72D7FF),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      SizedBox(width: 5),
+                      Icon(
+                        Icons.arrow_back_rounded,
+                        color: Color(0xFF72D7FF),
+                        size: 15,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewsImagePlaceholder() {
+    return Container(
+      height: 115,
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF202B43),
+            Color(0xFF151923),
+          ],
+        ),
+      ),
+      child: const Icon(
+        Icons.newspaper_rounded,
+        size: 35,
+        color: Color(0x66FFD76A),
+      ),
+    );
+  }
+
+  Widget _buildCompactReelsCard() {
+    return Material(
+      color: const Color(0xFF171C2B),
+      borderRadius: BorderRadius.circular(17),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _openReels,
+        child: Padding(
+          padding: const EdgeInsets.all(13),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0x3372D7FF),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(
+                  Icons.play_circle_fill_rounded,
+                  color: Color(0xFF72D7FF),
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 11),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'استراحة ريلز',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'افتح مقاطع الفيديو القصيرة',
+                      style: TextStyle(
+                        color: Colors.white60,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Colors.white60,
+                size: 15,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReelsEntry() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            Color(0xFF322A57),
+            Color(0xFF17213B),
+          ],
+        ),
+        border: Border.all(
+          color: const Color(0x4472D7FF),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(22),
+        child: InkWell(
+          onTap: _openReels,
+          borderRadius: BorderRadius.circular(22),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0xFF72D7FF),
+                        Color(0xFF8B7BFF),
+                      ],
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow_rounded,
+                    color: Color(0xFF101421),
+                    size: 34,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ريلز صاحبي',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      SizedBox(height: 5),
+                      Text(
+                        'مقاطع قصيرة في مكان واحد',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_back_rounded,
+                  color: Colors.white,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeAdBanner extends StatefulWidget {
+  const _HomeAdBanner();
+
+  @override
+  State<_HomeAdBanner> createState() => _HomeAdBannerState();
+}
+
+class _HomeAdBannerState extends State<_HomeAdBanner> {
+  BannerAd? _banner;
+  bool _loading = false;
+  bool _failed = false;
+  int _attempts = 0;
+  Timer? _retryTimer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (MonetizationConfig.admobEnabled &&
+        MonetizationConfig.homeBannerEnabled) {
+      _loadBanner();
+    }
+  }
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    _banner?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBanner() async {
+    if (!mounted || _loading || _banner != null) return;
+
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+
+    try {
+      final ad = await AdsService.instance
+          .loadBanner(adSize: AdSize.banner)
+          .timeout(const Duration(seconds: 12));
+
+      if (!mounted) {
+        ad?.dispose();
+        return;
+      }
+
+      if (ad == null) {
+        _scheduleRetry();
+        return;
+      }
+
+      setState(() {
+        _banner = ad;
+        _failed = false;
+      });
+    } catch (_) {
+      _scheduleRetry();
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _scheduleRetry() {
+    if (!mounted) return;
+
+    _failed = true;
+    if (_attempts >= 3) return;
+
+    _attempts++;
+    _retryTimer?.cancel();
+    _retryTimer = Timer(
+      Duration(seconds: 4 * _attempts),
+      () {
+        if (mounted) {
+          _loadBanner();
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!MonetizationConfig.admobEnabled ||
+        !MonetizationConfig.homeBannerEnabled) {
+      return const SizedBox.shrink();
+    }
+
+    final banner = _banner;
+
+    if (banner == null) {
+      return Container(
+        height: 52,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFF10141E),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: const Color(0x22FFFFFF),
+          ),
+        ),
+        child: Text(
+          _failed
+              ? 'الإعلانات غير متاحة حاليًا'
+              : 'مساحة إعلانية',
+          style: const TextStyle(
+            color: Colors.white38,
+            fontSize: 10,
+          ),
+        ),
+      );
+    }
+
+    return Center(
+      child: SizedBox(
+        width: banner.size.width.toDouble(),
+        height: banner.size.height.toDouble(),
+        child: AdWidget(ad: banner),
+      ),
+    );
+  }
+}
