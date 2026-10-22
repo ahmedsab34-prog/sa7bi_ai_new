@@ -1,13 +1,12 @@
-
-﻿// backend/src/index.js
+// backend/src/index.js
 // Sa7bi AI Backend
 // FINAL MODULAR INTEGRATION
 // Version 6.3.1
 
 /*
-ملاحظة: هذا الملف مبني على النسخة الحالية، مع إضافة ربط
-social_games.js. راجع إعداد Durable Object في wrangler.toml
-قبل النشر.
+API keys never belong in Flutter.
+API keys never belong in this file.
+API keys remain Cloudflare Secrets.
 */
 
 import {
@@ -251,13 +250,14 @@ async function handleChat(request, env) {
       : "";
 
   const imagePrompt =
-    typeof body.imagePrompt === "string" &&
-    body.imagePrompt.trim()
+    typeof body.imagePrompt === "string" && body.imagePrompt.trim()
       ? body.imagePrompt.trim().substring(0, 4000)
       : "حلل الصور المرفقة بدقة، واقرأ أي نص واضح فيها، واشرح الأشياء المهمة الظاهرة.";
 
-  const creditOperation =
-    getChatCreditOperation(body, imageDataUrls);
+  const creditOperation = getChatCreditOperation(
+    body,
+    imageDataUrls,
+  );
 
   const deviceId = getCreditDeviceId(request, body);
   const requestId = getCreditRequestId(request, body);
@@ -310,6 +310,7 @@ async function handleChat(request, env) {
       body,
       requestId: reservationRequestId,
     });
+
     throw error;
   }
 
@@ -467,6 +468,7 @@ async function handleImageGeneration(request, env) {
       body,
       requestId: reservationRequestId,
     });
+
     throw error;
   }
 
@@ -659,11 +661,10 @@ export default {
       }
 
       const url = new URL(request.url);
+      const path = url.pathname.replace(/\/+$/, "") || "/";
 
-      const path =
-        url.pathname.replace(/\/+$/, "") || "/";
-
-      // Social accounts and multiplayer routes are handled separately.
+      // Social accounts and multiplayer games are handled separately
+      // from AI/chat and retain their own Durable Object storage.
       if (
         path.startsWith("/v1/social/") ||
         path.startsWith("/v1/games/")
@@ -679,24 +680,15 @@ export default {
         return handleHealth(env);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/diagnostics"
-      ) {
+      if (request.method === "GET" && path === "/v1/diagnostics") {
         return handleDiagnostics(env);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/service-status"
-      ) {
+      if (request.method === "GET" && path === "/v1/service-status") {
         return handleServiceStatus(env);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/credits"
-      ) {
+      if (request.method === "GET" && path === "/v1/credits") {
         return handleCredits(request, env);
       }
 
@@ -739,10 +731,7 @@ export default {
         return handleAudioSearch(request);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/audio/quran"
-      ) {
+      if (request.method === "GET" && path === "/v1/audio/quran") {
         return handleQuranCatalog();
       }
 
@@ -750,10 +739,7 @@ export default {
         return handleHadithSearch(request);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/hadith/books"
-      ) {
+      if (request.method === "GET" && path === "/v1/hadith/books") {
         return handleHadithBooks();
       }
 
@@ -761,24 +747,15 @@ export default {
         return handleTafsirSearch(request);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/tafsir/books"
-      ) {
+      if (request.method === "GET" && path === "/v1/tafsir/books") {
         return handleTafsirBooks();
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/tafsir/audio"
-      ) {
+      if (request.method === "GET" && path === "/v1/tafsir/audio") {
         return handleTafsirAudio(request);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/religious"
-      ) {
+      if (request.method === "GET" && path === "/v1/religious") {
         return handleReligiousContent(request);
       }
 
@@ -789,10 +766,7 @@ export default {
         return handleReligiousContentTypes();
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/radio/search"
-      ) {
+      if (request.method === "GET" && path === "/v1/radio/search") {
         return handleRadioSearch(request);
       }
 
@@ -803,10 +777,7 @@ export default {
         return handleRadioCountries();
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/radio/country"
-      ) {
+      if (request.method === "GET" && path === "/v1/radio/country") {
         const countryCode =
           url.searchParams.get("country") ||
           url.searchParams.get("countryCode") ||
@@ -819,10 +790,7 @@ export default {
         return handleRadioByCountry(countryCode, limit);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/radio/station"
-      ) {
+      if (request.method === "GET" && path === "/v1/radio/station") {
         const stationUuid =
           url.searchParams.get("stationUuid") ||
           url.searchParams.get("stationuuid") ||
@@ -838,10 +806,7 @@ export default {
         return handleRadioSearch(request);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/radio/health"
-      ) {
+      if (request.method === "GET" && path === "/v1/radio/health") {
         return handleRadioHealth();
       }
 
@@ -866,24 +831,15 @@ export default {
         return handlePodcastEpisodes(request);
       }
 
-      if (
-        request.method === "GET" &&
-        path === "/v1/shorts"
-      ) {
+      if (request.method === "GET" && path === "/v1/shorts") {
         return handleShorts();
       }
 
-      if (
-        request.method === "POST" &&
-        path === "/v1/chat"
-      ) {
+      if (request.method === "POST" && path === "/v1/chat") {
         return handleChat(request, env);
       }
 
-      if (
-        request.method === "POST" &&
-        path === "/v1/image"
-      ) {
+      if (request.method === "POST" && path === "/v1/image") {
         return handleImageGeneration(request, env);
       }
 
@@ -897,11 +853,17 @@ export default {
       const message = error?.message || "INTERNAL_ERROR";
 
       if (message === "BODY_TOO_LARGE") {
-        return json({ ok: false, error: message }, 413);
+        return json({
+          ok: false,
+          error: message,
+        }, 413);
       }
 
       if (message === "INVALID_JSON_BODY") {
-        return json({ ok: false, error: message }, 400);
+        return json({
+          ok: false,
+          error: message,
+        }, 400);
       }
 
       if (
@@ -910,7 +872,10 @@ export default {
         message === "WORKERS_AI_BINDING_MISSING" ||
         message === "NO_AI_PROVIDER_CONFIGURED"
       ) {
-        return json({ ok: false, error: message }, 500);
+        return json({
+          ok: false,
+          error: message,
+        }, 500);
       }
 
       if (
