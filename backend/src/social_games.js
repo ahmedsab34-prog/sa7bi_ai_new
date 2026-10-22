@@ -1,5 +1,4 @@
-
- // backend/src/social_games.js
+// backend/src/social_games.js
 // Sa7bi AI social accounts + cross-device multiplayer rooms.
 // Persistent data is stored in a SQLite-backed Durable Object.
 // Player names are always read from authenticated server accounts.
