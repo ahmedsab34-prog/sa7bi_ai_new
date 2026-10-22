@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -23,15 +22,11 @@ import 'widgets/khalasana_portal.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
   http.runWithClient(
     () {
       runApp(const Sa7biAiApp());
-
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) {
-          unawaited(_initializeApplicationServices());
-        },
+        (_) => unawaited(_initializeApplicationServices()),
       );
     },
     Sa7biNetworkClient.factory,
@@ -41,13 +36,10 @@ void main() {
 Future<void> _initializeApplicationServices() async {
   try {
     await CreditsService.instance.initialize();
-  } catch (_) {
-    // فشل الرصيد لا يمنع تشغيل التطبيق.
-  }
+  } catch (_) {}
 
   try {
     final backend = await AiRequestService.checkBackend();
-
     if (backend.isAvailable) {
       await ProfileService.instance.markAiConnected();
     } else {
@@ -56,28 +48,21 @@ Future<void> _initializeApplicationServices() async {
   } catch (_) {
     try {
       await ProfileService.instance.markAiDisconnected();
-    } catch (_) {
-      // فشل تحديث حالة الاتصال لا يوقف التطبيق.
-    }
+    } catch (_) {}
   }
 
   try {
     await AudioController.initialize();
-  } catch (_) {
-    // فشل تهيئة الصوت لا يمنع بقية التطبيق.
-  }
+  } catch (_) {}
 
   try {
     final ads = AdsService.instance;
     await ads.initialize();
-
     if (ads.isAdMobInitialized) {
       unawaited(ads.loadInterstitial());
       unawaited(ads.loadRewarded());
     }
-  } catch (_) {
-    // فشل الإعلانات لا يمنع بقية التطبيق.
-  }
+  } catch (_) {}
 }
 
 class Sa7biAiApp extends StatelessWidget {
@@ -115,23 +100,16 @@ class MainContainerScreen extends StatefulWidget {
 }
 
 class _MainContainerScreenState extends State<MainContainerScreen> {
-  // ترتيب التبويبات:
-  // 0 = الرئيسية
-  // 1 = الشات العام
-  // 2 = حسابي
+  // 0 الرئيسية، 1 الشات، 2 الألعاب، 3 حسابي.
   int index = 0;
 
   void openProfile() {
     if (!mounted) return;
-
-    setState(() {
-      index = 2;
-    });
+    setState(() => index = 3);
   }
 
   void openAudioCenter() {
     if (!mounted) return;
-
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const AudioCenterScreen(),
@@ -141,7 +119,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
   void openKhalasana() {
     if (!mounted) return;
-
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => const KhalasanaPortalScreen(),
@@ -149,19 +126,8 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
     );
   }
 
-  void openGames() {
-    if (!mounted) return;
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const InteractiveExperiencesScreen(),
-      ),
-    );
-  }
-
   void openDiagnostics() {
     if (!mounted) return;
-
     Navigator.of(context).pushNamed('/diagnostics');
   }
 
@@ -176,13 +142,11 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         serviceKey: ServiceKeys.general,
         serviceTitle: 'المحادثة العامة',
         serviceContext:
-            'أنت صاحبي AI، مساعد عربي عام. '
-            'أجب بوضوح وبشكل مفيد، '
+            'أنت صاحبي AI، مساعد عربي عام. أجب بوضوح وبشكل مفيد، '
             'وحافظ على سياق المحادثة العامة.',
       ),
-      ProfileScreen(
-        onAudio: openAudioCenter,
-      ),
+      const InteractiveExperiencesScreen(),
+      ProfileScreen(onAudio: openAudioCenter),
     ];
 
     final isChatTab = index == 1;
@@ -196,7 +160,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
               index: index,
               children: pages,
             ),
-
             if (!isChatTab)
               const Positioned(
                 left: 10,
@@ -204,7 +167,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 bottom: 8,
                 child: MiniAudioPlayer(),
               ),
-
             if (!isChatTab)
               Positioned(
                 left: 12,
@@ -244,7 +206,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                   ),
                 ),
               ),
-
             if (!isChatTab)
               Positioned(
                 right: 12,
@@ -253,60 +214,17 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                   onTap: openKhalasana,
                 ),
               ),
-
-            // الألعاب متاحة من زر مستقل، دون تبويب رابع.
-            if (!isChatTab)
-              Positioned(
-                right: 12,
-                bottom: 146,
-                child: Material(
-                  color: Colors.transparent,
-                  child: Tooltip(
-                    message: 'الألعاب والتجارب',
-                    child: InkWell(
-                      onTap: openGames,
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF11141D)
-                              .withOpacity(0.96),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: const Color(0x5563E6FF),
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x55000000),
-                              blurRadius: 12,
-                              offset: Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.sports_esports_rounded,
-                          color: Color(0xFF63E6FF),
-                          size: 23,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
       bottomNavigationBar: NavigationBar(
+        height: 66,
         backgroundColor: const Color(0xFF11141D),
         indicatorColor: const Color(0x3348D8FF),
         selectedIndex: index,
         onDestinationSelected: (value) {
-          if (!mounted) return;
-
-          setState(() {
-            index = value;
-          });
+          if (!mounted || value == index) return;
+          setState(() => index = value);
         },
         destinations: const [
           NavigationDestination(
@@ -318,6 +236,11 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             icon: Icon(Icons.chat_bubble_outline_rounded),
             selectedIcon: Icon(Icons.chat_rounded),
             label: 'الشات',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sports_esports_outlined),
+            selectedIcon: Icon(Icons.sports_esports_rounded),
+            label: 'الألعاب',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
@@ -339,13 +262,11 @@ class MiniAudioPlayer extends StatelessWidget {
       stream: AudioController.handler?.mediaItem,
       builder: (context, mediaSnapshot) {
         final item = mediaSnapshot.data;
-
         if (item == null) {
           return const SizedBox.shrink();
         }
 
         final handler = AudioController.handler;
-
         if (handler == null) {
           return const SizedBox.shrink();
         }
@@ -372,13 +293,11 @@ class MiniAudioPlayer extends StatelessWidget {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const AudioCenterScreen(),
-                      ),
-                    );
-                  },
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AudioCenterScreen(),
+                    ),
+                  ),
                   child: Container(
                     width: 44,
                     height: 44,
@@ -400,13 +319,11 @@ class MiniAudioPlayer extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AudioCenterScreen(),
-                        ),
-                      );
-                    },
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AudioCenterScreen(),
+                      ),
+                    ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -438,7 +355,8 @@ class MiniAudioPlayer extends StatelessWidget {
                 StreamBuilder<PlaybackState>(
                   stream: handler.playbackState,
                   builder: (context, snapshot) {
-                    final playing = snapshot.data?.playing ?? false;
+                    final playing =
+                        snapshot.data?.playing ?? false;
 
                     return IconButton(
                       padding: EdgeInsets.zero,
@@ -469,9 +387,7 @@ class MiniAudioPlayer extends StatelessWidget {
                     minWidth: 34,
                     minHeight: 40,
                   ),
-                  onPressed: () {
-                    handler.stop();
-                  },
+                  onPressed: () => handler.stop(),
                   icon: const Icon(
                     Icons.close_rounded,
                     color: Colors.white54,
