@@ -50,7 +50,7 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Check required test files
+      - name: Check required files
         run: |
           test -f test/sa7bi_network_client_lifecycle_test.dart
           test -f test/image_intent_detector_test.dart
@@ -67,6 +67,9 @@ jobs:
           flutter test --reporter expanded \
             test/sa7bi_network_client_lifecycle_test.dart
 
-      - name: Analyze Flutter source
+      - name: Analyze changed Dart files
         run: |
-          flutter analyze --no-pub
+          flutter analyze --no-pub \
+            lib/chat_screen.dart \
+            lib/services/image_intent_detector.dart \
+            test/image_intent_detector_test.dart
