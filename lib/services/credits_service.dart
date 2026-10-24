@@ -1,3 +1,4 @@
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/credits_config.dart';
@@ -70,50 +71,39 @@ class CreditsService {
   int get credits => _credits;
 
   /// عدد الإعلانات المكافِئة المستخدمة اليوم حسب آخر مزامنة.
-  int get rewardedAdsToday =>
-      _rewardedAdsToday;
+  int get rewardedAdsToday => _rewardedAdsToday;
 
   /// الحد اليومي للإعلانات حسب السيرفر.
-  int get rewardedAdDailyLimit =>
-      _rewardedAdsDailyLimit;
+  int get rewardedAdDailyLimit => _rewardedAdsDailyLimit;
 
   /// عدد Credits التي يمنحها الإعلان حسب السيرفر.
-  int get rewardedAdCredits =>
-      _rewardedAdCredits;
+  int get rewardedAdCredits => _rewardedAdCredits;
 
   /// عدد الإعلانات المتبقية اليوم.
   int get remainingRewardedAdsToday {
     final remaining =
-        _rewardedAdsDailyLimit -
-            _rewardedAdsToday;
+        _rewardedAdsDailyLimit - _rewardedAdsToday;
 
-    return remaining < 0
-        ? 0
-        : remaining;
+    return remaining < 0 ? 0 : remaining;
   }
 
   /// هل تم تشغيل الخدمة؟
-  bool get isInitialized =>
-      _initialized;
+  bool get isInitialized => _initialized;
 
   /// هل آخر اتصال بالسيرفر نجح؟
-  bool get isServerAvailable =>
-      _serverAvailable;
+  bool get isServerAvailable => _serverAvailable;
 
   /// آخر خطأ حصل أثناء المزامنة.
-  String? get lastError =>
-      _lastError;
+  String? get lastError => _lastError;
 
   /// وقت آخر مزامنة ناجحة.
-  DateTime? get lastSync =>
-      _lastSync;
+  DateTime? get lastSync => _lastSync;
 
   /// هل يوجد رصيد كافٍ محليًا للعرض فقط؟
   ///
   /// لا تستخدم هذه الدالة للسماح بتنفيذ طلب AI.
   /// القرار النهائي يكون في الـBackend.
-  bool get hasCredits =>
-      _credits > 0;
+  bool get hasCredits => _credits > 0;
 
   // ============================================================
   // INITIALIZE
@@ -128,17 +118,14 @@ class CreditsService {
       return;
     }
 
-    _preferences =
-        await SharedPreferences.getInstance();
+    _preferences = await SharedPreferences.getInstance();
 
     _loadLocalCache();
 
     _initialized = true;
 
     // مزامنة أولية.
-    //
-    // لا نفشل تشغيل التطبيق إذا كان السيرفر
-    // غير متاح مؤقتًا.
+    // لا نفشل تشغيل التطبيق إذا كان السيرفر غير متاح مؤقتًا.
     try {
       await refresh();
     } catch (_) {
@@ -163,29 +150,20 @@ class CreditsService {
     await _ensureInitialized();
 
     try {
-      final result =
-          await AiRequestService.getCredits();
+      final result = await AiRequestService.getCredits();
 
-      _credits =
-          _sanitizeCredits(
-        result.balance,
-      );
+      _credits = _sanitizeCredits(result.balance);
 
       _rewardedAdsToday =
-          _sanitizeRewardedCount(
-        result.dailyRewardedAds,
-      );
+          _sanitizeRewardedCount(result.dailyRewardedAds);
 
-      if (result.dailyRewardedAdsLimit >
-          0) {
+      if (result.dailyRewardedAdsLimit > 0) {
         _rewardedAdsDailyLimit =
             result.dailyRewardedAdsLimit;
       }
 
-      if (result.rewardedAdCredits >
-          0) {
-        _rewardedAdCredits =
-            result.rewardedAdCredits;
+      if (result.rewardedAdCredits > 0) {
+        _rewardedAdCredits = result.rewardedAdCredits;
       }
 
       _serverAvailable = true;
@@ -200,7 +178,6 @@ class CreditsService {
       _lastError = error.message;
 
       // لا نمسح الرصيد المحلي.
-      //
       // نستخدم آخر قيمة معروفة للعرض فقط.
       return _credits;
     } catch (error) {
@@ -219,9 +196,7 @@ class CreditsService {
   ///
   /// لا يعتبر تصريحًا بتنفيذ الطلب.
   /// الـBackend يعيد التحقق من الرصيد لحظة تنفيذ AI.
-  Future<bool> canAfford(
-    int cost,
-  ) async {
+  Future<bool> canAfford(int cost) async {
     await _ensureInitialized();
 
     if (cost <= 0) {
@@ -236,40 +211,27 @@ class CreditsService {
   // ============================================================
 
   /// تكلفة الرسالة النصية.
-  ///
-  /// متوافقة مع CreditsConfig وBackend:
   /// text = 1
-  int get textCost =>
-      CreditsConfig.textMessageCost;
+  int get textCost => CreditsConfig.textMessageCost;
 
   /// تكلفة تحليل صورة.
-  ///
-  /// متوافقة مع CreditsConfig وBackend:
   /// image_analysis = 3
   int get imageAnalysisCost =>
       CreditsConfig.imageAnalysisCost;
 
   /// تكلفة تحليل فيديو.
-  ///
-  /// متوافقة مع CreditsConfig وBackend:
   /// video_analysis = 5
   int get videoAnalysisCost =>
       CreditsConfig.videoAnalysisCost;
 
   /// تكلفة إنشاء صورة.
-  ///
-  /// متوافقة مع CreditsConfig وBackend:
   /// image_generation = 10
   int get imageGenerationCost =>
       CreditsConfig.imageGenerationCost;
 
   /// تكلفة تعديل صورة.
-  ///
-  /// الـBackend يستخدم حاليًا نفس تكلفة إنشاء الصورة:
+  /// يستخدم حاليًا نفس تكلفة إنشاء الصورة.
   /// image_edit = 10
-  ///
-  /// لا نضيف قيمة ثانية إلى CreditsConfig حتى لا
-  /// يكون لدينا مصدران مختلفان للأسعار.
   int get imageEditCost =>
       CreditsConfig.imageGenerationCost;
 
@@ -277,35 +239,20 @@ class CreditsService {
   // SPEND
   // ============================================================
 
-  /// لم يعد التطبيق يخصم الرصيد محليًا.
+  /// لا يخصم الرصيد محليًا.
   ///
   /// الخصم الحقيقي يتم داخل Backend:
-  ///
   /// reserve → AI → commit
   ///
-  /// لذلك هذه الدالة موجودة فقط للتوافق مع أي كود قديم.
-  ///
-  /// لا تستخدمها لإدارة Credits الجديدة.
-  Future<bool> spend(
-    int cost,
-  ) async {
+  /// هذه الدالة موجودة للتوافق مع الكود القديم.
+  Future<bool> spend(int cost) async {
     await _ensureInitialized();
 
     if (cost <= 0) {
       return true;
     }
 
-    /*
-     * لا نخصم محليًا.
-     *
-     * السبب:
-     * لو خصمنا هنا ثم خصم الـBackend مرة أخرى
-     * سيُخصم الرصيد مرتين.
-     *
-     * كذلك لو فشل AI فلن نتمكن من معرفة
-     * الحالة الحقيقية من الواجهة وحدها.
-     */
-
+    // لا نخصم محليًا منعًا للخصم المزدوج.
     await refresh();
 
     return _credits >= cost;
@@ -315,26 +262,18 @@ class CreditsService {
   // ADD
   // ============================================================
 
-  /// لم يعد مسموحًا بإضافة Credits مباشرة من التطبيق.
+  /// لا تسمح بإضافة Credits مباشرة من التطبيق.
   ///
   /// المكافآت الحقيقية يجب أن تأتي من السيرفر بعد
   /// التحقق من مصدر المكافأة.
-  ///
-  /// هذه الدالة متروكة للتوافق مع الكود القديم فقط.
-  Future<int> add(
-    int amount,
-  ) async {
+  Future<int> add(int amount) async {
     await _ensureInitialized();
 
     if (amount <= 0) {
       return _credits;
     }
 
-    /*
-     * ممنوع تعديل الرصيد محليًا.
-     *
-     * أي إضافة حقيقية يجب أن تتم في Backend.
-     */
+    // لا نعدّل الرصيد محليًا.
     await refresh();
 
     return _credits;
@@ -346,45 +285,30 @@ class CreditsService {
 
   /// هل يمكن للمستخدم طلب إعلان مكافأة؟
   ///
-  /// هذا فحص للواجهة فقط.
-  /// التحقق النهائي يحدث على السيرفر
-  /// بعد إثبات مشاهدة الإعلان.
+  /// فحص للواجهة فقط.
+  /// التحقق النهائي يحدث على السيرفر بعد إثبات مشاهدة الإعلان.
   Future<bool> canClaimRewardedAd() async {
     await _ensureInitialized();
 
-    /*
-     * نحاول تحديث البيانات أولًا حتى لا تعتمد الواجهة
-     * على Cache قديم.
-     */
+    // حدّث بيانات السيرفر قبل اتخاذ القرار.
     await refresh();
 
-    return remainingRewardedAdsToday > 0;
+    // لا تعتمد على Cache قديم عند انقطاع السيرفر.
+    return _serverAvailable &&
+        remainingRewardedAdsToday > 0;
   }
 
-  /// تسجيل مكافأة إعلان.
+  /// لا تسجّل مكافأة ولا تضف رصيدًا محليًا.
   ///
-  /// IMPORTANT:
-  /// لا نضيف Credits محليًا هنا.
-  ///
-  /// نظام المكافآت الحقيقي يتم من خلال:
-  ///
+  /// نظام المكافآت الحقيقي:
   /// AdMob → SSV → Cloudflare Worker → Durable Object
   ///
-  /// لذلك هذه الدالة لا تمنح Credits بنفسها.
+  /// لا تستخدم هذه الدالة كدليل على نجاح منح المكافأة.
   Future<bool> claimRewardedAd() async {
     await _ensureInitialized();
 
-    /*
-     * لا يوجد هنا:
-     *
-     * _credits += 10
-     *
-     * لأن ذلك يسمح بالتلاعب بالرصيد من التطبيق.
-     *
-     * AdMob SSV هو المسؤول عن إثبات المشاهدة،
-     * والـBackend هو المسؤول عن إضافة Credits.
-     */
-
+    // لا توجد إضافة محلية للرصيد.
+    // يجب التحقق من الرصيد بعد معالجة SSV على السيرفر.
     await refresh();
 
     return false;
@@ -400,84 +324,54 @@ class CreditsService {
   }
 
   /// هل آخر مزامنة من السيرفر ناجحة؟
-  bool get hasValidServerBalance =>
-      _serverAvailable;
+  bool get hasValidServerBalance => _serverAvailable;
 
   // ============================================================
   // LOCAL CACHE
   // ============================================================
 
   void _loadLocalCache() {
-    final prefs =
-        _preferences;
+    final prefs = _preferences;
 
     if (prefs == null) {
       return;
     }
 
-    _credits =
-        _sanitizeCredits(
-      prefs.getInt(
-            _creditsKey,
-          ) ??
-          0,
+    _credits = _sanitizeCredits(
+      prefs.getInt(_creditsKey) ?? 0,
     );
 
-    _rewardedAdsToday =
-        _sanitizeRewardedCount(
-      prefs.getInt(
-            _rewardedCountKey,
-          ) ??
-          0,
+    _rewardedAdsToday = _sanitizeRewardedCount(
+      prefs.getInt(_rewardedCountKey) ?? 0,
     );
 
-    final savedLimit =
-        prefs.getInt(
-      _rewardedLimitKey,
-    );
+    final savedLimit = prefs.getInt(_rewardedLimitKey);
 
-    if (savedLimit != null &&
-        savedLimit > 0) {
-      _rewardedAdsDailyLimit =
-          savedLimit;
+    if (savedLimit != null && savedLimit > 0) {
+      _rewardedAdsDailyLimit = savedLimit;
     }
 
-    final savedReward =
-        prefs.getInt(
-      _rewardedCreditsKey,
-    );
+    final savedReward = prefs.getInt(_rewardedCreditsKey);
 
-    if (savedReward != null &&
-        savedReward > 0) {
-      _rewardedAdCredits =
-          savedReward;
+    if (savedReward != null && savedReward > 0) {
+      _rewardedAdCredits = savedReward;
     }
 
-    final savedSync =
-        prefs.getString(
-      _lastSyncKey,
-    );
+    final savedSync = prefs.getString(_lastSyncKey);
 
     if (savedSync != null) {
-      _lastSync =
-          DateTime.tryParse(
-        savedSync,
-      );
+      _lastSync = DateTime.tryParse(savedSync);
     }
   }
 
   Future<void> _saveLocalCache() async {
-    final prefs =
-        _preferences;
+    final prefs = _preferences;
 
     if (prefs == null) {
       return;
     }
 
-    await prefs.setInt(
-      _creditsKey,
-      _credits,
-    );
+    await prefs.setInt(_creditsKey, _credits);
 
     await prefs.setInt(
       _rewardedCountKey,
@@ -507,58 +401,34 @@ class CreditsService {
   // ============================================================
 
   /// يمسح الـCache المحلي فقط.
-  ///
   /// لا يمسح الرصيد الحقيقي من السيرفر.
   Future<void> clearLocalData() async {
     await _ensureInitialized();
 
-    final prefs =
-        _preferences;
+    final prefs = _preferences;
 
     if (prefs == null) {
       return;
     }
 
-    await prefs.remove(
-      _creditsKey,
-    );
-
-    await prefs.remove(
-      _rewardedCountKey,
-    );
-
-    await prefs.remove(
-      _rewardedLimitKey,
-    );
-
-    await prefs.remove(
-      _rewardedCreditsKey,
-    );
-
-    await prefs.remove(
-      _lastSyncKey,
-    );
+    await prefs.remove(_creditsKey);
+    await prefs.remove(_rewardedCountKey);
+    await prefs.remove(_rewardedLimitKey);
+    await prefs.remove(_rewardedCreditsKey);
+    await prefs.remove(_lastSyncKey);
 
     _credits = 0;
     _rewardedAdsToday = 0;
     _lastSync = null;
     _lastError = null;
 
-    /*
-     * مهم:
-     * لا ننشئ 100 Credits هنا.
-     *
-     * الـ100 Credits الأولى يتم إنشاؤها
-     * داخل Durable Object فقط.
-     */
-
+    // لا ننشئ رصيدًا ابتدائيًا محليًا.
+    // الرصيد الأولي يتم إنشاؤه داخل Durable Object.
     await refresh();
   }
 
-  /// دالة قديمة كانت تعيد الرصيد إلى البداية.
-  ///
-  /// لم تعد تغير السيرفر.
-  /// موجودة فقط لمنع كسر أي كود قديم.
+  /// دالة قديمة للتوافق فقط.
+  /// لا تعيد ضبط الرصيد على السيرفر.
   Future<void> resetToInitial() async {
     await _ensureInitialized();
 
@@ -569,36 +439,26 @@ class CreditsService {
   // SANITIZATION
   // ============================================================
 
-  int _sanitizeCredits(
-    int value,
-  ) {
+  int _sanitizeCredits(int value) {
     if (value < 0) {
       return 0;
     }
 
-    /*
-     * لا نستخدم maximumLocalCredits كحد أمني
-     * للرصيد الحقيقي.
-     *
-     * هذا مجرد Cache للعرض.
-     */
-    if (value >
-        CreditsConfig.maximumLocalCredits) {
+    // هذا حدّ للـCache المحلي المعروض فقط،
+    // وليس حدًا أمنيًا للرصيد الحقيقي.
+    if (value > CreditsConfig.maximumLocalCredits) {
       return CreditsConfig.maximumLocalCredits;
     }
 
     return value;
   }
 
-  int _sanitizeRewardedCount(
-    int value,
-  ) {
+  int _sanitizeRewardedCount(int value) {
     if (value < 0) {
       return 0;
     }
 
-    if (value >
-        _rewardedAdsDailyLimit) {
+    if (value > _rewardedAdsDailyLimit) {
       return _rewardedAdsDailyLimit;
     }
 
