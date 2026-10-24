@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -99,13 +100,15 @@ class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
 
   @override
-  State<MainContainerScreen> createState() =>
-      _MainContainerScreenState();
+  State<MainContainerScreen> createState() => _MainContainerScreenState();
 }
 
 class _MainContainerScreenState extends State<MainContainerScreen> {
   // 0 الرئيسية، 1 الشات، 2 الألعاب، 3 حسابي.
   int index = 0;
+
+  final GlobalKey<HomeScreenState> _homeKey =
+      GlobalKey<HomeScreenState>();
 
   void openProfile() {
     if (!mounted) return;
@@ -141,6 +144,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       HomeScreen(
+        key: _homeKey,
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
@@ -231,7 +235,16 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         indicatorColor: const Color(0x3348D8FF),
         selectedIndex: index,
         onDestinationSelected: (value) {
-          if (!mounted || value == index) return;
+          if (!mounted) return;
+
+          if (value == index) {
+            // الضغط على الرئيسية وهي محددة يعيد تحميل الأخبار.
+            if (value == 0) {
+              unawaited(_homeKey.currentState?.refreshNews());
+            }
+            return;
+          }
+
           setState(() => index = value);
         },
         destinations: const [
@@ -270,14 +283,10 @@ class MiniAudioPlayer extends StatelessWidget {
       stream: AudioController.handler?.mediaItem,
       builder: (context, mediaSnapshot) {
         final item = mediaSnapshot.data;
-        if (item == null) {
-          return const SizedBox.shrink();
-        }
+        if (item == null) return const SizedBox.shrink();
 
         final handler = AudioController.handler;
-        if (handler == null) {
-          return const SizedBox.shrink();
-        }
+        if (handler == null) return const SizedBox.shrink();
 
         return Material(
           color: Colors.transparent,
@@ -287,9 +296,7 @@ class MiniAudioPlayer extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFF121720).withOpacity(0.98),
               borderRadius: BorderRadius.circular(19),
-              border: Border.all(
-                color: const Color(0x55FFD76A),
-              ),
+              border: Border.all(color: const Color(0x55FFD76A)),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x66000000),
@@ -363,8 +370,7 @@ class MiniAudioPlayer extends StatelessWidget {
                 StreamBuilder<PlaybackState>(
                   stream: handler.playbackState,
                   builder: (context, snapshot) {
-                    final playing =
-                        snapshot.data?.playing ?? false;
+                    final playing = snapshot.data?.playing ?? false;
 
                     return IconButton(
                       padding: EdgeInsets.zero,
