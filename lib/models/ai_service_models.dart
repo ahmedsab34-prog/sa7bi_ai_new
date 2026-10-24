@@ -1,6 +1,10 @@
-import 'dart:typed_data';
 
-/// نموذج عنصر الأخبار.
+part of '../ai_service.dart';
+
+// ============================================================
+// MODELS
+// ============================================================
+
 class NewsItem {
   final String title;
   final String source;
@@ -19,7 +23,6 @@ class NewsItem {
   });
 }
 
-/// نموذج نتيجة البحث عن الصوتيات.
 class AudioSearchItem {
   final String id;
   final String title;
@@ -48,7 +51,6 @@ class AudioSearchItem {
   });
 }
 
-/// نموذج البودكاست.
 class PodcastItem {
   final String id;
   final String title;
@@ -79,7 +81,6 @@ class PodcastItem {
   });
 }
 
-/// نموذج حلقة بودكاست.
 class PodcastEpisode {
   final String id;
   final String title;
@@ -106,7 +107,6 @@ class PodcastEpisode {
   });
 }
 
-/// نموذج كتاب حديث.
 class HadithBook {
   final String id;
   final String name;
@@ -117,7 +117,6 @@ class HadithBook {
   });
 }
 
-/// نموذج الحديث.
 class HadithItem {
   final String id;
   final String number;
@@ -136,7 +135,6 @@ class HadithItem {
   });
 }
 
-/// نموذج كتاب التفسير.
 class TafsirBook {
   final int id;
   final String name;
@@ -147,7 +145,6 @@ class TafsirBook {
   });
 }
 
-/// نموذج نتيجة التفسير.
 class TafsirItem {
   final String id;
   final int tafsirId;
@@ -166,7 +163,6 @@ class TafsirItem {
   });
 }
 
-/// نتيجة توفر صوت التفسير.
 class TafsirAudioResult {
   final bool available;
   final String audioUrl;
@@ -177,7 +173,6 @@ class TafsirAudioResult {
   });
 }
 
-/// نتيجة إنشاء الصورة.
 class ImageGenerationResult {
   final Uint8List? bytes;
   final String? imageUrl;
@@ -212,7 +207,6 @@ class ImageGenerationResult {
       (imageUrl != null && imageUrl!.isNotEmpty);
 }
 
-/// فهرس القرآن.
 class QuranCatalog {
   final List<QuranReciter> reciters;
   final List<QuranSura> suwar;
@@ -223,7 +217,6 @@ class QuranCatalog {
   });
 }
 
-/// نموذج القارئ.
 class QuranReciter {
   final String id;
   final String name;
@@ -236,7 +229,6 @@ class QuranReciter {
   });
 }
 
-/// نموذج المصحف.
 class QuranMoshaf {
   final String id;
   final String name;
@@ -253,7 +245,6 @@ class QuranMoshaf {
   });
 }
 
-/// نموذج السورة.
 class QuranSura {
   final int id;
   final String name;
@@ -264,7 +255,6 @@ class QuranSura {
   });
 }
 
-/// نموذج دولة محطات الراديو.
 class RadioCountry {
   final String name;
   final String code;
@@ -277,7 +267,6 @@ class RadioCountry {
   });
 }
 
-/// نموذج محطة الراديو.
 class RadioStation {
   final String id;
   final String name;
@@ -300,7 +289,6 @@ class RadioStation {
   });
 }
 
-/// نموذج الفيديو القصير.
 class ShortVideoItem {
   final String id;
   final String title;
