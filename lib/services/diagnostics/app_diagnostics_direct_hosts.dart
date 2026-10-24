@@ -1,18 +1,17 @@
+
 part of '../app_diagnostics_service.dart';
 
-/// Independent HTTPS probes for the primary and fallback Workers.
-///
-/// These probes use a fresh dart:io HttpClient directly.
-/// They do not use Sa7biNetworkClient and do not send AI requests.
+/// فحص مستقل للخادمين الأساسي والاحتياطي.
+/// لا يرسل أي طلب ذكاء اصطناعي مدفوع.
 extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
   static const String _fallbackWorkerUrl =
       'https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev';
 
   static const Duration _directProbeTimeout =
-      Duration(seconds: 10);
+      Duration(seconds: 7);
 
   static const Duration _directConnectTimeout =
-      Duration(seconds: 8);
+      Duration(seconds: 5);
 
   Future<DiagnosticResult> _checkPrimaryDirectHttps() {
     return _checkDirectWorkerHealth(
@@ -75,7 +74,6 @@ extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
         HttpHeaders.acceptHeader,
         'application/json',
       );
-
       request.headers.set(
         HttpHeaders.cacheControlHeader,
         'no-cache',
@@ -112,7 +110,27 @@ extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
             'path=${uri.path}; '
             'transport=DIRECT_DART_IO; '
             'HTTP=${response.statusCode}; '
+            'connectTimeout=${_directConnectTimeout.inSeconds}s; '
+            'probeTimeout=${_directProbeTimeout.inSeconds}s; '
             '${_summarizeBody(responseBody)}',
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
+    } on TimeoutException catch (error) {
+      stopwatch.stop();
+
+      return DiagnosticResult(
+        name: name,
+        category: 'NETWORK',
+        success: false,
+        severity: 'FAIL',
+        status: 'DIRECT_HTTPS_TIMEOUT',
+        details:
+            'Direct HTTPS timed out; '
+            'host=${uri.host}; '
+            'transport=DIRECT_DART_IO; '
+            'connectTimeout=${_directConnectTimeout.inSeconds}s; '
+            'probeTimeout=${_directProbeTimeout.inSeconds}s; '
+            'error=${_safeError(error)}',
         durationMs: stopwatch.elapsedMilliseconds,
       );
     } catch (error) {
@@ -128,8 +146,6 @@ extension AppDiagnosticsDirectHostChecks on AppDiagnosticsService {
             'Direct HTTPS request failed; '
             'host=${uri.host}; '
             'transport=DIRECT_DART_IO; '
-            'timeout=${_directProbeTimeout.inSeconds}s; '
-            'connectTimeout=${_directConnectTimeout.inSeconds}s; '
             'error=${_safeError(error)}',
         durationMs: stopwatch.elapsedMilliseconds,
       );
