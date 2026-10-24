@@ -14,6 +14,7 @@ import 'services/chat_image_service.dart';
 import 'services/chat_media_service.dart';
 import 'services/chat_voice_service.dart';
 import 'services/credits_service.dart';
+import 'services/image_intent_detector.dart';
 import 'services/profile_service.dart';
 import 'services/video_analysis_service.dart';
 import 'widgets/chat_screen_body.dart';
@@ -1316,51 +1317,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _looksLikeImageRequest(
     String text,
   ) {
-    final value =
-        text
-            .toLowerCase()
-            .replaceAll('أ', 'ا')
-            .replaceAll('إ', 'ا')
-            .replaceAll('آ', 'ا');
-
-    const imageWords =
-        <String>[
-      'صورة',
-      'صوره',
-      'صور',
-      'تصميم',
-      'لوجو',
-      'شعار',
-      'بوستر',
-      'image',
-      'logo',
-      'poster',
-    ];
-
-    const actionWords =
-        <String>[
-      'اعمل',
-      'اعملي',
-      'اعمللي',
-      'انشئ',
-      'انشئلي',
-      'صمم',
-      'صمملي',
-      'ارسم',
-      'عايز',
-      'محتاج',
-      'create',
-      'generate',
-      'make',
-      'draw',
-    ];
-
-    return imageWords.any(
-          value.contains,
-        ) &&
-        actionWords.any(
-          value.contains,
-        );
+    return ImageIntentDetector
+        .isGenerationRequest(text);
   }
 
   String _cleanSpeech(String value) {
