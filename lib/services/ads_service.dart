@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -149,8 +150,7 @@ class AdsService {
     }
 
     try {
-      _preferences =
-          await SharedPreferences.getInstance();
+      _preferences = await SharedPreferences.getInstance();
 
       _interstitialCounter =
           _preferences!.getInt(
@@ -164,10 +164,7 @@ class AdsService {
               ) ??
               true;
 
-      // ----------------------------------------------------------
       // AdMob
-      // ----------------------------------------------------------
-
       try {
         await MobileAds.instance.initialize();
 
@@ -196,13 +193,10 @@ class AdsService {
   Future<bool> shouldShowBanner() async {
     await _ensureInitialized();
 
-    return _bannerEnabled &&
-        _adMobInitialized;
+    return _bannerEnabled && _adMobInitialized;
   }
 
-  Future<void> setBannerEnabled(
-    bool enabled,
-  ) async {
+  Future<void> setBannerEnabled(bool enabled) async {
     await _ensureInitialized();
 
     _bannerEnabled = enabled;
@@ -227,8 +221,7 @@ class AdsService {
   }) async {
     await _ensureInitialized();
 
-    if (!_adMobInitialized ||
-        !_bannerEnabled) {
+    if (!_adMobInitialized || !_bannerEnabled) {
       return null;
     }
 
@@ -242,8 +235,7 @@ class AdsService {
 
     _isLoadingBanner = true;
 
-    final completer =
-        Completer<BannerAd?>();
+    final completer = Completer<BannerAd?>();
 
     late final BannerAd banner;
 
@@ -405,29 +397,24 @@ class AdsService {
 
     _isLoadingInterstitial = true;
 
-    final completer =
-        Completer<bool>();
+    final completer = Completer<bool>();
 
     try {
       await InterstitialAd.load(
         adUnitId: interstitialAdUnitId,
         request: const AdRequest(),
-        adLoadCallback:
-            InterstitialAdLoadCallback(
+        adLoadCallback: InterstitialAdLoadCallback(
           onAdLoaded: (ad) {
             _interstitialAd = ad;
 
             ad.fullScreenContentCallback =
                 FullScreenContentCallback(
-              onAdDismissedFullScreenContent:
-                  (ad) {
+              onAdDismissedFullScreenContent: (ad) {
                 ad.dispose();
 
                 _interstitialAd = null;
 
-                unawaited(
-                  loadInterstitial(),
-                );
+                unawaited(loadInterstitial());
               },
               onAdFailedToShowFullScreenContent:
                   (ad, error) {
@@ -435,9 +422,7 @@ class AdsService {
 
                 _interstitialAd = null;
 
-                unawaited(
-                  loadInterstitial(),
-                );
+                unawaited(loadInterstitial());
               },
             );
 
@@ -496,9 +481,7 @@ class AdsService {
         ad.dispose();
       } catch (_) {}
 
-      unawaited(
-        loadInterstitial(),
-      );
+      unawaited(loadInterstitial());
 
       return false;
     }
@@ -522,40 +505,28 @@ class AdsService {
 
   /// يجهز بيانات SSV للإعلان.
   ///
-  /// لا نرسل أي API Key أو بيانات حساسة.
-  ///
-  /// customData تحتوي على Device ID فقط مع مصدر العملية.
-  ///
-  /// الـBackend سيستقبلها في:
-  ///
-  /// custom_data
-  ///
-  /// داخل AdMob SSV callback.
+  /// customData تحتوي على Device ID ومصدر العملية.
+  /// لا نرسل API Key أو بيانات حساسة.
   Future<bool> _configureRewardedSsv(
     RewardedAd ad,
   ) async {
     try {
-      final deviceId =
-          await AiRequestService.getDeviceId();
+      final deviceId = await AiRequestService.getDeviceId();
 
       if (deviceId.trim().isEmpty) {
         return false;
       }
 
-      final customData =
-          jsonEncode({
+      final customData = jsonEncode({
         'deviceId': deviceId,
         'source': 'sa7bi_rewarded_ad',
       });
 
-      final options =
-          ServerSideVerificationOptions(
+      final options = ServerSideVerificationOptions(
         customData: customData,
       );
 
-      await ad.setServerSideOptions(
-        options,
-      );
+      await ad.setServerSideOptions(options);
 
       return true;
     } catch (_) {
@@ -580,15 +551,13 @@ class AdsService {
 
     _isLoadingRewarded = true;
 
-    final completer =
-        Completer<bool>();
+    final completer = Completer<bool>();
 
     try {
       await RewardedAd.load(
         adUnitId: rewardedAdUnitId,
         request: const AdRequest(),
-        rewardedAdLoadCallback:
-            RewardedAdLoadCallback(
+        rewardedAdLoadCallback: RewardedAdLoadCallback(
           onAdLoaded: (ad) {
             unawaited(
               _finishRewardedLoad(
@@ -629,19 +598,13 @@ class AdsService {
     }
   }
 
-  /// يكمل تحميل Rewarded بعد ضبط SSV.
-  ///
-  /// لا يتم اعتبار الإعلان جاهزًا قبل نجاح
-  /// setServerSideOptions().
+  /// لا يتم اعتبار الإعلان جاهزًا قبل نجاح ضبط SSV.
   Future<void> _finishRewardedLoad(
     RewardedAd ad,
     Completer<bool> completer,
   ) async {
     try {
-      final ssvReady =
-          await _configureRewardedSsv(
-        ad,
-      );
+      final ssvReady = await _configureRewardedSsv(ad);
 
       if (!ssvReady) {
         try {
@@ -680,28 +643,10 @@ class AdsService {
 
   /// عرض Rewarded Ad.
   ///
-  /// مهم:
-  ///
-  /// onUserEarnedReward:
-  /// - يؤكد أن AdMob أعطى التطبيق حدث المكافأة.
-  /// - لا يمنح Credits محليًا.
-  /// - لا يعدل الرصيد.
-  ///
-  /// منح الرصيد الحقيقي يتم فقط من:
-  ///
-  /// AdMob SSV
-  ///      ↓
-  /// Cloudflare Worker
-  ///      ↓
-  /// Google signature verification
-  ///      ↓
-  /// Durable Object
-  ///
-  /// لذلك callback هنا يستخدم فقط لإبلاغ الواجهة
-  /// أن حدث المكافأة المحلي وقع.
+  /// onUserEarnedReward لا يمنح Credits محليًا.
+  /// المكافأة الحقيقية تأتي من AdMob SSV ثم Cloudflare.
   Future<bool> showRewarded({
-    void Function(int amount)?
-        onRewardEarned,
+    void Function(int amount)? onRewardEarned,
   }) async {
     await _ensureInitialized();
 
@@ -710,12 +655,10 @@ class AdsService {
       return false;
     }
 
-    RewardedAd? ad =
-        _rewardedAd;
+    RewardedAd? ad = _rewardedAd;
 
     if (ad == null) {
-      final loaded =
-          await loadRewarded();
+      final loaded = await loadRewarded();
 
       if (!loaded) {
         return false;
@@ -730,70 +673,50 @@ class AdsService {
 
     _rewardedAd = null;
 
-    final completer =
-        Completer<bool>();
+    final completer = Completer<bool>();
 
     bool rewardEarned = false;
 
     ad.fullScreenContentCallback =
         FullScreenContentCallback(
-      onAdDismissedFullScreenContent:
-          (ad) {
+      onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
 
         if (!completer.isCompleted) {
-          completer.complete(
-            rewardEarned,
-          );
+          completer.complete(rewardEarned);
         }
 
-        unawaited(
-          loadRewarded(),
-        );
+        unawaited(loadRewarded());
       },
-      onAdFailedToShowFullScreenContent:
-          (ad, error) {
+      onAdFailedToShowFullScreenContent: (
+        ad,
+        error,
+      ) {
         ad.dispose();
 
         if (!completer.isCompleted) {
           completer.complete(false);
         }
 
-        unawaited(
-          loadRewarded(),
-        );
+        unawaited(loadRewarded());
       },
     );
 
     try {
       await ad.show(
-        onUserEarnedReward:
-            (ad, reward) {
+        onUserEarnedReward: (ad, reward) {
           rewardEarned = true;
 
-          final amount =
-              reward.amount.toInt();
+          final amount = reward.amount.toInt();
 
-          final safeAmount =
-              amount > 0
-                  ? amount
-                  : CreditsConfig
-                      .rewardedAdCredits;
+          final safeAmount = amount > 0
+              ? amount
+              : CreditsConfig.rewardedAdCredits;
 
-          // ----------------------------------------------------
-          // IMPORTANT:
-          //
           // لا نضيف Credits هنا.
-          //
           // هذه callback من AdMob فقط.
           // المكافأة الحقيقية تأتي من SSV.
-          // ----------------------------------------------------
-
-          if (onRewardEarned != null) {
-            onRewardEarned(
-              safeAmount,
-            );
-          }
+          onRewardEarned?.call(safeAmount);
         },
       );
     } catch (_) {
@@ -805,9 +728,7 @@ class AdsService {
         completer.complete(false);
       }
 
-      unawaited(
-        loadRewarded(),
-      );
+      unawaited(loadRewarded());
     }
 
     return completer.future;
@@ -833,11 +754,9 @@ class AdsService {
   }
 }
 
-/// حالة مستقلة لمعرفة هل يمكن إعطاء
-/// Rewarded Credits.
+/// حالة مستقلة لمعرفة هل يمكن عرض Rewarded Credits.
 ///
-/// هذه لا تمنح الرصيد.
-/// هي مجرد مفتاح تشغيل/إيقاف لواجهة الإعلانات.
+/// لا تمنح الرصيد؛ هي مجرد مفتاح تشغيل/إيقاف.
 class CreditsServiceAvailability {
   CreditsServiceAvailability._();
 
