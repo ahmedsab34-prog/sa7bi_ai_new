@@ -1,3 +1,4 @@
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -21,19 +22,14 @@ class ProfileScreen extends StatefulWidget {
   });
 
   @override
-  State<ProfileScreen> createState() =>
-      _ProfileScreenState();
+  State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final ProfileService _profileService =
-      ProfileService.instance;
-
-  final ReminderService _reminderService =
-      ReminderService.instance;
+  final ProfileService _profileService = ProfileService.instance;
+  final ReminderService _reminderService = ReminderService.instance;
 
   Uint8List? _photo;
-
   String _displayName = '';
   String _reelName = '';
   String _bio = '';
@@ -47,27 +43,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
 
-    _profileService.changes.addListener(
-      _syncProfile,
-    );
-
-    _reminderService.reminders.addListener(
-      _onRemindersChanged,
-    );
+    _profileService.changes.addListener(_syncProfile);
+    _reminderService.reminders.addListener(_onRemindersChanged);
 
     _initialize();
   }
 
   @override
   void dispose() {
-    _profileService.changes.removeListener(
-      _syncProfile,
-    );
-
-    _reminderService.reminders.removeListener(
-      _onRemindersChanged,
-    );
-
+    _profileService.changes.removeListener(_syncProfile);
+    _reminderService.reminders.removeListener(_onRemindersChanged);
     super.dispose();
   }
 
@@ -78,9 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _reminderService.initialize(),
       ]);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       _syncProfile();
 
@@ -90,9 +73,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       await _checkAiConnection();
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _loading = false;
@@ -101,9 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _syncProfile() {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     setState(() {
       _photo = _profileService.photoBytes;
@@ -116,17 +95,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _onRemindersChanged() {
-    if (!mounted) {
-      return;
-    }
-
+    if (!mounted) return;
     setState(() {});
   }
 
   Future<void> _checkAiConnection() async {
-    if (_checkingAi) {
-      return;
-    }
+    if (_checkingAi) return;
 
     if (mounted) {
       setState(() {
@@ -135,25 +109,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     try {
-      final connected =
-          await AiService.checkConnection();
+      final connected = await AiService.checkConnection();
 
-      await _profileService.saveAiConnection(
-        connected,
-      );
+      await _profileService.saveAiConnection(connected);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _aiConnected = connected;
         _checkingAi = false;
       });
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _aiConnected = false;
@@ -167,32 +134,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _refreshProfile() async {
     try {
       await _profileService.refresh();
-
       await _reminderService.initialize();
       await _reminderService.rescheduleAll();
-
       await _checkAiConnection();
 
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       _syncProfile();
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      _showMessage(
-        'تعذر تحديث بيانات الحساب حاليًا.',
-      );
+      if (!mounted) return;
+      _showMessage('تعذر تحديث بيانات الحساب حاليًا.');
     }
   }
 
   void _showMessage(String message) {
-    if (!mounted || message.trim().isEmpty) {
-      return;
-    }
+    if (!mounted || message.trim().isEmpty) return;
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -210,22 +165,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildAiStatusBar() {
     final connected = _aiConnected;
-
-    final statusColor = connected
-        ? Colors.greenAccent
-        : Colors.orangeAccent;
+    final statusColor =
+        connected ? Colors.greenAccent : Colors.orangeAccent;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(
-        6,
-        0,
-        6,
-        5,
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 6,
-      ),
+      margin: const EdgeInsets.fromLTRB(6, 0, 6, 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: Theme.of(context)
             .colorScheme
@@ -233,9 +178,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(13),
         border: Border.all(
-          color: statusColor.withValues(
-            alpha: 0.30,
-          ),
+          color: statusColor.withValues(alpha: 0.30),
         ),
       ),
       child: Row(
@@ -258,9 +201,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: statusColor,
                 boxShadow: [
                   BoxShadow(
-                    color: statusColor.withValues(
-                      alpha: 0.35,
-                    ),
+                    color: statusColor.withValues(alpha: 0.35),
                     blurRadius: 6,
                   ),
                 ],
@@ -288,17 +229,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(width: 1),
           IconButton(
-            onPressed:
-                _checkingAi ? null : _checkAiConnection,
+            onPressed: _checkingAi ? null : _checkAiConnection,
             tooltip: 'فحص الاتصال',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(
-              minWidth: 30,
-              minHeight: 30,
+              minWidth: 36,
+              minHeight: 36,
             ),
             icon: Icon(
               Icons.refresh_rounded,
-              size: 17,
+              size: 18,
               color: statusColor,
             ),
           ),
@@ -309,12 +249,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildCreditsSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        6,
-        0,
-        6,
-        5,
-      ),
+      padding: const EdgeInsets.fromLTRB(6, 0, 6, 5),
       child: Row(
         children: [
           const Expanded(
@@ -324,9 +259,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(width: 6),
-          const RewardedAdButton(
-            compact: true,
-          ),
+          const RewardedAdButton(compact: true),
         ],
       ),
     );
@@ -362,7 +295,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return SafeArea(
       child: Column(
         children: [
-          // الهيدر ثابت أعلى الصفحة ولا يتكرر في محتواها.
           AppHeader(
             onAudioTap: widget.onAudio,
           ),
@@ -373,18 +305,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      // ملاءمة محتوى الصفحة للشاشة دون تمرير رأسي.
-                      // عند ضيق المساحة يصغر المحتوى بدل قصّ الأزرار.
-                      return SizedBox(
-                        width: constraints.maxWidth,
-                        height: constraints.maxHeight,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.topCenter,
-                          child: SizedBox(
-                            width: constraints.maxWidth,
-                            child: _buildProfileContent(),
+                      // لا نصغّر الصفحة كلها بـ FittedBox؛ ذلك يجعل
+                      // الأزرار أصغر من حجم اللمس المناسب.
+                      // نستخدم مساحة مرنة مع حد أدنى للمسافات.
+                      return SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: constraints.maxHeight - 12,
                           ),
+                          child: _buildProfileContent(),
                         ),
                       );
                     },
