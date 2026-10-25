@@ -1,6 +1,5 @@
 
-import '../ai_service.dart' show AiService;
-import '../models/ai_service_models.dart';
+import '../ai_service.dart';
 
 /// خدمات الحديث الشريف والتفسير والبحث الديني.
 class AiReligiousService {
