@@ -1,6 +1,5 @@
 
-import '../ai_service.dart' show AiService;
-import '../models/ai_service_models.dart';
+import '../ai_service.dart';
 
 /// خدمات القرآن الكريم ومحطات الراديو.
 /// تعتمد على AiService الحالية للحفاظ على توافق التطبيق.
