@@ -1,4 +1,5 @@
-import '../ai_service.dart';
+
+import '../ai_service.dart' show AiService;
 import '../models/ai_service_models.dart';
 
 /// خدمات الحديث الشريف والتفسير والبحث الديني.
