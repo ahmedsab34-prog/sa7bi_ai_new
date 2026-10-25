@@ -1,9 +1,5 @@
 
-part of '../ai_service.dart';
-
-// ============================================================
-// MODELS
-// ============================================================
+import 'dart:typed_data';
 
 class NewsItem {
   final String title;
@@ -184,23 +180,14 @@ class ImageGenerationResult {
     this.error,
   });
 
-  const ImageGenerationResult.success(
-    Uint8List bytes,
-  ) : this._(
-          bytes: bytes,
-        );
+  const ImageGenerationResult.success(Uint8List bytes)
+      : this._(bytes: bytes);
 
-  const ImageGenerationResult.successUrl(
-    String url,
-  ) : this._(
-          imageUrl: url,
-        );
+  const ImageGenerationResult.successUrl(String url)
+      : this._(imageUrl: url);
 
-  const ImageGenerationResult.failure(
-    String error,
-  ) : this._(
-          error: error,
-        );
+  const ImageGenerationResult.failure(String error)
+      : this._(error: error);
 
   bool get isSuccess =>
       (bytes != null && bytes!.isNotEmpty) ||
