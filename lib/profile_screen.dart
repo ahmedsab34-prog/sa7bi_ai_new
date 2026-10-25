@@ -1,4 +1,3 @@
-
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -38,6 +37,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _aiConnected = false;
   bool _loading = true;
   bool _checkingAi = false;
+  bool _refreshing = false;
 
   @override
   void initState() {
@@ -110,7 +110,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final connected = await AiService.checkConnection();
-
       await _profileService.saveAiConnection(connected);
 
       if (!mounted) return;
@@ -132,17 +131,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _refreshProfile() async {
+    if (_refreshing) return;
+
+    setState(() {
+      _refreshing = true;
+    });
+
     try {
       await _profileService.refresh();
       await _reminderService.initialize();
       await _reminderService.rescheduleAll();
-      await _checkAiConnection();
 
       if (!mounted) return;
+
       _syncProfile();
+      await _checkAiConnection();
     } catch (_) {
       if (!mounted) return;
       _showMessage('تعذر تحديث بيانات الحساب حاليًا.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _refreshing = false;
+        });
+      }
     }
   }
 
@@ -227,7 +239,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             size: 17,
             color: statusColor,
           ),
-          const SizedBox(width: 1),
           IconButton(
             onPressed: _checkingAi ? null : _checkAiConnection,
             tooltip: 'فحص الاتصال',
@@ -305,17 +316,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      // لا نصغّر الصفحة كلها بـ FittedBox؛ ذلك يجعل
-                      // الأزرار أصغر من حجم اللمس المناسب.
-                      // نستخدم مساحة مرنة مع حد أدنى للمسافات.
-                      return SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: constraints.maxHeight - 12,
+                      return RefreshIndicator(
+                        onRefresh: _refreshProfile,
+                        child: SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(
+                            8,
+                            4,
+                            8,
+                            88,
                           ),
-                          child: _buildProfileContent(),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight:
+                                  constraints.maxHeight - 12,
+                            ),
+                            child: _buildProfileContent(),
+                          ),
                         ),
                       );
                     },
