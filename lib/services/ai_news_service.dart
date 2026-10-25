@@ -1,10 +1,8 @@
-
 import 'dart:convert';
-
-import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../models/ai_service_models.dart';
+import 'sa7bi_network_client.dart';
 
 /// خدمة الأخبار المستقلة لتطبيق صاحبي AI.
 class AiNewsService {
@@ -12,8 +10,7 @@ class AiNewsService {
 
   static const String newsEndpoint = AppConfig.newsEndpoint;
 
-  /// تحميل الأخبار من الخادم.
-  ///
+  /// تحميل الأخبار باستخدام عميل الشبكة الموحد.
   /// ترجع قائمة فارغة عند فشل الاتصال أو عدم صلاحية البيانات.
   static Future<List<NewsItem>> getNews() async {
     try {
@@ -25,7 +22,7 @@ class AiNewsService {
         },
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(
             uri,
             headers: const {
@@ -64,8 +61,7 @@ class AiNewsService {
             raw['thumbnail'] ??
             ''
           ).toString(),
-          description:
-              raw['description']?.toString() ?? '',
+          description: raw['description']?.toString() ?? '',
           pubDate: (
             raw['pubDate'] ??
             raw['publishedAt'] ??
