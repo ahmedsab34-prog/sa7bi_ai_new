@@ -1,4 +1,5 @@
-// backend/src/admob-ssv.js
+
+ // backend/src/admob-ssv.js
 // Sa7bi AI - Final AdMob Rewarded SSV Verification
 //
 // FINAL REWARD FLOW
@@ -1240,16 +1241,14 @@ function validateAdUnit(
     ).trim();
 
   /*
-   * If it is not configured yet, verification can still
-   * operate using Google's cryptographic signature and
-   * the other server validations.
-   *
-   * Once configured, exact matching is enforced.
+   * Reward grants must fail closed if the expected AdMob
+   * rewarded unit is not configured on this Worker.
+   * Never accept a signed callback for an unknown unit.
    */
-  if (
-    !configuredAdUnit
-  ) {
-    return true;
+  if (!configuredAdUnit) {
+    throw new Error(
+      "ADMOB_SSV_AD_UNIT_NOT_CONFIGURED",
+    );
   }
 
   const callbackAdUnit =
@@ -1347,7 +1346,7 @@ export async function handleAdMobSSV(
     /*
      * -------------------------------------------------------
      * STEP 4
-     * Validate rewarded ad unit when configured.
+     * Validate the configured rewarded ad unit.
      * -------------------------------------------------------
      */
     validateAdUnit(
@@ -1527,6 +1526,8 @@ export async function handleAdMobSSV(
         "ADMOB_SSV_TRANSACTION_ID_INVALID",
 
         "ADMOB_SSV_CUSTOM_DATA_MISSING",
+
+        "ADMOB_SSV_AD_UNIT_NOT_CONFIGURED",
 
         "ADMOB_SSV_AD_UNIT_MISSING",
 
