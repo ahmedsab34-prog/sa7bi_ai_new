@@ -3,7 +3,7 @@ name = "sa7bi-ai-new"
 main = "src/index.js"
 compatibility_date = "2026-09-18"
 
-# Explicitly enable the public workers.dev endpoint.
+# Enable the public workers.dev endpoint.
 workers_dev = true
 
 [vars]
@@ -14,15 +14,14 @@ WORKERS_TEXT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 WORKERS_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
 WORKERS_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 
-# AdMob rewarded-ad server-side verification configuration.
-# These values must match the rewarded ad configured in Flutter.
+# Must match the rewarded AdMob unit configured in Flutter.
 ADMOB_REWARDED_AD_UNIT_ID = "ca-app-pub-9077658292229374/4621745555"
 ADMOB_REWARD_ITEM = "credits"
 
 [ai]
 binding = "AI"
 
-# Existing credits Durable Object — preserved.
+# Existing server-authoritative credits ledger.
 [[durable_objects.bindings]]
 name = "SA7BI_CREDITS"
 class_name = "Sa7biCredits"
@@ -32,7 +31,7 @@ class_name = "Sa7biCredits"
 name = "SA7BI_SOCIAL"
 class_name = "Sa7biSocial"
 
-# Keep the existing modern Durable Object exports configuration.
+# Preserve existing SQLite Durable Object exports.
 [exports.Sa7biCredits]
 type = "durable-object"
 storage = "sqlite"
