@@ -1,4 +1,4 @@
-part of '../ai_service.dart';
+import 'dart:typed_data';
 
 // ============================================================
 // MODELS
