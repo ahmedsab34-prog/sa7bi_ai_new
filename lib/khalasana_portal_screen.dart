@@ -1,16 +1,13 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import 'chat_screen.dart';
-import 'service_config.dart';
 import 'config/service_keys.dart';
+import 'service_config.dart';
 
 /// شاشة خلصانة AI.
-///
-/// تفتح المحادثة مباشرة بدون صفحة وسيطة.
-/// أدوات المحادثة كلها موجودة داخل ChatScreen.
-class KhalasanaPortalScreen extends StatefulWidget {
+/// تستخدم شاشة المحادثة الحالية مباشرة، من دون طبقات حركة
+/// إضافية أو Scaffold متداخل.
+class KhalasanaPortalScreen extends StatelessWidget {
   const KhalasanaPortalScreen({
     super.key,
   });
@@ -45,165 +42,21 @@ class KhalasanaPortalScreen extends StatefulWidget {
 إذا فشلت خدمة فعلية، وضح ذلك وقدم بديلًا مفيدًا.
 ''';
 
-  static const Sa7biService khalasanaService =
-      Sa7biService(
+  static const Sa7biService khalasanaService = Sa7biService(
     serviceKey: ServiceKeys.khalasana,
     title: 'خلصانة AI',
-    description:
-        'المساعد الشامل بكل أدوات صاحبي AI',
+    description: 'المساعد الشامل بكل أدوات صاحبي AI',
     icon: Icons.auto_awesome_rounded,
     color: Color(0xFF8EA8FF),
     aiRole: contextText,
   );
 
   @override
-  State<KhalasanaPortalScreen> createState() =>
-      _KhalasanaPortalScreenState();
-}
-
-class _KhalasanaPortalScreenState
-    extends State<KhalasanaPortalScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _animationController;
-
-  @override
-  void initState() {
-    super.initState();
-
-    _animationController =
-        AnimationController(
-      vsync: this,
-      duration: const Duration(
-        seconds: 4,
-      ),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor:
-          const Color(0xFF070910),
-      body: Stack(
-        children: [
-          // ==================================================
-          // MAIN AI CHAT
-          // ==================================================
-
-          Positioned.fill(
-            child: ChatScreen(
-              serviceKey:
-                  KhalasanaPortalScreen
-                      .khalasanaService
-                      .serviceKey,
-              serviceTitle:
-                  KhalasanaPortalScreen
-                      .khalasanaService
-                      .title,
-              serviceContext:
-                  KhalasanaPortalScreen
-                      .khalasanaService
-                      .aiRole,
-            ),
-          ),
-
-          // ==================================================
-          // SUBTLE KHALASANA ANIMATION
-          //
-          // IgnorePointer مهم:
-          // لا يمنع الكتابة أو الضغط أو الكاميرا
-          // أو الصور أو أي أداة من أدوات المحادثة.
-          // ==================================================
-
-          Positioned(
-            top: 58,
-            right: 10,
-            child: IgnorePointer(
-              ignoring: true,
-              child: AnimatedBuilder(
-                animation:
-                    _animationController,
-                builder: (
-                  context,
-                  child,
-                ) {
-                  final wave =
-                      (math.sin(
-                                _animationController
-                                        .value *
-                                    math.pi *
-                                    2,
-                              ) +
-                              1) /
-                          2;
-
-                  return Opacity(
-                    opacity:
-                        0.12 +
-                            wave * 0.10,
-                    child:
-                        Transform.scale(
-                      scale:
-                          0.94 +
-                              wave * 0.08,
-                      child:
-                          Container(
-                        width: 40,
-                        height: 40,
-                        decoration:
-                            BoxDecoration(
-                          shape:
-                              BoxShape.circle,
-                          border:
-                              Border.all(
-                            color:
-                                const Color(
-                              0xFF8EA8FF,
-                            ),
-                            width: 1.3,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  const Color(
-                                0xFF8EA8FF,
-                              ).withOpacity(
-                                0.14 +
-                                    wave *
-                                        0.12,
-                              ),
-                              blurRadius:
-                                  10 +
-                                      wave *
-                                          7,
-                            ),
-                          ],
-                        ),
-                        child:
-                            const Icon(
-                          Icons
-                              .auto_awesome_rounded,
-                          color:
-                              Color(
-                            0xFFB9C8FF,
-                          ),
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
+    return ChatScreen(
+      serviceKey: khalasanaService.serviceKey,
+      serviceTitle: khalasanaService.title,
+      serviceContext: khalasanaService.aiRole,
     );
   }
 }
