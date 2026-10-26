@@ -1,31 +1,26 @@
+
+// lib/services/storage_service.dart
+
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// خدمة التخزين العامة في صاحبي AI.
 ///
-/// الهدف منها توحيد التعامل مع SharedPreferences بدل تكرار
-/// نفس كود التخزين داخل كل شاشة وخدمة.
+/// توحّد التعامل مع SharedPreferences للبيانات البسيطة:
+/// String, int, double, bool, JSON, List<String>.
 ///
-/// تستخدم حاليًا للبيانات البسيطة:
-/// - String
-/// - int
-/// - double
-/// - bool
-/// - JSON
-/// - List<String>
-///
-/// بيانات الشات نفسها تظل مرتبطة بمفتاح الخدمة الخاص بها،
-/// ويمكن استخدام هذه الخدمة للوصول إليها بدون تغيير شكلها.
+/// بيانات الشات تحتفظ بمفاتيحها الحالية لتجنب فقد البيانات القديمة.
 class StorageService {
   StorageService._();
 
-  static final StorageService instance =
-      StorageService._();
+  static final StorageService instance = StorageService._();
 
   SharedPreferences? _preferences;
-
   bool _initialized = false;
+
+  // مشاركة عملية التهيئة بين كل الاستدعاءات المتزامنة.
+  Future<void>? _initializationFuture;
 
   /// هل الخدمة جاهزة؟
   bool get isInitialized => _initialized;
@@ -35,27 +30,54 @@ class StorageService {
   // ============================================================
 
   /// تهيئة SharedPreferences مرة واحدة.
-  Future<void> initialize() async {
-    if (_initialized) {
-      return;
+  ///
+  /// إذا كانت التهيئة جارية، ينتظر باقي المستدعين نفس العملية.
+  /// إذا فشلت، يمكن استدعاء initialize مرة أخرى للمحاولة مجددًا.
+  Future<void> initialize() {
+    if (_initialized && _preferences != null) {
+      return Future<void>.value();
     }
 
-    _preferences =
-        await SharedPreferences.getInstance();
+    final pending = _initializationFuture;
+    if (pending != null) {
+      return pending;
+    }
 
-    _initialized = true;
+    final future = _initializeInternal();
+    _initializationFuture = future;
+    return future;
+  }
+
+  Future<void> _initializeInternal() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+
+      _preferences = preferences;
+      _initialized = true;
+    } catch (error, stackTrace) {
+      _preferences = null;
+      _initialized = false;
+
+      // تسجيل الخطأ ثم السماح للمستدعي بمعالجته.
+      Error.throwWithStackTrace(error, stackTrace);
+    } finally {
+      // لا نحتفظ بمستقبل تهيئة فاشل يمنع إعادة المحاولة.
+      _initializationFuture = null;
+    }
   }
 
   Future<void> _ensureInitialized() async {
-    if (!_initialized) {
-      await initialize();
+    if (_initialized && _preferences != null) {
+      return;
     }
+
+    await initialize();
   }
 
   SharedPreferences get _prefs {
     final prefs = _preferences;
 
-    if (prefs == null) {
+    if (prefs == null || !_initialized) {
       throw StateError(
         'StorageService has not been initialized.',
       );
@@ -68,107 +90,64 @@ class StorageService {
   // String
   // ============================================================
 
-  Future<String?> getString(
-    String key,
-  ) async {
+  Future<String?> getString(String key) async {
     await _ensureInitialized();
-
     return _prefs.getString(key);
   }
 
-  Future<bool> setString(
-    String key,
-    String value,
-  ) async {
+  Future<bool> setString(String key, String value) async {
     await _ensureInitialized();
-
-    return _prefs.setString(
-      key,
-      value,
-    );
+    return _prefs.setString(key, value);
   }
 
   // ============================================================
   // Integer
   // ============================================================
 
-  Future<int?> getInt(
-    String key,
-  ) async {
+  Future<int?> getInt(String key) async {
     await _ensureInitialized();
-
     return _prefs.getInt(key);
   }
 
-  Future<bool> setInt(
-    String key,
-    int value,
-  ) async {
+  Future<bool> setInt(String key, int value) async {
     await _ensureInitialized();
-
-    return _prefs.setInt(
-      key,
-      value,
-    );
+    return _prefs.setInt(key, value);
   }
 
   // ============================================================
   // Double
   // ============================================================
 
-  Future<double?> getDouble(
-    String key,
-  ) async {
+  Future<double?> getDouble(String key) async {
     await _ensureInitialized();
-
     return _prefs.getDouble(key);
   }
 
-  Future<bool> setDouble(
-    String key,
-    double value,
-  ) async {
+  Future<bool> setDouble(String key, double value) async {
     await _ensureInitialized();
-
-    return _prefs.setDouble(
-      key,
-      value,
-    );
+    return _prefs.setDouble(key, value);
   }
 
   // ============================================================
   // Boolean
   // ============================================================
 
-  Future<bool?> getBool(
-    String key,
-  ) async {
+  Future<bool?> getBool(String key) async {
     await _ensureInitialized();
-
     return _prefs.getBool(key);
   }
 
-  Future<bool> setBool(
-    String key,
-    bool value,
-  ) async {
+  Future<bool> setBool(String key, bool value) async {
     await _ensureInitialized();
-
-    return _prefs.setBool(
-      key,
-      value,
-    );
+    return _prefs.setBool(key, value);
   }
 
   // ============================================================
   // List<String>
   // ============================================================
 
-  Future<List<String>?> getStringList(
-    String key,
-  ) async {
+  Future<List<String>?> getStringList(String key) async {
     await _ensureInitialized();
-
     return _prefs.getStringList(key);
   }
 
@@ -177,18 +156,14 @@ class StorageService {
     List<String> value,
   ) async {
     await _ensureInitialized();
-
-    return _prefs.setStringList(
-      key,
-      value,
-    );
+    return _prefs.setStringList(key, value);
   }
 
   // ============================================================
-  // JSON
+  // JSON Map
   // ============================================================
 
-  /// حفظ أي Map كـJSON String.
+  /// حفظ Map بصيغة JSON.
   Future<bool> setJson(
     String key,
     Map<String, dynamic> value,
@@ -197,26 +172,19 @@ class StorageService {
 
     try {
       final encoded = jsonEncode(value);
-
-      return _prefs.setString(
-        key,
-        encoded,
-      );
+      return await _prefs.setString(key, encoded);
     } catch (_) {
       return false;
     }
   }
 
   /// قراءة Map محفوظة بصيغة JSON.
-  Future<Map<String, dynamic>?> getJson(
-    String key,
-  ) async {
+  Future<Map<String, dynamic>?> getJson(String key) async {
     await _ensureInitialized();
 
     final value = _prefs.getString(key);
 
-    if (value == null ||
-        value.trim().isEmpty) {
+    if (value == null || value.trim().isEmpty) {
       return null;
     }
 
@@ -224,9 +192,7 @@ class StorageService {
       final decoded = jsonDecode(value);
 
       if (decoded is Map) {
-        return Map<String, dynamic>.from(
-          decoded,
-        );
+        return Map<String, dynamic>.from(decoded);
       }
     } catch (_) {
       return null;
@@ -235,7 +201,11 @@ class StorageService {
     return null;
   }
 
-  /// حفظ List من البيانات كـJSON.
+  // ============================================================
+  // JSON List
+  // ============================================================
+
+  /// حفظ List بصيغة JSON.
   Future<bool> setJsonList(
     String key,
     List<dynamic> value,
@@ -244,26 +214,19 @@ class StorageService {
 
     try {
       final encoded = jsonEncode(value);
-
-      return _prefs.setString(
-        key,
-        encoded,
-      );
+      return await _prefs.setString(key, encoded);
     } catch (_) {
       return false;
     }
   }
 
   /// قراءة List محفوظة بصيغة JSON.
-  Future<List<dynamic>?> getJsonList(
-    String key,
-  ) async {
+  Future<List<dynamic>?> getJsonList(String key) async {
     await _ensureInitialized();
 
     final value = _prefs.getString(key);
 
-    if (value == null ||
-        value.trim().isEmpty) {
+    if (value == null || value.trim().isEmpty) {
       return null;
     }
 
@@ -271,7 +234,7 @@ class StorageService {
       final decoded = jsonDecode(value);
 
       if (decoded is List) {
-        return decoded;
+        return List<dynamic>.from(decoded);
       }
     } catch (_) {
       return null;
@@ -281,24 +244,18 @@ class StorageService {
   }
 
   // ============================================================
-  // Remove
+  // Remove and contains
   // ============================================================
 
-  /// حذف قيمة واحدة.
-  Future<bool> remove(
-    String key,
-  ) async {
+  /// حذف قيمة واحدة فقط.
+  Future<bool> remove(String key) async {
     await _ensureInitialized();
-
     return _prefs.remove(key);
   }
 
-  /// التأكد من وجود مفتاح.
-  Future<bool> contains(
-    String key,
-  ) async {
+  /// التحقق من وجود مفتاح.
+  Future<bool> contains(String key) async {
     await _ensureInitialized();
-
     return _prefs.containsKey(key);
   }
 
@@ -306,18 +263,13 @@ class StorageService {
   // Generic helpers
   // ============================================================
 
-  /// قراءة قيمة String مع قيمة افتراضية.
+  /// قراءة String مع قيمة افتراضية.
   Future<String> getStringOrDefault(
     String key, {
     String defaultValue = '',
   }) async {
     final value = await getString(key);
-
-    if (value == null) {
-      return defaultValue;
-    }
-
-    return value;
+    return value ?? defaultValue;
   }
 
   /// قراءة int مع قيمة افتراضية.
@@ -326,12 +278,7 @@ class StorageService {
     int defaultValue = 0,
   }) async {
     final value = await getInt(key);
-
-    if (value == null) {
-      return defaultValue;
-    }
-
-    return value;
+    return value ?? defaultValue;
   }
 
   /// قراءة bool مع قيمة افتراضية.
@@ -340,34 +287,25 @@ class StorageService {
     bool defaultValue = false,
   }) async {
     final value = await getBool(key);
-
-    if (value == null) {
-      return defaultValue;
-    }
-
-    return value;
+    return value ?? defaultValue;
   }
 
   // ============================================================
   // Chat storage helpers
   // ============================================================
 
-  /// إنشاء مفتاح موحد لتاريخ شات معين.
+  /// إنشاء مفتاح موحد لتاريخ كل خدمة شات.
   ///
-  /// مثال:
+  /// أمثلة:
   /// general
   /// khalasana
   /// kitchen
   /// shopping
   ///
-  /// كل خدمة تحصل على تاريخ مستقل.
-  String chatHistoryKey(
-    String serviceKey,
-  ) {
-    final normalized = _normalizeKey(
-      serviceKey,
-    );
-
+  /// نحافظ على نفس بادئة المفاتيح المستخدمة حاليًا
+  /// لتجنب تغيير أماكن تخزين المحادثات السابقة.
+  String chatHistoryKey(String serviceKey) {
+    final normalized = _normalizeKey(serviceKey);
     return 'sa7bi_chat_history_$normalized';
   }
 
@@ -377,11 +315,7 @@ class StorageService {
     List<Map<String, dynamic>> messages,
   ) async {
     final key = chatHistoryKey(serviceKey);
-
-    return setJsonList(
-      key,
-      messages,
-    );
+    return setJsonList(key, messages);
   }
 
   /// قراءة تاريخ شات.
@@ -389,33 +323,30 @@ class StorageService {
     String serviceKey,
   ) async {
     final key = chatHistoryKey(serviceKey);
-
     final data = await getJsonList(key);
 
     if (data == null) {
       return <Map<String, dynamic>>[];
     }
 
-    final result =
-        <Map<String, dynamic>>[];
+    final result = <Map<String, dynamic>>[];
 
     for (final item in data) {
       if (item is Map) {
-        result.add(
-          Map<String, dynamic>.from(item),
-        );
+        try {
+          result.add(Map<String, dynamic>.from(item));
+        } catch (_) {
+          // تجاهل العنصر غير الصالح مع الحفاظ على باقي السجل.
+        }
       }
     }
 
     return result;
   }
 
-  /// مسح تاريخ شات خدمة واحدة فقط.
-  Future<bool> clearChatHistory(
-    String serviceKey,
-  ) async {
+  /// مسح تاريخ خدمة واحدة فقط.
+  Future<bool> clearChatHistory(String serviceKey) async {
     final key = chatHistoryKey(serviceKey);
-
     return remove(key);
   }
 
@@ -423,9 +354,7 @@ class StorageService {
   // Internal helpers
   // ============================================================
 
-  String _normalizeKey(
-    String value,
-  ) {
+  String _normalizeKey(String value) {
     var result = value.trim().toLowerCase();
 
     result = result.replaceAll(
