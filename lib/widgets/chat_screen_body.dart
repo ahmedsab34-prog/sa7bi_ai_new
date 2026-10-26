@@ -12,9 +12,9 @@ import 'rewarded_ad_button.dart';
 
 /// جسم شاشة المحادثة.
 ///
-/// مسؤول عن تركيب واجهة المحادثة فقط.
-/// منطق الذكاء الاصطناعي والوسائط والحفظ موجود
-/// في ChatScreen والخدمات الخاصة به.
+/// مسؤول عن تركيب الواجهة فقط.
+/// منطق الذكاء الاصطناعي والوسائط والحفظ موجود في ChatScreen
+/// والخدمات المرتبطة به.
 class ChatScreenBody extends StatelessWidget {
   final ChatController chatController;
   final ProfileService profileService;
@@ -96,28 +96,22 @@ class ChatScreenBody extends StatelessWidget {
           child: SafeArea(
             child: Column(
               children: [
-                // ==================================================
-                // HEADER
-                // ==================================================
-
+                // رأس الحالة يحتفظ بالأيقونة والحالة ومسح المحادثة،
+                // لكن اسم الشاشة يظهر مرة واحدة فقط في AppBar.
                 ChatStatusHeader(
                   theme: theme,
                   title: title,
                   topic: safeTopic,
                   isLoading: chatController.isLoading,
-                  canClear:
-                      messages.isNotEmpty &&
+                  canClear: messages.isNotEmpty &&
                       !chatController.isLoading,
-                  onClear:
-                      chatController.isLoading
-                          ? null
-                          : onClear,
+                  onClear: chatController.isLoading
+                      ? null
+                      : onClear,
+                  showTitle: false,
                 ),
 
-                // ==================================================
-                // CREDITS
-                // ==================================================
-
+                // حالة الرصيد وزر المكافأة.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     10,
@@ -137,29 +131,26 @@ class ChatScreenBody extends StatelessWidget {
                       RewardedAdButton(
                         compact: true,
                         onRewarded: () {
-                          // CreditsStatus يعيد قراءة الرصيد
-                          // عند إعادة بناء الواجهة.
+                          // يعاد بناء حالة الرصيد عبر الخدمة
+                          // والمكونات المستمعة لها.
                         },
                       ),
                     ],
                   ),
                 ),
 
-                // ==================================================
-                // MESSAGES
-                // ==================================================
-
+                // الرسائل أو شاشة البداية من دون تكرار الاسم.
                 Expanded(
                   child: messages.isEmpty
                       ? ChatEmptyState(
                           theme: theme,
                           title: aiName,
-                          subtitle:
-                              chatController.isKhalasana
-                                  ? 'اتكلم مع خلصانة براحتك، '
-                                      'والمحادثة تتغير حسب الموضوع.'
-                                  : 'اتكلم معايا براحتك، '
-                                      'وأنا هساعدك على قد ما أقدر.',
+                          showTitle: false,
+                          subtitle: chatController.isKhalasana
+                              ? 'اتكلم مع خلصانة براحتك، '
+                                  'والمحادثة تتغير حسب الموضوع.'
+                              : 'اتكلم معايا براحتك، '
+                                  'وأنا هساعدك على قد ما أقدر.',
                         )
                       : ChatMessageList(
                           messages: messages,
@@ -167,69 +158,29 @@ class ChatScreenBody extends StatelessWidget {
                           userName: userName,
                           userPhoto: userPhoto,
                           aiName: aiName,
-                          isLoading:
-                              chatController.isLoading,
+                          isLoading: chatController.isLoading,
                           controller: scrollController,
                         ),
                 ),
 
-                // ==================================================
-                // CHAT COMPOSER
-                // ==================================================
-
+                // أدوات الكتابة والوسائط.
                 ChatComposer(
                   controller: textController,
                   focusNode: focusNode,
-                  isLoading:
-                      !enabled ||
+                  isLoading: !enabled ||
                       chatController.isLoading,
                   isListening: isListening,
                   isGeneratingImage: isGeneratingImage,
-
-                  // إرسال النص
                   onSend: onSend,
-
-                  // الكاميرا
-                  onCamera:
-                      !enabled
-                          ? null
-                          : onCamera,
-
-                  // الصور والمعرض
-                  onGallery:
-                      !enabled
-                          ? null
-                          : onGallery,
-
-                  // الفيديو
-                  onVideo:
-                      !enabled
-                          ? null
-                          : onVideo,
-
-                  // قراءة آخر رد AI بالصوت
-                  onVoice:
-                      !enabled
-                          ? null
-                          : onVoice,
-
-                  // فتح لوحة الكتابة
-                  onText:
-                      !enabled
-                          ? null
-                          : onText,
-
-                  // تحويل الكلام إلى نص
+                  onCamera: !enabled ? null : onCamera,
+                  onGallery: !enabled ? null : onGallery,
+                  onVideo: !enabled ? null : onVideo,
+                  onVoice: !enabled ? null : onVoice,
+                  onText: !enabled ? null : onText,
                   onSpeechToText:
-                      !enabled
-                          ? null
-                          : onSpeechToText,
-
-                  // توليد صورة بالذكاء الاصطناعي
+                      !enabled ? null : onSpeechToText,
                   onImageGeneration:
-                      !enabled
-                          ? null
-                          : onImageGeneration,
+                      !enabled ? null : onImageGeneration,
                 ),
               ],
             ),
