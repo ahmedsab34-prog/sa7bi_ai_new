@@ -4,7 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 /// أيقونة خلصانة AI العائمة.
-/// تصميم روبوت زجاجي بحركة خفيفة، ويدعم السحب والضغط.
+/// يحافظ الملف على واجهة الاستخدام الحالية: KhalasanaPortal(onTap: ...).
+/// يمكن الضغط لفتح المساعد أو سحب الأيقونة لتغيير مكانها.
 class KhalasanaPortal extends StatefulWidget {
   const KhalasanaPortal({
     super.key,
@@ -27,7 +28,7 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 9),
+      duration: const Duration(seconds: 7),
     )..repeat();
   }
 
@@ -39,18 +40,23 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
 
   void _move(DragUpdateDetails details, Size screen) {
     const edge = 8.0;
-    const size = 78.0;
+    const widgetWidth = 82.0;
+    const widgetHeight = 82.0;
 
     setState(() {
       final next = _dragOffset + details.delta;
       _dragOffset = Offset(
         next.dx
-            .clamp(-screen.width + size + edge,
-                screen.width - size - edge)
+            .clamp(
+              -screen.width + widgetWidth + edge,
+              screen.width - widgetWidth - edge,
+            )
             .toDouble(),
         next.dy
-            .clamp(-screen.height + size + edge,
-                screen.height - size - edge)
+            .clamp(
+              -screen.height + widgetHeight + edge,
+              screen.height - widgetHeight - edge,
+            )
             .toDouble(),
       );
     });
@@ -64,7 +70,7 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
       offset: _dragOffset,
       child: Semantics(
         button: true,
-        label: 'فتح خلصانة AI، اضغط للفتح واسحب لتحريك الروبوت',
+        label: 'خلصانة AI، اضغط لفتح المساعد أو اسحب لتحريك الأيقونة',
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
@@ -72,33 +78,37 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
           child: AnimatedBuilder(
             animation: _controller,
             builder: (context, child) {
-              final pulse =
-                  (math.sin(_controller.value * math.pi * 2) + 1) / 2;
-
+              final phase = _controller.value * math.pi * 2;
+              final pulse = (math.sin(phase) + 1) / 2;
               final glow = Color.lerp(
                 const Color(0xFFFFD76A),
-                const Color(0xFF62E7FF),
+                const Color(0xFF6CE8FF),
                 pulse,
               )!;
 
               return SizedBox(
-                width: 72,
-                height: 78,
+                width: 82,
+                height: 82,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 64,
-                      height: 64,
+                      width: 61,
+                      height: 57,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(23),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(22),
+                          topRight: Radius.circular(22),
+                          bottomLeft: Radius.circular(22),
+                          bottomRight: Radius.circular(8),
+                        ),
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Color(0xFF343B58),
-                            Color(0xFF141A2A),
-                            Color(0xFF090D17),
+                            Color(0xFF303C5B),
+                            Color(0xFF171E32),
+                            Color(0xFF090E1A),
                           ],
                         ),
                         border: Border.all(
@@ -108,14 +118,14 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                         boxShadow: [
                           BoxShadow(
                             color: glow.withValues(
-                              alpha: 0.16 + pulse * 0.10,
+                              alpha: 0.14 + pulse * 0.12,
                             ),
-                            blurRadius: 13,
+                            blurRadius: 15,
                             spreadRadius: 1,
                           ),
                           const BoxShadow(
                             color: Color(0x66000000),
-                            blurRadius: 10,
+                            blurRadius: 8,
                             offset: Offset(0, 4),
                           ),
                         ],
@@ -124,67 +134,30 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                         alignment: Alignment.center,
                         children: [
                           Positioned(
-                            top: 7,
+                            top: 5,
+                            right: 8,
                             child: Container(
-                              width: 35,
-                              height: 4,
+                              width: 29,
+                              height: 3,
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(8),
+                                color: Colors.white.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(4),
                               ),
                             ),
                           ),
-                          Container(
-                            width: 43,
-                            height: 35,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF202A40),
-                              borderRadius: BorderRadius.circular(13),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.25),
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    _RobotEye(color: glow),
-                                    const SizedBox(width: 10),
-                                    _RobotEye(color: glow),
-                                  ],
-                                ),
-                                const SizedBox(height: 5),
-                                Container(
-                                  width: 15,
-                                  height: 3,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFD76A),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                              ],
-                            ),
+                          Icon(
+                            Icons.forum_rounded,
+                            color: Colors.white.withValues(alpha: 0.94),
+                            size: 31,
                           ),
                           Positioned(
-                            top: 1,
+                            bottom: 8,
+                            right: 11,
                             child: Container(
-                              width: 3,
-                              height: 7,
+                              width: 9,
+                              height: 9,
                               decoration: BoxDecoration(
                                 color: glow,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            top: 0,
-                            child: Container(
-                              width: 7,
-                              height: 7,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFD76A),
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
@@ -196,43 +169,32 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                             ),
                           ),
                           Positioned(
-                            left: 4,
-                            top: 29,
-                            child: Container(
-                              width: 4,
-                              height: 11,
-                              decoration: BoxDecoration(
-                                color: glow.withValues(alpha: 0.8),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            right: 4,
-                            top: 29,
-                            child: Container(
-                              width: 4,
-                              height: 11,
-                              decoration: BoxDecoration(
-                                color: glow.withValues(alpha: 0.8),
-                                borderRadius: BorderRadius.circular(4),
+                            top: 9,
+                            left: 9,
+                            child: Transform.rotate(
+                              angle: -phase * 0.35,
+                              child: Icon(
+                                Icons.auto_awesome_rounded,
+                                color: const Color(0xFFFFD76A)
+                                    .withValues(alpha: 0.8),
+                                size: 12,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 7,
-                        vertical: 2,
+                        vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xEE101522),
+                        color: const Color(0xF0101522),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: const Color(0x55FFD76A),
+                          color: glow.withValues(alpha: 0.65),
                         ),
                       ),
                       child: const Text(
@@ -252,30 +214,6 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
             },
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _RobotEye extends StatelessWidget {
-  const _RobotEye({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 7,
-      height: 7,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.65),
-            blurRadius: 5,
-          ),
-        ],
       ),
     );
   }
