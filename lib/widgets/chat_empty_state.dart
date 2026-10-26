@@ -5,27 +5,16 @@ import 'chat_ai_avatar.dart';
 
 /// واجهة البداية عندما تكون المحادثة فارغة.
 ///
-/// تستخدم مع:
-/// - صاحبي AI
-/// - خلصانة AI
-/// - أي خدمة من خدمات المحادثة.
-///
-/// لا تحتوي على منطق AI؛
-/// هي مسؤولة عن العرض والاقتراحات فقط.
+/// مسؤولة عن العرض والاقتراحات فقط، ولا تنفذ طلبات AI.
 class ChatEmptyState extends StatelessWidget {
   final ChatThemeData theme;
-
-  /// اسم المحادثة.
   final String title;
-
-  /// الوصف الظاهر أسفل الاسم.
   final String? subtitle;
-
-  /// يتم استدعاؤه عند اختيار اقتراح سريع.
   final ValueChanged<String>? onSuggestionTap;
-
-  /// الاقتراحات السريعة.
   final List<String> suggestions;
+
+  /// يسمح بإخفاء الاسم عندما يكون موجودًا بالفعل في AppBar.
+  final bool showTitle;
 
   const ChatEmptyState({
     super.key,
@@ -34,6 +23,7 @@ class ChatEmptyState extends StatelessWidget {
     this.subtitle,
     this.onSuggestionTap,
     this.suggestions = const [],
+    this.showTitle = true,
   });
 
   @override
@@ -48,52 +38,31 @@ class ChatEmptyState extends StatelessWidget {
 
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(
-          20,
-          30,
-          20,
-          24,
-        ),
+        padding: const EdgeInsets.fromLTRB(20, 30, 20, 24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // =====================================================
-            // AI AVATAR
-            // =====================================================
-
             ChatAiAvatar(
               theme: theme,
               size: 92,
               animated: true,
             ),
-
-            const SizedBox(height: 18),
-
-            // =====================================================
-            // TITLE
-            // =====================================================
-
-            Text(
-              safeTitle,
-              textDirection: TextDirection.rtl,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w900,
+            if (showTitle) ...[
+              const SizedBox(height: 18),
+              Text(
+                safeTitle,
+                textDirection: TextDirection.rtl,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-            ),
-
+            ],
             const SizedBox(height: 8),
-
-            // =====================================================
-            // SUBTITLE
-            // =====================================================
-
             ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 330,
-              ),
+              constraints: const BoxConstraints(maxWidth: 330),
               child: Text(
                 safeSubtitle,
                 textDirection: TextDirection.rtl,
@@ -106,11 +75,6 @@ class ChatEmptyState extends StatelessWidget {
                 ),
               ),
             ),
-
-            // =====================================================
-            // QUICK SUGGESTIONS
-            // =====================================================
-
             if (suggestions.isNotEmpty) ...[
               const SizedBox(height: 24),
               _Suggestions(
@@ -186,9 +150,7 @@ class _SuggestionChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Container(
-          constraints: const BoxConstraints(
-            maxWidth: 170,
-          ),
+          constraints: const BoxConstraints(maxWidth: 170),
           padding: const EdgeInsets.symmetric(
             horizontal: 13,
             vertical: 9,
