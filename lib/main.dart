@@ -172,6 +172,8 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
               index: index,
               children: pages,
             ),
+
+            // مشغل الصوت مخفي في الشات حتى لا يغطي مربع الكتابة.
             if (!isChatTab)
               const Positioned(
                 left: 10,
@@ -179,6 +181,8 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 bottom: 8,
                 child: MiniAudioPlayer(),
               ),
+
+            // زر التشخيص لا يظهر فوق مربع كتابة الشات.
             if (!isChatTab)
               Positioned(
                 left: 12,
@@ -218,19 +222,20 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                   ),
                 ),
               ),
-            if (!isChatTab)
-              Positioned(
-                right: 12,
-                bottom: 92,
-                child: KhalasanaPortal(
-                  onTap: openKhalasana,
-                ),
+
+            // خلصانة AI متاحة في كل التبويبات، بما فيها الشات.
+            Positioned(
+              right: 12,
+              bottom: isChatTab ? 112 : 92,
+              child: KhalasanaPortal(
+                onTap: openKhalasana,
               ),
+            ),
           ],
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        height: 66,
+        height: 62,
         backgroundColor: const Color(0xFF11141D),
         indicatorColor: const Color(0x3348D8FF),
         selectedIndex: index,
