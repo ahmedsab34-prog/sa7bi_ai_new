@@ -1,8 +1,10 @@
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'ai_service.dart';
 import 'monetization_config.dart';
@@ -27,6 +29,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class HomeScreenState extends State<HomeScreen> {
+  static const String _newsCacheKey = 'sa7bi_home_news_cache_v1';
+  static const String _newsCacheTimeKey = 'sa7bi_home_news_cache_time_v1';
+
   List<NewsItem> _news = [];
   bool _loading = true;
   bool _refreshing = false;
@@ -36,11 +41,106 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadNews();
+    unawaited(_initializeNews());
+  }
+
+  /// يعرض الأخبار المحفوظة أولًا، ثم يحاول جلب الأحدث من الإنترنت.
+  Future<void> _initializeNews() async {
+    await _loadCachedNews();
+
+    if (!mounted) return;
+
+    await _loadNews();
   }
 
   /// يستدعيها الشريط السفلي عند الضغط على الرئيسية مرة أخرى.
   Future<void> refreshNews() => _loadNews(pullToRefresh: true);
+
+  Future<void> _loadCachedNews() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedJson = prefs.getString(_newsCacheKey);
+
+      if (cachedJson == null || cachedJson.trim().isEmpty) {
+        return;
+      }
+
+      final decoded = jsonDecode(cachedJson);
+      if (decoded is! List) return;
+
+      final cachedItems = <NewsItem>[];
+
+      for (final raw in decoded) {
+        if (raw is! Map) continue;
+
+        final item = NewsItem(
+          title: raw['title']?.toString() ?? '',
+          source: raw['source']?.toString() ?? 'الأخبار',
+          link: raw['link']?.toString() ?? '',
+          imageUrl: raw['imageUrl']?.toString() ?? '',
+          description: raw['description']?.toString() ?? '',
+          pubDate: raw['pubDate']?.toString() ?? '',
+        );
+
+        if (item.title.trim().isEmpty || item.link.trim().isEmpty) {
+          continue;
+        }
+
+        final uri = Uri.tryParse(item.link.trim());
+        if (uri == null ||
+            (uri.scheme != 'https' && uri.scheme != 'http')) {
+          continue;
+        }
+
+        cachedItems.add(item);
+      }
+
+      if (cachedItems.isEmpty || !mounted) return;
+
+      final cachedTime = prefs.getInt(_newsCacheTimeKey);
+
+      setState(() {
+        _news = cachedItems;
+        _lastUpdated = cachedTime == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(cachedTime);
+        _loading = false;
+        _error = 'تعرض الأخبار المحفوظة لحين تحديثها من الإنترنت.';
+      });
+    } catch (_) {
+      // تلف الكاش لا يمنع تحميل الأخبار من الإنترنت.
+    }
+  }
+
+  Future<void> _saveCachedNews(
+    List<NewsItem> items,
+    DateTime savedAt,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final encoded = jsonEncode(
+        items.map((item) {
+          return <String, String>{
+            'title': item.title,
+            'source': item.source,
+            'link': item.link,
+            'imageUrl': item.imageUrl,
+            'description': item.description,
+            'pubDate': item.pubDate,
+          };
+        }).toList(),
+      );
+
+      await prefs.setString(_newsCacheKey, encoded);
+      await prefs.setInt(
+        _newsCacheTimeKey,
+        savedAt.millisecondsSinceEpoch,
+      );
+    } catch (_) {
+      // فشل حفظ الكاش لا يمنع عرض الأخبار التي وصلت من الخادم.
+    }
+  }
 
   Future<void> _loadNews({bool pullToRefresh = false}) async {
     if (!mounted || _refreshing) return;
@@ -58,28 +158,42 @@ class HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      setState(() {
-        if (result.isNotEmpty) {
+      if (result.isNotEmpty) {
+        final updatedAt = DateTime.now();
+
+        setState(() {
           _news = result;
-          _lastUpdated = DateTime.now();
+          _lastUpdated = updatedAt;
           _error = null;
-        } else if (_news.isEmpty) {
-          _error = 'لا توجد أخبار متاحة حاليًا. حاول التحديث بعد قليل.';
-        }
-      });
+        });
+
+        unawaited(_saveCachedNews(result, updatedAt));
+      } else {
+        setState(() {
+          if (_news.isEmpty) {
+            _error =
+                'لا توجد أخبار متاحة حاليًا. تحقق من الإنترنت وحاول مرة أخرى.';
+          } else {
+            _error =
+                'تعذر تحديث الأخبار؛ ما زالت الأخبار المحفوظة ظاهرة.';
+          }
+        });
+      }
     } on TimeoutException {
       if (!mounted) return;
+
       setState(() {
-        if (_news.isEmpty) {
-          _error = 'تأخر تحميل الأخبار. تحقق من الإنترنت وحاول مرة أخرى.';
-        }
+        _error = _news.isEmpty
+            ? 'تأخر تحميل الأخبار. تحقق من الإنترنت وحاول مرة أخرى.'
+            : 'الاتصال بطيء؛ تعرض الأخبار المحفوظة لحين نجاح التحديث.';
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
-        if (_news.isEmpty) {
-          _error = 'تعذر تحميل الأخبار حاليًا. تحقق من الإنترنت وحاول مرة أخرى.';
-        }
+        _error = _news.isEmpty
+            ? 'تعذر تحميل الأخبار حاليًا. تحقق من الإنترنت وحاول مرة أخرى.'
+            : 'تعذر تحديث الأخبار؛ ما زالت الأخبار المحفوظة ظاهرة.';
       });
     } finally {
       if (mounted) {
@@ -93,9 +207,11 @@ class HomeScreenState extends State<HomeScreen> {
 
   String _formatUpdatedAt(DateTime? value) {
     if (value == null) return 'لم يتم التحديث بعد';
+
     final local = value.toLocal();
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
+
     return 'آخر تحديث $hour:$minute';
   }
 
@@ -148,6 +264,8 @@ class HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 12),
                   _buildNewsHeader(),
                   const SizedBox(height: 8),
+                  if (_error != null && _news.isNotEmpty)
+                    _buildOfflineStatus(),
                   if (_loading && _news.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 38),
@@ -214,6 +332,53 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildOfflineStatus() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF182333),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0x3372D7FF)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.cloud_off_rounded,
+            color: Color(0xFF72D7FF),
+            size: 17,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _error!,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 10,
+                height: 1.4,
+              ),
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 30,
+              minHeight: 30,
+            ),
+            tooltip: 'تحديث الأخبار',
+            onPressed: _refreshing ? null : refreshNews,
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: Color(0xFFFFD76A),
+              size: 18,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildErrorCard() {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -242,7 +407,7 @@ class HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
-            onPressed: refreshNews,
+            onPressed: _refreshing ? null : refreshNews,
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('إعادة المحاولة'),
           ),
@@ -294,11 +459,14 @@ class HomeScreenState extends State<HomeScreen> {
   Widget _buildNewsCard(NewsItem item, int index) {
     final title =
         item.title.trim().isEmpty ? 'خبر ${index + 1}' : item.title.trim();
+
     final description = item.description.trim().isEmpty
         ? 'اضغط لقراءة تفاصيل الخبر.'
         : item.description.trim();
+
     final source =
         item.source.trim().isEmpty ? 'مصدر إخباري' : item.source.trim();
+
     final imageUrl = item.imageUrl.trim();
 
     return Material(
@@ -484,6 +652,7 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
   @override
   void initState() {
     super.initState();
+
     if (MonetizationConfig.admobEnabled &&
         MonetizationConfig.homeBannerEnabled) {
       _loadBanner();
@@ -523,25 +692,31 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
       setState(() {
         _banner = ad;
         _failed = false;
+        _attempts = 0;
       });
     } catch (_) {
       _scheduleRetry();
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   void _scheduleRetry() {
     if (!mounted) return;
+
     _failed = true;
+
     if (_attempts >= 3) return;
 
     _attempts++;
     _retryTimer?.cancel();
+
     _retryTimer = Timer(
       Duration(seconds: 4 * _attempts),
       () {
-        if (mounted) _loadBanner();
+        if (mounted) unawaited(_loadBanner());
       },
     );
   }
@@ -554,6 +729,7 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
     }
 
     final banner = _banner;
+
     if (banner == null) {
       return Container(
         height: 52,
@@ -564,8 +740,13 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
           border: Border.all(color: const Color(0x22FFFFFF)),
         ),
         child: Text(
-          _failed ? 'الإعلانات غير متاحة حاليًا' : 'مساحة إعلانية',
-          style: const TextStyle(color: Colors.white38, fontSize: 10),
+          _failed
+              ? 'الإعلانات غير متاحة حاليًا'
+              : 'مساحة إعلانية',
+          style: const TextStyle(
+            color: Colors.white38,
+            fontSize: 10,
+          ),
         ),
       );
     }
