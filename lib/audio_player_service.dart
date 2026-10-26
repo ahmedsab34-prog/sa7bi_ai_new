@@ -1,5 +1,5 @@
 
-// ignore_for_file: unused_field
+ // ignore_for_file: unused_field
 
 import 'dart:async';
 import 'dart:io';
@@ -866,22 +866,29 @@ class AudioController {
   }
 
   static StreamSubscription<PlaybackState>? _playbackSubscription;
-  static Future<void> _initializationFuture = Future<void>.value();
 
-  static Future<Sa7biAudioHandler> initialize() async {
-    if (_handler != null && _initialized) {
-      return _handler!;
+  // الإصلاح: نخزن Future واحدة للتهيئة الجارية فقط.
+  // عند فشل التهيئة يتم تصفيرها حتى يمكن إعادة المحاولة.
+  static Future<Sa7biAudioHandler>? _initializationFuture;
+
+  static Future<Sa7biAudioHandler> initialize() {
+    final currentHandler = _handler;
+
+    if (currentHandler != null && _initialized) {
+      return Future<Sa7biAudioHandler>.value(currentHandler);
     }
 
-    await _initializationFuture;
-
-    if (_handler != null && _initialized) {
-      return _handler!;
+    final pending = _initializationFuture;
+    if (pending != null) {
+      return pending;
     }
 
-    final completer = Completer<void>();
-    _initializationFuture = completer.future;
+    final future = _initializeInternal();
+    _initializationFuture = future;
+    return future;
+  }
 
+  static Future<Sa7biAudioHandler> _initializeInternal() async {
     try {
       final handler = await AudioService.init(
         builder: () => Sa7biAudioHandler(),
@@ -912,16 +919,20 @@ class AudioController {
         }
       });
 
-      completer.complete();
       return handler;
     } catch (error, stackTrace) {
+      _handler = null;
       _initialized = false;
 
-      if (!completer.isCompleted) {
-        completer.completeError(error, stackTrace);
-      }
+      debugPrint(
+        'AudioController initialization failed: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
 
       rethrow;
+    } finally {
+      // لا نترك Future فاشلة تمنع كل محاولات التهيئة التالية.
+      _initializationFuture = null;
     }
   }
 
