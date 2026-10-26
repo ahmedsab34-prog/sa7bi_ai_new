@@ -5,32 +5,19 @@ import 'chat_ai_avatar.dart';
 
 /// رأس المحادثة الديناميكي.
 ///
-/// يعرض:
-/// - أيقونة AI الخاصة بالثيم الحالي.
-/// - اسم المحادثة.
-/// - الموضوع الحالي إذا تم اكتشافه.
-/// - حالة الذكاء الاصطناعي.
-/// - زر اختياري لمسح المحادثة.
+/// يعرض أيقونة المساعد وحالة المحادثة، مع إمكانية إخفاء
+/// اسم المساعد لمنع تكراره مع عنوان شريط التطبيق.
 class ChatStatusHeader extends StatelessWidget {
   final ChatThemeData theme;
-
-  /// اسم الخدمة أو المحادثة.
   final String title;
-
-  /// الموضوع الحالي المكتشف من الرسائل.
   final String? topic;
-
-  /// حالة المعالجة.
   final bool isLoading;
-
-  /// هل يمكن مسح المحادثة؟
   final bool canClear;
-
-  /// عند الضغط على مسح المحادثة.
   final VoidCallback? onClear;
-
-  /// عند الضغط على الرأس نفسه.
   final VoidCallback? onTap;
+
+  /// عند false يُخفى العنوان الداخلي ويظل مؤشر الحالة ظاهرًا.
+  final bool showTitle;
 
   const ChatStatusHeader({
     super.key,
@@ -41,13 +28,13 @@ class ChatStatusHeader extends StatelessWidget {
     this.canClear = false,
     this.onClear,
     this.onTap,
+    this.showTitle = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final safeTitle =
         title.trim().isEmpty ? 'صاحبي AI' : title.trim();
-
     final safeTopic = topic?.trim() ?? '';
 
     return Material(
@@ -56,12 +43,7 @@ class ChatStatusHeader extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Container(
-          margin: const EdgeInsets.fromLTRB(
-            10,
-            8,
-            10,
-            4,
-          ),
+          margin: const EdgeInsets.fromLTRB(10, 8, 10, 4),
           padding: const EdgeInsets.symmetric(
             horizontal: 11,
             vertical: 9,
@@ -90,32 +72,54 @@ class ChatStatusHeader extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            safeTitle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textDirection: TextDirection.rtl,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
+                    if (showTitle)
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              safeTitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textDirection: TextDirection.rtl,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 7),
-                        _OnlineIndicator(
-                          active: !isLoading,
-                          color: theme.secondary,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
+                          const SizedBox(width: 7),
+                          _OnlineIndicator(
+                            active: !isLoading,
+                            color: theme.secondary,
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          _OnlineIndicator(
+                            active: !isLoading,
+                            color: theme.secondary,
+                          ),
+                          const SizedBox(width: 7),
+                          Text(
+                            isLoading
+                                ? 'جاري تجهيز الرد'
+                                : 'المساعد جاهز',
+                            textDirection: TextDirection.rtl,
+                            style: TextStyle(
+                              color: theme.secondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (showTitle) const SizedBox(height: 3),
                     _buildStatus(safeTopic),
                   ],
                 ),
