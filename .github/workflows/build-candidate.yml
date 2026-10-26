@@ -76,14 +76,18 @@ jobs:
           echo "Detected analyzer errors: ${ERROR_COUNT}"
 
           if [ "${ERROR_COUNT}" -gt 0 ]; then
-            echo "Blocking Dart analyzer errors were found."
+            echo "::error::Dart analyzer errors were found."
             exit 1
           fi
 
           if [ "${ANALYZE_STATUS}" -ne 0 ]; then
-            echo "Analyzer returned a non-zero exit code."
-            echo "Review the uploaded analyzer report."
-            exit 1
+            if grep -Eq '[0-9]+ issues found\.' flutter-analyze-report.txt; then
+              echo "::warning::Flutter analyze completed with warnings or informational issues, but no Dart errors were detected."
+              echo "Continuing to tests and APK build. Review the analyzer artifact."
+            else
+              echo "::error::Flutter analyzer failed unexpectedly before producing its normal summary."
+              exit 1
+            fi
           fi
 
       - name: Upload analyzer report
