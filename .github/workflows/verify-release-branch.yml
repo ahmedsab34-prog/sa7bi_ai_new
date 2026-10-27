@@ -1,5 +1,5 @@
 
-name: Sa7bi AI Branch Verification APK
+name: Sa7bi AI - Canonical APK Release
 
 on:
   push:
@@ -10,16 +10,17 @@ on:
       - "lib/**"
       - "test/**"
       - "android/**"
+      - "assets/**"
       - "backend/**"
       - "pubspec.yaml"
       - "pubspec.lock"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: sa7bi-branch-verification-${{ github.ref }}
+  group: sa7bi-canonical-apk-release
   cancel-in-progress: false
 
 env:
@@ -28,15 +29,17 @@ env:
   FLUTTER_VERSION: "3.38.1"
   JAVA_VERSION: "17"
   APK_PATH: "build/app/outputs/flutter-apk/app-release.apk"
+  RELEASE_TAG: "apk-latest"
+  RELEASE_APK_NAME: "sa7bi-ai.apk"
 
 jobs:
-  verify-and-build:
-    name: Analyze, test, build, and verify candidate APK
+  build-test-verify-publish:
+    name: Test, build, verify, and publish the canonical APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
-      - name: Checkout exact source commit
+      - name: Checkout the exact source commit
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -65,41 +68,42 @@ jobs:
             echo "Run ID: ${GITHUB_RUN_ID}"
             echo "Run number: ${GITHUB_RUN_NUMBER}"
             echo "Run attempt: ${GITHUB_RUN_ATTEMPT}"
-            echo "Expected app version: ${APP_VERSION}"
+            echo "App version: ${APP_VERSION}"
             echo "Expected package ID: ${EXPECTED_APPLICATION_ID}"
-            echo "Expected Android version code: $((1000 + GITHUB_RUN_NUMBER))"
+            echo "Expected version code: $((1000 + GITHUB_RUN_NUMBER))"
             echo
             flutter --version
             dart --version
             java -version
           } 2>&1 | tee build-provenance.txt
 
-      - name: Install dependencies
+      - name: Install locked project dependencies
         run: flutter pub get
 
-      - name: Analyze Flutter project
+      - name: Analyze the Flutter project
         shell: bash
         run: |
           set -euo pipefail
-          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos \
+          flutter analyze --no-pub \
+            --no-fatal-warnings \
+            --no-fatal-infos \
             2>&1 | tee flutter-analyze-report.txt
 
-      - name: Run network lifecycle tests
+      - name: Run all Flutter tests
         shell: bash
         run: |
           set -euo pipefail
-          test -f test/sa7bi_network_client_lifecycle_test.dart
           flutter test --no-pub --reporter expanded \
-            test/sa7bi_network_client_lifecycle_test.dart \
-            2>&1 | tee network-client-test-report.txt
+            2>&1 | tee flutter-test-report.txt
 
-      - name: Build release candidate from this exact commit
+      - name: Build release APK from this exact commit
         shell: bash
         run: |
           set -euo pipefail
+
+          BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
           BUILD_ID="run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
           SOURCE_ID="${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-          BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
 
           flutter build apk --release \
             --build-name="${APP_VERSION}" \
@@ -110,7 +114,7 @@ jobs:
             --dart-define="APP_BUILD_ID=${BUILD_ID}" \
             --dart-define="APP_SOURCE_ID=${SOURCE_ID}"
 
-      - name: Verify APK identity and checksum
+      - name: Verify package identity, APK integrity, and checksum
         shell: bash
         run: |
           set -euo pipefail
@@ -119,7 +123,7 @@ jobs:
           EXPECTED_BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
 
           test -s "${APK}" || {
-            echo "ERROR: APK missing or empty"
+            echo "ERROR: APK is missing or empty."
             exit 1
           }
 
@@ -142,23 +146,22 @@ jobs:
 
           echo "Application ID: ${ACTUAL_ID}"
           echo "Version name: ${ACTUAL_VERSION}"
-          echo "Expected version code: ${EXPECTED_BUILD_NUMBER}"
-          echo "Actual version code: ${ACTUAL_CODE}"
+          echo "Version code: ${ACTUAL_CODE}"
           echo "APK bytes: ${APK_BYTES}"
           echo "APK SHA-256: ${APK_SHA256}"
 
           test "${ACTUAL_ID}" = "${EXPECTED_APPLICATION_ID}" || {
-            echo "ERROR: Wrong APK application ID."
+            echo "ERROR: Unexpected application ID."
             exit 1
           }
 
           test "${ACTUAL_VERSION}" = "${APP_VERSION}" || {
-            echo "ERROR: Wrong APK version name."
+            echo "ERROR: Unexpected version name."
             exit 1
           }
 
           test "${ACTUAL_CODE}" = "${EXPECTED_BUILD_NUMBER}" || {
-            echo "ERROR: Wrong APK version code."
+            echo "ERROR: Unexpected version code."
             exit 1
           }
 
@@ -167,38 +170,138 @@ jobs:
             exit 1
           fi
 
+          unzip -t "${APK}"
+
           unzip -l "${APK}" | grep -q 'libapp.so' || {
-            echo "ERROR: Flutter compiled library is missing."
+            echo "ERROR: Compiled Flutter library is missing."
+            exit 1
+          }
+
+          cp "${APK}" "${RELEASE_APK_NAME}"
+          sha256sum "${RELEASE_APK_NAME}" > app-release.apk.sha256
+
+          {
+            echo "Repository=${GITHUB_REPOSITORY}"
+            echo "Branch=${GITHUB_REF_NAME}"
+            echo "Commit=${GITHUB_SHA}"
+            echo "RunID=${GITHUB_RUN_ID}"
+            echo "RunAttempt=${GITHUB_RUN_ATTEMPT}"
+            echo "BuildID=run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+            echo "SourceID=${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+            echo "AppVersion=${ACTUAL_VERSION}"
+            echo "ApplicationID=${ACTUAL_ID}"
+            echo "VersionCode=${ACTUAL_CODE}"
+            echo "APKSize=${APK_BYTES}"
+            echo "APK_SHA256=${APK_SHA256}"
+            echo "CanonicalFilename=${RELEASE_APK_NAME}"
+            echo "CanonicalReleaseTag=${RELEASE_TAG}"
+          } | tee -a build-provenance.txt
+
+          echo "APK_SIZE=${APK_BYTES}" >> "${GITHUB_ENV}"
+          echo "APK_SHA256=${APK_SHA256}" >> "${GITHUB_ENV}"
+
+      - name: Upload the exact verified APK as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-ai-canonical-${{ github.run_number }}-${{ github.sha }}
+          path: |
+            sa7bi-ai.apk
+            app-release.apk.sha256
+            build-provenance.txt
+            flutter-analyze-report.txt
+            flutter-test-report.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish the canonical APK to the stable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          gh release view "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" >/dev/null
+
+          # Remove only the previous canonical APK and its checksum report.
+          # Other release assets are not deleted.
+          gh release delete-asset "${RELEASE_TAG}" "${RELEASE_APK_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" --yes || true
+
+          gh release delete-asset "${RELEASE_TAG}" "sa7bi-ai.apk.sha256" \
+            --repo "${GITHUB_REPOSITORY}" --yes || true
+
+          cp "${APK_PATH}" "${RELEASE_APK_NAME}"
+          printf '%s  %s\n' "${APK_SHA256}" "${RELEASE_APK_NAME}" \
+            > "sa7bi-ai.apk.sha256"
+
+          test "$(stat -c%s "${RELEASE_APK_NAME}")" = "${APK_SIZE}"
+          test "$(sha256sum "${RELEASE_APK_NAME}" | awk '{print $1}')" \
+            = "${APK_SHA256}"
+
+          gh release upload "${RELEASE_TAG}" \
+            "${RELEASE_APK_NAME}" \
+            "sa7bi-ai.apk.sha256" \
+            --repo "${GITHUB_REPOSITORY}"
+
+      - name: Verify the published release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          RELEASE_JSON="$(
+            gh release view "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --json tagName,assets
+          )"
+
+          echo "${RELEASE_JSON}" | jq .
+
+          test "$(
+            echo "${RELEASE_JSON}" | jq -r '.tagName'
+          )" = "${RELEASE_TAG}"
+
+          PUBLISHED_COUNT="$(
+            echo "${RELEASE_JSON}" |
+              jq '[.assets[] | select(.name == "sa7bi-ai.apk")] | length'
+          )"
+
+          test "${PUBLISHED_COUNT}" -eq 1 || {
+            echo "ERROR: Expected exactly one canonical APK asset."
+            exit 1
+          }
+
+          PUBLISHED_SIZE="$(
+            echo "${RELEASE_JSON}" |
+              jq -r '.assets[] |
+                select(.name == "sa7bi-ai.apk") | .size'
+          )"
+
+          PUBLISHED_SHA="$(
+            echo "${RELEASE_JSON}" |
+              jq -r '.assets[] |
+                select(.name == "sa7bi-ai.apk") | .digest' |
+              sed 's/^sha256://'
+          )"
+
+          test "${PUBLISHED_SIZE}" = "${APK_SIZE}" || {
+            echo "ERROR: Published APK size differs from the built APK."
+            exit 1
+          }
+
+          test "${PUBLISHED_SHA}" = "${APK_SHA256}" || {
+            echo "ERROR: Published APK checksum differs from the built APK."
             exit 1
           }
 
           {
+            echo "## Canonical APK verified"
             echo
-            echo "APK verification:"
-            echo "APK path: ${APK}"
-            echo "Application ID: ${ACTUAL_ID}"
-            echo "Version name: ${ACTUAL_VERSION}"
-            echo "Version code: ${ACTUAL_CODE}"
-            echo "APK bytes: ${APK_BYTES}"
-            echo "APK SHA-256: ${APK_SHA256}"
-            echo "Source commit: ${GITHUB_SHA}"
-            echo "Build ID: run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
-            echo "Source ID: ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-          } | tee -a build-provenance.txt
-
-          cp "${APK}" sa7bi-ai-candidate.apk
-          sha256sum "${APK}" > app-release.apk.sha256
-
-      - name: Upload candidate APK and verification reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: sa7bi-ai-candidate-${{ github.run_number }}-${{ github.sha }}
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            sa7bi-ai-candidate.apk
-            build-provenance.txt
-            app-release.apk.sha256
-            flutter-analyze-report.txt
-            network-client-test-report.txt
-          if-no-files-found: error
-          retention-days: 14
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- App version: \`${APP_VERSION}\`"
+            echo "- APK size: \`${APK_SIZE}\` bytes"
+            echo "- SHA-256: \`${APK_SHA256}\`"
+            echo "- Download: https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_APK_NAME}"
+          } >> "${GITHUB_STEP_SUMMARY}"
