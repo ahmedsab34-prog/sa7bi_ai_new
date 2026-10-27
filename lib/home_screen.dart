@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -456,6 +455,7 @@ class HomeScreenState extends State<HomeScreen> {
     return widgets;
   }
 
+  /// بطاقة خبر أفقية صغيرة: الصورة على اليمين والتفاصيل على اليسار.
   Widget _buildNewsCard(NewsItem item, int index) {
     final title =
         item.title.trim().isEmpty ? 'خبر ${index + 1}' : item.title.trim();
@@ -471,87 +471,94 @@ class HomeScreenState extends State<HomeScreen> {
 
     return Material(
       color: const Color(0xFF11141D),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(15),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _openNews(item),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (imageUrl.isNotEmpty)
+        child: SizedBox(
+          height: 124,
+          child: Row(
+            textDirection: TextDirection.rtl,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               SizedBox(
-                height: 100,
-                width: double.infinity,
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _buildNewsImagePlaceholder(),
-                ),
-              )
-            else
-              _buildNewsImagePlaceholder(),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    source,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFFFFD76A),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 10.5,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                width: 116,
+                child: imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            _buildNewsImagePlaceholder(),
+                      )
+                    : _buildNewsImagePlaceholder(),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'اقرأ التفاصيل',
-                        style: TextStyle(
-                          color: Color(0xFF72D7FF),
+                        source,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFFFD76A),
                           fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      SizedBox(width: 5),
-                      Icon(
-                        Icons.arrow_back_rounded,
-                        color: Color(0xFF72D7FF),
-                        size: 14,
+                      const SizedBox(height: 4),
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                          height: 1.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                            'اقرأ التفاصيل',
+                            style: TextStyle(
+                              color: Color(0xFF72D7FF),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(
+                            Icons.arrow_back_rounded,
+                            color: Color(0xFF72D7FF),
+                            size: 13,
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -559,8 +566,9 @@ class HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNewsImagePlaceholder() {
     return Container(
-      height: 82,
+      height: double.infinity,
       width: double.infinity,
+      alignment: Alignment.center,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [Color(0xFF202B43), Color(0xFF151923)],
