@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import '../config/app_config.dart';
@@ -5,32 +6,46 @@ import '../models/ai_service_models.dart';
 import 'sa7bi_network_client.dart';
 
 /// خدمة الأخبار المستقلة لتطبيق صاحبي AI.
+///
+/// التحميل العادي يسمح بالاستفادة من التخزين المؤقت.
+/// التحديث اليدوي فقط يطلب بيانات جديدة دون الاعتماد على الكاش.
 class AiNewsService {
   AiNewsService._();
 
   static const String newsEndpoint = AppConfig.newsEndpoint;
 
-  /// تحميل الأخبار باستخدام عميل الشبكة الموحد.
-  /// ترجع قائمة فارغة عند فشل الاتصال أو عدم صلاحية البيانات.
-  static Future<List<NewsItem>> getNews() async {
+  static Future<List<NewsItem>> getNews({
+    bool forceRefresh = false,
+  }) async {
     try {
-      final uri = Uri.parse(newsEndpoint).replace(
-        queryParameters: {
-          'refresh': DateTime.now()
-              .millisecondsSinceEpoch
-              .toString(),
-        },
+      final baseUri = Uri.parse(newsEndpoint);
+      final query = Map<String, String>.from(
+        baseUri.queryParameters,
       );
 
-      final response = await Sa7biNetworkClient.client
-          .get(
-            uri,
-            headers: const {
+      if (forceRefresh) {
+        query['refresh'] = DateTime.now()
+            .millisecondsSinceEpoch
+            .toString();
+      }
+
+      final uri = baseUri.replace(
+        queryParameters: query.isEmpty ? null : query,
+      );
+
+      final headers = forceRefresh
+          ? const <String, String>{
+              'Accept': 'application/json',
               'Cache-Control': 'no-cache, no-store',
               'Pragma': 'no-cache',
-            },
-          )
-          .timeout(const Duration(seconds: 45));
+            }
+          : const <String, String>{
+              'Accept': 'application/json',
+            };
+
+      final response = await Sa7biNetworkClient.client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 20));
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
@@ -83,6 +98,7 @@ class AiNewsService {
 
       return result;
     } catch (_) {
+      // فشل الشبكة لا يُسقط التطبيق؛ الرئيسية تحتفظ بالأخبار المحفوظة.
       return [];
     }
   }
