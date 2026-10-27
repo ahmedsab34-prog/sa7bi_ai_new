@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import 'config/app_config.dart';
 import 'services/ai_request_service.dart';
+import 'services/sa7bi_network_client.dart';
 
 /// الواجهة الموحدة لخدمات صاحبي AI.
 ///
@@ -65,7 +65,7 @@ class AiService {
 
   static Future<bool> checkConnection() async {
     try {
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(
             Uri.parse(
               AppConfig.backendHealthEndpoint,
@@ -310,7 +310,7 @@ class AiService {
         },
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(
             uri,
             headers: const {
@@ -400,7 +400,7 @@ class AiService {
         },
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(
             uri,
             headers: const {
@@ -535,7 +535,7 @@ class AiService {
         queryParameters: parameters,
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(uri)
           .timeout(
             const Duration(seconds: 30),
@@ -663,7 +663,7 @@ class AiService {
         queryParameters: parameters,
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(uri)
           .timeout(
             const Duration(seconds: 30),
@@ -745,7 +745,7 @@ class AiService {
         },
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(uri)
           .timeout(
             const Duration(seconds: 25),
@@ -801,7 +801,7 @@ class AiService {
         queryParameters: parameters,
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(uri)
           .timeout(
             const Duration(seconds: 30),
@@ -847,7 +847,7 @@ class AiService {
         },
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(uri)
           .timeout(
             const Duration(seconds: 30),
@@ -966,7 +966,7 @@ class AiService {
         },
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(uri)
           .timeout(
             const Duration(seconds: 30),
@@ -1082,7 +1082,7 @@ class AiService {
         },
       );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(uri)
           .timeout(
             const Duration(seconds: 30),
@@ -1175,7 +1175,7 @@ class AiService {
 
   static Future<QuranCatalog?> getQuranCatalog() async {
     try {
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(Uri.parse(quranEndpoint))
           .timeout(
             const Duration(seconds: 25),
@@ -1355,7 +1355,7 @@ class AiService {
   static Future<List<RadioCountry>>
       getRadioCountries() async {
     try {
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(
             Uri.parse(
               radioCountriesEndpoint,
@@ -1456,7 +1456,7 @@ class AiService {
             },
           );
 
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(uri)
           .timeout(
             const Duration(seconds: 25),
@@ -1555,7 +1555,7 @@ class AiService {
   static Future<List<ShortVideoItem>>
       getShorts() async {
     try {
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(Uri.parse(shortsEndpoint))
           .timeout(
             const Duration(seconds: 25),
@@ -1643,7 +1643,7 @@ class AiService {
     String endpoint,
   ) async {
     try {
-      final response = await http
+      final response = await Sa7biNetworkClient.client
           .get(
             Uri.parse(endpoint),
             headers: const {
