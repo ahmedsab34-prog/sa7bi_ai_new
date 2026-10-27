@@ -1,3 +1,4 @@
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -182,7 +183,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(6, 0, 6, 5),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: Theme.of(context)
             .colorScheme
@@ -195,7 +196,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Row(
         children: [
-          if (_checkingAi)
+          if (_checkingAi || _refreshing)
             SizedBox(
               width: 9,
               height: 9,
@@ -226,6 +227,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ? 'صاحبي AI متصل وجاهز'
                   : 'صاحبي AI غير متصل',
               textDirection: TextDirection.rtl,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -240,12 +243,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             color: statusColor,
           ),
           IconButton(
-            onPressed: _checkingAi ? null : _checkAiConnection,
-            tooltip: 'فحص الاتصال',
+            onPressed: _refreshing ? null : _refreshProfile,
+            tooltip: 'تحديث الحساب والاتصال',
             padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
+              minWidth: 34,
+              minHeight: 34,
             ),
             icon: Icon(
               Icons.refresh_rounded,
@@ -316,21 +320,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      return RefreshIndicator(
-                        onRefresh: _refreshProfile,
-                        child: SingleChildScrollView(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.fromLTRB(
-                            8,
-                            4,
-                            8,
-                            88,
-                          ),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight:
-                                  constraints.maxHeight - 12,
-                            ),
+                      return SizedBox.expand(
+                        child: FittedBox(
+                          alignment: Alignment.topCenter,
+                          fit: BoxFit.scaleDown,
+                          child: SizedBox(
+                            width: constraints.maxWidth,
                             child: _buildProfileContent(),
                           ),
                         ),
