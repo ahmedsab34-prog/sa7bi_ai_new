@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -9,6 +10,7 @@ import 'ai_service.dart';
 import 'monetization_config.dart';
 import 'news_webview_screen.dart';
 import 'services/ads_service.dart';
+import 'services/ai_news_service.dart' as network_news;
 import 'shorts_feed_screen.dart';
 import 'widgets/affiliate_carousel.dart';
 import 'widgets/app_header.dart';
@@ -151,9 +153,26 @@ class HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final result = await AiService.getNews().timeout(
+      final networkResult = await network_news.AiNewsService.getNews(
+        forceRefresh: pullToRefresh,
+      ).timeout(
         const Duration(seconds: 25),
       );
+
+      // تحويل نموذج الشبكة إلى نموذج الواجهة الحالي دون تغيير
+      // نوع NewsItem الذي تستخدمه بقية هذه الشاشة.
+      final result = networkResult
+          .map(
+            (item) => NewsItem(
+              title: item.title,
+              source: item.source,
+              link: item.link,
+              imageUrl: item.imageUrl,
+              description: item.description,
+              pubDate: item.pubDate,
+            ),
+          )
+          .toList(growable: false);
 
       if (!mounted) return;
 
