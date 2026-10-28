@@ -1,3 +1,4 @@
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -5,37 +6,17 @@ import 'package:flutter/material.dart';
 import '../services/chat_theme_service.dart';
 import 'chat_ai_avatar.dart';
 
-/// فقاعة رسالة واحدة داخل المحادثة.
-///
-/// مسؤول عن عرض:
-/// - رسائل المستخدم.
-/// - رسائل الذكاء الاصطناعي.
-/// - الصور المرفقة.
-/// - حالة التحميل.
-/// - هوية المستخدم والـAI.
-///
-/// لا يحتوي على أي منطق لإرسال الرسائل أو الاتصال بالـBackend.
+/// فقاعة رسائل صغيرة بتصميم مدمج.
+/// لا تتعامل مع الشبكة ولا تغيّر منطق إرسال الرسائل.
 class ChatMessageBubble extends StatelessWidget {
   final String text;
   final bool isUser;
   final ChatThemeData theme;
-
-  /// اسم المستخدم المحفوظ في البروفايل.
   final String userName;
-
-  /// صورة المستخدم المحفوظة.
   final Uint8List? userPhoto;
-
-  /// صورة مرفقة بالرسالة إن وجدت.
   final Uint8List? imageBytes;
-
-  /// اسم الذكاء الاصطناعي الظاهر للمستخدم.
   final String aiName;
-
-  /// هل الرسالة قيد المعالجة؟
   final bool isLoading;
-
-  /// حجم صورة الحساب / أيقونة الـAI.
   final double avatarSize;
 
   const ChatMessageBubble({
@@ -48,17 +29,18 @@ class ChatMessageBubble extends StatelessWidget {
     this.imageBytes,
     this.aiName = 'خلصانة AI',
     this.isLoading = false,
-    this.avatarSize = 40,
+    this.avatarSize = 32,
   });
 
   @override
   Widget build(BuildContext context) {
     final safeText = text.trim();
+    final effectiveAvatarSize = avatarSize.clamp(26.0, 36.0);
 
     return Padding(
       padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 6,
+        horizontal: 8,
+        vertical: 3,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -68,20 +50,18 @@ class ChatMessageBubble extends StatelessWidget {
           if (!isUser) ...[
             ChatAiAvatar(
               theme: theme,
-              size: avatarSize,
+              size: effectiveAvatarSize,
               animated: !isLoading,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
           ],
           Flexible(
-            child: _buildBubble(
-              safeText,
-            ),
+            child: _buildBubble(safeText),
           ),
           if (isUser) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             _UserAvatar(
-              size: avatarSize,
+              size: effectiveAvatarSize,
               photoBytes: userPhoto,
               name: userName,
             ),
@@ -92,32 +72,27 @@ class ChatMessageBubble extends StatelessWidget {
   }
 
   Widget _buildBubble(String safeText) {
-    final bubbleColor =
-        isUser ? theme.userBubble : theme.aiBubble;
+    final bubbleColor = isUser ? theme.userBubble : theme.aiBubble;
 
     final borderColor = isUser
-        ? theme.primary.withValues(alpha: 0.32)
-        : theme.secondary.withValues(alpha: 0.22);
+        ? theme.primary.withValues(alpha: 0.30)
+        : theme.secondary.withValues(alpha: 0.20);
 
     return Container(
       constraints: const BoxConstraints(
         maxWidth: 340,
       ),
       padding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 11,
+        horizontal: 11,
+        vertical: 8,
       ),
       decoration: BoxDecoration(
-        color: bubbleColor.withValues(alpha: 0.94),
+        color: bubbleColor.withValues(alpha: 0.96),
         borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(20),
-          topRight: const Radius.circular(20),
-          bottomLeft: Radius.circular(
-            isUser ? 20 : 5,
-          ),
-          bottomRight: Radius.circular(
-            isUser ? 5 : 20,
-          ),
+          topLeft: const Radius.circular(17),
+          topRight: const Radius.circular(17),
+          bottomLeft: Radius.circular(isUser ? 17 : 5),
+          bottomRight: Radius.circular(isUser ? 5 : 17),
         ),
         border: Border.all(
           color: borderColor,
@@ -125,27 +100,27 @@ class ChatMessageBubble extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: theme.glow.withValues(alpha: 0.08),
-            blurRadius: 14,
-            spreadRadius: 1,
+            color: theme.glow.withValues(alpha: 0.055),
+            blurRadius: 9,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           _buildHeader(),
           if (imageBytes != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             _buildImage(),
           ],
           if (safeText.isNotEmpty) ...[
-            if (imageBytes != null)
-              const SizedBox(height: 8),
+            if (imageBytes != null) const SizedBox(height: 6),
             _buildText(safeText),
           ],
           if (isLoading) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 7),
             _buildLoadingIndicator(),
           ],
         ],
@@ -155,12 +130,8 @@ class ChatMessageBubble extends StatelessWidget {
 
   Widget _buildHeader() {
     final name = isUser
-        ? (userName.trim().isEmpty
-            ? 'صاحبي'
-            : userName.trim())
-        : aiName.trim().isEmpty
-            ? 'خلصانة AI'
-            : aiName.trim();
+        ? (userName.trim().isEmpty ? 'صاحبي' : userName.trim())
+        : (aiName.trim().isEmpty ? 'خلصانة AI' : aiName.trim());
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -169,12 +140,10 @@ class ChatMessageBubble extends StatelessWidget {
           isUser
               ? Icons.person_outline_rounded
               : Icons.auto_awesome_rounded,
-          size: 13,
-          color: isUser
-              ? theme.primary
-              : theme.secondary,
+          size: 12,
+          color: isUser ? theme.primary : theme.secondary,
         ),
-        const SizedBox(width: 5),
+        const SizedBox(width: 4),
         Flexible(
           child: Text(
             name,
@@ -183,7 +152,7 @@ class ChatMessageBubble extends StatelessWidget {
             textDirection: TextDirection.rtl,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.68),
-              fontSize: 10.5,
+              fontSize: 9.5,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -200,8 +169,8 @@ class ChatMessageBubble extends StatelessWidget {
         textAlign: TextAlign.start,
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 15,
-          height: 1.55,
+          fontSize: 13,
+          height: 1.45,
           fontWeight: FontWeight.w400,
         ),
       ),
@@ -216,29 +185,25 @@ class ChatMessageBubble extends StatelessWidget {
     }
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(11),
       child: Image.memory(
         bytes,
         width: double.infinity,
-        height: 210,
+        height: 180,
         fit: BoxFit.cover,
         gaplessPlayback: true,
-        errorBuilder: (
-          context,
-          error,
-          stackTrace,
-        ) {
+        errorBuilder: (context, error, stackTrace) {
           return Container(
-            height: 120,
+            height: 100,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(11),
             ),
             child: Icon(
               Icons.broken_image_outlined,
               color: Colors.white.withValues(alpha: 0.6),
-              size: 34,
+              size: 30,
             ),
           );
         },
@@ -251,22 +216,20 @@ class ChatMessageBubble extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          width: 15,
-          height: 15,
+          width: 14,
+          height: 14,
           child: CircularProgressIndicator(
-            strokeWidth: 1.8,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              theme.secondary,
-            ),
+            strokeWidth: 1.7,
+            valueColor: AlwaysStoppedAnimation<Color>(theme.secondary),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 7),
         Text(
           'جاري التفكير...',
           textDirection: TextDirection.rtl,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.62),
-            fontSize: 11,
+            fontSize: 10,
           ),
         ),
       ],
@@ -274,7 +237,6 @@ class ChatMessageBubble extends StatelessWidget {
   }
 }
 
-/// صورة المستخدم داخل فقاعة الرسالة.
 class _UserAvatar extends StatelessWidget {
   final double size;
   final Uint8List? photoBytes;
@@ -298,27 +260,14 @@ class _UserAvatar extends StatelessWidget {
           shape: BoxShape.circle,
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.16),
-            width: 1,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
-              blurRadius: 10,
-            ),
-          ],
         ),
         child: ClipOval(
           child: Image.memory(
             bytes,
             fit: BoxFit.cover,
             gaplessPlayback: true,
-            errorBuilder: (
-              context,
-              error,
-              stackTrace,
-            ) {
-              return _fallback();
-            },
+            errorBuilder: (context, error, stackTrace) => _fallback(),
           ),
         ),
       );
@@ -328,9 +277,10 @@ class _UserAvatar extends StatelessWidget {
   }
 
   Widget _fallback() {
-    final initial = name.trim().isEmpty
+    final trimmedName = name.trim();
+    final initial = trimmedName.isEmpty
         ? 'ص'
-        : name.trim().characters.first;
+        : trimmedName.characters.first;
 
     return Container(
       width: size,
