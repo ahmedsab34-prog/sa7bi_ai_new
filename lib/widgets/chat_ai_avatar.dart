@@ -1,15 +1,11 @@
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../services/chat_theme_service.dart';
 
-/// أيقونة الذكاء الاصطناعي داخل المحادثة.
-///
-/// هذه الأيقونة خاصة بالـAI داخل شاشة المحادثة فقط.
-/// لا تستخدم شعار صاحبي AI ولا تغيّره.
-///
-/// تعتمد الألوان والأيقونة على ChatThemeData.
+/// أيقونة المساعد داخل المحادثة، منفصلة عن شعار التطبيق.
 class ChatAiAvatar extends StatelessWidget {
   final ChatThemeData theme;
   final double size;
@@ -63,16 +59,14 @@ class _AnimatedAiAvatarState extends State<_AnimatedAiAvatar>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 6),
     );
 
     _syncAnimation();
   }
 
   @override
-  void didUpdateWidget(
-    covariant _AnimatedAiAvatar oldWidget,
-  ) {
+  void didUpdateWidget(covariant _AnimatedAiAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.animated != widget.animated) {
@@ -100,28 +94,17 @@ class _AnimatedAiAvatarState extends State<_AnimatedAiAvatar>
     final avatar = AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        final progress = _controller.value;
-
         final pulse = widget.animated
-            ? 1.0 +
-                0.025 *
-                    ((math.sin(
-                              progress * math.pi * 2,
-                            ) +
-                            1) /
-                        2)
+            ? 1 + 0.015 * ((math.sin(
+                        _controller.value * math.pi * 2,
+                      ) +
+                      1) /
+                  2)
             : 1.0;
-
-        final rotation = widget.animated
-            ? progress * math.pi * 0.18
-            : 0.0;
 
         return Transform.scale(
           scale: pulse,
-          child: Transform.rotate(
-            angle: rotation,
-            child: child,
-          ),
+          child: child,
         );
       },
       child: _buildAvatar(),
@@ -137,15 +120,15 @@ class _AnimatedAiAvatarState extends State<_AnimatedAiAvatar>
       mainAxisSize: MainAxisSize.min,
       children: [
         avatar,
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         Text(
           labelText,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.82),
-            fontSize: 10,
+            color: Colors.white.withValues(alpha: 0.78),
+            fontSize: 9,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -155,11 +138,7 @@ class _AnimatedAiAvatarState extends State<_AnimatedAiAvatar>
 
   Widget _buildAvatar() {
     final outerSize = widget.size;
-
-    final innerSize = math.max(
-      1.0,
-      outerSize - 5,
-    );
+    final innerSize = math.max(1.0, outerSize - 4);
 
     return SizedBox(
       width: outerSize,
@@ -167,10 +146,6 @@ class _AnimatedAiAvatarState extends State<_AnimatedAiAvatar>
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // ======================================================
-          // OUTER GLOW
-          // ======================================================
-
           Container(
             width: outerSize,
             height: outerSize,
@@ -178,55 +153,31 @@ class _AnimatedAiAvatarState extends State<_AnimatedAiAvatar>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: widget.theme.primary.withValues(
-                    alpha: 0.28,
-                  ),
-                  blurRadius: outerSize * 0.32,
-                  spreadRadius: outerSize * 0.04,
-                ),
-                BoxShadow(
-                  color: widget.theme.secondary.withValues(
-                    alpha: 0.18,
-                  ),
-                  blurRadius: outerSize * 0.55,
-                  spreadRadius: 0,
+                  color: widget.theme.primary.withValues(alpha: 0.18),
+                  blurRadius: outerSize * 0.24,
+                  spreadRadius: outerSize * 0.015,
                 ),
               ],
             ),
           ),
-
-          // ======================================================
-          // GRADIENT RING
-          // ======================================================
-
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return Container(
-                width: outerSize,
-                height: outerSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: SweepGradient(
-                    transform: GradientRotation(
-                      _controller.value * math.pi * 2,
-                    ),
-                    colors: [
-                      widget.theme.primary,
-                      widget.theme.secondary,
-                      widget.theme.glow,
-                      widget.theme.primary,
-                    ],
-                  ),
+          Container(
+            width: outerSize,
+            height: outerSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: SweepGradient(
+                transform: GradientRotation(
+                  _controller.value * math.pi * 2,
                 ),
-              );
-            },
+                colors: [
+                  widget.theme.primary,
+                  widget.theme.secondary,
+                  widget.theme.glow,
+                  widget.theme.primary,
+                ],
+              ),
+            ),
           ),
-
-          // ======================================================
-          // INNER GLASS BODY
-          // ======================================================
-
           Container(
             width: innerSize,
             height: innerSize,
@@ -241,109 +192,46 @@ class _AnimatedAiAvatarState extends State<_AnimatedAiAvatar>
                 ],
               ),
               border: Border.all(
-                color: Colors.white.withValues(
-                  alpha: 0.12,
-                ),
-                width: 1,
+                color: Colors.white.withValues(alpha: 0.12),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: widget.theme.glow.withValues(
-                    alpha: 0.10,
-                  ),
-                  blurRadius: outerSize * 0.20,
-                ),
-              ],
             ),
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // ==================================================
-                // TOP REFLECTION
-                // ==================================================
-
                 Positioned(
-                  top: outerSize * 0.14,
-                  left: outerSize * 0.18,
+                  top: outerSize * 0.17,
+                  right: outerSize * 0.19,
                   child: Container(
-                    width: outerSize * 0.25,
+                    width: outerSize * 0.10,
                     height: outerSize * 0.10,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(
-                        outerSize,
-                      ),
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.white.withValues(
-                            alpha: 0.16,
-                          ),
-                          Colors.white.withValues(
-                            alpha: 0.0,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ==================================================
-                // INNER LIGHT POINT
-                // ==================================================
-
-                Positioned(
-                  top: outerSize * 0.16,
-                  right: outerSize * 0.20,
-                  child: Container(
-                    width: outerSize * 0.12,
-                    height: outerSize * 0.12,
-                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: widget.theme.secondary.withValues(
-                        alpha: 0.88,
-                      ),
+                      color: widget.theme.secondary,
                       boxShadow: [
                         BoxShadow(
                           color: widget.theme.secondary.withValues(
-                            alpha: 0.55,
+                            alpha: 0.40,
                           ),
-                          blurRadius: outerSize * 0.18,
+                          blurRadius: outerSize * 0.12,
                         ),
                       ],
                     ),
                   ),
                 ),
-
-                // ==================================================
-                // AI ICON
-                // ==================================================
-
                 Icon(
                   widget.theme.aiIcon,
-                  size: outerSize * 0.46,
+                  size: outerSize * 0.43,
                   color: Colors.white,
                 ),
-
-                // ==================================================
-                // SMALL BOTTOM LIGHT
-                // ==================================================
-
                 Positioned(
-                  bottom: outerSize * 0.16,
+                  bottom: outerSize * 0.17,
                   left: outerSize * 0.20,
                   child: Container(
-                    width: outerSize * 0.07,
-                    height: outerSize * 0.07,
+                    width: outerSize * 0.065,
+                    height: outerSize * 0.065,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: widget.theme.primary,
-                      boxShadow: [
-                        BoxShadow(
-                          color: widget.theme.primary.withValues(
-                            alpha: 0.45,
-                          ),
-                          blurRadius: outerSize * 0.10,
-                        ),
-                      ],
                     ),
                   ),
                 ),
