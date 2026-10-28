@@ -1,3 +1,4 @@
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -6,27 +7,14 @@ import '../models/chat_message.dart';
 import '../services/chat_theme_service.dart';
 import 'chat_message_bubble.dart';
 
-/// قائمة رسائل المحادثة.
-///
-/// مسؤوليتها عرض الرسائل فقط.
-/// منطق الإرسال والـAI والحفظ يظل خارج هذا الملف.
+/// قائمة رسائل مدمجة، مع الحفاظ على الصور وحالة انتظار الرد.
 class ChatMessageList extends StatelessWidget {
   final List<ChatMessage> messages;
   final ChatThemeData theme;
-
-  /// اسم المستخدم المحفوظ في البروفايل.
   final String userName;
-
-  /// صورة المستخدم المحفوظة.
   final Uint8List? userPhoto;
-
-  /// اسم الذكاء الاصطناعي.
   final String aiName;
-
-  /// هل يوجد رد قيد المعالجة؟
   final bool isLoading;
-
-  /// ScrollController الخاص بشاشة المحادثة.
   final ScrollController? controller;
 
   const ChatMessageList({
@@ -42,8 +30,7 @@ class ChatMessageList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final itemCount =
-        messages.length + (isLoading ? 1 : 0);
+    final itemCount = messages.length + (isLoading ? 1 : 0);
 
     if (itemCount == 0) {
       return const SizedBox.shrink();
@@ -52,15 +39,14 @@ class ChatMessageList extends StatelessWidget {
     return ListView.builder(
       controller: controller,
       padding: const EdgeInsets.only(
-        top: 8,
-        bottom: 10,
+        top: 3,
+        bottom: 5,
       ),
       keyboardDismissBehavior:
           ScrollViewKeyboardDismissBehavior.onDrag,
       physics: const BouncingScrollPhysics(),
       itemCount: itemCount,
       itemBuilder: (context, index) {
-        // آخر عنصر يظهر أثناء انتظار رد الـAI.
         if (index >= messages.length) {
           return ChatMessageBubble(
             text: '',
