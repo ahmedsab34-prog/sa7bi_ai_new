@@ -1,18 +1,11 @@
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../services/chat_theme_service.dart';
 
-/// خلفية ديناميكية للمحادثات.
-///
-/// تستقبل ChatThemeData وتحوّلها إلى خلفية متحركة:
-/// - تدرج لوني هادئ.
-/// - إضاءات ناعمة متحركة.
-/// - نقاط ضوئية بسيطة.
-/// - حركة خفيفة لا تؤثر على محتوى المحادثة.
-///
-/// هذا الـWidget لا يحتوي على منطق الشات نفسه.
+/// خلفية داكنة بإضاءات هادئة وحركة خفيفة.
 class ChatDynamicBackground extends StatefulWidget {
   final ChatThemeData theme;
   final Widget child;
@@ -41,7 +34,7 @@ class _ChatDynamicBackgroundState
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 12),
+      duration: const Duration(seconds: 18),
     );
 
     if (widget.animated) {
@@ -90,23 +83,16 @@ class _ChatBackgroundPainter extends CustomPainter {
   final ChatThemeData theme;
   final double animationValue;
 
-  _ChatBackgroundPainter({
+  const _ChatBackgroundPainter({
     required this.theme,
     required this.animationValue,
   });
 
   @override
-  void paint(
-    Canvas canvas,
-    Size size,
-  ) {
-    if (size.width <= 0 || size.height <= 0) {
-      return;
-    }
+  void paint(Canvas canvas, Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
 
-    // ==========================================================
-    // الخلفية الأساسية
-    // ==========================================================
+    final bounds = Offset.zero & size;
 
     final backgroundPaint = Paint()
       ..shader = LinearGradient(
@@ -116,84 +102,58 @@ class _ChatBackgroundPainter extends CustomPainter {
           theme.backgroundTop,
           theme.backgroundBottom,
         ],
-      ).createShader(
-        Rect.fromLTWH(
-          0,
-          0,
-          size.width,
-          size.height,
-        ),
-      );
+      ).createShader(bounds);
 
-    canvas.drawRect(
-      Offset.zero & size,
-      backgroundPaint,
-    );
-
-    // ==========================================================
-    // الإضاءات المتحركة
-    // ==========================================================
+    canvas.drawRect(bounds, backgroundPaint);
 
     final angle = animationValue * math.pi * 2;
 
     final firstCenter = Offset(
       size.width * 0.18 +
-          math.cos(angle) * size.width * 0.08,
-      size.height * 0.18 +
-          math.sin(angle) * size.height * 0.06,
+          math.cos(angle) * size.width * 0.045,
+      size.height * 0.20 +
+          math.sin(angle) * size.height * 0.035,
     );
 
     final secondCenter = Offset(
       size.width * 0.82 +
-          math.sin(angle) * size.width * 0.07,
+          math.sin(angle) * size.width * 0.04,
       size.height * 0.58 +
-          math.cos(angle) * size.height * 0.09,
+          math.cos(angle) * size.height * 0.045,
     );
 
     _drawGlow(
       canvas,
       center: firstCenter,
-      radius: size.width * 0.55,
+      radius: size.width * 0.48,
       color: theme.primary,
-      opacity: 0.10,
+      opacity: 0.075,
     );
 
     _drawGlow(
       canvas,
       center: secondCenter,
-      radius: size.width * 0.50,
+      radius: size.width * 0.43,
       color: theme.secondary,
-      opacity: 0.08,
+      opacity: 0.06,
     );
 
-    // ==========================================================
-    // هالة صغيرة متحركة
-    // ==========================================================
-
-    final smallCenter = Offset(
+    final lowerCenter = Offset(
       size.width *
-          (0.50 + math.sin(angle * 0.7) * 0.20),
+          (0.50 + math.sin(angle * 0.7) * 0.12),
       size.height *
-          (0.78 + math.cos(angle * 0.8) * 0.08),
+          (0.78 + math.cos(angle * 0.8) * 0.05),
     );
 
     _drawGlow(
       canvas,
-      center: smallCenter,
-      radius: size.width * 0.28,
+      center: lowerCenter,
+      radius: size.width * 0.24,
       color: theme.glow,
-      opacity: 0.05,
+      opacity: 0.035,
     );
 
-    // ==========================================================
-    // النقاط الضوئية
-    // ==========================================================
-
-    _drawParticles(
-      canvas,
-      size,
-      angle,
-    );
+    _drawParticles(canvas, size, angle);
   }
 
   void _drawGlow(
@@ -207,7 +167,7 @@ class _ChatBackgroundPainter extends CustomPainter {
       ..shader = RadialGradient(
         colors: [
           color.withValues(alpha: opacity),
-          color.withValues(alpha: 0.0),
+          color.withValues(alpha: 0),
         ],
       ).createShader(
         Rect.fromCircle(
@@ -216,11 +176,7 @@ class _ChatBackgroundPainter extends CustomPainter {
         ),
       );
 
-    canvas.drawCircle(
-      center,
-      radius,
-      paint,
-    );
+    canvas.drawCircle(center, radius, paint);
   }
 
   void _drawParticles(
@@ -228,43 +184,29 @@ class _ChatBackgroundPainter extends CustomPainter {
     Size size,
     double angle,
   ) {
-    final paint = Paint()
-      ..style = PaintingStyle.fill;
+    final paint = Paint()..style = PaintingStyle.fill;
 
-    const particleCount = 18;
+    const particleCount = 10;
 
     for (int i = 0; i < particleCount; i++) {
       final seed = i * 1.731;
 
-      final xRatio =
-          (math.sin(seed * 4.0) + 1.0) / 2.0;
-
-      final baseY =
-          (math.cos(seed * 2.7) + 1.0) / 2.0;
-
-      final movement =
-          math.sin(angle + seed) * 0.025;
+      final xRatio = (math.sin(seed * 4) + 1) / 2;
+      final baseY = (math.cos(seed * 2.7) + 1) / 2;
+      final movement = math.sin(angle + seed) * 0.018;
 
       final x = size.width * xRatio;
-
       final y = size.height *
           (baseY + movement).clamp(0.0, 1.0);
 
-      final radius =
-          0.8 + ((i % 3) * 0.45);
-
-      final color =
-          i.isEven ? theme.primary : theme.secondary;
+      final radius = 0.7 + ((i % 3) * 0.3);
+      final color = i.isEven ? theme.primary : theme.secondary;
 
       paint.color = color.withValues(
-        alpha: 0.08 + ((i % 4) * 0.015),
+        alpha: 0.045 + ((i % 3) * 0.01),
       );
 
-      canvas.drawCircle(
-        Offset(x, y),
-        radius,
-        paint,
-      );
+      canvas.drawCircle(Offset(x, y), radius, paint);
     }
   }
 
@@ -273,7 +215,6 @@ class _ChatBackgroundPainter extends CustomPainter {
     covariant _ChatBackgroundPainter oldDelegate,
   ) {
     return oldDelegate.theme.id != theme.id ||
-        oldDelegate.animationValue !=
-            animationValue;
+        oldDelegate.animationValue != animationValue;
   }
 }
