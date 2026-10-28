@@ -3,9 +3,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// أيقونة خلصانة AI العائمة.
-/// يحافظ الملف على واجهة الاستخدام الحالية: KhalasanaPortal(onTap: ...).
-/// يمكن الضغط لفتح المساعد أو سحب الأيقونة لتغيير مكانها.
+import '../theme/sa7bi_theme.dart';
+
+/// روبوت خلصانة العائم، بدون مربع خلفية أو اسم أسفله.
 class KhalasanaPortal extends StatefulWidget {
   const KhalasanaPortal({
     super.key,
@@ -23,12 +23,15 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
   late final AnimationController _controller;
   Offset _dragOffset = Offset.zero;
 
+  static const double _width = 64;
+  static const double _height = 74;
+
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 7),
+      duration: const Duration(milliseconds: 3200),
     )..repeat();
   }
 
@@ -39,23 +42,21 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
   }
 
   void _move(DragUpdateDetails details, Size screen) {
-    const edge = 8.0;
-    const widgetWidth = 82.0;
-    const widgetHeight = 82.0;
+    const edge = 4.0;
 
     setState(() {
       final next = _dragOffset + details.delta;
       _dragOffset = Offset(
         next.dx
             .clamp(
-              -screen.width + widgetWidth + edge,
-              screen.width - widgetWidth - edge,
+              -screen.width + _width + edge,
+              screen.width - _width - edge,
             )
             .toDouble(),
         next.dy
             .clamp(
-              -screen.height + widgetHeight + edge,
-              screen.height - widgetHeight - edge,
+              -screen.height + _height + edge,
+              screen.height - _height - edge,
             )
             .toDouble(),
       );
@@ -70,7 +71,7 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
       offset: _dragOffset,
       child: Semantics(
         button: true,
-        label: 'خلصانة AI، اضغط لفتح المساعد أو اسحب لتحريك الأيقونة',
+        label: 'روبوت خلصانة، اضغط لفتح المساعد أو اسحب لتحريكه',
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
@@ -81,138 +82,261 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
               final phase = _controller.value * math.pi * 2;
               final pulse = (math.sin(phase) + 1) / 2;
               final glow = Color.lerp(
-                const Color(0xFFFFD76A),
-                const Color(0xFF6CE8FF),
+                Sa7biTheme.cyan,
+                Sa7biTheme.violet,
                 pulse,
               )!;
 
-              return SizedBox(
-                width: 82,
-                height: 82,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 61,
-                      height: 57,
-                      decoration: BoxDecoration(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(22),
-                          topRight: Radius.circular(22),
-                          bottomLeft: Radius.circular(22),
-                          bottomRight: Radius.circular(8),
-                        ),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFF303C5B),
-                            Color(0xFF171E32),
-                            Color(0xFF090E1A),
-                          ],
-                        ),
-                        border: Border.all(
-                          color: glow.withValues(alpha: 0.85),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: glow.withValues(
-                              alpha: 0.14 + pulse * 0.12,
-                            ),
-                            blurRadius: 15,
-                            spreadRadius: 1,
+              return Transform.translate(
+                offset: Offset(0, math.sin(phase) * 1.8),
+                child: SizedBox(
+                  width: _width,
+                  height: _height,
+                  child: Stack(
+                    alignment: Alignment.topCenter,
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        top: 1,
+                        child: Container(
+                          width: 3,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: glow,
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                          const BoxShadow(
-                            color: Color(0x66000000),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
+                        ),
                       ),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Positioned(
-                            top: 5,
-                            right: 8,
-                            child: Container(
-                              width: 29,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(4),
+                      Positioned(
+                        top: 0,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: Sa7biTheme.gold,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Sa7biTheme.gold.withValues(
+                                  alpha: 0.55,
+                                ),
+                                blurRadius: 8,
                               ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 31,
+                        left: 3,
+                        child: _RobotEar(color: glow),
+                      ),
+                      Positioned(
+                        top: 31,
+                        right: 3,
+                        child: _RobotEar(color: glow),
+                      ),
+                      Positioned(
+                        top: 11,
+                        child: Container(
+                          width: 48,
+                          height: 43,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF293953),
+                                Color(0xFF17243A),
+                                Color(0xFF101727),
+                              ],
                             ),
+                            border: Border.all(
+                              color: glow.withValues(
+                                alpha: 0.72 + pulse * 0.2,
+                              ),
+                              width: 1.4,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: glow.withValues(
+                                  alpha: 0.13 + pulse * 0.1,
+                                ),
+                                blurRadius: 14,
+                                spreadRadius: 1,
+                              ),
+                              const BoxShadow(
+                                color: Color(0x66000000),
+                                blurRadius: 9,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
                           ),
-                          Icon(
-                            Icons.forum_rounded,
-                            color: Colors.white.withValues(alpha: 0.94),
-                            size: 31,
-                          ),
-                          Positioned(
-                            bottom: 8,
-                            right: 11,
-                            child: Container(
-                              width: 9,
-                              height: 9,
-                              decoration: BoxDecoration(
-                                color: glow,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: glow.withValues(alpha: 0.7),
-                                    blurRadius: 7,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Positioned(
+                                top: 4,
+                                left: 10,
+                                right: 10,
+                                child: Container(
+                                  height: 2,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(
+                                      alpha: 0.17,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
-                                ],
+                                ),
+                              ),
+                              Positioned(
+                                top: 14,
+                                left: 10,
+                                child: _RobotEye(glow: glow),
+                              ),
+                              Positioned(
+                                top: 14,
+                                right: 10,
+                                child: _RobotEye(glow: glow),
+                              ),
+                              Positioned(
+                                bottom: 7,
+                                child: Container(
+                                  width: 13,
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    border: const Border(
+                                      bottom: BorderSide(
+                                        color: Sa7biTheme.cyan,
+                                        width: 1.8,
+                                      ),
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 11,
+                                right: 7,
+                                child: Container(
+                                  width: 3,
+                                  height: 3,
+                                  decoration: BoxDecoration(
+                                    color: Sa7biTheme.gold.withValues(
+                                      alpha: 0.9,
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 57,
+                        child: Container(
+                          width: 25,
+                          height: 11,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF26354D),
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(
+                              color: glow.withValues(alpha: 0.7),
+                              width: 1,
+                            ),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 7,
+                              height: 2,
+                              decoration: BoxDecoration(
+                                color: Sa7biTheme.gold,
+                                borderRadius: BorderRadius.circular(3),
                               ),
                             ),
                           ),
-                          Positioned(
-                            top: 9,
-                            left: 9,
-                            child: Transform.rotate(
-                              angle: -phase * 0.35,
-                              child: Icon(
-                                Icons.auto_awesome_rounded,
-                                color: const Color(0xFFFFD76A)
-                                    .withValues(alpha: 0.8),
-                                size: 12,
-                              ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 19,
+                        right: 0,
+                        child: Transform.rotate(
+                          angle: phase * 0.4,
+                          child: Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Sa7biTheme.gold.withValues(
+                              alpha: 0.45 + pulse * 0.4,
                             ),
+                            size: 11,
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xF0101522),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: glow.withValues(alpha: 0.65),
                         ),
                       ),
-                      child: const Text(
-                        'خلصانة AI',
-                        textDirection: TextDirection.rtl,
-                        style: TextStyle(
-                          color: Color(0xFFFFE6A0),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RobotEye extends StatelessWidget {
+  const _RobotEye({required this.glow});
+
+  final Color glow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 9,
+      height: 10,
+      decoration: BoxDecoration(
+        color: glow,
+        borderRadius: BorderRadius.circular(5),
+        boxShadow: [
+          BoxShadow(
+            color: glow.withValues(alpha: 0.45),
+            blurRadius: 5,
+          ),
+        ],
+      ),
+      child: Align(
+        alignment: Alignment.topRight,
+        child: Container(
+          width: 3,
+          height: 3,
+          margin: const EdgeInsets.all(2),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RobotEar extends StatelessWidget {
+  const _RobotEar({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 6,
+      height: 14,
+      decoration: BoxDecoration(
+        color: const Color(0xFF202E45),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: color.withValues(alpha: 0.75),
+          width: 1,
         ),
       ),
     );
