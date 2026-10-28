@@ -1,19 +1,16 @@
+
 import 'package:flutter/material.dart';
 
 import '../services/chat_theme_service.dart';
 import 'chat_ai_avatar.dart';
 
-/// واجهة البداية عندما تكون المحادثة فارغة.
-///
-/// مسؤولة عن العرض والاقتراحات فقط، ولا تنفذ طلبات AI.
+/// واجهة بداية المحادثة بتصميم مدمج ومساحة أوسع.
 class ChatEmptyState extends StatelessWidget {
   final ChatThemeData theme;
   final String title;
   final String? subtitle;
   final ValueChanged<String>? onSuggestionTap;
   final List<String> suggestions;
-
-  /// يسمح بإخفاء الاسم عندما يكون موجودًا بالفعل في AppBar.
   final bool showTitle;
 
   const ChatEmptyState({
@@ -38,59 +35,79 @@ class ChatEmptyState extends StatelessWidget {
 
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 30, 20, 24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ChatAiAvatar(
-              theme: theme,
-              size: 92,
-              animated: true,
-            ),
-            if (showTitle) ...[
-              const SizedBox(height: 18),
-              Text(
-                safeTitle,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
+        padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                    colors: [
+                      theme.primary.withValues(alpha: 0.15),
+                      theme.secondary.withValues(alpha: 0.08),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: theme.primary.withValues(alpha: 0.16),
+                  ),
+                ),
+                child: ChatAiAvatar(
+                  theme: theme,
+                  size: 66,
+                  animated: true,
                 ),
               ),
-            ],
-            const SizedBox(height: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 330),
-              child: Text(
-                safeSubtitle,
-                textDirection: TextDirection.rtl,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.62),
-                  fontSize: 13,
-                  height: 1.55,
-                  fontWeight: FontWeight.w500,
+              if (showTitle) ...[
+                const SizedBox(height: 12),
+                Text(
+                  safeTitle,
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 390),
+                child: Text(
+                  safeSubtitle,
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.66),
+                    fontSize: 12,
+                    height: 1.5,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-            ),
-            if (suggestions.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              _Suggestions(
-                theme: theme,
-                suggestions: suggestions,
-                onTap: onSuggestionTap,
-              ),
+              if (suggestions.isNotEmpty) ...[
+                const SizedBox(height: 18),
+                _Suggestions(
+                  theme: theme,
+                  suggestions: suggestions,
+                  onTap: onSuggestionTap,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// مجموعة الاقتراحات السريعة.
 class _Suggestions extends StatelessWidget {
   final ChatThemeData theme;
   final List<String> suggestions;
@@ -115,22 +132,19 @@ class _Suggestions extends StatelessWidget {
 
     return Wrap(
       alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 7,
+      runSpacing: 7,
       children: visibleSuggestions.map((suggestion) {
         return _SuggestionChip(
           theme: theme,
           text: suggestion,
-          onTap: onTap == null
-              ? null
-              : () => onTap!(suggestion),
+          onTap: onTap == null ? null : () => onTap!(suggestion),
         );
       }).toList(),
     );
   }
 }
 
-/// زر اقتراح سريع.
 class _SuggestionChip extends StatelessWidget {
   final ChatThemeData theme;
   final String text;
@@ -148,26 +162,19 @@ class _SuggestionChip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 170),
+          constraints: const BoxConstraints(maxWidth: 190),
           padding: const EdgeInsets.symmetric(
-            horizontal: 13,
-            vertical: 9,
+            horizontal: 11,
+            vertical: 8,
           ),
           decoration: BoxDecoration(
             color: theme.aiBubble.withValues(alpha: 0.78),
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: theme.primary.withValues(alpha: 0.20),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: theme.glow.withValues(alpha: 0.05),
-                blurRadius: 12,
-                spreadRadius: 1,
-              ),
-            ],
           ),
           child: Text(
             text,
@@ -177,7 +184,7 @@ class _SuggestionChip extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.88),
-              fontSize: 11.5,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
               height: 1.3,
             ),
