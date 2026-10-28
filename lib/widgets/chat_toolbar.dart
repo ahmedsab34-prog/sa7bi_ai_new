@@ -1,6 +1,7 @@
+
 import 'package:flutter/material.dart';
 
-/// شريط أدوات المحادثة، مع الحفاظ على أدوات الوسائط وإضافة الألعاب والتجارب.
+/// شريط أدوات محادثة مدمج مع الحفاظ على جميع الأدوات.
 class ChatToolbar extends StatelessWidget {
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
@@ -32,87 +33,80 @@ class ChatToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(8, 4, 8, 6),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.075),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.13),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.20),
-              blurRadius: 18,
-              offset: const Offset(0, 7),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(5, 2, 5, 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 3,
+        vertical: 4,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.09),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ToolButton(
+              icon: Icons.camera_alt_rounded,
+              tooltip: 'الكاميرا',
+              onPressed: enabled ? onCamera : null,
+            ),
+            _ToolButton(
+              icon: Icons.photo_library_rounded,
+              tooltip: 'الصور والمعرض',
+              onPressed: enabled ? onGallery : null,
+            ),
+            _ToolButton(
+              icon: Icons.videocam_rounded,
+              tooltip: 'فيديو',
+              onPressed: enabled ? onVideo : null,
+            ),
+            _ToolButton(
+              icon: Icons.mic_rounded,
+              tooltip: isListening ? 'إيقاف التسجيل' : 'صوت',
+              active: isListening,
+              onPressed: enabled ? onVoice : null,
+            ),
+            _ToolButton(
+              icon: Icons.keyboard_rounded,
+              tooltip: 'كتابة',
+              onPressed: enabled ? onText : null,
+            ),
+            _ToolButton(
+              icon: isListening
+                  ? Icons.stop_circle_rounded
+                  : Icons.graphic_eq_rounded,
+              tooltip: isListening
+                  ? 'إيقاف تحويل الكلام'
+                  : 'تحويل الكلام إلى نص',
+              active: isListening,
+              onPressed: enabled ? onSpeechToText : null,
+            ),
+            _ToolButton(
+              icon: isGeneratingImage
+                  ? Icons.hourglass_top_rounded
+                  : Icons.auto_awesome_rounded,
+              tooltip: isGeneratingImage
+                  ? 'جاري توليد الصورة'
+                  : 'توليد صورة',
+              active: isGeneratingImage,
+              emphasized: true,
+              onPressed: enabled && !isGeneratingImage
+                  ? onImageGeneration
+                  : null,
+            ),
+            _ToolButton(
+              icon: Icons.sports_esports_rounded,
+              tooltip: 'الألعاب والتجارب التفاعلية',
+              emphasized: true,
+              onPressed: enabled ? onExperiences : null,
             ),
           ],
-        ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _ToolButton(
-                icon: Icons.camera_alt_rounded,
-                tooltip: 'الكاميرا',
-                onPressed: enabled ? onCamera : null,
-              ),
-              _ToolButton(
-                icon: Icons.photo_library_rounded,
-                tooltip: 'الصور والمعرض',
-                onPressed: enabled ? onGallery : null,
-              ),
-              _ToolButton(
-                icon: Icons.videocam_rounded,
-                tooltip: 'فيديو',
-                onPressed: enabled ? onVideo : null,
-              ),
-              _ToolButton(
-                icon: Icons.mic_rounded,
-                tooltip: isListening ? 'إيقاف التسجيل' : 'صوت',
-                active: isListening,
-                onPressed: enabled ? onVoice : null,
-              ),
-              _ToolButton(
-                icon: Icons.keyboard_rounded,
-                tooltip: 'كتابة',
-                onPressed: enabled ? onText : null,
-              ),
-              _ToolButton(
-                icon: isListening
-                    ? Icons.stop_circle_rounded
-                    : Icons.graphic_eq_rounded,
-                tooltip: isListening
-                    ? 'إيقاف تحويل الكلام'
-                    : 'تحويل الكلام إلى نص',
-                active: isListening,
-                onPressed: enabled ? onSpeechToText : null,
-              ),
-              _ToolButton(
-                icon: isGeneratingImage
-                    ? Icons.hourglass_top_rounded
-                    : Icons.auto_awesome_rounded,
-                tooltip: isGeneratingImage
-                    ? 'جاري توليد الصورة'
-                    : 'توليد صورة',
-                active: isGeneratingImage,
-                emphasized: true,
-                onPressed: enabled && !isGeneratingImage
-                    ? onImageGeneration
-                    : null,
-              ),
-              _ToolButton(
-                icon: Icons.sports_esports_rounded,
-                tooltip: 'الألعاب والتجارب التفاعلية',
-                emphasized: true,
-                onPressed: enabled ? onExperiences : null,
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -140,59 +134,42 @@ class _ToolButton extends StatelessWidget {
 
     return Tooltip(
       message: tooltip,
-      child: Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(15),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 40,
-              height: 40,
+              duration: const Duration(milliseconds: 150),
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
                 color: active
-                    ? Colors.white.withValues(alpha: 0.18)
+                    ? const Color(0x3367E8F9)
                     : emphasized
-                        ? Colors.amber.withValues(alpha: 0.13)
-                        : Colors.white.withValues(alpha: 0.045),
+                        ? const Color(0x229B8CFF)
+                        : Colors.white.withValues(alpha: 0.035),
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: active
-                      ? Colors.white.withValues(alpha: 0.32)
+                      ? const Color(0x8867E8F9)
                       : emphasized
-                          ? Colors.amber.withValues(alpha: 0.30)
-                          : Colors.white.withValues(alpha: 0.08),
-                  width: 1,
+                          ? const Color(0x559B8CFF)
+                          : Colors.white.withValues(alpha: 0.07),
                 ),
-                boxShadow: active
-                    ? [
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          blurRadius: 8,
-                          spreadRadius: 1,
-                        ),
-                      ]
-                    : emphasized && !disabled
-                        ? [
-                            BoxShadow(
-                              color: Colors.amber.withValues(alpha: 0.12),
-                              blurRadius: 8,
-                              spreadRadius: 1,
-                            ),
-                          ]
-                        : null,
               ),
               child: Icon(
                 icon,
-                size: 19,
+                size: 17,
                 color: disabled
-                    ? Colors.white.withValues(alpha: 0.25)
+                    ? Colors.white.withValues(alpha: 0.23)
                     : active
-                        ? Colors.white
+                        ? const Color(0xFF67E8F9)
                         : emphasized
-                            ? Colors.amber.shade200
-                            : Colors.white.withValues(alpha: 0.84),
+                            ? const Color(0xFFB7AFFF)
+                            : Colors.white.withValues(alpha: 0.82),
               ),
             ),
           ),
