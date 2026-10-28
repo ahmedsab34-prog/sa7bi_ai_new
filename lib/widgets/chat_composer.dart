@@ -1,11 +1,9 @@
+
 import 'package:flutter/material.dart';
 
 import '../interactive_experiences_screen.dart';
 import 'chat_toolbar.dart';
 
-/// شريط كتابة المحادثة وأدواتها.
-/// يحافظ على أدوات الوسائط الحالية ويضيف فتح الألعاب والتجارب،
-/// وتعود نتيجة التجربة إلى مربع الكتابة دون إرسالها تلقائيًا.
 class ChatComposer extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -58,10 +56,20 @@ class _ChatComposerState extends State<ChatComposer> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant ChatComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onTextChanged);
+      widget.controller.addListener(_onTextChanged);
+      _hasText = widget.controller.text.trim().isNotEmpty;
+    }
+  }
+
   void _onTextChanged() {
-    final hasText = widget.controller.text.trim().isNotEmpty;
-    if (hasText == _hasText || !mounted) return;
-    setState(() => _hasText = hasText);
+    final value = widget.controller.text.trim().isNotEmpty;
+    if (!mounted || value == _hasText) return;
+    setState(() => _hasText = value);
   }
 
   void _send() {
@@ -77,12 +85,12 @@ class _ChatComposerState extends State<ChatComposer> {
       MaterialPageRoute<void>(
         builder: (_) => InteractiveExperiencesScreen(
           onShareResult: (message) {
-            final text = message.trim();
-            if (text.isEmpty || !mounted) return;
+            final value = message.trim();
+            if (!mounted || value.isEmpty) return;
 
-            widget.controller.text = text;
+            widget.controller.text = value;
             widget.controller.selection = TextSelection.collapsed(
-              offset: widget.controller.text.length,
+              offset: value.length,
             );
             widget.focusNode.requestFocus();
           },
@@ -98,13 +106,12 @@ class _ChatComposerState extends State<ChatComposer> {
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+        padding: const EdgeInsets.fromLTRB(7, 3, 7, 5),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.25),
           border: Border(
             top: BorderSide(
-              color: Colors.white.withValues(alpha: 0.10),
-              width: 1,
+              color: Colors.white.withValues(alpha: 0.08),
             ),
           ),
         ),
@@ -117,71 +124,65 @@ class _ChatComposerState extends State<ChatComposer> {
               onVideo: disabled ? null : widget.onVideo,
               onVoice: disabled ? null : widget.onVoice,
               onText: disabled ? null : widget.onText,
-              onSpeechToText: disabled ? null : widget.onSpeechToText,
-              onImageGeneration: disabled ? null : widget.onImageGeneration,
+              onSpeechToText:
+                  disabled ? null : widget.onSpeechToText,
+              onImageGeneration:
+                  disabled ? null : widget.onImageGeneration,
               onExperiences: disabled ? null : _openExperiences,
               enabled: !disabled,
               isListening: widget.isListening,
               isGeneratingImage: widget.isGeneratingImage,
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 3),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
+                    duration: const Duration(milliseconds: 160),
                     constraints: const BoxConstraints(
-                      minHeight: 50,
-                      maxHeight: 135,
+                      minHeight: 42,
+                      maxHeight: 112,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.095),
-                      borderRadius: BorderRadius.circular(25),
+                      color: Colors.white.withValues(alpha: 0.075),
+                      borderRadius: BorderRadius.circular(21),
                       border: Border.all(
                         color: _hasText
-                            ? Colors.white.withValues(alpha: 0.24)
-                            : Colors.white.withValues(alpha: 0.13),
+                            ? const Color(0x6678E8F9)
+                            : Colors.white.withValues(alpha: 0.12),
                       ),
-                      boxShadow: _hasText
-                          ? [
-                              BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.05),
-                                blurRadius: 12,
-                                spreadRadius: 1,
-                              ),
-                            ]
-                          : null,
                     ),
                     child: TextField(
                       controller: widget.controller,
                       focusNode: widget.focusNode,
                       enabled: !disabled,
                       minLines: 1,
-                      maxLines: 5,
+                      maxLines: 4,
                       textInputAction: TextInputAction.newline,
                       keyboardType: TextInputType.multiline,
                       textDirection: TextDirection.rtl,
                       textAlign: TextAlign.right,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
-                        height: 1.35,
+                        fontSize: 14,
+                        height: 1.3,
                       ),
-                      cursorColor: Colors.white,
+                      cursorColor: const Color(0xFF67E8F9),
                       decoration: InputDecoration(
                         hintText: widget.isListening
                             ? 'جاري الاستماع...'
                             : 'اكتب رسالتك لصاحبي...',
                         hintTextDirection: TextDirection.rtl,
                         hintStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.48),
-                          fontSize: 15,
+                          color: Colors.white.withValues(alpha: 0.45),
+                          fontSize: 13,
                         ),
                         border: InputBorder.none,
+                        isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 13,
+                          horizontal: 14,
+                          vertical: 11,
                         ),
                       ),
                       onSubmitted: (_) {
@@ -190,56 +191,38 @@ class _ChatComposerState extends State<ChatComposer> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: disabled || !_hasText ? null : _send,
-                    borderRadius: BorderRadius.circular(25),
+                    borderRadius: BorderRadius.circular(22),
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 50,
-                      height: 50,
+                      duration: const Duration(milliseconds: 160),
+                      width: 42,
+                      height: 42,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: _hasText && !disabled
                             ? const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
                                 colors: [
-                                  Color(0xFFFFE08A),
-                                  Color(0xFFFFB347),
+                                  Color(0xFF67E8F9),
+                                  Color(0xFF9B8CFF),
                                 ],
                               )
-                            : const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0x22FFFFFF),
-                                  Color(0x0FFFFFFF),
-                                ],
-                              ),
-                        border: Border.all(
-                          color: _hasText && !disabled
-                              ? Colors.white.withValues(alpha: 0.28)
-                              : Colors.white.withValues(alpha: 0.08),
-                        ),
-                        boxShadow: _hasText && !disabled
-                            ? [
-                                BoxShadow(
-                                  color: const Color(0xFFFFD76A)
-                                      .withValues(alpha: 0.30),
-                                  blurRadius: 14,
-                                  spreadRadius: 1,
-                                ),
-                              ]
                             : null,
+                        color: _hasText && !disabled
+                            ? null
+                            : Colors.white.withValues(alpha: 0.07),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.10),
+                        ),
                       ),
                       child: widget.isLoading
                           ? const Padding(
-                              padding: EdgeInsets.all(14),
+                              padding: EdgeInsets.all(11),
                               child: CircularProgressIndicator(
-                                strokeWidth: 2.2,
+                                strokeWidth: 2,
                                 valueColor:
                                     AlwaysStoppedAnimation<Color>(
                                   Colors.white,
@@ -249,9 +232,9 @@ class _ChatComposerState extends State<ChatComposer> {
                           : Icon(
                               Icons.arrow_upward_rounded,
                               color: _hasText && !disabled
-                                  ? Colors.black
-                                  : Colors.white.withValues(alpha: 0.30),
-                              size: 26,
+                                  ? const Color(0xFF080B14)
+                                  : Colors.white.withValues(alpha: 0.35),
+                              size: 23,
                             ),
                     ),
                   ),
