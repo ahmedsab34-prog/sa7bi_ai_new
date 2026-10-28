@@ -1,12 +1,10 @@
+
 import 'package:flutter/material.dart';
 
 import '../services/chat_theme_service.dart';
 import 'chat_ai_avatar.dart';
 
-/// رأس المحادثة الديناميكي.
-///
-/// يعرض أيقونة المساعد وحالة المحادثة، مع إمكانية إخفاء
-/// اسم المساعد لمنع تكراره مع عنوان شريط التطبيق.
+/// رأس محادثة صغير يحافظ على الحالة والعنوان وأدوات التحكم.
 class ChatStatusHeader extends StatelessWidget {
   final ChatThemeData theme;
   final String title;
@@ -15,8 +13,6 @@ class ChatStatusHeader extends StatelessWidget {
   final bool canClear;
   final VoidCallback? onClear;
   final VoidCallback? onTap;
-
-  /// عند false يُخفى العنوان الداخلي ويظل مؤشر الحالة ظاهرًا.
   final bool showTitle;
 
   const ChatStatusHeader({
@@ -33,43 +29,37 @@ class ChatStatusHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final safeTitle =
-        title.trim().isEmpty ? 'صاحبي AI' : title.trim();
+    final safeTitle = title.trim().isEmpty
+        ? 'صاحبي AI'
+        : title.trim();
     final safeTopic = topic?.trim() ?? '';
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(15),
         child: Container(
-          margin: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+          margin: const EdgeInsets.fromLTRB(7, 4, 7, 2),
           padding: const EdgeInsets.symmetric(
-            horizontal: 11,
-            vertical: 9,
+            horizontal: 9,
+            vertical: 6,
           ),
           decoration: BoxDecoration(
             color: theme.aiBubble.withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(15),
             border: Border.all(
               color: theme.primary.withValues(alpha: 0.16),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: theme.glow.withValues(alpha: 0.06),
-                blurRadius: 15,
-                spreadRadius: 1,
-              ),
-            ],
           ),
           child: Row(
             children: [
               ChatAiAvatar(
                 theme: theme,
-                size: 42,
+                size: 34,
                 animated: !isLoading,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,12 +76,12 @@ class ChatStatusHeader extends StatelessWidget {
                               textDirection: TextDirection.rtl,
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 14,
+                                fontSize: 12.5,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 7),
+                          const SizedBox(width: 6),
                           _OnlineIndicator(
                             active: !isLoading,
                             color: theme.secondary,
@@ -105,21 +95,25 @@ class ChatStatusHeader extends StatelessWidget {
                             active: !isLoading,
                             color: theme.secondary,
                           ),
-                          const SizedBox(width: 7),
-                          Text(
-                            isLoading
-                                ? 'جاري تجهيز الرد'
-                                : 'المساعد جاهز',
-                            textDirection: TextDirection.rtl,
-                            style: TextStyle(
-                              color: theme.secondary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              isLoading
+                                  ? 'جاري تجهيز الرد'
+                                  : 'المساعد جاهز',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textDirection: TextDirection.rtl,
+                              style: TextStyle(
+                                color: theme.secondary,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    if (showTitle) const SizedBox(height: 3),
+                    if (showTitle) const SizedBox(height: 2),
                     _buildStatus(safeTopic),
                   ],
                 ),
@@ -139,10 +133,11 @@ class ChatStatusHeader extends StatelessWidget {
   Widget _buildStatus(String safeTopic) {
     if (isLoading) {
       return Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 12,
-            height: 12,
+            width: 10,
+            height: 10,
             child: CircularProgressIndicator(
               strokeWidth: 1.5,
               valueColor: AlwaysStoppedAnimation<Color>(
@@ -150,13 +145,17 @@ class ChatStatusHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
-          Text(
-            'بيفكر في الرد...',
-            textDirection: TextDirection.rtl,
-            style: TextStyle(
-              color: theme.secondary.withValues(alpha: 0.85),
-              fontSize: 10.5,
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              'بيفكر في الرد...',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textDirection: TextDirection.rtl,
+              style: TextStyle(
+                color: theme.secondary.withValues(alpha: 0.85),
+                fontSize: 9.5,
+              ),
             ),
           ),
         ],
@@ -168,10 +167,10 @@ class ChatStatusHeader extends StatelessWidget {
         children: [
           Icon(
             Icons.auto_awesome_rounded,
-            size: 12,
+            size: 10,
             color: theme.primary,
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: 4),
           Flexible(
             child: Text(
               'الموضوع: $safeTopic',
@@ -180,7 +179,7 @@ class ChatStatusHeader extends StatelessWidget {
               textDirection: TextDirection.rtl,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.58),
-                fontSize: 10.5,
+                fontSize: 9.5,
               ),
             ),
           ),
@@ -190,10 +189,12 @@ class ChatStatusHeader extends StatelessWidget {
 
     return Text(
       'جاهز للكلام معاك',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       textDirection: TextDirection.rtl,
       style: TextStyle(
         color: Colors.white.withValues(alpha: 0.52),
-        fontSize: 10.5,
+        fontSize: 9.5,
       ),
     );
   }
@@ -211,8 +212,8 @@ class _OnlineIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 7,
-      height: 7,
+      width: 6,
+      height: 6,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: active
@@ -221,8 +222,8 @@ class _OnlineIndicator extends StatelessWidget {
         boxShadow: active
             ? [
                 BoxShadow(
-                  color: color.withValues(alpha: 0.55),
-                  blurRadius: 7,
+                  color: color.withValues(alpha: 0.45),
+                  blurRadius: 5,
                 ),
               ]
             : null,
@@ -248,12 +249,12 @@ class _ClearButton extends StatelessWidget {
       icon: Icon(
         Icons.delete_outline_rounded,
         color: color.withValues(alpha: 0.72),
-        size: 21,
+        size: 18,
       ),
-      padding: const EdgeInsets.all(6),
+      padding: const EdgeInsets.all(3),
       constraints: const BoxConstraints(
-        minWidth: 36,
-        minHeight: 36,
+        minWidth: 30,
+        minHeight: 30,
       ),
     );
   }
