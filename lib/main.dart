@@ -19,6 +19,7 @@ import 'services/ai_request_service.dart';
 import 'services/credits_service.dart';
 import 'services/profile_service.dart';
 import 'services/sa7bi_network_client.dart';
+import 'theme/sa7bi_theme.dart';
 import 'widgets/khalasana_portal.dart';
 
 void main() {
@@ -78,16 +79,7 @@ class Sa7biAiApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'صاحبي AI',
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF070A12),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFFFFD76A),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-        fontFamily: 'sans',
-      ),
+      theme: Sa7biTheme.dark(),
       routes: {
         '/diagnostics': (_) => const AppDiagnosticsScreen(),
       },
@@ -164,7 +156,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
     final isChatTab = index == 1;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF070A12),
+      backgroundColor: Sa7biTheme.background,
       body: SafeArea(
         child: Stack(
           children: [
@@ -186,7 +178,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             if (!isChatTab)
               Positioned(
                 left: 12,
-                bottom: 92,
+                bottom: 78,
                 child: Material(
                   color: Colors.transparent,
                   child: Tooltip(
@@ -195,14 +187,15 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                       onTap: openDiagnostics,
                       borderRadius: BorderRadius.circular(24),
                       child: Container(
-                        width: 46,
-                        height: 46,
+                        width: 40,
+                        height: 40,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF11141D)
-                              .withOpacity(0.96),
+                          color: Sa7biTheme.surface.withValues(
+                            alpha: 0.96,
+                          ),
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: const Color(0x55FFD76A),
+                            color: Sa7biTheme.border,
                           ),
                           boxShadow: const [
                             BoxShadow(
@@ -214,8 +207,8 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                         ),
                         child: const Icon(
                           Icons.health_and_safety_outlined,
-                          color: Color(0xFFFFD76A),
-                          size: 23,
+                          color: Sa7biTheme.cyan,
+                          size: 20,
                         ),
                       ),
                     ),
@@ -223,10 +216,10 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 ),
               ),
 
-            // خلصانة AI متاحة في كل التبويبات، بما فيها الشات.
+            // روبوت خلصانة العائم متاح في كل التبويبات.
             Positioned(
-              right: 12,
-              bottom: isChatTab ? 112 : 92,
+              right: 8,
+              bottom: isChatTab ? 100 : 76,
               child: KhalasanaPortal(
                 onTap: openKhalasana,
               ),
@@ -235,15 +228,17 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        height: 62,
-        backgroundColor: const Color(0xFF11141D),
-        indicatorColor: const Color(0x3348D8FF),
+        height: 60,
+        backgroundColor: Sa7biTheme.surface,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: Sa7biTheme.cyan.withValues(alpha: 0.12),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         selectedIndex: index,
         onDestinationSelected: (value) {
           if (!mounted) return;
 
           if (value == index) {
-            // الضغط على الرئيسية وهي محددة يعيد تحميل الأخبار.
+            // الضغط على الرئيسية مرة أخرى يطلب تحديث الأخبار.
             if (value == 0) {
               unawaited(_homeKey.currentState?.refreshNews());
             }
@@ -254,23 +249,23 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
+            icon: Icon(Icons.home_outlined, size: 20),
+            selectedIcon: Icon(Icons.home_rounded, size: 21),
             label: 'الرئيسية',
           ),
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded),
-            selectedIcon: Icon(Icons.chat_rounded),
+            icon: Icon(Icons.chat_bubble_outline_rounded, size: 20),
+            selectedIcon: Icon(Icons.chat_rounded, size: 21),
             label: 'الشات',
           ),
           NavigationDestination(
-            icon: Icon(Icons.sports_esports_outlined),
-            selectedIcon: Icon(Icons.sports_esports_rounded),
+            icon: Icon(Icons.sports_esports_outlined, size: 20),
+            selectedIcon: Icon(Icons.sports_esports_rounded, size: 21),
             label: 'الألعاب',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
+            icon: Icon(Icons.person_outline_rounded, size: 20),
+            selectedIcon: Icon(Icons.person_rounded, size: 21),
             label: 'حسابي',
           ),
         ],
@@ -296,12 +291,12 @@ class MiniAudioPlayer extends StatelessWidget {
         return Material(
           color: Colors.transparent,
           child: Container(
-            height: 62,
+            height: 56,
             padding: const EdgeInsets.symmetric(horizontal: 7),
             decoration: BoxDecoration(
-              color: const Color(0xFF121720).withOpacity(0.98),
-              borderRadius: BorderRadius.circular(19),
-              border: Border.all(color: const Color(0x55FFD76A)),
+              color: Sa7biTheme.surface.withValues(alpha: 0.98),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Sa7biTheme.border),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x66000000),
@@ -319,20 +314,16 @@ class MiniAudioPlayer extends StatelessWidget {
                     ),
                   ),
                   child: Container(
-                    width: 44,
-                    height: 44,
+                    width: 38,
+                    height: 38,
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [
-                          Color(0xFFFFD76A),
-                          Color(0xFF7164FF),
-                        ],
-                      ),
+                      gradient: Sa7biTheme.brandGradient,
                     ),
                     child: const Icon(
                       Icons.graphic_eq_rounded,
-                      color: Colors.black,
+                      color: Color(0xFF08111C),
+                      size: 21,
                     ),
                   ),
                 ),
@@ -354,6 +345,7 @@ class MiniAudioPlayer extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
+                            color: Sa7biTheme.textPrimary,
                             fontWeight: FontWeight.w900,
                             fontSize: 11,
                           ),
@@ -364,7 +356,7 @@ class MiniAudioPlayer extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Colors.white54,
+                            color: Sa7biTheme.textSecondary,
                             fontSize: 9,
                           ),
                         ),
@@ -380,8 +372,8 @@ class MiniAudioPlayer extends StatelessWidget {
                     return IconButton(
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(
-                        minWidth: 40,
-                        minHeight: 40,
+                        minWidth: 38,
+                        minHeight: 38,
                       ),
                       onPressed: () {
                         if (playing) {
@@ -394,8 +386,8 @@ class MiniAudioPlayer extends StatelessWidget {
                         playing
                             ? Icons.pause_rounded
                             : Icons.play_arrow_rounded,
-                        color: const Color(0xFFFFD76A),
-                        size: 27,
+                        color: Sa7biTheme.cyan,
+                        size: 25,
                       ),
                     );
                   },
@@ -403,14 +395,14 @@ class MiniAudioPlayer extends StatelessWidget {
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
-                    minWidth: 34,
-                    minHeight: 40,
+                    minWidth: 30,
+                    minHeight: 38,
                   ),
                   onPressed: () => handler.stop(),
                   icon: const Icon(
                     Icons.close_rounded,
-                    color: Colors.white54,
-                    size: 19,
+                    color: Sa7biTheme.textSecondary,
+                    size: 18,
                   ),
                 ),
               ],
