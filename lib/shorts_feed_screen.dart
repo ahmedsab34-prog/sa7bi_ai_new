@@ -1,13 +1,20 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'ai_service.dart';
+import 'widgets/app_header.dart';
 
 class ShortsFeedScreen extends StatefulWidget {
-  const ShortsFeedScreen({super.key});
+  final VoidCallback? onProfileTap;
+  final VoidCallback? onAudioTap;
+
+  const ShortsFeedScreen({
+    super.key,
+    this.onProfileTap,
+    this.onAudioTap,
+  });
 
   @override
   State<ShortsFeedScreen> createState() => _ShortsFeedScreenState();
@@ -116,38 +123,64 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF05070D),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF090D17),
-          elevation: 0,
-          centerTitle: true,
-          title: const Text(
-            'ريلز صاحبي',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          actions: [
-            IconButton(
-              tooltip: 'تحديث الفيديوهات',
-              onPressed: _refreshing ? null : _loadShorts,
-              icon: _refreshing
-                  ? const SizedBox(
-                      width: 19,
-                      height: 19,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFFFFD76A),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(
+                  10,
+                  4,
+                  10,
+                  2,
+                ),
+                child: AppHeader(
+                  onProfileTap: widget.onProfileTap,
+                  onAudioTap: widget.onAudioTap,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(
+                  14,
+                  0,
+                  8,
+                  3,
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'ريلز صاحبي',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                        ),
                       ),
-                    )
-                  : const Icon(
-                      Icons.refresh_rounded,
-                      color: Color(0xFFFFD76A),
                     ),
-            ),
-          ],
+                    IconButton(
+                      tooltip: 'تحديث الفيديوهات',
+                      onPressed: _refreshing ? null : _loadShorts,
+                      icon: _refreshing
+                          ? const SizedBox(
+                              width: 19,
+                              height: 19,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFFFFD76A),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.refresh_rounded,
+                              color: Color(0xFFFFD76A),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(child: _buildBody()),
+            ],
+          ),
         ),
-        body: _buildBody(),
       ),
     );
   }
@@ -595,7 +628,7 @@ class _ShortVideoWebView extends StatefulWidget {
 }
 
 class _ShortVideoWebViewState extends State<_ShortVideoWebView> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
 
   int _progress = 0;
   String? _error;
@@ -603,57 +636,69 @@ class _ShortVideoWebViewState extends State<_ShortVideoWebView> {
   @override
   void initState() {
     super.initState();
+    unawaited(_loadInitialPage());
+  }
 
+  Future<void> _loadInitialPage() async {
     final uri = Uri.tryParse(widget.url);
     if (uri == null ||
         !uri.hasAuthority ||
+        uri.host.isEmpty ||
         (uri.scheme != 'https' && uri.scheme != 'http')) {
-      _error = 'رابط الفيديو غير صالح.';
-      _progress = 100;
+      if (!mounted) return;
+      setState(() {
+        _progress = 100;
+        _error = 'رابط الفيديو غير صالح.';
+      });
       return;
     }
 
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.black)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onProgress: (value) {
-            if (!mounted) return;
-            setState(() => _progress = value);
-          },
-          onPageFinished: (_) {
-            if (!mounted) return;
-            setState(() {
-              _progress = 100;
-              _error = null;
-            });
-          },
-          onWebResourceError: (error) {
-            if (!mounted || error.isForMainFrame == false) return;
-            setState(() {
-              _progress = 100;
-              _error = 'تعذر فتح صفحة الفيديو. تحقق من الاتصال أو جرّب رابطًا آخر.';
-            });
-          },
-          onNavigationRequest: (request) {
-            final target = Uri.tryParse(request.url);
-            if (target == null ||
-                !target.hasAuthority ||
-                (target.scheme != 'https' && target.scheme != 'http')) {
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
-          },
-        ),
-      );
-
-    unawaited(_loadInitialPage(uri));
-  }
-
-  Future<void> _loadInitialPage(Uri uri) async {
     try {
-      await _controller.loadRequest(uri);
+      final controller = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.black)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onProgress: (value) {
+              if (!mounted) return;
+              setState(() => _progress = value);
+            },
+            onPageFinished: (_) {
+              if (!mounted) return;
+              setState(() {
+                _progress = 100;
+                _error = null;
+              });
+            },
+            onWebResourceError: (error) {
+              if (!mounted || error.isForMainFrame == false) return;
+              setState(() {
+                _progress = 100;
+                _error =
+                    'تعذر فتح صفحة الفيديو. تحقق من الاتصال أو جرّب رابطًا آخر.';
+              });
+            },
+            onNavigationRequest: (request) {
+              final target = Uri.tryParse(request.url);
+              if (target == null ||
+                  !target.hasAuthority ||
+                  target.host.isEmpty ||
+                  (target.scheme != 'https' && target.scheme != 'http')) {
+                return NavigationDecision.prevent;
+              }
+              return NavigationDecision.navigate;
+            },
+          ),
+        );
+
+      _controller = controller;
+      if (mounted) {
+        setState(() {
+          _progress = 0;
+          _error = null;
+        });
+      }
+      await controller.loadRequest(uri);
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -686,7 +731,7 @@ class _ShortVideoWebViewState extends State<_ShortVideoWebView> {
                 _error = null;
                 _progress = 0;
               });
-              unawaited(_controller.reload());
+              unawaited(_loadInitialPage());
             },
             icon: const Icon(
               Icons.refresh_rounded,
@@ -697,8 +742,14 @@ class _ShortVideoWebViewState extends State<_ShortVideoWebView> {
       ),
       body: Stack(
         children: [
-          if (_error == null)
-            WebViewWidget(controller: _controller)
+          if (_error == null && _controller != null)
+            WebViewWidget(controller: _controller!)
+          else if (_error == null)
+            const Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFFFFD76A),
+              ),
+            )
           else
             Center(
               child: Padding(
@@ -727,7 +778,7 @@ class _ShortVideoWebViewState extends State<_ShortVideoWebView> {
                           _error = null;
                           _progress = 0;
                         });
-                        unawaited(_controller.reload());
+                        unawaited(_loadInitialPage());
                       },
                       icon: const Icon(Icons.refresh_rounded),
                       label: const Text('إعادة المحاولة'),
