@@ -16,15 +16,11 @@ class AudioCenterWithHeader extends StatelessWidget {
   });
 
   void _openProfile(BuildContext context) {
-    // أغلق صفحة مركز الصوت أولًا، ثم انتقل إلى حسابي.
     Navigator.of(context).pop();
     onProfileTap();
   }
 
-  void _showMessage(
-    BuildContext context,
-    String message,
-  ) {
+  void _showMessage(BuildContext context, String message) {
     if (!context.mounted) return;
 
     ScaffoldMessenger.of(context)
@@ -44,10 +40,7 @@ class AudioCenterWithHeader extends StatelessWidget {
     final handler = AudioController.handler;
 
     if (handler == null || handler.mediaItem.value == null) {
-      _showMessage(
-        context,
-        'افتح قسمًا واختر مقطعًا صوتيًا أولًا.',
-      );
+      _showMessage(context, 'افتح قسمًا واختر مقطعًا صوتيًا أولًا.');
       return;
     }
 
@@ -58,17 +51,13 @@ class AudioCenterWithHeader extends StatelessWidget {
     }
   }
 
-  Future<void> _pickLocalAudio(
-    BuildContext context,
-  ) async {
+  Future<void> _pickLocalAudio(BuildContext context) async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.audio,
       );
 
-      if (!context.mounted ||
-          result == null ||
-          result.files.isEmpty) {
+      if (!context.mounted || result == null || result.files.isEmpty) {
         return;
       }
 
@@ -76,10 +65,7 @@ class AudioCenterWithHeader extends StatelessWidget {
       final path = file.path;
 
       if (path == null || path.trim().isEmpty) {
-        _showMessage(
-          context,
-          'تعذر الوصول إلى الملف الصوتي.',
-        );
+        _showMessage(context, 'تعذر الوصول إلى الملف الصوتي.');
         return;
       }
 
@@ -90,18 +76,10 @@ class AudioCenterWithHeader extends StatelessWidget {
       );
 
       if (!context.mounted) return;
-
-      _showMessage(
-        context,
-        'بدأ تشغيل ${file.name}',
-      );
+      _showMessage(context, 'بدأ تشغيل ${file.name}');
     } catch (_) {
       if (!context.mounted) return;
-
-      _showMessage(
-        context,
-        'تعذر فتح الملف الصوتي أو تشغيله.',
-      );
+      _showMessage(context, 'تعذر فتح الملف الصوتي أو تشغيله.');
     }
   }
 
@@ -116,9 +94,6 @@ class AudioCenterWithHeader extends StatelessWidget {
               onProfileTap: () => _openProfile(context),
               onAudioTap: () => _toggleAudio(context),
             ),
-
-            // شريط مركز الصوت لا يكرر الهيدر؛ يحتوي فقط
-            // على اسم القسم وزر اختيار ملف من الهاتف.
             Padding(
               padding: const EdgeInsetsDirectional.fromSTEB(
                 14,
@@ -150,11 +125,8 @@ class AudioCenterWithHeader extends StatelessWidget {
                 ],
               ),
             ),
-
             const Expanded(
-              child: AudioCenterScreen(
-                showAppBar: false,
-              ),
+              child: AudioCenterScreen(showAppBar: false),
             ),
           ],
         ),
