@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -256,7 +255,10 @@ class HomeScreenState extends State<HomeScreen> {
   void _openReels() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => const ShortsFeedScreen(),
+        builder: (_) => ShortsFeedScreen(
+          onProfileTap: widget.onProfile,
+          onAudioTap: widget.onAudio,
+        ),
       ),
     );
   }
@@ -767,9 +769,7 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
           border: Border.all(color: const Color(0x22FFFFFF)),
         ),
         child: Text(
-          _failed
-              ? 'الإعلانات غير متاحة حاليًا'
-              : 'مساحة إعلانية',
+          _failed ? 'الإعلانات غير متاحة حاليًا' : 'مساحة إعلانية',
           style: const TextStyle(
             color: Colors.white38,
             fontSize: 10,
