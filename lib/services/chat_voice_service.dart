@@ -9,14 +9,8 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../audio_player_service.dart';
 
-/// خدمة صوت المحادثة في صاحبي AI.
-///
-/// - التعرف على الكلام Speech To Text.
-/// - قراءة النصوص العربية بصوت الهاتف.
-/// - تشغيل القراءة عبر AudioService عند نجاح تحويل النص
-///   إلى ملف صوتي؛ حتى تستمر في الخلفية.
-/// - إيقاف الصوت أثناء التقاط الميكروفون واستئنافه بعده.
-/// - عدم إيقاف جلسة AudioService عند التخلص من الشاشة.
+/// خدمة الصوت الخاصة بالمحادثة.
+/// تدير التعرف على الكلام، وقراءة النص، والتكامل مع مشغل الصوت المركزي.
 class ChatVoiceService {
   ChatVoiceService({
     SpeechToText? speechToText,
@@ -29,7 +23,6 @@ class ChatVoiceService {
 
   bool _speechInitialized = false;
   bool _ttsInitialized = false;
-
   bool _isListening = false;
   bool _isSpeaking = false;
   bool _nativeTtsActive = false;
@@ -38,8 +31,7 @@ class ChatVoiceService {
   String _ttsLanguage = 'ar-EG';
   String? _activeTtsPath;
 
-  StreamSubscription<PlaybackState>?
-      _audioPlaybackSubscription;
+  StreamSubscription<PlaybackState>? _audioPlaybackSubscription;
 
   bool get isListening => _isListening;
   bool get isSpeaking => _isSpeaking;
@@ -51,9 +43,7 @@ class ChatVoiceService {
   // ============================================================
 
   Future<bool> initializeSpeech() async {
-    if (_speechInitialized) {
-      return true;
-    }
+    if (_speechInitialized) return true;
 
     try {
       final available = await _speech.initialize(
@@ -63,11 +53,7 @@ class ChatVoiceService {
       );
 
       _speechInitialized = available;
-
-      if (!available) {
-        _isListening = false;
-      }
-
+      if (!available) _isListening = false;
       return available;
     } catch (_) {
       _speechInitialized = false;
@@ -81,10 +67,7 @@ class ChatVoiceService {
 
     if (normalized == 'listening') {
       _isListening = true;
-      return;
-    }
-
-    if (normalized == 'notlistening' ||
+    } else if (normalized == 'notlistening' ||
         normalized == 'not listening' ||
         normalized == 'done') {
       _isListening = false;
@@ -97,10 +80,7 @@ class ChatVoiceService {
   }
 
   Future<bool> startListening({
-    required void Function(
-      String text,
-      bool isFinal,
-    ) onResult,
+    required void Function(String text, bool isFinal) onResult,
     String localeId = 'ar-EG',
   }) async {
     try {
@@ -108,25 +88,20 @@ class ChatVoiceService {
         await stopListening();
       }
 
-      // نوقف TTS الأصلي فقط إن كان هو الذي يتحدث.
-      // إذا كانت القراءة الحالية من AudioService،
-      // نترك المشغّل المركزي يدير الإيقاف والاستئناف.
       if (_nativeTtsActive) {
         await _tts.stop();
         _nativeTtsActive = false;
         _isSpeaking = false;
       }
 
-      // إيقاف الصوت الجاري مؤقتًا قبل فتح الميكروفون.
+      // يوقف المشغل مؤقتًا أثناء فتح الميكروفون ثم يعيده حسب حالته.
       await AudioController.beginMicrophoneCapture();
 
+      final handler = AudioController.handler;
       _microphoneCaptureStarted =
-          AudioController.handler != null &&
-          AudioController.handler!
-              .isMicrophoneCaptureActive;
+          handler != null && handler.isMicrophoneCaptureActive;
 
       final initialized = await initializeSpeech();
-
       if (!initialized) {
         await _finishMicrophoneCapture();
         return false;
@@ -145,24 +120,19 @@ class ChatVoiceService {
         partialResults: true,
         cancelOnError: true,
         onResult: (result) {
-          final text = result.recognizedWords.trim();
+          final recognized = result.recognizedWords.trim();
 
           if (!result.finalResult) {
-            onResult(text, false);
+            onResult(recognized, false);
             return;
           }
 
-          if (finalResultHandled) {
-            return;
-          }
-
+          if (finalResultHandled) return;
           finalResultHandled = true;
 
-          // ننهي الميكروفون أولًا ثم نسلم النتيجة النهائية.
-          // هذا يمنع بدء رد AI بينما جلسة التقاط الصوت معلقة.
           unawaited(
             _deliverFinalResult(
-              text: text,
+              text: recognized,
               onResult: onResult,
             ),
           );
@@ -179,13 +149,9 @@ class ChatVoiceService {
 
   Future<void> _deliverFinalResult({
     required String text,
-    required void Function(
-      String text,
-      bool isFinal,
-    ) onResult,
+    required void Function(String text, bool isFinal) onResult,
   }) async {
     await stopListening();
-
     onResult(text, true);
   }
 
@@ -195,7 +161,7 @@ class ChatVoiceService {
         await _speech.stop();
       }
     } catch (_) {
-      // لا نسمح بخطأ الميكروفون بإغلاق التطبيق.
+      // خطأ إيقاف الميكروفون لا يجب أن يغلق التطبيق.
     } finally {
       _isListening = false;
       await _finishMicrophoneCapture();
@@ -216,9 +182,7 @@ class ChatVoiceService {
   }
 
   Future<void> _finishMicrophoneCapture() async {
-    if (!_microphoneCaptureStarted) {
-      return;
-    }
+    if (!_microphoneCaptureStarted) return;
 
     _microphoneCaptureStarted = false;
 
@@ -230,10 +194,7 @@ class ChatVoiceService {
   }
 
   Future<bool> toggleListening({
-    required void Function(
-      String text,
-      bool isFinal,
-    ) onResult,
+    required void Function(String text, bool isFinal) onResult,
     String localeId = 'ar-EG',
   }) async {
     if (_isListening || _speech.isListening) {
@@ -252,13 +213,10 @@ class ChatVoiceService {
   // ============================================================
 
   Future<bool> initializeTts() async {
-    if (_ttsInitialized) {
-      return true;
-    }
+    if (_ttsInitialized) return true;
 
     try {
       await _tts.awaitSpeakCompletion(false);
-
       await _tts.setLanguage(_ttsLanguage);
       await _tts.setSpeechRate(0.48);
       await _tts.setPitch(1.0);
@@ -296,17 +254,10 @@ class ChatVoiceService {
 
   Future<bool> setLanguage(String language) async {
     final clean = language.trim();
-
-    if (clean.isEmpty) {
-      return false;
-    }
+    if (clean.isEmpty) return false;
 
     try {
-      final initialized = await initializeTts();
-
-      if (!initialized) {
-        return false;
-      }
+      if (!await initializeTts()) return false;
 
       await _tts.setLanguage(clean);
       _ttsLanguage = clean;
@@ -324,81 +275,62 @@ class ChatVoiceService {
     double? volume,
   }) async {
     final cleaned = text.trim();
-
-    if (cleaned.isEmpty) {
-      return false;
-    }
+    if (cleaned.isEmpty) return false;
 
     try {
       if (_isListening || _speech.isListening) {
         await stopListening();
       }
 
-      final initialized = await initializeTts();
-
-      if (!initialized) {
-        return false;
-      }
-
-      if (language != null && language.trim().isNotEmpty) {
-        final cleanLanguage = language.trim();
-
+      // أوقف أي قراءة أصلية سابقة قبل تبديل المصدر.
+      if (_nativeTtsActive) {
         try {
-          await _tts.setLanguage(cleanLanguage);
-          _ttsLanguage = cleanLanguage;
-        } catch (_) {
-          // نستخدم اللغة السابقة عند عدم توافر المطلوبة.
-        }
+          await _tts.stop();
+        } catch (_) {}
+        _nativeTtsActive = false;
       }
 
-      if (rate != null) {
-        await _tts.setSpeechRate(rate);
-      }
-
-      if (pitch != null) {
-        await _tts.setPitch(pitch);
-      }
-
-      if (volume != null) {
-        await _tts.setVolume(volume);
-      }
-
-      // لا نوقف موسيقى أخرى بالخطأ إذا كان مصدرها مختلفًا.
-      // نوقف فقط قراءة TTS السابقة إذا كانت هي المقطع الحالي.
-      final oldPath = _activeTtsPath;
-      final handler = AudioController.handler;
-
-      if (oldPath != null &&
-          handler != null &&
-          handler.mediaItem.value?.id == oldPath) {
-        await handler.stop();
+      // التعديل الأساسي: إيقاف المصدر المركزي الجاري أيضًا،
+      // سواء كان قرآنًا أو راديو أو بودكاست أو ملفًا صوتيًا.
+      // يتم ذلك قبل انتظار توليد ملف القراءة الجديد.
+      try {
+        await AudioController.stop();
+      } catch (error, stackTrace) {
+        debugPrint('Stopping previous audio before speech failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
       }
 
       _activeTtsPath = null;
       await _audioPlaybackSubscription?.cancel();
       _audioPlaybackSubscription = null;
+      _isSpeaking = false;
 
-      if (_nativeTtsActive) {
-        await _tts.stop();
-        _nativeTtsActive = false;
+      if (!await initializeTts()) return false;
+
+      if (language != null && language.trim().isNotEmpty) {
+        final cleanLanguage = language.trim();
+        try {
+          await _tts.setLanguage(cleanLanguage);
+          _ttsLanguage = cleanLanguage;
+        } catch (_) {
+          // الاحتفاظ باللغة الحالية إذا لم تتوفر اللغة المطلوبة.
+        }
       }
 
-      // محاولة إنشاء ملف صوتي مؤقت لتشغيله داخل AudioService.
+      if (rate != null) await _tts.setSpeechRate(rate);
+      if (pitch != null) await _tts.setPitch(pitch);
+      if (volume != null) await _tts.setVolume(volume);
+
       final extension = Platform.isIOS ? 'caf' : 'wav';
       final fileName =
           'sa7bi_tts_${DateTime.now().microsecondsSinceEpoch}.$extension';
-
       final filePath = [
         Directory.systemTemp.path,
         fileName,
       ].join(Platform.pathSeparator);
 
       try {
-        await _tts.synthesizeToFile(
-          cleaned,
-          filePath,
-          true,
-        );
+        await _tts.synthesizeToFile(cleaned, filePath, true);
 
         final ready = await _waitForAudioFile(filePath);
 
@@ -410,69 +342,43 @@ class ChatVoiceService {
           );
 
           final activeHandler = AudioController.handler;
-
           if (activeHandler != null) {
             _activeTtsPath = filePath;
             _isSpeaking = true;
 
-            await _watchAudioPlayback(
-              activeHandler,
-              filePath,
-            );
-
+            await _watchAudioPlayback(activeHandler, filePath);
             return true;
           }
         }
 
-        // إزالة الملف المؤقت غير الصالح عند فشل التوليد.
-        final failedFile = File(filePath);
-
-        if (await failedFile.exists()) {
-          await failedFile.delete();
-        }
+        await _deleteTemporaryFile(filePath);
       } catch (error) {
         debugPrint('TTS file synthesis failed: $error');
-
-        try {
-          final failedFile = File(filePath);
-
-          if (await failedFile.exists()) {
-            await failedFile.delete();
-          }
-        } catch (_) {}
+        await _deleteTemporaryFile(filePath);
       }
 
-      // مسار احتياطي إذا كان محرك الهاتف لا يدعم إنشاء الملف.
-      // هذا المسار قد لا يوفر تحكم شاشة القفل مثل AudioService.
-      final result = await _speakNatively(cleaned);
-
-      return result;
+      // احتياطي للأجهزة التي لا تدعم إنشاء ملف TTS.
+      return await _speakNatively(cleaned);
     } catch (error, stackTrace) {
       debugPrint('ChatVoiceService speak failed: $error');
       debugPrintStack(stackTrace: stackTrace);
-
       _isSpeaking = false;
       _nativeTtsActive = false;
       return false;
     }
   }
 
-  Future<bool> _waitForAudioFile(
-    String path,
-  ) async {
+  Future<bool> _waitForAudioFile(String path) async {
     final file = File(path);
 
-    // بعض محركات TTS تحتاج وقتًا قصيرًا لإنهاء كتابة الملف.
     for (var attempt = 0; attempt < 60; attempt++) {
       try {
-        if (await file.exists()) {
-          final length = await file.length();
-
-          if (length > 44) {
-            return true;
-          }
+        if (await file.exists() && await file.length() > 44) {
+          return true;
         }
-      } catch (_) {}
+      } catch (_) {
+        // الملف قد يكون ما زال قيد الإنشاء.
+      }
 
       await Future<void>.delayed(
         const Duration(milliseconds: 100),
@@ -482,34 +388,38 @@ class ChatVoiceService {
     return false;
   }
 
+  Future<void> _deleteTemporaryFile(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (_) {
+      // تعذر حذف ملف مؤقت لا يجب أن يمنع القراءة الاحتياطية.
+    }
+  }
+
   Future<void> _watchAudioPlayback(
     Sa7biAudioHandler handler,
     String path,
   ) async {
     await _audioPlaybackSubscription?.cancel();
 
-    _audioPlaybackSubscription =
-        handler.playbackState.listen(
+    _audioPlaybackSubscription = handler.playbackState.listen(
       (state) {
-        if (_activeTtsPath != path) {
-          return;
-        }
+        if (_activeTtsPath != path) return;
 
         final currentItem = handler.mediaItem.value;
 
         if (currentItem?.id != path) {
-          // بدأ مصدر صوتي آخر؛ لا نعتبره قراءة TTS.
+          // تم تشغيل مصدر آخر، فلا ننسبه إلى قراءة TTS.
           _activeTtsPath = null;
           _isSpeaking = false;
-
-          unawaited(
-            _audioPlaybackSubscription?.cancel(),
-          );
+          unawaited(_audioPlaybackSubscription?.cancel());
           return;
         }
 
-        if (state.processingState ==
-            AudioProcessingState.completed) {
+        if (state.processingState == AudioProcessingState.completed) {
           _isSpeaking = false;
           return;
         }
@@ -523,39 +433,30 @@ class ChatVoiceService {
     );
   }
 
-  Future<bool> _speakNatively(
-    String text,
-  ) async {
+  Future<bool> _speakNatively(String text) async {
     try {
       _activeTtsPath = null;
-
       await _tts.stop();
 
       _nativeTtsActive = true;
       _isSpeaking = true;
 
-      final result = await _tts.speak(
-        text,
-        focus: true,
-      );
+      final result = await _tts.speak(text, focus: true);
 
       if (result is bool) {
         if (!result) {
           _nativeTtsActive = false;
           _isSpeaking = false;
         }
-
         return result;
       }
 
       if (result is int) {
         final success = result == 1;
-
         if (!success) {
           _nativeTtsActive = false;
           _isSpeaking = false;
         }
-
         return success;
       }
 
@@ -572,15 +473,15 @@ class ChatVoiceService {
     final handler = AudioController.handler;
 
     try {
-      // نوقف المشغّل المركزي فقط عندما يكون المقطع الحالي
-      // هو ملف TTS الذي أنشأته هذه الخدمة.
+      // لا نوقف القرآن أو الراديو إذا كانا المصدر الحالي.
+      // نوقف المشغل المركزي هنا فقط إذا كان يشغل ملف TTS الخاص بنا.
       if (activePath != null &&
           handler != null &&
           handler.mediaItem.value?.id == activePath) {
         await handler.stop();
       }
     } catch (_) {
-      // نتعامل مع خطأ الإيقاف دون إغلاق الشاشة.
+      // نتعامل مع أخطاء الإيقاف بأمان.
     }
 
     try {
@@ -644,11 +545,8 @@ class ChatVoiceService {
     await stopSpeaking();
   }
 
-  /// التخلص من خدمة الشاشة لا يوقف AudioService.
-  ///
-  /// هذه نقطة مهمة: إذا خرج المستخدم من مركز الصوت أو غادر
-  /// شاشة المحادثة، فإن المقطع الحالي يظل تحت إدارة المشغّل
-  /// المركزي، ويمكن التحكم فيه من إشعار الوسائط.
+  /// لا توقف هذه الدالة جلسة AudioService عند مغادرة الشاشة،
+  /// حتى يستمر المقطع الحالي في الخلفية.
   Future<void> dispose() async {
     await stopListening();
 
