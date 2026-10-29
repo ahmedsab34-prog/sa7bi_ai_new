@@ -1,4 +1,3 @@
-
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -9,6 +8,7 @@ import 'config/app_config.dart';
 import 'config/credits_config.dart';
 import 'config/service_keys.dart';
 import 'models/chat_message.dart';
+import 'profile_screen.dart';
 import 'services/ai_request_service.dart';
 import 'services/chat_controller.dart';
 import 'services/chat_image_service.dart';
@@ -18,6 +18,8 @@ import 'services/credits_service.dart';
 import 'services/image_intent_detector.dart';
 import 'services/profile_service.dart';
 import 'services/video_analysis_service.dart';
+import 'widgets/audio_center_with_header.dart';
+import 'widgets/app_header.dart';
 import 'widgets/chat_screen_body.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -25,11 +27,16 @@ class ChatScreen extends StatefulWidget {
   final String? serviceContext;
   final String? serviceKey;
 
+  final VoidCallback? onProfileTap;
+  final VoidCallback? onAudioTap;
+
   const ChatScreen({
     super.key,
     this.serviceTitle,
     this.serviceContext,
     this.serviceKey,
+    this.onProfileTap,
+    this.onAudioTap,
   });
 
   @override
@@ -200,6 +207,47 @@ class _ChatScreenState extends State<ChatScreen> {
     _chatController.dispose();
 
     super.dispose();
+  }
+
+  // ============================================================
+  // SHARED HEADER NAVIGATION
+  // ============================================================
+
+  void _openProfile() {
+    final callback = widget.onProfileTap;
+
+    if (callback != null) {
+      callback();
+      return;
+    }
+
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (profileContext) => ProfileScreen(
+          onProfileTap: () {
+            Navigator.of(profileContext).maybePop();
+          },
+          onAudio: _openAudioCenter,
+        ),
+      ),
+    );
+  }
+
+  void _openAudioCenter() {
+    final callback = widget.onAudioTap;
+
+    if (callback != null) {
+      callback();
+      return;
+    }
+
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AudioCenterWithHeader(
+          onProfileTap: _openProfile,
+        ),
+      ),
+    );
   }
 
   // ============================================================
@@ -1129,6 +1177,16 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
             ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(56),
+              child: SizedBox(
+                height: 56,
+                child: AppHeader(
+                  onProfileTap: _openProfile,
+                  onAudioTap: _openAudioCenter,
+                ),
+              ),
+            ),
           ),
           body: ChatScreenBody(
             chatController: _chatController,
