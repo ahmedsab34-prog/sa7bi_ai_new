@@ -1,41 +1,32 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ===================================================== -->
-    <!-- Internet -->
-    <!-- ===================================================== -->
-
+    <!-- إتاحة الوصول إلى الإنترنت -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- ===================================================== -->
-    <!-- Background Audio / Wake Lock -->
-    <!-- ===================================================== -->
-
+    <!-- تشغيل الصوت بالخلفية -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- ===================================================== -->
-    <!-- Notifications -->
-    <!-- ===================================================== -->
-
+    <!-- الإشعارات -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Exact alarm permission for precise reminder times -->
+    <!-- التذكيرات -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-    <!-- ===================================================== -->
-    <!-- Camera / Microphone -->
-    <!-- ===================================================== -->
-
+    <!-- الكاميرا والميكروفون -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- ===================================================== -->
-    <!-- Application -->
-    <!-- ===================================================== -->
+    <!-- إتاحة اكتشاف خدمة تحويل النص إلى كلام في Android -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 
     <application
         android:name="${applicationName}"
@@ -43,18 +34,12 @@
         android:icon="@drawable/app_icon"
         android:usesCleartextTraffic="false">
 
-        <!-- ================================================= -->
         <!-- Google Mobile Ads / AdMob -->
-        <!-- ================================================= -->
-
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-9077658292229374~9135705635" />
 
-        <!-- ================================================= -->
-        <!-- Main Flutter Activity -->
-        <!-- ================================================= -->
-
+        <!-- شاشة Flutter الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -72,13 +57,9 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
         </activity>
 
-        <!-- ================================================= -->
-        <!-- Background Audio Service -->
-        <!-- ================================================= -->
-
+        <!-- خدمة تشغيل الوسائط في الخلفية -->
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
@@ -88,13 +69,9 @@
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
-
         </service>
 
-        <!-- ================================================= -->
-        <!-- Media / Headset / Lock-screen Buttons -->
-        <!-- ================================================= -->
-
+        <!-- أزرار السماعة وشاشة القفل -->
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true"
@@ -103,13 +80,9 @@
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
-
         </receiver>
 
-        <!-- ================================================= -->
-        <!-- Local Notifications -->
-        <!-- ================================================= -->
-
+        <!-- الإشعارات المحلية المجدولة -->
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
@@ -124,17 +97,12 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
-
         </receiver>
 
-        <!-- ================================================= -->
         <!-- Flutter Embedding -->
-        <!-- ================================================= -->
-
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
     </application>
-
 </manifest>
