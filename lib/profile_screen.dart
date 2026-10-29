@@ -1,4 +1,3 @@
-
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -14,10 +13,12 @@ import 'widgets/profile_header.dart';
 import 'widgets/rewarded_ad_button.dart';
 
 class ProfileScreen extends StatefulWidget {
+  final VoidCallback? onProfileTap;
   final VoidCallback? onAudio;
 
   const ProfileScreen({
     super.key,
+    this.onProfileTap,
     this.onAudio,
   });
 
@@ -311,6 +312,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           AppHeader(
+            onProfileTap: widget.onProfileTap,
             onAudioTap: widget.onAudio,
           ),
           Expanded(
