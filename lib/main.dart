@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -6,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'app_diagnostics_screen.dart';
-import 'audio_center_screen.dart';
 import 'audio_player_service.dart';
 import 'chat_screen.dart';
 import 'config/service_keys.dart';
@@ -20,6 +18,7 @@ import 'services/credits_service.dart';
 import 'services/profile_service.dart';
 import 'services/sa7bi_network_client.dart';
 import 'theme/sa7bi_theme.dart';
+import 'widgets/audio_center_with_header.dart';
 import 'widgets/khalasana_portal.dart';
 
 void main() {
@@ -110,9 +109,11 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
   void openAudioCenter() {
     if (!mounted) return;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const AudioCenterScreen(),
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AudioCenterWithHeader(
+          onProfileTap: openProfile,
+        ),
       ),
     );
   }
@@ -120,8 +121,8 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
   void openKhalasana() {
     if (!mounted) return;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
         builder: (_) => const KhalasanaPortalScreen(),
       ),
     );
@@ -140,15 +141,18 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
-      const ChatScreen(
+      ChatScreen(
         serviceKey: ServiceKeys.general,
         serviceTitle: 'المحادثة العامة',
         serviceContext:
             'أنت صاحبي AI، مساعد عربي عام. أجب بوضوح وبشكل مفيد، '
             'وحافظ على سياق المحادثة العامة.',
+        onProfileTap: openProfile,
+        onAudioTap: openAudioCenter,
       ),
       const InteractiveExperiencesScreen(),
       ProfileScreen(
+        onProfileTap: openProfile,
         onAudio: openAudioCenter,
       ),
     ];
@@ -167,11 +171,13 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
             // مشغل الصوت مخفي في الشات حتى لا يغطي مربع الكتابة.
             if (!isChatTab)
-              const Positioned(
+              Positioned(
                 left: 10,
                 right: 10,
                 bottom: 8,
-                child: MiniAudioPlayer(),
+                child: MiniAudioPlayer(
+                  onProfileTap: openProfile,
+                ),
               ),
 
             // زر التشخيص لا يظهر فوق مربع كتابة الشات.
@@ -275,7 +281,12 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 }
 
 class MiniAudioPlayer extends StatelessWidget {
-  const MiniAudioPlayer({super.key});
+  final VoidCallback onProfileTap;
+
+  const MiniAudioPlayer({
+    super.key,
+    required this.onProfileTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -308,9 +319,11 @@ class MiniAudioPlayer extends StatelessWidget {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AudioCenterScreen(),
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AudioCenterWithHeader(
+                        onProfileTap: onProfileTap,
+                      ),
                     ),
                   ),
                   child: Container(
@@ -330,9 +343,11 @@ class MiniAudioPlayer extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const AudioCenterScreen(),
+                    onTap: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => AudioCenterWithHeader(
+                          onProfileTap: onProfileTap,
+                        ),
                       ),
                     ),
                     child: Column(
