@@ -1,12 +1,13 @@
-
-name: Sa7bi AI - Test alternate Pages API hostname
+name: Sa7bi AI - Alternate Pages Proxy (Manual Approval Only)
 
 on:
-  push:
-    branches:
-      - "fix/build-692-network-client-lifecycle"
-    paths:
-      - ".github/workflows/worker-pages-proxy.yml"
+  workflow_dispatch:
+    inputs:
+      deploy_proxy:
+        description: "Set true only after explicitly approving creation or deployment of the alternate Cloudflare Pages proxy."
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,9 +18,10 @@ concurrency:
 
 jobs:
   deploy-and-test:
-    name: Deploy isolated pages.dev proxy and test health
+    name: Deploy isolated Pages proxy and test health after explicit approval
+    if: ${{ inputs.deploy_proxy == true }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -28,8 +30,22 @@ jobs:
       PRIMARY_WORKER: sa7bi-ai-new
 
     steps:
-      - name: Checkout repair branch
+      - name: Checkout selected source commit
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Restrict Pages deployment to the repair branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED_BRANCH="fix/build-692-network-client-lifecycle"
+
+          if [ "${GITHUB_REF_NAME}" != "${EXPECTED_BRANCH}" ]; then
+            echo "::error::This isolated Pages proxy may only be deployed from ${EXPECTED_BRANCH}."
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -43,8 +59,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$CLOUDFLARE_API_TOKEN"
-          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "${CLOUDFLARE_API_TOKEN}" || {
+            echo "::error::CLOUDFLARE_API_TOKEN secret is missing."
+            exit 1
+          }
+          test -n "${CLOUDFLARE_ACCOUNT_ID}" || {
+            echo "::error::CLOUDFLARE_ACCOUNT_ID secret is missing."
+            exit 1
+          }
           echo "Cloudflare credentials are available."
 
       - name: Create isolated Pages proxy files
@@ -116,7 +138,7 @@ jobs:
           TOML
 
           echo "Temporary proxy files created."
-          echo "Existing Workers and Flutter files remain unchanged."
+          echo "Existing Flutter files and Workers remain unchanged."
 
       - name: Create Pages project if needed
         shell: bash
@@ -143,7 +165,7 @@ jobs:
             --project-name "$PAGES_PROJECT" \
             --branch main \
             --commit-hash "$GITHUB_SHA" \
-            --commit-message "Test alternate pages.dev API hostname" \
+            --commit-message "Manually approved Sa7bi AI alternate Pages proxy" \
             --config "$RUNNER_TEMP/sa7bi-pages-config/wrangler.toml"
 
       - name: Verify Pages proxy health
@@ -177,7 +199,24 @@ jobs:
             sleep 5
           done
 
-          echo "FAIL: alternate host did not return expected health response."
+          echo "::error::Alternate host did not return the expected health response."
           cat "$RUNNER_TEMP/pages-headers.txt" 2>/dev/null || true
           cat "$RUNNER_TEMP/pages-body.json" 2>/dev/null || true
           exit 1
+
+  deployment-not-approved:
+    name: Confirm no Pages project was deployed
+    if: ${{ inputs.deploy_proxy != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Record safe default
+        shell: bash
+        run: |
+          {
+            echo "## Safe default: no Cloudflare Pages deployment"
+            echo
+            echo "The deploy_proxy input was false."
+            echo "No Pages project was created or modified."
+          } >> "${GITHUB_STEP_SUMMARY}"
