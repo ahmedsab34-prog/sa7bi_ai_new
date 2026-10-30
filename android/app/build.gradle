@@ -1,7 +1,59 @@
+
 plugins {
     id "com.android.application"
     id "org.jetbrains.kotlin.android"
     id "dev.flutter.flutter-gradle-plugin"
+}
+
+// ============================================================
+// SA7BI AI - ANDROID BUILD CONFIGURATION
+// ============================================================
+
+def signingProperties = new java.util.Properties()
+
+def signingPropertiesFile = rootProject.file("key.properties")
+
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withInputStream { stream ->
+        signingProperties.load(stream)
+    }
+}
+
+def releaseStoreFilePath =
+    (signingProperties.getProperty("storeFile") ?: "").trim()
+
+def releaseKeyAlias =
+    (signingProperties.getProperty("keyAlias") ?: "").trim()
+
+def releaseStorePassword =
+    signingProperties.getProperty("storePassword") ?: ""
+
+def releaseKeyPassword =
+    signingProperties.getProperty("keyPassword") ?: ""
+
+def releaseStoreFile = releaseStoreFilePath.isEmpty()
+    ? null
+    : rootProject.file(releaseStoreFilePath)
+
+def releaseSigningConfigured =
+    releaseStoreFile != null &&
+    releaseStoreFile.isFile() &&
+    !releaseKeyAlias.isEmpty() &&
+    !releaseStorePassword.isEmpty() &&
+    !releaseKeyPassword.isEmpty()
+
+def isGitHubActions =
+    "true".equalsIgnoreCase(
+        System.getenv("GITHUB_ACTIONS") ?: "false"
+    )
+
+// لا تسمح ببناء Release على GitHub باستخدام مفتاح Debug.
+if (isGitHubActions && !releaseSigningConfigured) {
+    throw new GradleException(
+        "SA7BI AI RELEASE BLOCKED: Permanent release signing is not " +
+        "configured. Add android/key.properties and the release " +
+        "keystore before building or publishing an official APK."
+    )
 }
 
 android {
@@ -28,21 +80,38 @@ android {
         minSdk 24
         targetSdk 36
 
-        // استخدام الإصدار ورقم البناء اللذين يحددهما Flutter.
-        // GitHub Actions يمررهما أثناء إنشاء APK.
         versionCode flutter.versionCode
         versionName flutter.versionName
     }
 
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            release {
+                storeFile releaseStoreFile
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            // محليًا: Debug للتجارب فقط عند غياب المفتاح.
+            // GitHub Actions: لا يسمح بالبناء إلا بمفتاح Release دائم.
+            signingConfig(
+                releaseSigningConfigured
+                    ? signingConfigs.release
+                    : signingConfigs.debug
+            )
         }
     }
 }
 
 dependencies {
-    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.5"
+    coreLibraryDesugaring(
+        "com.android.tools:desugar_jdk_libs:2.1.5"
+    )
 }
 
 flutter {
