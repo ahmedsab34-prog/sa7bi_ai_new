@@ -1,4 +1,4 @@
-name: Sa7bi AI - Candidate Checks Only
+name: Sa7bi AI - Candidate Build (No Release Publishing)
 
 on:
   push:
@@ -8,6 +8,8 @@ on:
       - ".github/workflows/build-candidate.yml"
       - "lib/**"
       - "test/**"
+      - "android/**"
+      - "assets/**"
       - "pubspec.yaml"
       - "pubspec.lock"
   workflow_dispatch:
@@ -16,30 +18,38 @@ permissions:
   contents: read
 
 concurrency:
-  group: sa7bi-candidate-checks-${{ github.ref }}
+  group: sa7bi-candidate-build-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   FLUTTER_VERSION: "3.38.1"
   JAVA_VERSION: "17"
+  APP_VERSION: "1.0.1"
+  EXPECTED_APPLICATION_ID: "com.example.sa7bi_ai_new"
+  APK_PATH: "build/app/outputs/flutter-apk/app-release.apk"
 
 jobs:
-  checks-only:
-    name: Analyze and test source (no APK build)
+  candidate:
+    name: Analyze, test, and build a signed candidate APK when signing is configured
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+
+    outputs:
+      signing_ready: ${{ steps.signing.outputs.ready }}
+      artifact_name: ${{ steps.identity.outputs.artifact_name }}
 
     steps:
-      - name: Checkout exact source commit
+      - name: Checkout the exact source commit
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Verify source commit
+      - name: Verify repository, branch, and source commit
         shell: bash
         run: |
           set -euo pipefail
 
+          EXPECTED_BRANCH="fix/build-692-network-client-lifecycle"
           ACTUAL_SHA="$(git rev-parse HEAD)"
 
           echo "Repository: ${GITHUB_REPOSITORY}"
@@ -47,74 +57,244 @@ jobs:
           echo "Expected commit: ${GITHUB_SHA}"
           echo "Checked out commit: ${ACTUAL_SHA}"
 
+          if [ "${GITHUB_REF_NAME}" != "${EXPECTED_BRANCH}" ]; then
+            echo "::error::Candidate builds are restricted to ${EXPECTED_BRANCH}."
+            exit 1
+          fi
+
           test "${ACTUAL_SHA}" = "${GITHUB_SHA}"
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
+          java-version: "${{ env.JAVA_VERSION }}"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
+          flutter-version: "${{ env.FLUTTER_VERSION }}"
           channel: stable
           cache: true
 
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Analyze Flutter project
+      - name: Record source identity
         shell: bash
         run: |
           set -euo pipefail
-          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos
-
-      - name: Run network lifecycle tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f test/sa7bi_network_client_lifecycle_test.dart
-          flutter test --no-pub --reporter expanded \
-            test/sa7bi_network_client_lifecycle_test.dart
-
-      - name: Run image intent tests when available
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -f test/image_intent_detector_test.dart ]; then
-            flutter test --no-pub --reporter expanded \
-              test/image_intent_detector_test.dart
-          else
-            echo "Image intent test file not present; skipped."
-          fi
-
-      - name: Confirm this workflow does not build or publish APKs
-        shell: bash
-        run: |
-          set -euo pipefail
-
           {
-            echo "SA7BI AI - SOURCE CHECKS REPORT"
             echo "Repository: ${GITHUB_REPOSITORY}"
             echo "Branch: ${GITHUB_REF_NAME}"
             echo "Commit: ${GITHUB_SHA}"
             echo "Run ID: ${GITHUB_RUN_ID}"
             echo "Run number: ${GITHUB_RUN_NUMBER}"
+            echo "App version: ${APP_VERSION}"
+            echo "Expected application ID: ${EXPECTED_APPLICATION_ID}"
             echo "Flutter version: ${FLUTTER_VERSION}"
-            echo "Purpose: source analysis and tests only"
-            echo "APK build: no"
-            echo "Worker deployment: no"
-            echo "GitHub Release publication: no"
-            echo "Canonical APK workflow: verify-release-branch.yml"
-          } | tee source-checks-report.txt
+          } | tee candidate-source-identity.txt
 
-      - name: Upload source checks report
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze the Flutter project
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter analyze --no-pub \
+            --no-fatal-warnings \
+            --no-fatal-infos \
+            2>&1 | tee flutter-analyze-report.txt
+
+      - name: Run all Flutter tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter test --no-pub --reporter expanded \
+            2>&1 | tee flutter-test-report.txt
+
+      - name: Configure permanent Android signing when secrets are available
+        id: signing
+        shell: bash
+        env:
+          SA7BI_RELEASE_KEYSTORE_BASE64: ${{ secrets.SA7BI_RELEASE_KEYSTORE_BASE64 }}
+          SA7BI_RELEASE_STORE_PASSWORD: ${{ secrets.SA7BI_RELEASE_STORE_PASSWORD }}
+          SA7BI_RELEASE_KEY_ALIAS: ${{ secrets.SA7BI_RELEASE_KEY_ALIAS }}
+          SA7BI_RELEASE_KEY_PASSWORD: ${{ secrets.SA7BI_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SA7BI_RELEASE_KEYSTORE_BASE64}" ] &&
+             [ -z "${SA7BI_RELEASE_STORE_PASSWORD}" ] &&
+             [ -z "${SA7BI_RELEASE_KEY_ALIAS}" ] &&
+             [ -z "${SA7BI_RELEASE_KEY_PASSWORD}" ]; then
+            echo "ready=false" >> "${GITHUB_OUTPUT}"
+            echo "APK_BUILD_STATUS=SKIPPED_NO_RELEASE_KEYSTORE" > candidate-build-status.txt
+            echo "Source analysis and tests completed. No APK was built because permanent Android signing is not configured." >> candidate-build-status.txt
+            echo "::notice::Flutter analysis and tests passed. APK build was skipped because the permanent signing secrets are not configured."
+            exit 0
+          fi
+
+          if [ -z "${SA7BI_RELEASE_KEYSTORE_BASE64}" ] ||
+             [ -z "${SA7BI_RELEASE_STORE_PASSWORD}" ] ||
+             [ -z "${SA7BI_RELEASE_KEY_ALIAS}" ] ||
+             [ -z "${SA7BI_RELEASE_KEY_PASSWORD}" ]; then
+            echo "::error::Android signing secrets are only partially configured. Set all four SA7BI_RELEASE_* secrets or leave all four empty."
+            exit 1
+          fi
+
+          mkdir -p android
+          printf '%s' "${SA7BI_RELEASE_KEYSTORE_BASE64}" | base64 --decode > android/sa7bi-release.jks
+          test -s android/sa7bi-release.jks
+          chmod 600 android/sa7bi-release.jks
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          def escape_property(value: str) -> str:
+              escaped = []
+              for index, char in enumerate(value):
+                  if char in "\\:=#!" or (index == 0 and char == " "):
+                      escaped.append("\\")
+                  escaped.append(char)
+              return "".join(escaped)
+
+          values = {
+              "storeFile": "sa7bi-release.jks",
+              "storePassword": os.environ["SA7BI_RELEASE_STORE_PASSWORD"],
+              "keyAlias": os.environ["SA7BI_RELEASE_KEY_ALIAS"],
+              "keyPassword": os.environ["SA7BI_RELEASE_KEY_PASSWORD"],
+          }
+
+          content = "".join(
+              f"{key}={escape_property(value)}\n"
+              for key, value in values.items()
+          )
+          path = Path("android/key.properties")
+          path.write_text(content, encoding="utf-8")
+          path.chmod(0o600)
+          PY
+
+          echo "ready=true" >> "${GITHUB_OUTPUT}"
+          echo "APK_BUILD_STATUS=READY_TO_BUILD_WITH_PERMANENT_SIGNING" > candidate-build-status.txt
+          echo "Permanent Android signing was configured without printing secret values." >> candidate-build-status.txt
+
+      - name: Build signed candidate APK
+        if: steps.signing.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
+          BUILD_ID="candidate-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+          SOURCE_ID="${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+
+          flutter build apk --release --no-pub \
+            --build-name="${APP_VERSION}" \
+            --build-number="${BUILD_NUMBER}" \
+            --dart-define="SA7BI_APP_VERSION=${APP_VERSION}" \
+            --dart-define="SA7BI_BUILD_NUMBER=${BUILD_NUMBER}" \
+            --dart-define="SA7BI_COMMIT_SHA=${GITHUB_SHA}" \
+            --dart-define="APP_BUILD_ID=${BUILD_ID}" \
+            --dart-define="APP_SOURCE_ID=${SOURCE_ID}"
+
+      - name: Verify candidate APK identity and integrity
+        id: verify_apk
+        if: steps.signing.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="${APK_PATH}"
+          EXPECTED_BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
+
+          test -s "${APK}"
+
+          APK_ANALYZER="$(
+            find "${ANDROID_HOME}" -type f \
+              -name apkanalyzer -perm -u+x -print -quit 2>/dev/null
+          )"
+
+          if [ -z "${APK_ANALYZER}" ]; then
+            echo "::error::Android apkanalyzer was not found."
+            exit 1
+          fi
+
+          ACTUAL_ID="$("${APK_ANALYZER}" manifest application-id "${APK}")"
+          ACTUAL_VERSION="$("${APK_ANALYZER}" manifest version-name "${APK}")"
+          ACTUAL_CODE="$("${APK_ANALYZER}" manifest version-code "${APK}")"
+          APK_BYTES="$(stat -c%s "${APK}")"
+          APK_SHA256="$(sha256sum "${APK}" | awk '{print $1}')"
+
+          echo "Application ID: ${ACTUAL_ID}"
+          echo "Version name: ${ACTUAL_VERSION}"
+          echo "Version code: ${ACTUAL_CODE}"
+          echo "APK bytes: ${APK_BYTES}"
+          echo "APK SHA-256: ${APK_SHA256}"
+
+          test "${ACTUAL_ID}" = "${EXPECTED_APPLICATION_ID}"
+          test "${ACTUAL_VERSION}" = "${APP_VERSION}"
+          test "${ACTUAL_CODE}" = "${EXPECTED_BUILD_NUMBER}"
+          test "${APK_BYTES}" -gt 1000000
+          unzip -t "${APK}" >/dev/null
+          unzip -l "${APK}" | grep -q 'libapp.so'
+
+          mkdir -p candidate-artifact
+          cp "${APK}" candidate-artifact/sa7bi-ai-candidate.apk
+          printf '%s  %s\n' "${APK_SHA256}" "sa7bi-ai-candidate.apk" \
+            > candidate-artifact/sa7bi-ai-candidate.apk.sha256
+
+          {
+            echo "Repository=${GITHUB_REPOSITORY}"
+            echo "Branch=${GITHUB_REF_NAME}"
+            echo "Commit=${GITHUB_SHA}"
+            echo "RunID=${GITHUB_RUN_ID}"
+            echo "RunAttempt=${GITHUB_RUN_ATTEMPT}"
+            echo "AppVersion=${ACTUAL_VERSION}"
+            echo "ApplicationID=${ACTUAL_ID}"
+            echo "VersionCode=${ACTUAL_CODE}"
+            echo "APKSize=${APK_BYTES}"
+            echo "APK_SHA256=${APK_SHA256}"
+            echo "Signing=permanent-release-keystore"
+            echo "WorkerDeployment=not-performed"
+            echo "GitHubReleasePublication=not-performed"
+          } > candidate-artifact/build-provenance.txt
+
+          echo "APK_BUILD_STATUS=SUCCESS" > candidate-build-status.txt
+          echo "APK_SHA256=${APK_SHA256}" >> candidate-build-status.txt
+          echo "APK_SIZE=${APK_BYTES}" >> candidate-build-status.txt
+
+      - name: Upload candidate APK artifact
+        if: steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: sa7bi-source-checks-${{ github.run_number }}-${{ github.sha }}
-          path: source-checks-report.txt
+          name: sa7bi-ai-candidate-${{ github.run_number }}-${{ github.sha }}
+          path: candidate-artifact/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload analysis and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-ai-candidate-reports-${{ github.run_number }}-${{ github.sha }}
+          path: |
+            candidate-source-identity.txt
+            candidate-build-status.txt
+            flutter-analyze-report.txt
+            flutter-test-report.txt
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Candidate build summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Sa7bi AI candidate validation"
+            echo
+            echo "- Branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- APK build status: see candidate-build-status.txt"
+            echo "- Worker deployment: not performed"
+            echo "- GitHub Release publication: not performed"
+          } >> "${GITHUB_STEP_SUMMARY}"
