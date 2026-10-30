@@ -1,13 +1,13 @@
-
-name: Sa7bi AI - Backend Worker Deployment Only
+name: Sa7bi AI - Backend Worker Deployment (Manual Approval Only)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "backend/**"
   workflow_dispatch:
+    inputs:
+      deploy_workers:
+        description: "Set true only after explicitly approving deployment of the primary and fallback Workers."
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,15 +22,29 @@ env:
 
 jobs:
   deploy-workers:
-    name: Deploy and verify backend Workers
+    name: Deploy and verify backend Workers after explicit approval
+    if: ${{ inputs.deploy_workers == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
 
     steps:
-      - name: Checkout backend source
+      - name: Checkout the selected source commit
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Restrict Worker deployment to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "::error::Production Worker deployment is allowed only from main, after the changes have been reviewed and approved."
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          echo "Approved source commit: ${GITHUB_SHA}"
 
       - name: Check Cloudflare credentials
         shell: bash
@@ -41,12 +55,12 @@ jobs:
           set -euo pipefail
 
           test -n "${CLOUDFLARE_API_TOKEN}" || {
-            echo "ERROR: CLOUDFLARE_API_TOKEN secret is missing."
+            echo "::error::CLOUDFLARE_API_TOKEN secret is missing."
             exit 1
           }
 
           test -n "${CLOUDFLARE_ACCOUNT_ID}" || {
-            echo "ERROR: CLOUDFLARE_ACCOUNT_ID secret is missing."
+            echo "::error::CLOUDFLARE_ACCOUNT_ID secret is missing."
             exit 1
           }
 
@@ -66,7 +80,7 @@ jobs:
           elif [ -f package.json ]; then
             npm install
           else
-            echo "ERROR: backend/package.json was not found."
+            echo "::error::backend/package.json was not found."
             exit 1
           fi
 
@@ -131,13 +145,12 @@ jobs:
             fi
 
             echo "Fallback health attempt ${attempt}/12 returned ${status}."
-
             if [ "${attempt}" -lt 12 ]; then
               sleep 5
             fi
           done
 
-          echo "ERROR: Fallback Worker health verification failed."
+          echo "::error::Fallback Worker health verification failed."
           cat /tmp/sa7bi-fallback-headers.txt 2>/dev/null || true
           cat /tmp/sa7bi-fallback-body.txt 2>/dev/null || true
           exit 1
@@ -146,10 +159,28 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Backend deployment verified"
+            echo "## Backend Worker deployment verified"
             echo
+            echo "- Source branch: \`${GITHUB_REF_NAME}\`"
             echo "- Source commit: \`${GITHUB_SHA}\`"
             echo "- Primary Worker: ${WORKER_URL}"
             echo "- Fallback Worker: ${FALLBACK_WORKER_URL}"
             echo "- APK build/publish: not performed by this workflow"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  deployment-not-approved:
+    name: Confirm no Worker deployment was requested
+    if: ${{ inputs.deploy_workers != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Record safe default
+        shell: bash
+        run: |
+          {
+            echo "## Safe default: no Worker deployment"
+            echo
+            echo "The deploy_workers input was false."
+            echo "Neither primary nor fallback Worker was changed."
           } >> "${GITHUB_STEP_SUMMARY}"
