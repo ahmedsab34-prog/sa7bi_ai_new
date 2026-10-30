@@ -1,4 +1,3 @@
-
 plugins {
     id "com.android.application"
     id "org.jetbrains.kotlin.android"
@@ -47,12 +46,21 @@ def isGitHubActions =
         System.getenv("GITHUB_ACTIONS") ?: "false"
     )
 
-// لا تسمح ببناء Release على GitHub باستخدام مفتاح Debug.
-if (isGitHubActions && !releaseSigningConfigured) {
+// Flutter passes tasks such as assembleDebug or assembleRelease to Gradle.
+// Debug validation is allowed on GitHub Actions without a release key.
+// A GitHub Actions Release build is blocked unless permanent signing exists.
+def requestedGradleTasks = gradle.startParameter.taskNames.collect {
+    it.toLowerCase()
+}
+
+def isReleaseBuild = requestedGradleTasks.any {
+    it.contains("release")
+}
+
+if (isGitHubActions && isReleaseBuild && !releaseSigningConfigured) {
     throw new GradleException(
         "SA7BI AI RELEASE BLOCKED: Permanent release signing is not " +
-        "configured. Add android/key.properties and the release " +
-        "keystore before building or publishing an official APK."
+        "configured. Add all four SA7BI_RELEASE_* GitHub secrets."
     )
 }
 
@@ -66,7 +74,6 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-
         coreLibraryDesugaringEnabled true
     }
 
@@ -76,10 +83,8 @@ android {
 
     defaultConfig {
         applicationId "com.example.sa7bi_ai_new"
-
         minSdk 24
         targetSdk 36
-
         versionCode flutter.versionCode
         versionName flutter.versionName
     }
@@ -97,8 +102,8 @@ android {
 
     buildTypes {
         release {
-            // محليًا: Debug للتجارب فقط عند غياب المفتاح.
-            // GitHub Actions: لا يسمح بالبناء إلا بمفتاح Release دائم.
+            // محليًا يمكن إنشاء نسخة تجريبية بمفتاح Debug.
+            // على GitHub لا يُسمح بمهمة Release دون مفتاح Release دائم.
             signingConfig(
                 releaseSigningConfigured
                     ? signingConfigs.release
