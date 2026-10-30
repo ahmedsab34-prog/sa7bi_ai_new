@@ -257,8 +257,8 @@ class AiNewsService {
 
   /// توحيد رابط الخبر وإزالة معاملات التتبع غير الضرورية.
   ///
-  /// لا نحذف معاملات الرابط التي قد تكون مطلوبة للوصول
-  /// إلى الخبر؛ نحذف فقط معاملات التتبع الشائعة.
+  /// نحتفظ بمعاملات الرابط المهمة وبكل قيم المعاملات المكررة.
+  /// نزيل معاملات التتبع، والمسار الزائد في نهاية الرابط، والـ fragment.
   static String canonicalizeNewsLink(String value) {
     final raw = value.trim();
 
@@ -289,18 +289,18 @@ class AiNewsService {
       'si',
     };
 
-    final keptParameters = <String, String>{};
+    // queryParametersAll يحافظ على المعاملات التي تتكرر أكثر من مرة.
+    final keptParameters = <String, List<String>>{};
 
-    for (final entry in uri.queryParameters.entries) {
-      final key = entry.key;
-      final lowerKey = key.toLowerCase();
+    for (final entry in uri.queryParametersAll.entries) {
+      final lowerKey = entry.key.toLowerCase();
 
       if (lowerKey.startsWith('utm_') ||
           trackingParameters.contains(lowerKey)) {
         continue;
       }
 
-      keptParameters[key] = entry.value;
+      keptParameters[entry.key] = List<String>.from(entry.value);
     }
 
     final originalPath = uri.path;
@@ -308,11 +308,16 @@ class AiNewsService {
         ? originalPath.replaceFirst(RegExp(r'/+$'), '')
         : originalPath;
 
-    final normalizedUri = uri.replace(
+    // إنشاء Uri جديد مهم هنا:
+    // Uri.replace(queryParameters: null) يحتفظ بالـ query القديم،
+    // وfragment: '' ينشئ علامة # فارغة بدل حذف الـ fragment تمامًا.
+    final normalizedUri = Uri(
+      scheme: uri.scheme,
+      userInfo: uri.userInfo,
+      host: uri.host,
+      port: uri.hasPort ? uri.port : null,
       path: cleanedPath,
-      fragment: '',
-      queryParameters:
-          keptParameters.isEmpty ? null : keptParameters,
+      queryParameters: keptParameters.isEmpty ? null : keptParameters,
     );
 
     return normalizedUri.toString();
