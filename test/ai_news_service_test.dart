@@ -20,9 +20,9 @@ void main() {
   });
 
   group('AiNewsService.canonicalizeNewsLink', () {
-    test('removes common tracking parameters', () {
+    test('removes common tracking parameters and fragment', () {
       final first = AiNewsService.canonicalizeNewsLink(
-        'https://example.com/news/123?utm_source=app&fbclid=abc',
+        'https://example.com/news/123?utm_source=app&fbclid=abc#details',
       );
 
       final second = AiNewsService.canonicalizeNewsLink(
@@ -30,6 +30,34 @@ void main() {
       );
 
       expect(first, second);
+      expect(first, 'https://example.com/news/123');
+    });
+
+    test('preserves meaningful query parameters', () {
+      expect(
+        AiNewsService.canonicalizeNewsLink(
+          'https://example.com/news?id=123&utm_medium=social&lang=ar',
+        ),
+        'https://example.com/news?id=123&lang=ar',
+      );
+    });
+
+    test('preserves repeated values for meaningful query parameters', () {
+      expect(
+        AiNewsService.canonicalizeNewsLink(
+          'https://example.com/search?tag=one&tag=two&utm_source=feed',
+        ),
+        'https://example.com/search?tag=one&tag=two',
+      );
+    });
+
+    test('preserves a non-default port', () {
+      expect(
+        AiNewsService.canonicalizeNewsLink(
+          'https://example.com:8443/news/123?utm_source=app',
+        ),
+        'https://example.com:8443/news/123',
+      );
     });
 
     test('removes a trailing slash and fragment', () {
