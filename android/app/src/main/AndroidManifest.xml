@@ -1,8 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- إتاحة الوصول إلى الإنترنت -->
+    <!-- الاتصال بالإنترنت وقراءة حالة الشبكة -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- تشغيل الصوت بالخلفية -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
