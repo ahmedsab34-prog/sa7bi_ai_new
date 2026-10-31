@@ -1,4 +1,3 @@
-
 {
   "name": "sa7bi-ai-backend",
   "private": true,
@@ -6,7 +5,9 @@
   "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "check": "find src -type f -name '*.js' -print0 | xargs -0 -n1 node --check",
+    "dry-run": "wrangler deploy --dry-run"
   },
   "dependencies": {
     "chess.js": "1.4.0"
