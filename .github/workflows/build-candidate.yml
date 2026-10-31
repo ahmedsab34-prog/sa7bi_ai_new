@@ -63,7 +63,10 @@ jobs:
             exit 1
           fi
 
-          test "${ACTUAL_SHA}" = "${GITHUB_SHA}"
+          if [ "${ACTUAL_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "::error::Checked-out source does not match the triggering commit."
+            exit 1
+          fi
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -115,18 +118,24 @@ jobs:
             echo "The dependency lockfile is committed."
           else
             echo "tracked=false" >> "${GITHUB_OUTPUT}"
-            echo "::notice::pubspec.lock is not committed yet. The first APK will be debug-validation only."
+            echo "::notice::pubspec.lock is not committed yet. This run can only produce a debug validation APK."
           fi
 
-      - name: Install Flutter dependencies and generate the lockfile when absent
-        run: flutter pub get
-
-      - name: Confirm dependency lockfile was generated
+      - name: Install Flutter dependencies
         shell: bash
         run: |
           set -euo pipefail
-          test -s pubspec.lock
-          echo "pubspec.lock was generated and will be included in the report artifact."
+          flutter pub get 2>&1 | tee flutter-pub-get-report.txt
+
+      - name: Confirm dependency lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s pubspec.lock ]; then
+            echo "::error::pubspec.lock is missing or empty after flutter pub get."
+            exit 1
+          fi
+          echo "pubspec.lock exists; its SHA-256 is: $(sha256sum pubspec.lock | awk '{print $1}')"
 
       - name: Analyze the complete Flutter project
         shell: bash
@@ -156,34 +165,62 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${SA7BI_RELEASE_KEYSTORE_BASE64}" ] &&
-             [ -z "${SA7BI_RELEASE_STORE_PASSWORD}" ] &&
-             [ -z "${SA7BI_RELEASE_KEY_ALIAS}" ] &&
-             [ -z "${SA7BI_RELEASE_KEY_PASSWORD}" ]; then
+          HAS_KEYSTORE=false
+          HAS_STORE_PASSWORD=false
+          HAS_ALIAS=false
+          HAS_KEY_PASSWORD=false
+          [ -n "${SA7BI_RELEASE_KEYSTORE_BASE64}" ] && HAS_KEYSTORE=true
+          [ -n "${SA7BI_RELEASE_STORE_PASSWORD}" ] && HAS_STORE_PASSWORD=true
+          [ -n "${SA7BI_RELEASE_KEY_ALIAS}" ] && HAS_ALIAS=true
+          [ -n "${SA7BI_RELEASE_KEY_PASSWORD}" ] && HAS_KEY_PASSWORD=true
+
+          {
+            echo "KeystoreSecretPresent=${HAS_KEYSTORE}"
+            echo "StorePasswordSecretPresent=${HAS_STORE_PASSWORD}"
+            echo "KeyAliasSecretPresent=${HAS_ALIAS}"
+            echo "KeyPasswordSecretPresent=${HAS_KEY_PASSWORD}"
+          } | tee android-signing-presence.txt
+
+          if [ "${HAS_KEYSTORE}" = "false" ] &&
+             [ "${HAS_STORE_PASSWORD}" = "false" ] &&
+             [ "${HAS_ALIAS}" = "false" ] &&
+             [ "${HAS_KEY_PASSWORD}" = "false" ]; then
             echo "ready=false" >> "${GITHUB_OUTPUT}"
             echo "mode=debug" >> "${GITHUB_OUTPUT}"
-            echo "APK_BUILD_STATUS=DEBUG_VALIDATION_ONLY" > candidate-build-status.txt
-            echo "No permanent signing secrets were configured. This run will build a DEBUG validation APK only; it is not the distributable release APK." >> candidate-build-status.txt
-            echo "::notice::Permanent signing is not configured. Building a debug validation APK only."
+            {
+              echo "APK_BUILD_STATUS=DEBUG_VALIDATION_ONLY_SIGNING_SECRETS_NOT_AVAILABLE_TO_THIS_RUN"
+              echo "The four release secrets were not available to this workflow run. A debug APK will be built only."
+            } > candidate-build-status.txt
+            echo "::warning::Release signing secrets were not available to this run. No secret values were printed."
             exit 0
           fi
 
-          if [ -z "${SA7BI_RELEASE_KEYSTORE_BASE64}" ] ||
-             [ -z "${SA7BI_RELEASE_STORE_PASSWORD}" ] ||
-             [ -z "${SA7BI_RELEASE_KEY_ALIAS}" ] ||
-             [ -z "${SA7BI_RELEASE_KEY_PASSWORD}" ]; then
-            echo "::error::Android signing secrets are only partially configured. Set all four SA7BI_RELEASE_* secrets or leave all four empty."
+          if [ "${HAS_KEYSTORE}" != "true" ] ||
+             [ "${HAS_STORE_PASSWORD}" != "true" ] ||
+             [ "${HAS_ALIAS}" != "true" ] ||
+             [ "${HAS_KEY_PASSWORD}" != "true" ]; then
+            echo "::error::Only some release signing secrets are available. All four SA7BI_RELEASE_* secrets must be present."
             exit 1
           fi
 
           mkdir -p android
-          printf '%s' "${SA7BI_RELEASE_KEYSTORE_BASE64}" | base64 --decode > android/sa7bi-release.jks
-          test -s android/sa7bi-release.jks
+          if ! printf '%s' "${SA7BI_RELEASE_KEYSTORE_BASE64}" | base64 --decode > android/sa7bi-release.jks; then
+            echo "::error::The release keystore secret is not valid Base64. Secret contents were not printed."
+            exit 1
+          fi
+          if [ ! -s android/sa7bi-release.jks ]; then
+            echo "::error::The decoded release keystore is empty."
+            exit 1
+          fi
           chmod 600 android/sa7bi-release.jks
 
-          keytool -list -keystore android/sa7bi-release.jks \
+          if ! keytool -list -keystore android/sa7bi-release.jks \
             -storepass "${SA7BI_RELEASE_STORE_PASSWORD}" \
-            -alias "${SA7BI_RELEASE_KEY_ALIAS}" >/dev/null
+            -alias "${SA7BI_RELEASE_KEY_ALIAS}" >/dev/null 2>keytool-validation-error.txt; then
+            echo "::error::The release keystore, store password, or alias could not be validated. Secret values were not printed."
+            cat keytool-validation-error.txt
+            exit 1
+          fi
 
           python3 - <<'PY'
           import os
@@ -216,16 +253,21 @@ jobs:
           echo "ready=true" >> "${GITHUB_OUTPUT}"
           if [ "${LOCKFILE_TRACKED}" = "true" ]; then
             echo "mode=release" >> "${GITHUB_OUTPUT}"
-            echo "APK_BUILD_STATUS=PERMANENT_RELEASE_SIGNING_READY" > candidate-build-status.txt
-            echo "The committed lockfile and permanent keystore were validated. Secret values were not printed." >> candidate-build-status.txt
+            {
+              echo "APK_BUILD_STATUS=PERMANENT_RELEASE_SIGNING_READY"
+              echo "The committed lockfile and permanent keystore were validated. Secret values were not printed."
+            } > candidate-build-status.txt
           else
             echo "mode=debug" >> "${GITHUB_OUTPUT}"
-            echo "APK_BUILD_STATUS=DEBUG_VALIDATION_ONLY_LOCK_NOT_COMMITTED" > candidate-build-status.txt
-            echo "The signing key is configured, but pubspec.lock is not committed yet. This run is debug-validation only. Commit the generated pubspec.lock and run again for the signed release candidate." >> candidate-build-status.txt
-            echo "::notice::A signed release will be enabled after pubspec.lock is committed."
+            {
+              echo "APK_BUILD_STATUS=DEBUG_VALIDATION_ONLY_LOCK_NOT_COMMITTED"
+              echo "The signing secrets are available, but pubspec.lock is not committed. Commit pubspec.lock before a signed release build."
+            } > candidate-build-status.txt
+            echo "::notice::Release signing is available; a committed pubspec.lock is still required."
           fi
 
       - name: Build validated APK
+        id: build
         shell: bash
         env:
           BUILD_MODE: ${{ steps.signing.outputs.mode }}
@@ -240,7 +282,8 @@ jobs:
               --dart-define="SA7BI_BUILD_NUMBER=${BUILD_NUMBER}" \
               --dart-define="SA7BI_COMMIT_SHA=${GITHUB_SHA}" \
               --dart-define="APP_BUILD_ID=${BUILD_ID}" \
-              --dart-define="APP_SOURCE_ID=${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+              --dart-define="APP_SOURCE_ID=${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
+              2>&1 | tee flutter-apk-build-report.txt
             echo "APK_PATH=build/app/outputs/flutter-apk/app-release.apk" >> "${GITHUB_ENV}"
             echo "APK_FILENAME=sa7bi-ai-candidate.apk" >> "${GITHUB_ENV}"
           else
@@ -251,65 +294,145 @@ jobs:
               --dart-define="SA7BI_BUILD_NUMBER=${BUILD_NUMBER}" \
               --dart-define="SA7BI_COMMIT_SHA=${GITHUB_SHA}" \
               --dart-define="APP_BUILD_ID=${BUILD_ID}" \
-              --dart-define="APP_SOURCE_ID=${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+              --dart-define="APP_SOURCE_ID=${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
+              2>&1 | tee flutter-apk-build-report.txt
             echo "APK_PATH=build/app/outputs/flutter-apk/app-debug.apk" >> "${GITHUB_ENV}"
             echo "APK_FILENAME=sa7bi-ai-debug-validation.apk" >> "${GITHUB_ENV}"
           fi
 
       - name: Verify APK package, version, signature, and integrity
+        id: verify_apk
         shell: bash
         env:
           BUILD_MODE: ${{ steps.signing.outputs.mode }}
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
 
-          APK="${APK_PATH}"
-          EXPECTED_BUILD_NUMBER="${BUILD_NUMBER}"
+          REPORT="apk-verification-report.txt"
+          : > "${REPORT}"
+          exec > >(tee -a "${REPORT}") 2>&1
 
-          test -s "${APK}"
+          fail() {
+            local message="$1"
+            echo "::error::${message}"
+            {
+              echo "APK_BUILD_STATUS=APK_VALIDATION_FAILED"
+              echo "APK_VALIDATION_ERROR=${message}"
+              echo "BuildMode=${BUILD_MODE}"
+            } > candidate-build-status.txt
+            exit 1
+          }
 
-          APK_ANALYZER="$(
-            find "${ANDROID_HOME}" -type f \
-              -name apkanalyzer -perm -u+x -print -quit 2>/dev/null
-          )"
-          APK_SIGNER="$(
-            find "${ANDROID_HOME}/build-tools" -type f \
-              -name apksigner -perm -u+x -print -quit 2>/dev/null
-          )"
+          APK="${APK_PATH:-}"
+          if [ -z "${APK}" ]; then
+            fail "APK_PATH was not set by the build step."
+          fi
+          if [ ! -s "${APK}" ]; then
+            fail "The expected APK does not exist or is empty: ${APK}"
+          fi
 
-          test -n "${APK_ANALYZER}"
-          test -n "${APK_SIGNER}"
+          echo "APK path: ${APK}"
+          ls -lh "${APK}"
+          echo "Build mode: ${BUILD_MODE}"
+          echo "Expected application ID: ${EXPECTED_APPLICATION_ID}"
+          echo "Expected version name: ${APP_VERSION}"
+          echo "Expected version code: ${BUILD_NUMBER}"
 
-          ACTUAL_ID="$("${APK_ANALYZER}" manifest application-id "${APK}")"
-          ACTUAL_VERSION="$("${APK_ANALYZER}" manifest version-name "${APK}")"
-          ACTUAL_CODE="$("${APK_ANALYZER}" manifest version-code "${APK}")"
+          ANDROID_SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "${ANDROID_SDK_PATH}" ] || [ ! -d "${ANDROID_SDK_PATH}" ]; then
+            fail "Android SDK directory could not be located (ANDROID_HOME/ANDROID_SDK_ROOT)."
+          fi
+
+          APK_ANALYZER="$(find "${ANDROID_SDK_PATH}" -type f -name apkanalyzer -perm -u+x -print -quit 2>/dev/null || true)"
+          APK_SIGNER="$(find "${ANDROID_SDK_PATH}/build-tools" -type f -name apksigner -perm -u+x -print -quit 2>/dev/null || true)"
+
+          if [ -z "${APK_ANALYZER}" ]; then
+            fail "apkanalyzer was not found under ${ANDROID_SDK_PATH}."
+          fi
+          if [ -z "${APK_SIGNER}" ]; then
+            fail "apksigner was not found under ${ANDROID_SDK_PATH}/build-tools."
+          fi
+          echo "apkanalyzer: ${APK_ANALYZER}"
+          echo "apksigner: ${APK_SIGNER}"
+
+          if ! ACTUAL_ID="$("${APK_ANALYZER}" manifest application-id "${APK}" 2>&1)"; then
+            fail "apkanalyzer could not read the APK application ID: ${ACTUAL_ID}"
+          fi
+          if ! ACTUAL_VERSION="$("${APK_ANALYZER}" manifest version-name "${APK}" 2>&1)"; then
+            fail "apkanalyzer could not read the APK version name: ${ACTUAL_VERSION}"
+          fi
+          if ! ACTUAL_CODE="$("${APK_ANALYZER}" manifest version-code "${APK}" 2>&1)"; then
+            fail "apkanalyzer could not read the APK version code: ${ACTUAL_CODE}"
+          fi
+
           APK_BYTES="$(stat -c%s "${APK}")"
           APK_SHA256="$(sha256sum "${APK}" | awk '{print $1}')"
+          echo "Actual application ID: ${ACTUAL_ID}"
+          echo "Actual version name: ${ACTUAL_VERSION}"
+          echo "Actual version code: ${ACTUAL_CODE}"
+          echo "APK size (bytes): ${APK_BYTES}"
+          echo "APK SHA-256: ${APK_SHA256}"
 
-          test "${ACTUAL_ID}" = "${EXPECTED_APPLICATION_ID}"
-          test "${ACTUAL_VERSION}" = "${APP_VERSION}"
-          test "${ACTUAL_CODE}" = "${EXPECTED_BUILD_NUMBER}"
-          test "${APK_BYTES}" -gt 1000000
-          unzip -t "${APK}" >/dev/null
-          unzip -l "${APK}" > apk-contents.txt
-          grep -q 'libapp.so' apk-contents.txt
-          "${APK_SIGNER}" verify --verbose "${APK}" >/dev/null
+          if [ "${ACTUAL_ID}" != "${EXPECTED_APPLICATION_ID}" ]; then
+            fail "Application ID mismatch. Expected ${EXPECTED_APPLICATION_ID}; received ${ACTUAL_ID}."
+          fi
+          if [ "${ACTUAL_VERSION}" != "${APP_VERSION}" ]; then
+            fail "Version name mismatch. Expected ${APP_VERSION}; received ${ACTUAL_VERSION}."
+          fi
+          if [ "${ACTUAL_CODE}" != "${BUILD_NUMBER}" ]; then
+            fail "Version code mismatch. Expected ${BUILD_NUMBER}; received ${ACTUAL_CODE}."
+          fi
+          if [ "${APK_BYTES}" -le 1000000 ]; then
+            fail "APK is unexpectedly small (${APK_BYTES} bytes); minimum expected size is 1000001 bytes."
+          fi
+
+          if ! unzip -tq "${APK}"; then
+            fail "APK ZIP integrity check failed."
+          fi
+          if ! unzip -l "${APK}" > apk-contents.txt; then
+            fail "Could not list APK contents."
+          fi
+          if ! grep -q 'libapp.so' apk-contents.txt; then
+            fail "libapp.so was not found inside the APK."
+          fi
+
+          if ! SIGNATURE_VERIFY="$("${APK_SIGNER}" verify --verbose "${APK}" 2>&1)"; then
+            echo "${SIGNATURE_VERIFY}"
+            fail "apksigner rejected the APK signature. See the verification report above."
+          fi
+          echo "APK signature verification: PASSED"
+          echo "${SIGNATURE_VERIFY}"
+
+          if ! SIGNATURE_REPORT="$("${APK_SIGNER}" verify --print-certs "${APK}" 2>&1)"; then
+            echo "${SIGNATURE_REPORT}"
+            fail "Could not read the APK signing certificate."
+          fi
+          echo "APK signing certificate report:"
+          echo "${SIGNATURE_REPORT}"
+
+          ACTUAL_CERT_SHA256="$(
+            printf '%s\n' "${SIGNATURE_REPORT}" |
+              awk 'tolower($0) ~ /certificate sha-256 digest:/ { sub(/^.*digest:[[:space:]]*/, ""); print; exit }' |
+              tr -d ':[:space:]' |
+              tr '[:upper:]' '[:lower:]'
+          )"
+
+          if [ "${BUILD_MODE}" = "release" ]; then
+            if [ -z "${ACTUAL_CERT_SHA256}" ]; then
+              fail "The release signing certificate SHA-256 fingerprint could not be extracted."
+            fi
+            if [ "${ACTUAL_CERT_SHA256}" != "${EXPECTED_RELEASE_CERT_SHA256}" ]; then
+              fail "Release certificate fingerprint mismatch. Expected ${EXPECTED_RELEASE_CERT_SHA256}; received ${ACTUAL_CERT_SHA256}."
+            fi
+            echo "Permanent release certificate fingerprint: MATCHED"
+          else
+            echo "Debug APK: permanent release certificate comparison is not applicable."
+          fi
 
           mkdir -p candidate-artifact
           cp "${APK}" "candidate-artifact/${APK_FILENAME}"
           printf '%s  %s\n' "${APK_SHA256}" "${APK_FILENAME}" \
             > "candidate-artifact/${APK_FILENAME}.sha256"
-
-          SIGNATURE_REPORT="$("${APK_SIGNER}" verify --print-certs "${APK}" 2>&1)"
-          if [ "${BUILD_MODE}" = "release" ]; then
-            ACTUAL_CERT_SHA256="$(
-              printf '%s\n' "${SIGNATURE_REPORT}" |
-                awk -F': ' '/certificate SHA-256 digest:/ { print $2; exit }' |
-                tr -d ':[:space:]' |
-                tr '[:upper:]' '[:lower:]'
-            )"
-            test "${ACTUAL_CERT_SHA256}" = "${EXPECTED_RELEASE_CERT_SHA256}"
-          fi
 
           {
             echo "Repository=${GITHUB_REPOSITORY}"
@@ -325,6 +448,7 @@ jobs:
             echo "APKSize=${APK_BYTES}"
             echo "APK_SHA256=${APK_SHA256}"
             echo "SigningMode=${BUILD_MODE}"
+            echo "SigningCertificateSHA256=${ACTUAL_CERT_SHA256:-not-compared-debug-build}"
             echo "WorkerDeployment=not-performed"
             echo "GitHubReleasePublication=not-performed"
             echo
@@ -339,8 +463,10 @@ jobs:
           fi
           echo "APK_SHA256=${APK_SHA256}" >> candidate-build-status.txt
           echo "APK_SIZE=${APK_BYTES}" >> candidate-build-status.txt
+          echo "APK verification completed successfully."
 
       - name: Upload validated APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.identity.outputs.artifact_name }}-${{ steps.signing.outputs.mode }}
@@ -356,8 +482,13 @@ jobs:
           path: |
             candidate-source-identity.txt
             candidate-build-status.txt
+            android-signing-presence.txt
+            flutter-pub-get-report.txt
             flutter-analyze-report.txt
             flutter-test-report.txt
+            flutter-apk-build-report.txt
+            apk-verification-report.txt
+            apk-contents.txt
             pubspec.lock
           if-no-files-found: warn
           retention-days: 14
@@ -367,15 +498,16 @@ jobs:
         shell: bash
         env:
           BUILD_MODE: ${{ steps.signing.outputs.mode }}
+          LOCKFILE_TRACKED: ${{ steps.lockfile.outputs.tracked }}
         run: |
           {
             echo "## Sa7bi AI candidate validation"
             echo
-            echo "- Branch: \`${GITHUB_REF_NAME}\`"
-            echo "- Source commit: \`${GITHUB_SHA}\`"
-            echo "- APK mode: \`${BUILD_MODE:-not-reached}\`"
-            echo "- Dependency lockfile committed: \`${{ steps.lockfile.outputs.tracked }}\`"
-            echo "- APK status: see candidate-build-status.txt"
+            echo "- Branch: ${GITHUB_REF_NAME}"
+            echo "- Source commit: ${GITHUB_SHA}"
+            echo "- APK mode: ${BUILD_MODE:-not-reached}"
+            echo "- Dependency lockfile committed: ${LOCKFILE_TRACKED:-unknown}"
+            echo "- APK status: see candidate-build-status.txt and apk-verification-report.txt"
             echo "- Worker deployment: NO"
             echo "- GitHub Release publication: NO"
           } >> "${GITHUB_STEP_SUMMARY}"
