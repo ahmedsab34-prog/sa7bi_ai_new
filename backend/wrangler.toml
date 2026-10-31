@@ -1,9 +1,8 @@
-
 name = "sa7bi-ai-new"
-main = "src/index.js"
+main = "src/index-v2.js"
 compatibility_date = "2026-09-18"
 
-# Enable the public workers.dev endpoint.
+# Explicitly enable the public workers.dev endpoint.
 workers_dev = true
 
 [vars]
@@ -26,12 +25,12 @@ binding = "AI"
 name = "SA7BI_CREDITS"
 class_name = "Sa7biCredits"
 
-# Social accounts and multiplayer game rooms.
+# Existing social accounts and multiplayer rooms, extended with invitations and DMs.
 [[durable_objects.bindings]]
 name = "SA7BI_SOCIAL"
 class_name = "Sa7biSocial"
 
-# Preserve existing SQLite Durable Object exports.
+# Preserve both existing SQLite Durable Object class exports.
 [exports.Sa7biCredits]
 type = "durable-object"
 storage = "sqlite"
