@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'services/social_games_service.dart';
 
@@ -11,6 +12,8 @@ class SocialGamesHubScreen extends StatefulWidget {
     this.onShareInvite,
   });
 
+  /// محفوظ للتوافق مع استدعاءات الشاشات الحالية.
+  /// مشاركة دعوات الألعاب تتم من خلال نافذة المشاركة الأصلية.
   final ValueChanged<String>? onShareInvite;
 
   @override
@@ -20,15 +23,28 @@ class SocialGamesHubScreen extends StatefulWidget {
 
 class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
   final SocialGamesService _service = SocialGamesService.instance;
+
   final TextEditingController _username = TextEditingController();
   final TextEditingController _password = TextEditingController();
   final TextEditingController _inviteCode = TextEditingController();
+  final TextEditingController _playerSearch = TextEditingController();
+
+  Timer? _playerSearchDebounce;
 
   bool _loading = true;
   bool _busy = false;
   bool _register = false;
+  bool _searchingPlayers = false;
+
   String? _error;
+  String? _searchError;
+
+  String _inviteGame = 'tic_tac_toe';
+
+  int _playerSearchSequence = 0;
+
   List<SocialGameRoom> _rooms = [];
+  List<SocialGameUser> _searchResults = [];
 
   @override
   void initState() {
@@ -38,15 +54,20 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
 
   @override
   void dispose() {
+    _playerSearchDebounce?.cancel();
+
     _username.dispose();
     _password.dispose();
     _inviteCode.dispose();
+    _playerSearch.dispose();
+
     super.dispose();
   }
 
   Future<void> _initialize() async {
     try {
       await _service.initialize();
+
       if (_service.isSignedIn) {
         await _service.getCurrentUser();
         await _loadRooms();
@@ -56,6 +77,7 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
     }
 
     if (!mounted) return;
+
     setState(() => _loading = false);
   }
 
@@ -63,6 +85,7 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
     Future<void> Function() action,
   ) async {
     if (_busy) return;
+
     setState(() {
       _busy = true;
       _error = null;
@@ -71,15 +94,20 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
     try {
       await action();
     } on SocialGamesException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() => _error = e.message);
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'حصل خطأ غير متوقع. تحقق من الاتصال وحاول مرة أخرى.';
+          _error =
+              'حصل خطأ غير متوقع. تحقق من الاتصال وحاول مرة أخرى.';
         });
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -113,6 +141,7 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
 
   Future<void> _loadRooms() async {
     final rooms = await _service.getMyRooms();
+
     if (!mounted) return;
 
     setState(() {
@@ -124,9 +153,11 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
   Future<void> _createRoom(String game) async {
     await _run(() async {
       final room = await _service.createRoom(game: game);
+
       if (!mounted) return;
 
       await _loadRooms();
+
       if (!mounted) return;
 
       await Navigator.of(context).push(
@@ -145,6 +176,7 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
   Future<void> _joinRoom() async {
     await _run(() async {
       final code = _inviteCode.text.trim().toUpperCase();
+
       if (code.isEmpty) {
         throw const SocialGamesException(
           'INVALID_INVITE_CODE',
@@ -152,7 +184,10 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
         );
       }
 
-      final room = await _service.joinRoom(inviteCode: code);
+      final room = await _service.joinRoom(
+        inviteCode: code,
+      );
+
       if (!mounted) return;
 
       await Navigator.of(context).push(
@@ -177,18 +212,153 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
         ),
       ),
     );
+
     await _loadRooms();
+  }
+
+  void _onPlayerSearchChanged(String value) {
+    _playerSearchDebounce?.cancel();
+
+    final query = value.trim();
+    final sequence = ++_playerSearchSequence;
+
+    if (query.length < 2) {
+      setState(() {
+        _searchResults = [];
+        _searchError = null;
+        _searchingPlayers = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _searchResults = [];
+      _searchError = null;
+      _searchingPlayers = true;
+    });
+
+    // منع إرسال طلب مع كل ضغطة مباشرة.
+    _playerSearchDebounce = Timer(
+      const Duration(milliseconds: 450),
+      () async {
+        try {
+          final results = await _service.searchUsers(query);
+
+          if (!mounted ||
+              sequence != _playerSearchSequence) {
+            return;
+          }
+
+          setState(() {
+            _searchResults = results;
+            _searchingPlayers = false;
+            _searchError = null;
+          });
+        } on SocialGamesException catch (e) {
+          if (!mounted ||
+              sequence != _playerSearchSequence) {
+            return;
+          }
+
+          setState(() {
+            _searchResults = [];
+            _searchingPlayers = false;
+            _searchError = e.message;
+          });
+        } catch (_) {
+          if (!mounted ||
+              sequence != _playerSearchSequence) {
+            return;
+          }
+
+          setState(() {
+            _searchResults = [];
+            _searchingPlayers = false;
+            _searchError =
+                'تعذر البحث عن اللاعبين. تحقق من الاتصال.';
+          });
+        }
+      },
+    );
+  }
+
+  void _clearPlayerSearch() {
+    _playerSearchDebounce?.cancel();
+    _playerSearchSequence++;
+
+    setState(() {
+      _playerSearch.clear();
+      _searchResults = [];
+      _searchError = null;
+      _searchingPlayers = false;
+    });
+  }
+
+  Future<void> _invitePlayer(SocialGameUser player) async {
+    await _run(() async {
+      // إنشاء غرفة فعلية على الخادم.
+      final room = await _service.createRoom(
+        game: _inviteGame,
+      );
+
+      if (!mounted) return;
+
+      // الاحتفاظ بالغرفة ضمن المباريات المحفوظة.
+      await _loadRooms();
+
+      if (!mounted) return;
+
+      final roomMessage = _service.buildInviteMessage(room);
+
+      final message =
+          'مرحبًا ${player.username} 👋\n'
+          'دي دعوة للعب معك على صاحبي AI 🎮\n\n'
+          '$roomMessage\n\n'
+          'افتح قسم الألعاب في التطبيق وسجّل الدخول، '
+          'ثم استخدم رمز الدعوة للانضمام.';
+
+      bool shareOpened = false;
+
+      try {
+        await Share.share(message);
+        shareOpened = true;
+      } catch (_) {
+        shareOpened = false;
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            shareOpened
+                ? 'تم إنشاء الغرفة وفتح المشاركة. اختر جهة الاتصال أو التطبيق لإرسال الدعوة.'
+                : 'تم إنشاء الغرفة، لكن تعذرت المشاركة. ستجد الرمز في مبارياتي المحفوظة.',
+          ),
+        ),
+      );
+    });
   }
 
   Future<void> _logout() async {
     await _run(() async {
+      _playerSearchDebounce?.cancel();
+      _playerSearchSequence++;
+
       await _service.logout();
+
       if (!mounted) return;
 
       setState(() {
         _rooms = [];
+        _searchResults = [];
+        _searchError = null;
+        _searchingPlayers = false;
+
         _username.clear();
         _password.clear();
+        _inviteCode.clear();
+        _playerSearch.clear();
       });
     });
   }
@@ -206,13 +376,16 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
             if (_service.isSignedIn)
               IconButton(
                 tooltip: 'تحديث المباريات',
-                onPressed: _busy ? null : () => _run(_loadRooms),
+                onPressed:
+                    _busy ? null : () => _run(_loadRooms),
                 icon: const Icon(Icons.refresh_rounded),
               ),
           ],
         ),
         body: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const Center(
+                child: CircularProgressIndicator(),
+              )
             : !_service.isSignedIn
                 ? _buildLogin()
                 : _buildLobby(),
@@ -244,14 +417,17 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
           obscure: true,
         ),
         const SizedBox(height: 14),
-        if (_error != null) _ErrorPanel(message: _error!),
+        if (_error != null)
+          _ErrorPanel(message: _error!),
         FilledButton.icon(
           onPressed: _busy ? null : _authenticate,
           icon: _busy
               ? const SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
                 )
               : Icon(
                   _register
@@ -284,7 +460,10 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
           'إنشاء الحساب يتطلب اسم مستخدم من 3 إلى 24 حرفًا '
           'وكلمة مرور من 10 أحرف على الأقل.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.white54, fontSize: 12),
+          style: TextStyle(
+            color: Colors.white54,
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -318,7 +497,9 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
           icon: Icons.grid_3x3_rounded,
           title: 'إكس أو',
           description: 'مباراة سريعة بين لاعبين.',
-          onTap: _busy ? null : () => _createRoom('tic_tac_toe'),
+          onTap: _busy
+              ? null
+              : () => _createRoom('tic_tac_toe'),
         ),
         _GameChoice(
           icon: Icons.back_hand_rounded,
@@ -335,6 +516,11 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
           onTap: _busy ? null : () => _createRoom('chess'),
         ),
         const SizedBox(height: 20),
+
+        // البحث عن لاعب ودعوته.
+        _buildPlayerSearch(),
+
+        const SizedBox(height: 20),
         const Text(
           'الانضمام برمز دعوة',
           style: TextStyle(
@@ -349,7 +535,8 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
             Expanded(
               child: TextField(
                 controller: _inviteCode,
-                textCapitalization: TextCapitalization.characters,
+                textCapitalization:
+                    TextCapitalization.characters,
                 textDirection: TextDirection.ltr,
                 decoration: const InputDecoration(
                   hintText: 'مثال: A7BC23',
@@ -382,7 +569,8 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
             ),
             IconButton(
               tooltip: 'تحديث',
-              onPressed: _busy ? null : () => _run(_loadRooms),
+              onPressed:
+                  _busy ? null : () => _run(_loadRooms),
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
@@ -433,6 +621,174 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
     );
   }
 
+  Widget _buildPlayerSearch() {
+    final query = _playerSearch.text.trim();
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.person_search_rounded,
+                color: Color(0xFFFFD76A),
+                size: 25,
+              ),
+              SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  'ابحث عن لاعب وادعه',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          const Text(
+            'ابحث باسم حساب اللاعب. عند الدعوة ستنشأ غرفة '
+            'وتفتح نافذة المشاركة لاختيار وسيلة إرسال الرمز.',
+            style: TextStyle(
+              color: Colors.white60,
+              height: 1.45,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            value: _inviteGame,
+            isExpanded: true,
+            dropdownColor: const Color(0xFF172033),
+            decoration: const InputDecoration(
+              labelText: 'اللعبة التي تريد دعوة اللاعب إليها',
+              filled: true,
+              fillColor: Color(0xFF151D2C),
+              border: OutlineInputBorder(),
+            ),
+            style: const TextStyle(color: Colors.white),
+            items: const [
+              DropdownMenuItem(
+                value: 'tic_tac_toe',
+                child: Text('إكس أو'),
+              ),
+              DropdownMenuItem(
+                value: 'rock_paper_scissors',
+                child: Text('حجر ورقة مقص'),
+              ),
+              DropdownMenuItem(
+                value: 'chess',
+                child: Text('الشطرنج'),
+              ),
+            ],
+            onChanged: _busy
+                ? null
+                : (value) {
+                    if (value == null) return;
+                    setState(() => _inviteGame = value);
+                  },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _playerSearch,
+            textInputAction: TextInputAction.search,
+            autocorrect: false,
+            onChanged: _onPlayerSearchChanged,
+            decoration: InputDecoration(
+              hintText: 'اكتب اسم اللاعب...',
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: Color(0xFFFFD76A),
+              ),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'مسح البحث',
+                      onPressed: _clearPlayerSearch,
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+              filled: true,
+              fillColor: const Color(0xFF151D2C),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(13),
+              ),
+            ),
+            style: const TextStyle(color: Colors.white),
+          ),
+          const SizedBox(height: 10),
+          if (_searchingPlayers)
+            const Padding(
+              padding: EdgeInsets.all(14),
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_searchError != null)
+            _ErrorPanel(message: _searchError!)
+          else if (query.length < 2)
+            const _NoticePanel(
+              message: 'اكتب حرفين على الأقل لبدء البحث.',
+            )
+          else if (_searchResults.isEmpty)
+            const _NoticePanel(
+              message: 'لم يتم العثور على لاعبين بهذا الاسم.',
+            )
+          else
+            for (final player in _searchResults)
+              Card(
+                color: const Color(0xFF172033),
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0x22FFD76A),
+                    child: Icon(
+                      Icons.person_rounded,
+                      color: Color(0xFFFFD76A),
+                    ),
+                  ),
+                  title: Text(
+                    player.username,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: const Text(
+                    'حساب لاعب في صاحبي AI',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                  trailing: FilledButton.tonal(
+                    onPressed: _busy
+                        ? null
+                        : () => _invitePlayer(player),
+                    child: const Text('دعوة'),
+                  ),
+                ),
+              ),
+          const SizedBox(height: 5),
+          const Text(
+            'ملاحظة: المشاركة تفتح نافذة تطبيقات الهاتف. '
+            'لا يتم إرسال إشعار داخل التطبيق تلقائيًا.',
+            style: TextStyle(
+              color: Colors.white38,
+              height: 1.4,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _field({
     required TextEditingController controller,
     required String label,
@@ -472,20 +828,30 @@ class SocialGameRoomScreen extends StatefulWidget {
       _SocialGameRoomScreenState();
 }
 
-class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
-  final SocialGamesService _service = SocialGamesService.instance;
-  final TextEditingController _from = TextEditingController(text: 'e2');
-  final TextEditingController _to = TextEditingController(text: 'e4');
+class _SocialGameRoomScreenState
+    extends State<SocialGameRoomScreen> {
+  final SocialGamesService _service =
+      SocialGamesService.instance;
+
+  final TextEditingController _from =
+      TextEditingController(text: 'e2');
+
+  final TextEditingController _to =
+      TextEditingController(text: 'e4');
 
   late SocialGameRoom _room;
+
   Timer? _pollTimer;
+
   bool _busy = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+
     _room = widget.initialRoom;
+
     _pollTimer = Timer.periodic(
       const Duration(seconds: 4),
       (_) => _refresh(silent: true),
@@ -497,6 +863,7 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
     _pollTimer?.cancel();
     _from.dispose();
     _to.dispose();
+
     super.dispose();
   }
 
@@ -505,13 +872,19 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
 
     try {
       final latest = await _service.getRoom(_room.id);
+
       if (!mounted) return;
+
       setState(() {
         _room = latest;
-        if (!silent) _error = null;
+
+        if (!silent) {
+          _error = null;
+        }
       });
     } catch (e) {
       if (!mounted || silent) return;
+
       setState(() {
         _error = e is SocialGamesException
             ? e.message
@@ -532,11 +905,15 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
 
     try {
       final updated = await action();
+
       if (!mounted) return;
 
       setState(() => _room = updated);
     } on SocialGamesException catch (e) {
-      if (mounted) setState(() => _error = e.message);
+      if (mounted) {
+        setState(() => _error = e.message);
+      }
+
       await _refresh(silent: true);
     } catch (_) {
       if (mounted) {
@@ -545,22 +922,28 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
               'تعذر إرسال الحركة. حدّث المباراة قبل المحاولة مرة أخرى.';
         });
       }
+
       await _refresh(silent: true);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
-  void _shareInvite() {
+  Future<void> _shareInvite() async {
     final message = _service.buildInviteMessage(_room);
-    final callback = widget.onShareInvite;
 
-    if (callback != null) {
-      callback(message);
-    } else {
+    try {
+      await Share.share(message);
+    } catch (_) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('تعذر فتح المشاركة من هذه الشاشة.'),
+          content: Text(
+            'تعذر فتح المشاركة. يمكنك نسخ رمز الدعوة من الشاشة.',
+          ),
         ),
       );
     }
@@ -611,10 +994,12 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
               const _NoticePanel(
                 message: 'المباراة متوقفة مؤقتًا.',
               ),
-            if (_room.isPlaying) _buildGame(),
+            if (_room.isPlaying)
+              _buildGame(),
             if (_room.isFinished)
               const _NoticePanel(
-                message: 'انتهت المباراة. يمكنك الرجوع إلى قائمة المباريات.',
+                message:
+                    'انتهت المباراة. يمكنك الرجوع إلى قائمة المباريات.',
               ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -644,7 +1029,9 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
               ),
             if (_busy) ...[
               const SizedBox(height: 12),
-              const Center(child: CircularProgressIndicator()),
+              const Center(
+                child: CircularProgressIndicator(),
+              ),
             ],
           ],
         ),
@@ -656,10 +1043,13 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
     switch (_room.game) {
       case 'tic_tac_toe':
         return _buildTicTacToe();
+
       case 'rock_paper_scissors':
         return _buildRps();
+
       case 'chess':
         return _buildChess();
+
       default:
         return const _NoticePanel(
           message: 'نوع اللعبة غير معروف في هذه النسخة.',
@@ -669,10 +1059,12 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
 
   Widget _buildTicTacToe() {
     final rawBoard = _room.state['board'];
+
     final board = rawBoard is List
         ? List<String>.generate(
             9,
-            (i) => i < rawBoard.length && rawBoard[i] is String
+            (i) => i < rawBoard.length &&
+                    rawBoard[i] is String
                 ? rawBoard[i] as String
                 : '',
           )
@@ -698,13 +1090,15 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: 9,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate:
+              const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             crossAxisSpacing: 8,
             mainAxisSpacing: 8,
           ),
           itemBuilder: (context, index) {
             final mark = board[index];
+
             return InkWell(
               onTap: _busy ||
                       !_room.isPlaying ||
@@ -745,17 +1139,22 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
 
   Widget _buildRps() {
     final choices = _room.state['choices'];
+
     final myChoice = choices is Map
         ? choices[_room.myRole]
         : null;
-    final result = _room.state['lastResult'] ??
-        _room.state['result'];
+
+    final result =
+        _room.state['lastResult'] ?? _room.state['result'];
 
     return Column(
       children: [
         const Text(
           'اختار حركة الجولة',
-          style: TextStyle(color: Colors.white, fontSize: 18),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+          ),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -781,14 +1180,20 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
             child: Text(
               'نتيجة الجولة: $result',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFFFFD76A)),
+              style: const TextStyle(
+                color: Color(0xFFFFD76A),
+              ),
             ),
           ),
       ],
     );
   }
 
-  Widget _rpsButton(String choice, String label, dynamic myChoice) {
+  Widget _rpsButton(
+    String choice,
+    String label,
+    dynamic myChoice,
+  ) {
     return FilledButton.tonal(
       onPressed: _busy ||
               !_room.isPlaying ||
@@ -800,7 +1205,10 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
                   choice: choice,
                 ),
               ),
-      child: Text(label, style: const TextStyle(fontSize: 17)),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 17),
+      ),
     );
   }
 
@@ -820,14 +1228,19 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
         Text(
           'الدور: ${turn == 'w' ? 'الأبيض' : 'الأسود'}',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFFFFD76A)),
+          style: const TextStyle(
+            color: Color(0xFFFFD76A),
+          ),
         ),
         const SizedBox(height: 8),
         if (fen is String)
           SelectableText(
             'FEN: $fen',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+            ),
           ),
         const SizedBox(height: 12),
         Row(
@@ -862,8 +1275,11 @@ class _SocialGameRoomScreenState extends State<SocialGameRoomScreen> {
           onPressed: _busy || !_room.isPlaying
               ? null
               : () {
-                  final from = _from.text.trim().toLowerCase();
-                  final to = _to.text.trim().toLowerCase();
+                  final from =
+                      _from.text.trim().toLowerCase();
+
+                  final to =
+                      _to.text.trim().toLowerCase();
 
                   _move(
                     () => _service.playChessMove(
@@ -895,7 +1311,10 @@ class _HubIntro extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF202A45), Color(0xFF111827)],
+          colors: [
+            Color(0xFF202A45),
+            Color(0xFF111827),
+          ],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white12),
@@ -958,7 +1377,11 @@ class _GameChoice extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 9),
       child: ListTile(
         onTap: onTap,
-        leading: Icon(icon, color: const Color(0xFFFFD76A), size: 30),
+        leading: Icon(
+          icon,
+          color: const Color(0xFFFFD76A),
+          size: 30,
+        ),
         title: Text(
           title,
           style: const TextStyle(
@@ -992,7 +1415,9 @@ class _ErrorPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF51252C),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+        border: Border.all(
+          color: Colors.redAccent.withValues(alpha: 0.4),
+        ),
       ),
       child: Text(
         message,
