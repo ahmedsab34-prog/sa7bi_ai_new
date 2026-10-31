@@ -259,37 +259,32 @@ async function createInvitation(actor, request, user) {
   const bodyError = bodyErrorResponse(body);
   if (bodyError) return bodyError;
 
-  const recipientUserId = safeString(body.recipientUserId, 64);
+  const recipientId = safeString(body.recipientUserId, 80);
   const game = safeString(body.game, 40);
 
-  if (!isUuid(recipientUserId) || !SUPPORTED_INVITATION_GAMES.has(game)) {
-    return json({ ok: false, error: "INVALID_INVITATION_DATA" }, 400);
+  if (!isUuid(recipientId)) {
+    return json({ ok: false, error: "INVALID_RECIPIENT" }, 400);
   }
 
-  if (recipientUserId === user.id) {
+  if (!SUPPORTED_INVITATION_GAMES.has(game)) {
+    return json({ ok: false, error: "UNSUPPORTED_GAME" }, 400);
+  }
+
+  if (recipientId === user.id) {
     return json({ ok: false, error: "CANNOT_INVITE_SELF" }, 409);
   }
 
   const recipient = actor.ctx.storage.sql.exec(
     "SELECT id FROM users WHERE id = ?",
-    recipientUserId,
+    recipientId,
   ).toArray()[0];
 
   if (!recipient) {
-    return json({ ok: false, error: "USER_NOT_FOUND" }, 404);
+    return json({ ok: false, error: "RECIPIENT_NOT_FOUND" }, 404);
   }
 
   const now = Date.now();
-
-  actor.ctx.storage.sql.exec(
-    `UPDATE social_invitations
-     SET status = 'expired', responded_at = ?
-     WHERE status = 'pending' AND expires_at <= ?`,
-    now,
-    now,
-  );
-
-  const existing = actor.ctx.storage.sql.exec(
+  const duplicate = actor.ctx.storage.sql.exec(
     `SELECT id
      FROM social_invitations
      WHERE sender_id = ?
@@ -298,39 +293,40 @@ async function createInvitation(actor, request, user) {
        AND expires_at > ?
      LIMIT 1`,
     user.id,
-    recipientUserId,
+    recipientId,
     now,
   ).toArray()[0];
 
-  if (existing) {
+  if (duplicate) {
     return json({ ok: false, error: "INVITATION_ALREADY_PENDING" }, 409);
   }
 
   let code = "";
-  let unique = false;
+  let uniqueCode = false;
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
   for (let attempt = 0; attempt < 12; attempt++) {
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     const bytes = crypto.getRandomValues(new Uint8Array(6));
     code = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
 
-    const found = actor.ctx.storage.sql.exec(
+    const exists = actor.ctx.storage.sql.exec(
       "SELECT id FROM game_rooms WHERE code = ?",
       code,
     ).toArray()[0];
 
-    if (!found) {
-      unique = true;
+    if (!exists) {
+      uniqueCode = true;
       break;
     }
   }
 
-  if (!unique) {
+  if (!uniqueCode) {
     return json({ ok: false, error: "INVITE_CODE_GENERATION_FAILED" }, 503);
   }
 
   const roomId = crypto.randomUUID();
   const invitationId = crypto.randomUUID();
+  const expiresAt = now + INVITATION_TTL_MS;
 
   actor.ctx.storage.sql.exec(
     `INSERT INTO game_rooms
@@ -345,52 +341,77 @@ async function createInvitation(actor, request, user) {
     now,
   );
 
-  actor.ctx.storage.sql.exec(
-    `INSERT INTO social_invitations
-     (id, sender_id, recipient_id, game, room_id, status, created_at, expires_at, responded_at)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, NULL)`,
-    invitationId,
-    user.id,
-    recipientUserId,
-    game,
-    roomId,
-    now,
-    now + INVITATION_TTL_MS,
-  );
-
-  const row = getInvitationRow(actor, invitationId);
+  try {
+    actor.ctx.storage.sql.exec(
+      `INSERT INTO social_invitations
+       (id, sender_id, recipient_id, game, room_id, status, created_at, expires_at, responded_at)
+       VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, NULL)`,
+      invitationId,
+      user.id,
+      recipientId,
+      game,
+      roomId,
+      now,
+      expiresAt,
+    );
+  } catch (_) {
+    actor.ctx.storage.sql.exec(
+      "DELETE FROM game_rooms WHERE id = ? AND host_id = ? AND guest_id IS NULL",
+      roomId,
+      user.id,
+    );
+    return json({ ok: false, error: "INVITATION_CREATE_FAILED" }, 500);
+  }
 
   return json(
     {
       ok: true,
-      invitation: invitationPayload(row, user.id),
+      invitation: invitationPayload(
+        getInvitationRow(actor, invitationId),
+        user.id,
+      ),
     },
     201,
   );
 }
 
-async function respondToInvitation(actor, request, user, invitationId, action) {
-  if (!isUuid(invitationId)) {
-    return json({ ok: false, error: "INVALID_INVITATION_ID" }, 400);
-  }
+async function respondToInvitation(actor, invitationId, request, user, action) {
+  const body = await actor.readBody(request);
+  const bodyError = bodyErrorResponse(body);
+  if (bodyError) return bodyError;
 
-  const row = getInvitationRow(actor, invitationId);
+  const invitation = getInvitationRow(actor, invitationId);
 
-  if (!row) {
+  if (!invitation) {
     return json({ ok: false, error: "INVITATION_NOT_FOUND" }, 404);
   }
 
-  if (row.recipient_id !== user.id) {
+  if (invitation.recipient_id !== user.id) {
     return json({ ok: false, error: "INVITATION_ACCESS_DENIED" }, 403);
-  }
-
-  if (row.status !== "pending") {
-    return json({ ok: false, error: "INVITATION_ALREADY_RESPONDED" }, 409);
   }
 
   const now = Date.now();
 
-  if (row.expires_at <= now) {
+  if (invitation.status === "accepted" && action === "accept") {
+    const room = actor.ctx.storage.sql.exec(
+      "SELECT guest_id FROM game_rooms WHERE id = ?",
+      invitation.room_id,
+    ).toArray()[0];
+
+    if (room && room.guest_id === user.id) {
+      return json({
+        ok: true,
+        invitation: invitationPayload(getInvitationRow(actor, invitationId), user.id),
+        room: await actor.roomPayload(invitation.room_id, user.id),
+      });
+    }
+  }
+
+  if (invitation.status !== "pending") {
+    return json({ ok: false, error: "INVITATION_NOT_PENDING" }, 409);
+  }
+
+  if (invitation.expires_at <= now) {
     actor.ctx.storage.sql.exec(
       `UPDATE social_invitations
        SET status = 'expired', responded_at = ?
@@ -398,7 +419,6 @@ async function respondToInvitation(actor, request, user, invitationId, action) {
       now,
       invitationId,
     );
-
     return json({ ok: false, error: "INVITATION_EXPIRED" }, 410);
   }
 
@@ -406,9 +426,10 @@ async function respondToInvitation(actor, request, user, invitationId, action) {
     actor.ctx.storage.sql.exec(
       `UPDATE social_invitations
        SET status = 'declined', responded_at = ?
-       WHERE id = ? AND status = 'pending'`,
+       WHERE id = ? AND recipient_id = ? AND status = 'pending'`,
       now,
       invitationId,
+      user.id,
     );
 
     return json({
@@ -418,96 +439,69 @@ async function respondToInvitation(actor, request, user, invitationId, action) {
   }
 
   const room = actor.ctx.storage.sql.exec(
-    "SELECT * FROM game_rooms WHERE id = ?",
-    row.room_id,
+    "SELECT id, host_id, guest_id, status FROM game_rooms WHERE id = ?",
+    invitation.room_id,
   ).toArray()[0];
 
   if (!room) {
     return json({ ok: false, error: "ROOM_NOT_FOUND" }, 404);
   }
 
-  if (room.status !== "waiting" || room.guest_id) {
-    actor.ctx.storage.sql.exec(
-      `UPDATE social_invitations
-       SET status = 'unavailable', responded_at = ?
-       WHERE id = ? AND status = 'pending'`,
+  if (room.guest_id && room.guest_id !== user.id) {
+    return json({ ok: false, error: "ROOM_FULL" }, 409);
+  }
+
+  if (room.status !== "waiting" && room.guest_id !== user.id) {
+    return json({ ok: false, error: "ROOM_NOT_AVAILABLE" }, 409);
+  }
+
+  if (!room.guest_id) {
+    const update = actor.ctx.storage.sql.exec(
+      `UPDATE game_rooms
+       SET guest_id = ?, status = 'playing', updated_at = ?
+       WHERE id = ? AND guest_id IS NULL AND status = 'waiting'`,
+      user.id,
       now,
-      invitationId,
+      invitation.room_id,
     );
 
-    return json({ ok: false, error: "ROOM_UNAVAILABLE" }, 409);
+    if (update.rowsWritten === 0) {
+      return json({ ok: false, error: "ROOM_FULL" }, 409);
+    }
   }
 
-  const updated = actor.ctx.storage.sql.exec(
-    `UPDATE game_rooms
-     SET guest_id = ?, status = 'playing', updated_at = ?
-     WHERE id = ? AND guest_id IS NULL AND status = 'waiting'`,
-    user.id,
-    now,
-    room.id,
-  );
-
-  if (updated.rowsWritten === 0) {
-    return json({ ok: false, error: "ROOM_UNAVAILABLE" }, 409);
-  }
-
-  actor.ctx.storage.sql.exec(
+  const inviteUpdate = actor.ctx.storage.sql.exec(
     `UPDATE social_invitations
      SET status = 'accepted', responded_at = ?
-     WHERE id = ? AND status = 'pending'`,
+     WHERE id = ? AND recipient_id = ? AND status = 'pending'`,
     now,
     invitationId,
-  );
-
-  const invitation = invitationPayload(
-    getInvitationRow(actor, invitationId),
     user.id,
   );
+
+  if (inviteUpdate.rowsWritten === 0) {
+    const currentRoom = actor.ctx.storage.sql.exec(
+      "SELECT guest_id FROM game_rooms WHERE id = ?",
+      invitation.room_id,
+    ).toArray()[0];
+
+    if (!currentRoom || currentRoom.guest_id !== user.id) {
+      return json({ ok: false, error: "INVITATION_NOT_PENDING" }, 409);
+    }
+  }
 
   return json({
     ok: true,
-    invitation,
-    room: await actor.roomPayload(room.id, user.id),
+    invitation: invitationPayload(getInvitationRow(actor, invitationId), user.id),
+    room: await actor.roomPayload(invitation.room_id, user.id),
   });
 }
 
-async function createConversation(actor, request, user) {
-  const body = await actor.readBody(request);
-  const bodyError = bodyErrorResponse(body);
-  if (bodyError) return bodyError;
+async function getOrCreateConversation(actor, firstUserId, secondUserId) {
+  const userA = firstUserId < secondUserId ? firstUserId : secondUserId;
+  const userB = firstUserId < secondUserId ? secondUserId : firstUserId;
 
-  const otherId = safeString(body.userId, 64);
-
-  if (!isUuid(otherId) || otherId === user.id) {
-    return json({ ok: false, error: "INVALID_USER_ID" }, 400);
-  }
-
-  const other = actor.ctx.storage.sql.exec(
-    "SELECT id, username FROM users WHERE id = ?",
-    otherId,
-  ).toArray()[0];
-
-  if (!other) {
-    return json({ ok: false, error: "USER_NOT_FOUND" }, 404);
-  }
-
-  const userA = user.id < otherId ? user.id : otherId;
-  const userB = user.id < otherId ? otherId : user.id;
-  const now = Date.now();
-
-  actor.ctx.storage.sql.exec(
-    `INSERT INTO social_conversations
-     (id, user_a, user_b, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(user_a, user_b) DO NOTHING`,
-    crypto.randomUUID(),
-    userA,
-    userB,
-    now,
-    now,
-  );
-
-  const conversation = actor.ctx.storage.sql.exec(
+  let conversation = actor.ctx.storage.sql.exec(
     `SELECT id, user_a, user_b, created_at, updated_at
      FROM social_conversations
      WHERE user_a = ? AND user_b = ?`,
@@ -515,72 +509,138 @@ async function createConversation(actor, request, user) {
     userB,
   ).toArray()[0];
 
+  if (conversation) return conversation;
+
+  const now = Date.now();
+  const id = crypto.randomUUID();
+
+  try {
+    actor.ctx.storage.sql.exec(
+      `INSERT INTO social_conversations (id, user_a, user_b, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      id,
+      userA,
+      userB,
+      now,
+      now,
+    );
+  } catch (_) {
+    // If another request created the same pair first, read that conversation.
+  }
+
+  conversation = actor.ctx.storage.sql.exec(
+    `SELECT id, user_a, user_b, created_at, updated_at
+     FROM social_conversations
+     WHERE user_a = ? AND user_b = ?`,
+    userA,
+    userB,
+  ).toArray()[0];
+
+  return conversation || null;
+}
+
+async function createConversation(actor, request, user) {
+  const body = await actor.readBody(request);
+  const bodyError = bodyErrorResponse(body);
+  if (bodyError) return bodyError;
+
+  const targetId = safeString(body.userId, 80);
+
+  if (!isUuid(targetId)) {
+    return json({ ok: false, error: "INVALID_USER_ID" }, 400);
+  }
+
+  if (targetId === user.id) {
+    return json({ ok: false, error: "CANNOT_MESSAGE_SELF" }, 409);
+  }
+
+  const target = actor.ctx.storage.sql.exec(
+    "SELECT id FROM users WHERE id = ?",
+    targetId,
+  ).toArray()[0];
+
+  if (!target) {
+    return json({ ok: false, error: "USER_NOT_FOUND" }, 404);
+  }
+
+  const conversation = await getOrCreateConversation(actor, user.id, targetId);
+
+  if (!conversation) {
+    return json({ ok: false, error: "CONVERSATION_CREATE_FAILED" }, 500);
+  }
+
   return json({
     ok: true,
-    conversation: {
-      id: conversation.id,
-      otherUser: userSummary(other.id, other.username),
-      createdAt: conversation.created_at,
-      updatedAt: conversation.updated_at,
-    },
-  });
+    conversation: await conversationPayload(actor, conversation, user.id),
+  }, 201);
+}
+
+async function conversationPayload(actor, conversation, currentUserId) {
+  const peerId = otherUserId(conversation, currentUserId);
+  const peer = actor.ctx.storage.sql.exec(
+    "SELECT id, username FROM users WHERE id = ?",
+    peerId,
+  ).toArray()[0];
+
+  const lastMessage = actor.ctx.storage.sql.exec(
+    `SELECT id, sender_id, body, created_at
+     FROM social_messages
+     WHERE conversation_id = ?
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    conversation.id,
+  ).toArray()[0] || null;
+
+  const unreadRow = actor.ctx.storage.sql.exec(
+    `SELECT COUNT(*) AS unread_count
+     FROM social_messages
+     WHERE conversation_id = ?
+       AND sender_id <> ?
+       AND read_at IS NULL`,
+    conversation.id,
+    currentUserId,
+  ).toArray()[0];
+
+  return {
+    id: conversation.id,
+    otherUser: userSummary(peer?.id, peer?.username),
+    lastMessage: lastMessage
+      ? {
+          id: lastMessage.id,
+          senderId: lastMessage.sender_id,
+          text: lastMessage.body,
+          createdAt: lastMessage.created_at,
+        }
+      : null,
+    unreadCount: Number(unreadRow?.unread_count || 0),
+    createdAt: conversation.created_at,
+    updatedAt: conversation.updated_at,
+  };
 }
 
 async function listConversations(actor, user) {
   const rows = actor.ctx.storage.sql.exec(
-    `SELECT
-       c.id,
-       c.user_a,
-       c.user_b,
-       c.created_at,
-       c.updated_at,
-       other.id AS other_id,
-       other.username AS other_username,
-       (SELECT body
-        FROM social_messages m
-        WHERE m.conversation_id = c.id
-        ORDER BY m.created_at DESC
-        LIMIT 1) AS last_message,
-       (SELECT created_at
-        FROM social_messages m
-        WHERE m.conversation_id = c.id
-        ORDER BY m.created_at DESC
-        LIMIT 1) AS last_message_at,
-       (SELECT COUNT(*)
-        FROM social_messages m
-        WHERE m.conversation_id = c.id
-          AND m.sender_id <> ?
-          AND m.read_at IS NULL) AS unread_count
-     FROM social_conversations c
-     JOIN users other
-       ON other.id = CASE
-         WHEN c.user_a = ? THEN c.user_b
-         ELSE c.user_a
-       END
-     WHERE c.user_a = ? OR c.user_b = ?
-     ORDER BY COALESCE(last_message_at, c.updated_at) DESC
-     LIMIT 100`,
-    user.id,
-    user.id,
+    `SELECT id, user_a, user_b, created_at, updated_at
+     FROM social_conversations
+     WHERE user_a = ? OR user_b = ?
+     ORDER BY updated_at DESC
+     LIMIT 50`,
     user.id,
     user.id,
   ).toArray();
 
-  return json({
-    ok: true,
-    conversations: rows.map((row) => ({
-      id: row.id,
-      otherUser: userSummary(row.other_id, row.other_username),
-      lastMessage: row.last_message || "",
-      updatedAt: row.last_message_at || row.updated_at,
-      unreadCount: Number(row.unread_count || 0),
-    })),
-  });
+  const conversations = [];
+
+  for (const row of rows) {
+    conversations.push(await conversationPayload(actor, row, user.id));
+  }
+
+  return json({ ok: true, conversations });
 }
 
-async function listMessages(actor, request, user) {
+async function getMessages(actor, request, user) {
   const url = new URL(request.url);
-  const conversationId = safeString(url.searchParams.get("conversationId"), 64);
+  const conversationId = url.searchParams.get("conversationId") || "";
 
   if (!isUuid(conversationId)) {
     return json({ ok: false, error: "INVALID_CONVERSATION_ID" }, 400);
@@ -596,20 +656,24 @@ async function listMessages(actor, request, user) {
     return json({ ok: false, error: "CONVERSATION_ACCESS_DENIED" }, 403);
   }
 
-  const limitValue = Number(url.searchParams.get("limit") || 50);
-  const limit = Number.isFinite(limitValue)
-    ? Math.min(100, Math.max(1, Math.trunc(limitValue)))
+  const requestedLimit = Number(url.searchParams.get("limit") || 50);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
     : 50;
 
   const rows = actor.ctx.storage.sql.exec(
     `SELECT id, conversation_id, sender_id, body, created_at, read_at
-     FROM social_messages
-     WHERE conversation_id = ?
-     ORDER BY created_at DESC
-     LIMIT ?`,
+     FROM (
+       SELECT id, conversation_id, sender_id, body, created_at, read_at
+       FROM social_messages
+       WHERE conversation_id = ?
+       ORDER BY created_at DESC
+       LIMIT ?
+     )
+     ORDER BY created_at ASC`,
     conversationId,
     limit,
-  ).toArray().reverse();
+  ).toArray();
 
   return json({
     ok: true,
@@ -630,11 +694,19 @@ async function sendMessage(actor, request, user) {
   const bodyError = bodyErrorResponse(body);
   if (bodyError) return bodyError;
 
-  const conversationId = safeString(body.conversationId, 64);
-  const message = typeof body.text === "string" ? body.text.trim() : "";
+  const conversationId = safeString(body.conversationId, 80);
+  const messageText = typeof body.text === "string" ? body.text.trim() : "";
 
-  if (!isUuid(conversationId) || !message || message.length > MESSAGE_MAX_LENGTH) {
-    return json({ ok: false, error: "INVALID_MESSAGE" }, 400);
+  if (!isUuid(conversationId)) {
+    return json({ ok: false, error: "INVALID_CONVERSATION_ID" }, 400);
+  }
+
+  if (!messageText || messageText.length > MESSAGE_MAX_LENGTH) {
+    return json({
+      ok: false,
+      error: "INVALID_MESSAGE",
+      message: `الرسالة يجب أن تكون من حرف واحد إلى ${MESSAGE_MAX_LENGTH} حرف.`,
+    }, 400);
   }
 
   const conversation = getConversationRow(actor, conversationId);
@@ -648,20 +720,19 @@ async function sendMessage(actor, request, user) {
   }
 
   const now = Date.now();
-  const recent = actor.ctx.storage.sql.exec(
-    `SELECT COUNT(*) AS total
+  const recentRow = actor.ctx.storage.sql.exec(
+    `SELECT COUNT(*) AS message_count
      FROM social_messages
-     WHERE sender_id = ? AND created_at > ?`,
+     WHERE sender_id = ? AND created_at >= ?`,
     user.id,
     now - MESSAGE_RATE_WINDOW_MS,
   ).toArray()[0];
 
-  if (Number(recent?.total || 0) >= MESSAGE_RATE_LIMIT) {
+  if (Number(recentRow?.message_count || 0) >= MESSAGE_RATE_LIMIT) {
     return json({ ok: false, error: "MESSAGE_RATE_LIMIT" }, 429);
   }
 
   const messageId = crypto.randomUUID();
-
   actor.ctx.storage.sql.exec(
     `INSERT INTO social_messages
      (id, conversation_id, sender_id, body, created_at, read_at)
@@ -669,7 +740,7 @@ async function sendMessage(actor, request, user) {
     messageId,
     conversationId,
     user.id,
-    message,
+    messageText,
     now,
   );
 
@@ -679,21 +750,18 @@ async function sendMessage(actor, request, user) {
     conversationId,
   );
 
-  return json(
-    {
-      ok: true,
-      message: {
-        id: messageId,
-        conversationId,
-        senderId: user.id,
-        text: message,
-        createdAt: now,
-        readAt: null,
-        isMine: true,
-      },
+  return json({
+    ok: true,
+    message: {
+      id: messageId,
+      conversationId,
+      senderId: user.id,
+      text: messageText,
+      createdAt: now,
+      readAt: null,
+      isMine: true,
     },
-    201,
-  );
+  }, 201);
 }
 
 async function markMessagesRead(actor, request, user) {
@@ -701,7 +769,7 @@ async function markMessagesRead(actor, request, user) {
   const bodyError = bodyErrorResponse(body);
   if (bodyError) return bodyError;
 
-  const conversationId = safeString(body.conversationId, 64);
+  const conversationId = safeString(body.conversationId, 80);
 
   if (!isUuid(conversationId)) {
     return json({ ok: false, error: "INVALID_CONVERSATION_ID" }, 400);
@@ -718,7 +786,6 @@ async function markMessagesRead(actor, request, user) {
   }
 
   const now = Date.now();
-
   actor.ctx.storage.sql.exec(
     `UPDATE social_messages
      SET read_at = ?
@@ -733,73 +800,82 @@ async function markMessagesRead(actor, request, user) {
   return json({ ok: true, readAt: now });
 }
 
+/**
+ * Returns a Response for the new messaging routes, or null for existing routes.
+ * The actor is the existing Sa7biSocial Durable Object instance.
+ */
 export async function handleSocialMessaging(request, actor) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
+  const method = request.method.toUpperCase();
 
-  const routes = [
-    ["GET", "/v1/social/invitations"],
-    ["POST", "/v1/social/invitations"],
-    ["POST", "/v1/social/conversations"],
-    ["GET", "/v1/social/conversations"],
-    ["GET", "/v1/social/messages"],
-    ["POST", "/v1/social/messages"],
-    ["POST", "/v1/social/messages/read"],
-  ];
+  const isInvitationRoute = path === "/v1/social/invitations" ||
+    /^\/v1\/social\/invitations\/[a-f0-9-]{36}\/(accept|decline)$/i.test(path);
+  const isConversationRoute = path === "/v1/social/conversations";
+  const isMessageRoute = path === "/v1/social/messages" ||
+    path === "/v1/social/messages/read";
 
-  const invitationAction = path.match(
-    /^\/v1\/social\/invitations\/([a-f0-9-]{36})\/(accept|decline)$/i,
-  );
-
-  const isMessagingRoute =
-    routes.some(([method, route]) => request.method === method && path === route) ||
-    (request.method === "POST" && invitationAction);
-
-  if (!isMessagingRoute) return null;
-
-  ensureMessagingTables(actor);
-
-  const user = await actor.requireUser(request);
-
-  if (user instanceof Response) return user;
-
-  if (request.method === "GET" && path === "/v1/social/invitations") {
-    return listInvitations(actor, request, user);
+  if (!isInvitationRoute && !isConversationRoute && !isMessageRoute) {
+    return null;
   }
 
-  if (request.method === "POST" && path === "/v1/social/invitations") {
-    return createInvitation(actor, request, user);
-  }
+  try {
+    ensureMessagingTables(actor);
 
-  if (request.method === "POST" && invitationAction) {
-    return respondToInvitation(
-      actor,
-      request,
-      user,
-      invitationAction[1],
-      invitationAction[2].toLowerCase(),
+    const user = await actor.requireUser(request);
+    if (user instanceof Response) return user;
+
+    if (path === "/v1/social/invitations" && method === "GET") {
+      return await listInvitations(actor, request, user);
+    }
+
+    if (path === "/v1/social/invitations" && method === "POST") {
+      return await createInvitation(actor, request, user);
+    }
+
+    const invitationMatch = path.match(
+      /^\/v1\/social\/invitations\/([a-f0-9-]{36})\/(accept|decline)$/i,
+    );
+
+    if (invitationMatch && method === "POST") {
+      return await respondToInvitation(
+        actor,
+        invitationMatch[1],
+        request,
+        user,
+        invitationMatch[2].toLowerCase(),
+      );
+    }
+
+    if (path === "/v1/social/conversations" && method === "GET") {
+      return await listConversations(actor, user);
+    }
+
+    if (path === "/v1/social/conversations" && method === "POST") {
+      return await createConversation(actor, request, user);
+    }
+
+    if (path === "/v1/social/messages" && method === "GET") {
+      return await getMessages(actor, request, user);
+    }
+
+    if (path === "/v1/social/messages" && method === "POST") {
+      return await sendMessage(actor, request, user);
+    }
+
+    if (path === "/v1/social/messages/read" && method === "POST") {
+      return await markMessagesRead(actor, request, user);
+    }
+
+    return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
+  } catch (_) {
+    return json(
+      {
+        ok: false,
+        error: "SOCIAL_MESSAGING_INTERNAL_ERROR",
+        message: "تعذر إكمال طلب الدعوات أو الرسائل. حاول مرة أخرى.",
+      },
+      500,
     );
   }
-
-  if (request.method === "POST" && path === "/v1/social/conversations") {
-    return createConversation(actor, request, user);
-  }
-
-  if (request.method === "GET" && path === "/v1/social/conversations") {
-    return listConversations(actor, user);
-  }
-
-  if (request.method === "GET" && path === "/v1/social/messages") {
-    return listMessages(actor, request, user);
-  }
-
-  if (request.method === "POST" && path === "/v1/social/messages") {
-    return sendMessage(actor, request, user);
-  }
-
-  if (request.method === "POST" && path === "/v1/social/messages/read") {
-    return markMessagesRead(actor, request, user);
-  }
-
-  return null;
 }
