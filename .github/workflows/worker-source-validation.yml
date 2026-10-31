@@ -1,0 +1,65 @@
+name: Sa7bi AI - Worker Source Validation
+
+on:
+  push:
+    branches:
+      - fix/build-692-network-client-lifecycle
+    paths:
+      - "backend/**"
+      - ".github/workflows/worker-source-validation.yml"
+  pull_request:
+    branches:
+      - fix/build-692-network-client-lifecycle
+    paths:
+      - "backend/**"
+      - ".github/workflows/worker-source-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa7bi-worker-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-worker:
+    name: Validate Worker syntax and bundle (no deployment)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify checked-out commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [ "${ACTUAL_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "::error::Checked-out source does not match the triggering commit."
+            exit 1
+          fi
+          echo "Validated source commit: ${ACTUAL_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        working-directory: backend
+        run: npm run check
+
+      - name: Bundle Worker without deploying
+        working-directory: backend
+        run: npm run dry-run
