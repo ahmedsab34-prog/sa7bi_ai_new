@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'chat_screen.dart';
 import 'config/service_keys.dart';
+import 'secure_venting_screen.dart';
 import 'service_config.dart';
 
 /// الشاشة الرئيسية لخلصانة AI.
@@ -9,10 +10,10 @@ import 'service_config.dart';
 /// تجمع المحادثة العامة والخدمات العشرة في شاشة واحدة:
 /// - المحادثة العامة هي الوضع الافتراضي.
 /// - الخدمات تظهر في ألسنة جانبية صغيرة.
-/// - كل خدمة لها ChatScreen وسجل مستقل.
-/// - نستخدم IndexedStack حتى تظل المحادثات التي فتحها المستخدم
-///   موجودة أثناء الانتقال بين الخدمات، ولا يضيع رد قيد الإرسال.
-/// - لا نعرض هيدرًا ثانيًا؛ ChatScreen يعرض AppHeader المشترك بالفعل.
+/// - كل خدمة لها سجل مستقل.
+/// - IndexedStack يحافظ على حالة الخدمات التي فتحها المستخدم.
+/// - الفضفضة لا تُنشأ داخل شجرة الواجهة إلا بعد فتح القفل المحلي.
+/// - لا نعرض هيدرًا ثانيًا داخل ChatScreen.
 class KhalasanaPortalScreen extends StatefulWidget {
   const KhalasanaPortalScreen({super.key});
 
@@ -77,14 +78,14 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
       ),
   ];
 
-  /// المفتاح النشط. يبدأ بالمحادثة العامة.
   String _selectedServiceKey = ServiceKeys.khalasana;
 
-  /// نحتفظ بالشاشات التي فتحها المستخدم فقط.
-  ///
-  /// بقية الخدمات تظل placeholders داخل IndexedStack، وعند فتح خدمة
-  /// لأول مرة تُنشأ مرة واحدة وتظل حالتها محفوظة عند التنقل بعدها.
-  final Map<String, ChatScreen> _chatScreens = <String, ChatScreen>{};
+  /// Store widgets rather than ChatScreen objects because the venting entry
+  /// is a lock wrapper. Its ChatScreen child is not mounted while locked.
+  final Map<String, Widget> _chatScreens = <String, Widget>{};
+
+  final GlobalKey<SecureVentingScreenState> _ventingKey =
+      GlobalKey<SecureVentingScreenState>();
 
   _KhalasanaTarget get _activeTarget {
     for (final target in _targets) {
@@ -95,10 +96,18 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
 
   void _selectTarget(_KhalasanaTarget target) {
     if (_selectedServiceKey == target.serviceKey) return;
+
+    // Remove the decrypted data key and unmount the private ChatScreen before
+    // changing tabs. The secure wrapper remains cached but shows its lock UI.
+    if (_selectedServiceKey == ServiceKeys.venting &&
+        target.serviceKey != ServiceKeys.venting) {
+      _ventingKey.currentState?.lock();
+    }
+
     setState(() => _selectedServiceKey = target.serviceKey);
   }
 
-  ChatScreen _createChatScreen(_KhalasanaTarget target) {
+  Widget _createChatScreen(_KhalasanaTarget target) {
     final contextText = target.isGeneral
         ? KhalasanaPortalScreen.contextText
         : '${KhalasanaPortalScreen.contextText}\n\n'
@@ -108,12 +117,21 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
             'لا تجبر المستخدم على تغيير التبويب، وتظل أدوات النص والصور '
             'والصوت والفيديو متاحة حسب إمكانات التطبيق.';
 
-    return ChatScreen(
+    final chat = ChatScreen(
       key: ValueKey<String>('khalasana-chat-${target.serviceKey}'),
       serviceKey: target.serviceKey,
       serviceTitle: target.title,
       serviceContext: contextText,
     );
+
+    if (target.serviceKey == ServiceKeys.venting) {
+      return SecureVentingScreen(
+        key: _ventingKey,
+        child: chat,
+      );
+    }
+
+    return chat;
   }
 
   Widget _buildChatStack() {
