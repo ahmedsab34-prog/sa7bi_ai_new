@@ -5,10 +5,12 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import com.ryanheise.audioservice.AudioServiceActivity
+import com.ryanheise.audioservice.AudioServiceFragmentActivity
 import java.io.ByteArrayOutputStream
 
-class MainActivity : AudioServiceActivity() {
+// FragmentActivity support is required by the native biometric prompt.
+// AudioServiceFragmentActivity preserves the existing audio_service engine link.
+class MainActivity : AudioServiceFragmentActivity() {
 
     private val videoChannel = "sa7bi_ai/video"
 
