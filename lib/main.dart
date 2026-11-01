@@ -17,6 +17,7 @@ import 'services/ai_request_service.dart';
 import 'services/credits_service.dart';
 import 'services/profile_service.dart';
 import 'services/sa7bi_network_client.dart';
+import 'social_connections_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/audio_center_with_header.dart';
 import 'widgets/khalasana_portal.dart';
@@ -133,6 +134,16 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
     Navigator.of(context).pushNamed('/diagnostics');
   }
 
+  void openSocialConnections() {
+    if (!mounted) return;
+
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const SocialConnectionsScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
@@ -215,6 +226,44 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                           Icons.health_and_safety_outlined,
                           color: Sa7biTheme.cyan,
                           size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+            // اختصار الدعوات والرسائل يظهر في تبويب الألعاب فقط.
+            if (index == 2)
+              Positioned(
+                right: 10,
+                bottom: 130,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Tooltip(
+                    message: 'الدعوات والرسائل الخاصة',
+                    child: InkWell(
+                      onTap: openSocialConnections,
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Sa7biTheme.surface.withValues(alpha: 0.98),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Sa7biTheme.border),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x55000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.mark_email_unread_outlined,
+                          color: Sa7biTheme.cyan,
+                          size: 22,
                         ),
                       ),
                     ),
