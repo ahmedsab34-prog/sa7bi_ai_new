@@ -134,6 +134,34 @@ class SocialCommunityService {
     return SocialGroupMessage.fromJson(_asMap(result['message']));
   }
 
+  /// يبحث عن لاعب حقيقي في طابور مشترك، ثم يترك الخادم يحوّل
+  /// الغرفة نفسها إلى خصم AI بعد انتهاء مهلة البحث.
+  Future<SocialQuickMatchResult> quickMatch({required String game}) async {
+    const supported = {'tic_tac_toe', 'rock_paper_scissors', 'chess'};
+    if (!supported.contains(game)) {
+      throw const SocialCommunityException(
+        'UNSUPPORTED_GAME',
+        'اللعبة المختارة غير مدعومة.',
+      );
+    }
+    final result = await _request(
+      'POST',
+      '/v1/games/matchmaking',
+      body: {'game': game},
+    );
+    return SocialQuickMatchResult.fromJson(result);
+  }
+
+  /// يلغي البحث فقط إذا لم ينضم لاعب آخر بعد.
+  Future<void> cancelQuickMatch(String roomId) async {
+    _validateUuid(roomId, 'ROOM_NOT_FOUND');
+    await _request(
+      'POST',
+      '/v1/games/rooms/$roomId/cancel-matchmaking',
+      body: const {},
+    );
+  }
+
   /// ينشئ مباراة محفوظة مع خصم آلي على الخادم.
   Future<SocialGameRoom> createAiRoom({required String game}) async {
     const supported = {'tic_tac_toe', 'rock_paper_scissors', 'chess'};
@@ -264,6 +292,10 @@ class SocialCommunityService {
             : 'محتوى الرسالة غير صالح.';
       case 'UNSUPPORTED_GAME':
         return 'اللعبة المختارة غير مدعومة.';
+      case 'MATCH_SEARCH_ALREADY_FINISHED':
+        return 'انضم لاعب بالفعل أو انتهى البحث. حدّث حالة المباراة.';
+      case 'MATCH_QUEUE_CREATE_CONFLICT':
+        return 'حدث تعارض أثناء إنشاء البحث. حاول مرة أخرى.';
       case 'NETWORK_TIMEOUT':
         return 'انتهت مهلة الاتصال. حاول مرة أخرى.';
       default:
@@ -271,6 +303,34 @@ class SocialCommunityService {
             ? serverMessage
             : 'تعذر إكمال الطلب ($code). حاول مرة أخرى.';
     }
+  }
+}
+
+
+class SocialQuickMatchResult {
+  const SocialQuickMatchResult({
+    required this.room,
+    required this.matched,
+    required this.aiFallback,
+    required this.waitSeconds,
+    required this.reused,
+  });
+
+  final SocialGameRoom room;
+  final bool matched;
+  final bool aiFallback;
+  final int waitSeconds;
+  final bool reused;
+
+  factory SocialQuickMatchResult.fromJson(Map<String, dynamic> json) {
+    final rawRoom = json['room'];
+    return SocialQuickMatchResult(
+      room: SocialGameRoom.fromJson(SocialCommunityService._asMap(rawRoom)),
+      matched: json['matched'] == true,
+      aiFallback: json['aiFallback'] == true,
+      waitSeconds: _readInt(json['waitSeconds']),
+      reused: json['reused'] == true,
+    );
   }
 }
 
