@@ -17,7 +17,7 @@ import 'services/ai_request_service.dart';
 import 'services/credits_service.dart';
 import 'services/profile_service.dart';
 import 'services/sa7bi_network_client.dart';
-import 'social_connections_screen.dart';
+import 'social_community_hub_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/audio_center_with_header.dart';
 import 'widgets/khalasana_portal.dart';
@@ -139,7 +139,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => const SocialConnectionsScreen(),
+        builder: (_) => const SocialCommunityHubScreen(),
       ),
     );
   }
@@ -233,7 +233,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 ),
               ),
 
-            // اختصار الدعوات والرسائل يظهر في تبويب الألعاب فقط.
+            // اختصار مركز التواصل يظهر في تبويب الألعاب فقط.
             if (index == 2)
               Positioned(
                 right: 10,
@@ -241,7 +241,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 child: Material(
                   color: Colors.transparent,
                   child: Tooltip(
-                    message: 'الدعوات والرسائل الخاصة',
+                    message: 'الرسائل والمجموعات واللعب مع الذكاء الاصطناعي',
                     child: InkWell(
                       onTap: openSocialConnections,
                       borderRadius: BorderRadius.circular(24),
@@ -261,7 +261,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                           ],
                         ),
                         child: const Icon(
-                          Icons.mark_email_unread_outlined,
+                          Icons.groups_rounded,
                           color: Sa7biTheme.cyan,
                           size: 22,
                         ),
