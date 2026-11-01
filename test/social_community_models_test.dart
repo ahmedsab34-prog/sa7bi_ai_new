@@ -77,4 +77,66 @@ void main() {
     expect(room.guest?.username, 'صاحبي AI');
     expect(room.isPlaying, isTrue);
   });
+
+  group('Quick matchmaking response', () {
+    test('parses a player search that is still waiting', () {
+      final result = SocialQuickMatchResult.fromJson({
+        'ok': true,
+        'matched': false,
+        'aiFallback': false,
+        'waitSeconds': 25,
+        'reused': false,
+        'room': {
+          'id': '33333333-3333-4333-8333-333333333333',
+          'inviteCode': 'AB2345',
+          'game': 'chess',
+          'status': 'waiting',
+          'myRole': 'host',
+          'state': {
+            'matchmaking': true,
+            'matchmakingStatus': 'searching',
+          },
+          'createdAt': 1760000000000,
+          'updatedAt': 1760000000000,
+        },
+      });
+
+      expect(result.matched, isFalse);
+      expect(result.aiFallback, isFalse);
+      expect(result.waitSeconds, 25);
+      expect(result.room.isWaiting, isTrue);
+      expect(result.room.state['matchmakingStatus'], 'searching');
+    });
+
+    test('parses an automatic AI fallback result', () {
+      final result = SocialQuickMatchResult.fromJson({
+        'ok': true,
+        'matched': true,
+        'aiFallback': true,
+        'room': {
+          'id': '44444444-4444-4444-8444-444444444444',
+          'inviteCode': 'CD6789',
+          'game': 'tic_tac_toe',
+          'status': 'playing',
+          'myRole': 'host',
+          'state': {
+            'aiOpponent': true,
+            'matchmaking': true,
+            'matchmakingStatus': 'ai_fallback',
+          },
+          'guest': {
+            'id': 'sa7bi-ai',
+            'username': 'صاحبي AI',
+            'mark': 'O',
+          },
+        },
+      });
+
+      expect(result.matched, isTrue);
+      expect(result.aiFallback, isTrue);
+      expect(result.room.isPlaying, isTrue);
+      expect(result.room.state['aiOpponent'], isTrue);
+      expect(result.room.guest?.username, 'صاحبي AI');
+    });
+  });
 }
