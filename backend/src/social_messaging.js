@@ -495,3 +495,385 @@ async function respondToInvitation(actor, invitationId, request, user, action) {
     room: await actor.roomPayload(invitation.room_id, user.id),
   });
 }
+async function getOrCreateConversation(actor, firstUserId, secondUserId) {
+  const userA = firstUserId < secondUserId ? firstUserId : secondUserId;
+  const userB = firstUserId < secondUserId ? secondUserId : firstUserId;
+
+  let conversation = actor.ctx.storage.sql.exec(
+    `SELECT id, user_a, user_b, created_at, updated_at
+     FROM social_conversations
+     WHERE user_a = ? AND user_b = ?`,
+    userA,
+    userB,
+  ).toArray()[0];
+
+  if (conversation) return conversation;
+
+  const now = Date.now();
+  const id = crypto.randomUUID();
+
+  try {
+    actor.ctx.storage.sql.exec(
+      `INSERT INTO social_conversations (id, user_a, user_b, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      id,
+      userA,
+      userB,
+      now,
+      now,
+    );
+  } catch (_) {
+    // If another request created the same pair first, read that conversation.
+  }
+
+  conversation = actor.ctx.storage.sql.exec(
+    `SELECT id, user_a, user_b, created_at, updated_at
+     FROM social_conversations
+     WHERE user_a = ? AND user_b = ?`,
+    userA,
+    userB,
+  ).toArray()[0];
+
+  return conversation || null;
+}
+
+async function createConversation(actor, request, user) {
+  const body = await actor.readBody(request);
+  const bodyError = bodyErrorResponse(body);
+  if (bodyError) return bodyError;
+
+  const targetId = safeString(body.userId, 80);
+
+  if (!isUuid(targetId)) {
+    return json({ ok: false, error: "INVALID_USER_ID" }, 400);
+  }
+
+  if (targetId === user.id) {
+    return json({ ok: false, error: "CANNOT_MESSAGE_SELF" }, 409);
+  }
+
+  const target = actor.ctx.storage.sql.exec(
+    "SELECT id FROM users WHERE id = ?",
+    targetId,
+  ).toArray()[0];
+
+  if (!target) {
+    return json({ ok: false, error: "USER_NOT_FOUND" }, 404);
+  }
+
+  const conversation = await getOrCreateConversation(actor, user.id, targetId);
+
+  if (!conversation) {
+    return json({ ok: false, error: "CONVERSATION_CREATE_FAILED" }, 500);
+  }
+
+  return json({
+    ok: true,
+    conversation: await conversationPayload(actor, conversation, user.id),
+  }, 201);
+}
+
+async function conversationPayload(actor, conversation, currentUserId) {
+  const peerId = otherUserId(conversation, currentUserId);
+  const peer = actor.ctx.storage.sql.exec(
+    "SELECT id, username FROM users WHERE id = ?",
+    peerId,
+  ).toArray()[0];
+
+  const lastMessage = actor.ctx.storage.sql.exec(
+    `SELECT id, sender_id, body, created_at
+     FROM social_messages
+     WHERE conversation_id = ?
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    conversation.id,
+  ).toArray()[0] || null;
+
+  const unreadRow = actor.ctx.storage.sql.exec(
+    `SELECT COUNT(*) AS unread_count
+     FROM social_messages
+     WHERE conversation_id = ?
+       AND sender_id <> ?
+       AND read_at IS NULL`,
+    conversation.id,
+    currentUserId,
+  ).toArray()[0];
+
+  return {
+    id: conversation.id,
+    otherUser: userSummary(peer?.id, peer?.username),
+    lastMessage: lastMessage
+      ? {
+          id: lastMessage.id,
+          senderId: lastMessage.sender_id,
+          text: lastMessage.body,
+          createdAt: lastMessage.created_at,
+        }
+      : null,
+    unreadCount: Number(unreadRow?.unread_count || 0),
+    createdAt: conversation.created_at,
+    updatedAt: conversation.updated_at,
+  };
+}
+
+async function listConversations(actor, user) {
+  const rows = actor.ctx.storage.sql.exec(
+    `SELECT id, user_a, user_b, created_at, updated_at
+     FROM social_conversations
+     WHERE user_a = ? OR user_b = ?
+     ORDER BY updated_at DESC
+     LIMIT 50`,
+    user.id,
+    user.id,
+  ).toArray();
+
+  const conversations = [];
+
+  for (const row of rows) {
+    conversations.push(await conversationPayload(actor, row, user.id));
+  }
+
+  return json({ ok: true, conversations });
+}
+
+async function getMessages(actor, request, user) {
+  const url = new URL(request.url);
+  const conversationId = url.searchParams.get("conversationId") || "";
+
+  if (!isUuid(conversationId)) {
+    return json({ ok: false, error: "INVALID_CONVERSATION_ID" }, 400);
+  }
+
+  const conversation = getConversationRow(actor, conversationId);
+
+  if (!conversation) {
+    return json({ ok: false, error: "CONVERSATION_NOT_FOUND" }, 404);
+  }
+
+  if (!conversationMember(conversation, user.id)) {
+    return json({ ok: false, error: "CONVERSATION_ACCESS_DENIED" }, 403);
+  }
+
+  const requestedLimit = Number(url.searchParams.get("limit") || 50);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(100, Math.floor(requestedLimit)))
+    : 50;
+
+  const rows = actor.ctx.storage.sql.exec(
+    `SELECT id, conversation_id, sender_id, body, created_at, read_at
+     FROM (
+       SELECT id, conversation_id, sender_id, body, created_at, read_at
+       FROM social_messages
+       WHERE conversation_id = ?
+       ORDER BY created_at DESC
+       LIMIT ?
+     )
+     ORDER BY created_at ASC`,
+    conversationId,
+    limit,
+  ).toArray();
+
+  return json({
+    ok: true,
+    messages: rows.map((row) => ({
+      id: row.id,
+      conversationId: row.conversation_id,
+      senderId: row.sender_id,
+      text: row.body,
+      createdAt: row.created_at,
+      readAt: row.read_at,
+      isMine: row.sender_id === user.id,
+    })),
+  });
+}
+
+async function sendMessage(actor, request, user) {
+  const body = await actor.readBody(request);
+  const bodyError = bodyErrorResponse(body);
+  if (bodyError) return bodyError;
+
+  const conversationId = safeString(body.conversationId, 80);
+  const messageText = typeof body.text === "string" ? body.text.trim() : "";
+
+  if (!isUuid(conversationId)) {
+    return json({ ok: false, error: "INVALID_CONVERSATION_ID" }, 400);
+  }
+
+  if (!messageText || messageText.length > MESSAGE_MAX_LENGTH) {
+    return json({
+      ok: false,
+      error: "INVALID_MESSAGE",
+      message: `الرسالة يجب أن تكون من حرف واحد إلى ${MESSAGE_MAX_LENGTH} حرف.`,
+    }, 400);
+  }
+
+  const conversation = getConversationRow(actor, conversationId);
+
+  if (!conversation) {
+    return json({ ok: false, error: "CONVERSATION_NOT_FOUND" }, 404);
+  }
+
+  if (!conversationMember(conversation, user.id)) {
+    return json({ ok: false, error: "CONVERSATION_ACCESS_DENIED" }, 403);
+  }
+
+  const now = Date.now();
+  const recentRow = actor.ctx.storage.sql.exec(
+    `SELECT COUNT(*) AS message_count
+     FROM social_messages
+     WHERE sender_id = ? AND created_at >= ?`,
+    user.id,
+    now - MESSAGE_RATE_WINDOW_MS,
+  ).toArray()[0];
+
+  if (Number(recentRow?.message_count || 0) >= MESSAGE_RATE_LIMIT) {
+    return json({ ok: false, error: "MESSAGE_RATE_LIMIT" }, 429);
+  }
+
+  const messageId = crypto.randomUUID();
+  actor.ctx.storage.sql.exec(
+    `INSERT INTO social_messages
+     (id, conversation_id, sender_id, body, created_at, read_at)
+     VALUES (?, ?, ?, ?, ?, NULL)`,
+    messageId,
+    conversationId,
+    user.id,
+    messageText,
+    now,
+  );
+
+  actor.ctx.storage.sql.exec(
+    "UPDATE social_conversations SET updated_at = ? WHERE id = ?",
+    now,
+    conversationId,
+  );
+
+  return json({
+    ok: true,
+    message: {
+      id: messageId,
+      conversationId,
+      senderId: user.id,
+      text: messageText,
+      createdAt: now,
+      readAt: null,
+      isMine: true,
+    },
+  }, 201);
+}
+
+async function markMessagesRead(actor, request, user) {
+  const body = await actor.readBody(request);
+  const bodyError = bodyErrorResponse(body);
+  if (bodyError) return bodyError;
+
+  const conversationId = safeString(body.conversationId, 80);
+
+  if (!isUuid(conversationId)) {
+    return json({ ok: false, error: "INVALID_CONVERSATION_ID" }, 400);
+  }
+
+  const conversation = getConversationRow(actor, conversationId);
+
+  if (!conversation) {
+    return json({ ok: false, error: "CONVERSATION_NOT_FOUND" }, 404);
+  }
+
+  if (!conversationMember(conversation, user.id)) {
+    return json({ ok: false, error: "CONVERSATION_ACCESS_DENIED" }, 403);
+  }
+
+  const now = Date.now();
+  actor.ctx.storage.sql.exec(
+    `UPDATE social_messages
+     SET read_at = ?
+     WHERE conversation_id = ?
+       AND sender_id <> ?
+       AND read_at IS NULL`,
+    now,
+    conversationId,
+    user.id,
+  );
+
+  return json({ ok: true, readAt: now });
+}
+
+/**
+ * Returns a Response for the new messaging routes, or null for existing routes.
+ * The actor is the existing Sa7biSocial Durable Object instance.
+ */
+export async function handleSocialMessaging(request, actor) {
+  const url = new URL(request.url);
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  const method = request.method.toUpperCase();
+
+  const isInvitationRoute = path === "/v1/social/invitations" ||
+    /^\/v1\/social\/invitations\/[a-f0-9-]{36}\/(accept|decline)$/i.test(path);
+  const isConversationRoute = path === "/v1/social/conversations";
+  const isMessageRoute = path === "/v1/social/messages" ||
+    path === "/v1/social/messages/read";
+
+  if (!isInvitationRoute && !isConversationRoute && !isMessageRoute) {
+    return null;
+  }
+
+  try {
+    ensureMessagingTables(actor);
+
+    const user = await actor.requireUser(request);
+    if (user instanceof Response) return user;
+
+    if (path === "/v1/social/invitations" && method === "GET") {
+      return await listInvitations(actor, request, user);
+    }
+
+    if (path === "/v1/social/invitations" && method === "POST") {
+      return await createInvitation(actor, request, user);
+    }
+
+    const invitationMatch = path.match(
+      /^\/v1\/social\/invitations\/([a-f0-9-]{36})\/(accept|decline)$/i,
+    );
+
+    if (invitationMatch && method === "POST") {
+      return await respondToInvitation(
+        actor,
+        invitationMatch[1],
+        request,
+        user,
+        invitationMatch[2].toLowerCase(),
+      );
+    }
+
+    if (path === "/v1/social/conversations" && method === "GET") {
+      return await listConversations(actor, user);
+    }
+
+    if (path === "/v1/social/conversations" && method === "POST") {
+      return await createConversation(actor, request, user);
+    }
+
+    if (path === "/v1/social/messages" && method === "GET") {
+      return await getMessages(actor, request, user);
+    }
+
+    if (path === "/v1/social/messages" && method === "POST") {
+      return await sendMessage(actor, request, user);
+    }
+
+    if (path === "/v1/social/messages/read" && method === "POST") {
+      return await markMessagesRead(actor, request, user);
+    }
+
+    return json({ ok: false, error: "METHOD_NOT_ALLOWED" }, 405);
+  } catch (_) {
+    return json(
+      {
+        ok: false,
+        error: "SOCIAL_MESSAGING_INTERNAL_ERROR",
+        message: "تعذر إكمال طلب الدعوات أو الرسائل. حاول مرة أخرى.",
+      },
+      500,
+    );
+  }
+}
