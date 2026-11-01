@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'social_ai_games_screen.dart';
 import 'social_connections_screen.dart';
 import 'social_groups_screen.dart';
+import 'social_quick_match_screen.dart';
 
 /// مدخل موحد للدعوات والرسائل والمجموعات واللعب مع الذكاء الاصطناعي.
 class SocialCommunityHubScreen extends StatelessWidget {
@@ -48,6 +49,12 @@ class SocialCommunityHubScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
+            _CommunityHubTile(
+              icon: Icons.people_alt_rounded,
+              title: 'العب مع لاعب عشوائي',
+              description: 'نبحث عن لاعب حقيقي أولًا، وبعد 25 ثانية يتحول البحث تلقائيًا إلى صاحبي AI.',
+              onTap: () => _open(context, const SocialQuickMatchScreen()),
+            ),
             _CommunityHubTile(
               icon: Icons.mark_email_unread_outlined,
               title: 'الدعوات والرسائل الخاصة',
