@@ -1,10 +1,11 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'services/social_games_service.dart';
+import 'widgets/sa7bi_chess_board.dart';
+import 'widgets/sa7bi_subpage_app_bar.dart';
 
 class SocialGamesHubScreen extends StatefulWidget {
   const SocialGamesHubScreen({
@@ -369,9 +370,8 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: const Text('الألعاب الجماعية'),
+        appBar: Sa7biSubpageAppBar(
+          title: 'الألعاب الجماعية',
           actions: [
             if (_service.isSignedIn)
               IconButton(
@@ -833,12 +833,6 @@ class _SocialGameRoomScreenState
   final SocialGamesService _service =
       SocialGamesService.instance;
 
-  final TextEditingController _from =
-      TextEditingController(text: 'e2');
-
-  final TextEditingController _to =
-      TextEditingController(text: 'e4');
-
   late SocialGameRoom _room;
 
   Timer? _pollTimer;
@@ -861,9 +855,6 @@ class _SocialGameRoomScreenState
   @override
   void dispose() {
     _pollTimer?.cancel();
-    _from.dispose();
-    _to.dispose();
-
     super.dispose();
   }
 
@@ -955,9 +946,8 @@ class _SocialGameRoomScreenState
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: Text(_room.gameTitle),
+        appBar: Sa7biSubpageAppBar(
+          title: _room.gameTitle,
           actions: [
             IconButton(
               tooltip: 'مشاركة الدعوة',
@@ -1214,82 +1204,49 @@ class _SocialGameRoomScreenState
 
   Widget _buildChess() {
     final fen = _room.state['fen'];
-    final turn = _room.state['turn'];
+    final turn = _room.state['turn'] == 'b' ? 'b' : 'w';
+    final isWhite = _room.myRole == 'host';
+    final myTurn = turn == (isWhite ? 'w' : 'b');
+
+    if (fen is! String || fen.isEmpty) {
+      return const _NoticePanel(
+        message: 'تعذر قراءة لوحة الشطرنج. حدّث المباراة للمحاولة مرة أخرى.',
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _NoticePanel(
-          message:
-              'إدخال النقلة هنا بالإحداثيات. مثال: من e2 إلى e4. '
-              'الخادم يتحقق من قانونية الحركة.',
+        _NoticePanel(
+          message: isWhite
+              ? 'أنت تلعب بالأبيض. صاحبك يلعب بالأسود.'
+              : 'أنت تلعب بالأسود. صاحبك يلعب بالأبيض.',
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Text(
-          'الدور: ${turn == 'w' ? 'الأبيض' : 'الأسود'}',
+          myTurn
+              ? 'دورك الآن — ${isWhite ? 'الأبيض' : 'الأسود'}'
+              : 'الدور الحالي — ${turn == 'w' ? 'الأبيض' : 'الأسود'}',
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Color(0xFFFFD76A),
+            fontWeight: FontWeight.w800,
           ),
         ),
-        const SizedBox(height: 8),
-        if (fen is String)
-          SelectableText(
-            'FEN: $fen',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white54,
-              fontSize: 11,
+        const SizedBox(height: 12),
+        Sa7biChessBoard(
+          fen: fen,
+          bottomSide: isWhite
+              ? Sa7biChessSide.white
+              : Sa7biChessSide.black,
+          enabled: _room.isPlaying && !_busy && myTurn,
+          onMove: (from, to) => _move(
+            () => _service.playChessMove(
+              roomId: _room.id,
+              from: from,
+              to: to,
             ),
           ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _from,
-                textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(
-                  labelText: 'من',
-                  hintText: 'e2',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _to,
-                textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(
-                  labelText: 'إلى',
-                  hintText: 'e4',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: _busy || !_room.isPlaying
-              ? null
-              : () {
-                  final from =
-                      _from.text.trim().toLowerCase();
-
-                  final to =
-                      _to.text.trim().toLowerCase();
-
-                  _move(
-                    () => _service.playChessMove(
-                      roomId: _room.id,
-                      from: from,
-                      to: to,
-                    ),
-                  );
-                },
-          child: const Text('إرسال النقلة'),
         ),
       ],
     );
