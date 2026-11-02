@@ -6,12 +6,18 @@ on:
       - fix/build-692-network-client-lifecycle
     paths:
       - "backend/**"
+      - "lib/services/ads_service.dart"
+      - "lib/config/credits_config.dart"
+      - "android/app/src/main/AndroidManifest.xml"
       - ".github/workflows/worker-source-validation.yml"
   pull_request:
     branches:
       - fix/build-692-network-client-lifecycle
     paths:
       - "backend/**"
+      - "lib/services/ads_service.dart"
+      - "lib/config/credits_config.dart"
+      - "android/app/src/main/AndroidManifest.xml"
       - ".github/workflows/worker-source-validation.yml"
   workflow_dispatch:
 
@@ -24,9 +30,10 @@ concurrency:
 
 jobs:
   validate-worker:
-    name: Validate Worker syntax and bundle (no deployment)
+    name: Validate Worker syntax, tests, AdMob and bundles without deployment
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
     steps:
       - name: Checkout exact source
         uses: actions/checkout@v4
@@ -38,11 +45,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           ACTUAL_SHA="$(git rev-parse HEAD)"
+
           if [ "${ACTUAL_SHA}" != "${GITHUB_SHA}" ]; then
             echo "::error::Checked-out source does not match the triggering commit."
             exit 1
           fi
+
           echo "Validated source commit: ${ACTUAL_SHA}"
 
       - name: Set up Node.js
@@ -54,12 +64,52 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: npm install --no-audit --no-fund
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
 
-      - name: Check JavaScript syntax
+      - name: Check JavaScript syntax and social smoke tests
         working-directory: backend
-        run: npm run check
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check
 
-      - name: Bundle Worker without deploying
+      - name: Verify AdMob identifiers and reward policy
         working-directory: backend
-        run: npm run dry-run
+        shell: bash
+        run: |
+          set -euo pipefail
+          node verify-admob-config.mjs
+
+      - name: Bundle primary Worker without deploying
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config wrangler.toml
+
+      - name: Bundle fallback Worker without deploying
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config wrangler-fallback.toml
+
+      - name: Validation summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Sa7bi Worker source validation"
+            echo
+            echo "- Source branch: ${GITHUB_REF_NAME}"
+            echo "- Source commit: ${GITHUB_SHA}"
+            echo "- JavaScript syntax and social smoke tests: executed"
+            echo "- AdMob configuration consistency: executed"
+            echo "- Primary Worker dry-run: executed"
+            echo "- Fallback Worker dry-run: executed"
+            echo "- Worker deployment: NO"
+            echo "- Cloudflare settings changed: NO"
+          } >> "${GITHUB_STEP_SUMMARY}"
