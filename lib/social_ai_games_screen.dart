@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'services/social_community_service.dart';
 import 'services/social_games_service.dart';
 import 'social_games_hub_screen.dart';
+import 'widgets/sa7bi_subpage_app_bar.dart';
 
 class SocialAiGamesScreen extends StatefulWidget {
   const SocialAiGamesScreen({super.key});
@@ -107,9 +108,8 @@ class _SocialAiGamesScreenState extends State<SocialAiGamesScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: const Text('العب مع صاحبي AI'),
+        appBar: Sa7biSubpageAppBar(
+          title: 'العب مع صاحبي AI',
           actions: [
             IconButton(
               tooltip: 'تحديث المباريات',
@@ -299,9 +299,8 @@ class _SocialAiGameRoomScreenState extends State<SocialAiGameRoomScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: Text(_room.gameTitle),
+        appBar: Sa7biSubpageAppBar(
+          title: _room.gameTitle,
           actions: [
             IconButton(
               tooltip: 'مزامنة',
