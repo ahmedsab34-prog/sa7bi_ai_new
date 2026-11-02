@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -20,6 +21,7 @@ import 'social_community_hub_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/audio_center_with_header.dart';
 import 'widgets/khalasana_portal.dart';
+import 'widgets/social_invite_link_listener.dart';
 
 void main() {
   http.runWithClient(
@@ -82,7 +84,9 @@ class Sa7biAiApp extends StatelessWidget {
       routes: {
         '/diagnostics': (_) => const AppDiagnosticsScreen(),
       },
-      home: const MainContainerScreen(),
+      home: const SocialInviteLinkListener(
+        child: MainContainerScreen(),
+      ),
     );
   }
 }
