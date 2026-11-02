@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'services/social_community_service.dart';
 import 'services/social_games_service.dart';
 import 'social_games_hub_screen.dart';
+import 'widgets/sa7bi_subpage_app_bar.dart';
 
 class SocialGroupsScreen extends StatefulWidget {
   const SocialGroupsScreen({super.key});
@@ -14,7 +16,8 @@ class SocialGroupsScreen extends StatefulWidget {
 }
 
 class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
-  final SocialCommunityService _community = SocialCommunityService.instance;
+  final SocialCommunityService _community =
+      SocialCommunityService.instance;
   final SocialGamesService _games = SocialGamesService.instance;
 
   List<SocialPublicGroup> _groups = const [];
@@ -41,14 +44,20 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
     } on SocialGamesException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'تعذر تحميل المجموعات. حاول مرة أخرى.');
+      if (mounted) {
+        setState(() {
+          _error = 'تعذر تحميل المجموعات. حاول مرة أخرى.';
+        });
+      }
     }
+
     if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _loadGroups() async {
     final groups = await _community.getGroups();
     if (!mounted) return;
+
     setState(() {
       _groups = groups;
       _loading = false;
@@ -58,10 +67,12 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
 
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
+
     setState(() {
       _busy = true;
       _error = null;
     });
+
     try {
       await action();
     } on SocialCommunityException catch (error) {
@@ -69,7 +80,12 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
     } on SocialGamesException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'حدث خطأ غير متوقع. تحقق من الاتصال وحاول مرة أخرى.');
+      if (mounted) {
+        setState(() {
+          _error =
+              'حدث خطأ غير متوقع. تحقق من الاتصال وحاول مرة أخرى.';
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -77,7 +93,9 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
 
   Future<void> _openLogin() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const SocialGamesHubScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => const SocialGamesHubScreen(),
+      ),
     );
     await _initialize();
   }
@@ -85,6 +103,7 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
   Future<void> _createGroup() async {
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
+
     final values = await showDialog<(String, String)?>(
       context: context,
       builder: (dialogContext) => Directionality(
@@ -121,7 +140,10 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
             FilledButton(
               onPressed: () => Navigator.pop(
                 dialogContext,
-                (nameController.text, descriptionController.text),
+                (
+                  nameController.text,
+                  descriptionController.text,
+                ),
               ),
               child: const Text('إنشاء'),
             ),
@@ -129,8 +151,10 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
         ),
       ),
     );
+
     nameController.dispose();
     descriptionController.dispose();
+
     if (values == null || !mounted) return;
 
     await _run(() async {
@@ -138,13 +162,16 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
         name: values.$1,
         description: values.$2,
       );
+
       await _loadGroups();
       if (!mounted) return;
+
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) => SocialGroupChatScreen(group: group),
         ),
       );
+
       await _loadGroups();
     });
   }
@@ -154,12 +181,15 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
       final joined = group.isMember
           ? group
           : await _community.joinGroup(group.id);
+
       if (!mounted) return;
+
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) => SocialGroupChatScreen(group: joined),
         ),
       );
+
       await _loadGroups();
     });
   }
@@ -170,18 +200,20 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: const Text('المجموعات العامة'),
+        appBar: Sa7biSubpageAppBar(
+          title: 'المجموعات العامة',
           actions: [
             IconButton(
               tooltip: 'تحديث',
-              onPressed: _busy || _loading ? null : () => _run(_loadGroups),
+              onPressed:
+                  _busy || _loading ? null : () => _run(_loadGroups),
               icon: const Icon(Icons.refresh_rounded),
             ),
             IconButton(
               tooltip: 'إنشاء مجموعة',
-              onPressed: !_community.isSignedIn || _busy ? null : _createGroup,
+              onPressed: !_community.isSignedIn || _busy
+                  ? null
+                  : _createGroup,
               icon: const Icon(Icons.add_rounded),
             ),
           ],
@@ -195,12 +227,19 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.groups_rounded, size: 52, color: Color(0xFFFFD76A)),
+                          const Icon(
+                            Icons.groups_rounded,
+                            size: 52,
+                            color: Color(0xFFFFD76A),
+                          ),
                           const SizedBox(height: 12),
                           const Text(
                             'سجّل الدخول إلى حساب الألعاب حتى تنضم للمجموعات أو تنشئ مجموعة جديدة.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white70, height: 1.5),
+                            style: TextStyle(
+                              color: Colors.white70,
+                              height: 1.5,
+                            ),
                           ),
                           const SizedBox(height: 14),
                           FilledButton.icon(
@@ -220,14 +259,18 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
                       children: [
                         const _GroupsIntro(),
                         const SizedBox(height: 12),
-                        if (_error != null) _CommunityError(message: _error!),
+                        if (_error != null)
+                          _CommunityError(message: _error!),
                         if (_groups.isEmpty)
                           const Padding(
                             padding: EdgeInsets.symmetric(vertical: 40),
                             child: Text(
                               'لا توجد مجموعات بعد. أنشئ أول مجموعة عامة وابدأ دعوة الناس للانضمام.',
                               textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.white60, height: 1.5),
+                              style: TextStyle(
+                                color: Colors.white60,
+                                height: 1.5,
+                              ),
                             ),
                           )
                         else
@@ -236,31 +279,53 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
                               color: const Color(0xFF111827),
                               margin: const EdgeInsets.only(bottom: 9),
                               child: ListTile(
-                                onTap: _busy ? null : () => _openGroup(group),
+                                onTap: _busy
+                                    ? null
+                                    : () => _openGroup(group),
                                 leading: CircleAvatar(
-                                  backgroundColor: const Color(0x223F91FF),
+                                  backgroundColor:
+                                      const Color(0x223F91FF),
                                   child: Icon(
-                                    group.isMember ? Icons.groups_rounded : Icons.public_rounded,
+                                    group.isMember
+                                        ? Icons.groups_rounded
+                                        : Icons.public_rounded,
                                     color: const Color(0xFF7FB4FF),
                                   ),
                                 ),
                                 title: Text(
                                   group.name,
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                                 subtitle: Text(
                                   [
-                                    if (group.description.isNotEmpty) group.description,
+                                    if (group.description.isNotEmpty)
+                                      group.description,
                                     '${group.memberCount} عضو',
-                                    if (group.lastMessage.isNotEmpty) group.lastMessage,
+                                    if (group.lastMessage.isNotEmpty)
+                                      group.lastMessage,
                                   ].join(' • '),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white60, height: 1.4),
+                                  style: const TextStyle(
+                                    color: Colors.white60,
+                                    height: 1.4,
+                                  ),
                                 ),
                                 trailing: group.isMember
-                                    ? const Icon(Icons.chevron_left_rounded, color: Colors.white60)
-                                    : const Text('انضمام', style: TextStyle(color: Color(0xFFFFD76A), fontWeight: FontWeight.w800)),
+                                    ? const Icon(
+                                        Icons.chevron_left_rounded,
+                                        color: Colors.white60,
+                                      )
+                                    : const Text(
+                                        'انضمام',
+                                        style: TextStyle(
+                                          color: Color(0xFFFFD76A),
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
                               ),
                             ),
                         const SizedBox(height: 18),
@@ -278,18 +343,24 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
 }
 
 class SocialGroupChatScreen extends StatefulWidget {
-  const SocialGroupChatScreen({super.key, required this.group});
+  const SocialGroupChatScreen({
+    super.key,
+    required this.group,
+  });
 
   final SocialPublicGroup group;
 
   @override
-  State<SocialGroupChatScreen> createState() => _SocialGroupChatScreenState();
+  State<SocialGroupChatScreen> createState() =>
+      _SocialGroupChatScreenState();
 }
 
 class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
-  final SocialCommunityService _service = SocialCommunityService.instance;
+  final SocialCommunityService _service =
+      SocialCommunityService.instance;
   final TextEditingController _composer = TextEditingController();
   final ScrollController _scroll = ScrollController();
+
   Timer? _poll;
   List<SocialGroupMessage> _messages = const [];
   bool _loading = true;
@@ -300,9 +371,13 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
   void initState() {
     super.initState();
     _loadMessages();
-    _poll = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!_sending) _loadMessages(silent: true);
-    });
+
+    _poll = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) {
+        if (!_sending) _loadMessages(silent: true);
+      },
+    );
   }
 
   @override
@@ -314,10 +389,14 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
   }
 
   Future<void> _loadMessages({bool silent = false}) async {
-    if (!silent && mounted) setState(() => _loading = true);
+    if (!silent && mounted) {
+      setState(() => _loading = true);
+    }
+
     try {
       final messages = await _service.getMessages(widget.group.id);
       if (!mounted) return;
+
       setState(() {
         _messages = messages;
         _error = null;
@@ -325,12 +404,14 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
       });
     } on SocialCommunityException catch (error) {
       if (!mounted) return;
+
       setState(() {
         _error = error.message;
         _loading = false;
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _error = 'تعذر تحديث رسائل المجموعة.';
         _loading = false;
@@ -340,24 +421,31 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
 
   Future<void> _send() async {
     if (_sending) return;
+
     final text = _composer.text.trim();
     if (text.isEmpty) return;
+
     setState(() {
       _sending = true;
       _error = null;
     });
+
     try {
       final message = await _service.sendGroupMessage(
         groupId: widget.group.id,
         text: text,
       );
+
       if (!mounted) return;
+
       _composer.clear();
+
       setState(() {
         if (!_messages.any((item) => item.id == message.id)) {
           _messages = [..._messages, message];
         }
       });
+
       if (_scroll.hasClients) {
         _scroll.animateTo(
           0,
@@ -368,7 +456,9 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
     } on SocialCommunityException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'تعذر إرسال الرسالة. حاول مرة أخرى.');
+      if (mounted) {
+        setState(() => _error = 'تعذر إرسال الرسالة. حاول مرة أخرى.');
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -376,8 +466,12 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
 
   String _time(int milliseconds) {
     if (milliseconds <= 0) return '';
-    final date = DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
-    return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+
+    final date =
+        DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
+
+    return '${date.hour.toString().padLeft(2, '0')}:'
+        '${date.minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -386,15 +480,9 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.group.name, style: const TextStyle(fontSize: 16)),
-              Text('${widget.group.memberCount} عضو', style: const TextStyle(fontSize: 11, color: Colors.white60)),
-            ],
-          ),
+        appBar: Sa7biSubpageAppBar(
+          title: widget.group.name,
+          subtitle: '${widget.group.memberCount} عضو',
           actions: [
             IconButton(
               tooltip: 'تحديث الرسائل',
@@ -406,18 +494,23 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
         body: Column(
           children: [
             const _CommunityNotice(
-              text: 'هذه مجموعة عامة. الرسائل يراها الأعضاء، وليست مشفرة من طرف إلى طرف. تجنب مشاركة كلمات المرور أو البيانات الحساسة.',
+              text:
+                  'هذه مجموعة عامة. الرسائل يراها الأعضاء، وليست مشفرة من طرف إلى طرف. تجنب مشاركة كلمات المرور أو البيانات الحساسة.',
             ),
-            if (_error != null) Padding(
-              padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
-              child: _CommunityError(message: _error!),
-            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 4, 10, 0),
+                child: _CommunityError(message: _error!),
+              ),
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator())
                   : _messages.isEmpty
                       ? const Center(
-                          child: Text('ابدأ المحادثة برسالة ترحيب.', style: TextStyle(color: Colors.white54)),
+                          child: Text(
+                            'ابدأ المحادثة برسالة ترحيب.',
+                            style: TextStyle(color: Colors.white54),
+                          ),
                         )
                       : ListView.builder(
                           controller: _scroll,
@@ -425,26 +518,58 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
                           padding: const EdgeInsets.all(12),
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
-                            final message = _messages[_messages.length - 1 - index];
+                            final message =
+                                _messages[_messages.length - 1 - index];
+
                             return Align(
-                              alignment: message.isMine ? Alignment.centerRight : Alignment.centerLeft,
+                              alignment: message.isMine
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
                               child: Container(
-                                constraints: const BoxConstraints(maxWidth: 310),
+                                constraints:
+                                    const BoxConstraints(maxWidth: 310),
                                 margin: const EdgeInsets.only(bottom: 9),
-                                padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  8,
+                                  12,
+                                  7,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: message.isMine ? const Color(0xFF19476A) : const Color(0xFF172033),
+                                  color: message.isMine
+                                      ? const Color(0xFF19476A)
+                                      : const Color(0xFF172033),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
                                     if (!message.isMine)
-                                      Text(message.username, style: const TextStyle(color: Color(0xFFFFD76A), fontSize: 11, fontWeight: FontWeight.w800)),
-                                    Text(message.text, style: const TextStyle(color: Colors.white, height: 1.4)),
+                                      Text(
+                                        message.username,
+                                        style: const TextStyle(
+                                          color: Color(0xFFFFD76A),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    Text(
+                                      message.text,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        height: 1.4,
+                                      ),
+                                    ),
                                     Align(
                                       alignment: Alignment.bottomLeft,
-                                      child: Text(_time(message.createdAt), style: const TextStyle(color: Colors.white54, fontSize: 9)),
+                                      child: Text(
+                                        _time(message.createdAt),
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 9,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -481,7 +606,13 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
                     IconButton.filled(
                       onPressed: _sending ? null : _send,
                       icon: _sending
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
                           : const Icon(Icons.send_rounded),
                     ),
                   ],
@@ -509,12 +640,19 @@ class _GroupsIntro extends StatelessWidget {
       ),
       child: const Row(
         children: [
-          Icon(Icons.public_rounded, color: Color(0xFF7FB4FF), size: 30),
+          Icon(
+            Icons.public_rounded,
+            color: Color(0xFF7FB4FF),
+            size: 30,
+          ),
           SizedBox(width: 11),
           Expanded(
             child: Text(
               'اكتشف مجموعات عامة، انضم للمناقشات، أو أنشئ مجتمعًا حول اهتماماتك.',
-              style: TextStyle(color: Colors.white70, height: 1.5),
+              style: TextStyle(
+                color: Colors.white70,
+                height: 1.5,
+              ),
             ),
           ),
         ],
@@ -525,21 +663,33 @@ class _GroupsIntro extends StatelessWidget {
 
 class _CommunityNotice extends StatelessWidget {
   const _CommunityNotice({required this.text});
+
   final String text;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 9,
+      ),
       color: const Color(0xFF172033),
-      child: Text(text, style: const TextStyle(color: Colors.white60, fontSize: 11, height: 1.4)),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white60,
+          fontSize: 11,
+          height: 1.4,
+        ),
+      ),
     );
   }
 }
 
 class _CommunityError extends StatelessWidget {
   const _CommunityError({required this.message});
+
   final String message;
 
   @override
@@ -551,7 +701,10 @@ class _CommunityError extends StatelessWidget {
         color: const Color(0xFF4A2028),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(message, style: const TextStyle(color: Colors.white)),
+      child: Text(
+        message,
+        style: const TextStyle(color: Colors.white),
+      ),
     );
   }
 }
