@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import 'sa7bi_network_client.dart';
+import 'social_invite_link_service.dart';
 
 /// واجهة موحدة للتعامل مع حسابات الألعاب والمباريات المحفوظة.
 ///
@@ -373,14 +374,18 @@ class SocialGamesService {
 
   /// تكوين نص دعوة يمكن إرساله في الشات أو مشاركته.
   ///
-  /// إرسال النص لا ينضم إلى المباراة تلقائيًا؛
-  /// الطرف الآخر يحتاج إلى تسجيل الدخول ثم استخدام joinRoom.
+  /// الرابط يفتح التطبيق مباشرة إذا كان مثبتًا.
+  /// يبقى رمز الدعوة متاحًا كطريقة بديلة للانضمام.
   String buildInviteMessage(SocialGameRoom room) {
     final gameName = room.gameTitle;
+    final inviteLink =
+        SocialInviteLinkService.buildGameInviteUri(room.inviteCode);
 
     return 'تعالى نلعب $gameName على صاحبي AI 🎮\n'
-        'رمز الدعوة: ${room.inviteCode}\n'
-        'افتح قسم الألعاب في التطبيق واختر الانضمام إلى مباراة.';
+        'اضغط الرابط لفتح التطبيق والانضمام مباشرة:\n'
+        '$inviteLink\n\n'
+        'لو الرابط لم يفتح التطبيق، افتح قسم الألعاب وأدخل الرمز: '
+        '${room.inviteCode}';
   }
 
   Uri _uri(String path) {
