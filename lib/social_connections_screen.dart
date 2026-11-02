@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'services/social_games_service.dart';
 import 'services/social_messaging_service.dart';
 import 'social_games_hub_screen.dart';
+import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// مركز الدعوات والرسائل الخاصة لحساب الألعاب.
 /// الحساب والجلسة نفسهما المستخدمان في SocialGamesService.
@@ -51,6 +53,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
 
   Future<void> _initialize() async {
     if (mounted) setState(() => _loading = true);
+
     try {
       await _games.initialize();
       await _messaging.refreshSession();
@@ -70,7 +73,9 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'تعذر تحميل الدعوات والرسائل. تحقق من الاتصال.');
+        setState(() {
+          _error = 'تعذر تحميل الدعوات والرسائل. تحقق من الاتصال.';
+        });
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -83,6 +88,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
         builder: (_) => const SocialGamesHubScreen(),
       ),
     );
+
     if (mounted) await _initialize();
   }
 
@@ -117,7 +123,9 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'حدث خطأ غير متوقع. حاول مرة أخرى.');
+        setState(() {
+          _error = 'حدث خطأ غير متوقع. حاول مرة أخرى.';
+        });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -126,6 +134,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
 
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
+
     final query = value.trim();
     final sequence = ++_searchSequence;
 
@@ -144,32 +153,37 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
       _searching = true;
     });
 
-    _searchDebounce = Timer(const Duration(milliseconds: 450), () async {
-      try {
-        final results = await _games.searchUsers(query);
-        if (!mounted || sequence != _searchSequence) return;
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 450),
+      () async {
+        try {
+          final results = await _games.searchUsers(query);
+          if (!mounted || sequence != _searchSequence) return;
 
-        setState(() {
-          _players = results;
-          _searching = false;
-          _searchError = null;
-        });
-      } on SocialGamesException catch (error) {
-        if (!mounted || sequence != _searchSequence) return;
-        setState(() {
-          _players = [];
-          _searching = false;
-          _searchError = error.message;
-        });
-      } catch (_) {
-        if (!mounted || sequence != _searchSequence) return;
-        setState(() {
-          _players = [];
-          _searching = false;
-          _searchError = 'تعذر البحث عن اللاعبين. تحقق من الاتصال.';
-        });
-      }
-    });
+          setState(() {
+            _players = results;
+            _searching = false;
+            _searchError = null;
+          });
+        } on SocialGamesException catch (error) {
+          if (!mounted || sequence != _searchSequence) return;
+
+          setState(() {
+            _players = [];
+            _searching = false;
+            _searchError = error.message;
+          });
+        } catch (_) {
+          if (!mounted || sequence != _searchSequence) return;
+
+          setState(() {
+            _players = [];
+            _searching = false;
+            _searchError = 'تعذر البحث عن اللاعبين. تحقق من الاتصال.';
+          });
+        }
+      },
+    );
   }
 
   Future<void> _invitePlayer(SocialGameUser player) async {
@@ -178,6 +192,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
         recipientUserId: player.id,
         game: _game,
       );
+
       await _refreshAll();
       if (!mounted) return;
 
@@ -193,7 +208,9 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
 
   Future<void> _startConversation(SocialGameUser player) async {
     await _run(() async {
-      final conversationId = await _messaging.createConversation(player.id);
+      final conversationId =
+          await _messaging.createConversation(player.id);
+
       if (!mounted) return;
 
       await Navigator.of(context).push<void>(
@@ -218,6 +235,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
         invitationId: invitation.id,
         accept: accept,
       );
+
       await _refreshAll();
 
       if (accept && roomId != null && mounted) {
@@ -290,7 +308,9 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
                 onDecline: () => _respond(invitation, accept: false),
                 onOpenRoom: invitation.roomId.isEmpty
                     ? null
-                    : () => _run(() => _openRoom(invitation.roomId)),
+                    : () => _run(
+                          () => _openRoom(invitation.roomId),
+                        ),
               ),
         ],
       ),
@@ -312,7 +332,10 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.person_search_rounded, color: Color(0xFFFFD76A)),
+              Icon(
+                Icons.person_search_rounded,
+                color: Color(0xFFFFD76A),
+              ),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -329,7 +352,11 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
           const SizedBox(height: 7),
           const Text(
             'الدعوة ستصل إلى صندوق الدعوات في حساب اللاعب، ولن تحتاج إلى واتساب أو مشاركة خارجية.',
-            style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45),
+            style: TextStyle(
+              color: Colors.white60,
+              fontSize: 12,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
@@ -344,17 +371,25 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
             ),
             style: const TextStyle(color: Colors.white),
             items: const [
-              DropdownMenuItem(value: 'tic_tac_toe', child: Text('إكس أو')),
+              DropdownMenuItem(
+                value: 'tic_tac_toe',
+                child: Text('إكس أو'),
+              ),
               DropdownMenuItem(
                 value: 'rock_paper_scissors',
                 child: Text('حجر ورقة مقص'),
               ),
-              DropdownMenuItem(value: 'chess', child: Text('الشطرنج')),
+              DropdownMenuItem(
+                value: 'chess',
+                child: Text('الشطرنج'),
+              ),
             ],
             onChanged: _busy
                 ? null
                 : (value) {
-                    if (value != null) setState(() => _game = value);
+                    if (value != null) {
+                      setState(() => _game = value);
+                    }
                   },
           ),
           const SizedBox(height: 10),
@@ -374,6 +409,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
                         _searchDebounce?.cancel();
                         _searchSequence++;
                         _searchController.clear();
+
                         setState(() {
                           _players = [];
                           _searchError = null;
@@ -390,27 +426,38 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
           ),
           const SizedBox(height: 8),
           if (_searching)
-            const Center(child: Padding(
-              padding: EdgeInsets.all(10),
-              child: CircularProgressIndicator(),
-            ))
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(10),
+                child: CircularProgressIndicator(),
+              ),
+            )
           else if (_searchError != null)
             _ErrorBox(message: _searchError!)
           else if (query.length < 2)
             const Text(
               'اكتب حرفين على الأقل لبدء البحث.',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 12,
+              ),
             )
           else if (_players.isEmpty)
             const Text(
               'لم يتم العثور على لاعبين بهذا الاسم.',
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+              style: TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+              ),
             )
           else
             for (final player in _players)
               Container(
                 margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF172033),
                   borderRadius: BorderRadius.circular(13),
@@ -441,14 +488,17 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
                     IconButton(
                       tooltip: 'مراسلة',
                       visualDensity: VisualDensity.compact,
-                      onPressed: _busy ? null : () => _startConversation(player),
+                      onPressed: _busy
+                          ? null
+                          : () => _startConversation(player),
                       icon: const Icon(
                         Icons.chat_bubble_outline_rounded,
                         color: Color(0xFF7FB4FF),
                       ),
                     ),
                     FilledButton.tonal(
-                      onPressed: _busy ? null : () => _invitePlayer(player),
+                      onPressed:
+                          _busy ? null : () => _invitePlayer(player),
                       child: const Text('دعوة'),
                     ),
                   ],
@@ -458,7 +508,8 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
       ),
     );
   }
-    Widget _buildConversationsTab() {
+
+  Widget _buildConversationsTab() {
     return RefreshIndicator(
       onRefresh: _refreshAll,
       child: ListView(
@@ -466,7 +517,8 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
         padding: const EdgeInsets.all(14),
         children: [
           const _NoticeBox(
-            text: 'المحادثات متاحة للحسابين المشاركين فقط. الرسائل محفوظة على الخادم، ولا تدعم هذه النسخة التشفير من طرف إلى طرف.',
+            text:
+                'المحادثات متاحة للحسابين المشاركين فقط. الرسائل محفوظة على الخادم، ولا تدعم هذه النسخة التشفير من طرف إلى طرف.',
           ),
           const SizedBox(height: 12),
           if (_error != null) _ErrorBox(message: _error!),
@@ -484,11 +536,17 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
                   onTap: () => _openConversation(conversation),
                   leading: const CircleAvatar(
                     backgroundColor: Color(0x222F9BFF),
-                    child: Icon(Icons.person_rounded, color: Color(0xFF7FB4FF)),
+                    child: Icon(
+                      Icons.person_rounded,
+                      color: Color(0xFF7FB4FF),
+                    ),
                   ),
                   title: Text(
                     conversation.otherUser.username,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   subtitle: Text(
                     conversation.lastMessage?.text ?? 'ابدأ المحادثة الآن',
@@ -511,7 +569,10 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
                             ),
                           ),
                         )
-                      : const Icon(Icons.chevron_left_rounded, color: Colors.white54),
+                      : const Icon(
+                          Icons.chevron_left_rounded,
+                          color: Colors.white54,
+                        ),
                 ),
               ),
         ],
@@ -527,22 +588,31 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
         length: 3,
         child: Scaffold(
           backgroundColor: const Color(0xFF080B13),
-          appBar: AppBar(
-            backgroundColor: const Color(0xFF111827),
-            title: const Text('الدعوات والرسائل'),
+          appBar: Sa7biSubpageAppBar(
+            title: 'الدعوات والرسائل',
             actions: [
               IconButton(
                 tooltip: 'تحديث',
-                onPressed: _busy || _loading ? null : () => _run(_refreshAll),
+                onPressed:
+                    _busy || _loading ? null : () => _run(_refreshAll),
                 icon: const Icon(Icons.refresh_rounded),
               ),
             ],
             bottom: const TabBar(
               isScrollable: true,
               tabs: [
-                Tab(icon: Icon(Icons.mark_email_unread_outlined), text: 'واردة'),
-                Tab(icon: Icon(Icons.send_outlined), text: 'مرسلة'),
-                Tab(icon: Icon(Icons.chat_bubble_outline_rounded), text: 'الرسائل'),
+                Tab(
+                  icon: Icon(Icons.mark_email_unread_outlined),
+                  text: 'واردة',
+                ),
+                Tab(
+                  icon: Icon(Icons.send_outlined),
+                  text: 'مرسلة',
+                ),
+                Tab(
+                  icon: Icon(Icons.chat_bubble_outline_rounded),
+                  text: 'الرسائل',
+                ),
               ],
             ),
           ),
@@ -556,7 +626,8 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             const _NoticeBox(
-                              text: 'سجّل الدخول أو أنشئ حساب ألعاب أولًا حتى تستطيع إرسال الدعوات واستقبال الرسائل الخاصة.',
+                              text:
+                                  'سجّل الدخول أو أنشئ حساب ألعاب أولًا حتى تستطيع إرسال الدعوات واستقبال الرسائل الخاصة.',
                             ),
                             const SizedBox(height: 14),
                             FilledButton.icon(
@@ -600,7 +671,8 @@ class _InvitationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final person = inbox ? invitation.sender.username : invitation.recipient.username;
+    final person =
+        inbox ? invitation.sender.username : invitation.recipient.username;
 
     return Card(
       color: const Color(0xFF111827),
@@ -612,12 +684,18 @@ class _InvitationCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.sports_esports_rounded, color: Color(0xFFFFD76A)),
+                const Icon(
+                  Icons.sports_esports_rounded,
+                  color: Color(0xFFFFD76A),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     invitation.gameTitle,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 Text(
@@ -640,7 +718,10 @@ class _InvitationCard extends StatelessWidget {
             Text(
               'رمز المباراة: ${invitation.inviteCode.isEmpty ? 'غير متاح' : invitation.inviteCode}',
               textDirection: TextDirection.ltr,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 12,
+              ),
             ),
             if (inbox && invitation.status == 'pending') ...[
               const SizedBox(height: 10),
@@ -661,7 +742,8 @@ class _InvitationCard extends StatelessWidget {
                   ),
                 ],
               ),
-            ] else if (invitation.status == 'accepted' && onOpenRoom != null) ...[
+            ] else if (invitation.status == 'accepted' &&
+                onOpenRoom != null) ...[
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: busy ? null : onOpenRoom,
@@ -707,6 +789,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
   void initState() {
     super.initState();
     _loadMessages();
+
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 8),
       (_) => _loadMessages(silent: true),
@@ -730,6 +813,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
       await _service.markConversationRead(widget.conversationId);
 
       if (!mounted) return;
+
       setState(() {
         _messages = messages;
         _error = null;
@@ -737,12 +821,14 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
       });
     } on SocialMessagingException catch (error) {
       if (!mounted || silent) return;
+
       setState(() {
         _error = error.message;
         _loading = false;
       });
     } catch (_) {
       if (!mounted || silent) return;
+
       setState(() {
         _error = 'تعذر تحميل الرسائل. تحقق من الاتصال.';
         _loading = false;
@@ -754,6 +840,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
 
   Future<void> _send() async {
     if (_sending) return;
+
     final text = _composer.text.trim();
     if (text.isEmpty) return;
 
@@ -769,24 +856,32 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
       );
 
       if (!mounted) return;
+
       _composer.clear();
+
       setState(() {
         _messages = [..._messages, message];
       });
+
       await _service.markConversationRead(widget.conversationId);
     } on SocialMessagingException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'تعذر إرسال الرسالة. حاول مرة أخرى.');
+      if (mounted) {
+        setState(() => _error = 'تعذر إرسال الرسالة. حاول مرة أخرى.');
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
   String _timeLabel(int milliseconds) {
-    final date = DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
+    final date =
+        DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
+
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
+
     return '$hour:$minute';
   }
 
@@ -796,9 +891,8 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: Text(widget.title),
+        appBar: Sa7biSubpageAppBar(
+          title: widget.title,
           actions: [
             IconButton(
               tooltip: 'تحديث الرسائل',
@@ -812,7 +906,8 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
             const Padding(
               padding: EdgeInsets.fromLTRB(12, 9, 12, 5),
               child: _NoticeBox(
-                text: 'هذه محادثة خاصة بين الحسابين المشاركين. الرسائل محفوظة على الخادم وليست مشفرة من طرف إلى طرف في هذه النسخة.',
+                text:
+                    'هذه محادثة خاصة بين الحسابين المشاركين. الرسائل محفوظة على الخادم وليست مشفرة من طرف إلى طرف في هذه النسخة.',
               ),
             ),
             if (_error != null)
@@ -833,20 +928,32 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
                       : ListView.builder(
                           controller: _scrollController,
                           reverse: true,
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+                          padding: const EdgeInsets.fromLTRB(
+                            12,
+                            10,
+                            12,
+                            14,
+                          ),
                           itemCount: _messages.length,
                           itemBuilder: (context, index) {
-                            final message = _messages[_messages.length - 1 - index];
+                            final message =
+                                _messages[_messages.length - 1 - index];
+
                             return Align(
                               alignment: message.isMine
                                   ? Alignment.centerLeft
                                   : Alignment.centerRight,
                               child: Container(
                                 constraints: BoxConstraints(
-                                  maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+                                  maxWidth:
+                                      MediaQuery.sizeOf(context).width *
+                                          0.78,
                                 ),
                                 margin: const EdgeInsets.only(bottom: 9),
-                                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 13,
+                                  vertical: 10,
+                                ),
                                 decoration: BoxDecoration(
                                   color: message.isMine
                                       ? const Color(0xFF203B5C)
@@ -855,7 +962,8 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
                                   border: Border.all(color: Colors.white10),
                                 ),
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
                                     SelectableText(
                                       message.text,
@@ -927,7 +1035,9 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
                         )
                       : const Icon(Icons.send_rounded),
                 ),
@@ -952,9 +1062,14 @@ class _ErrorBox extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF51252C),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.35)),
+        border: Border.all(
+          color: Colors.redAccent.withValues(alpha: 0.35),
+        ),
       ),
-      child: Text(message, style: const TextStyle(color: Colors.white)),
+      child: Text(
+        message,
+        style: const TextStyle(color: Colors.white),
+      ),
     );
   }
 }
@@ -976,14 +1091,21 @@ class _NoticeBox extends StatelessWidget {
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white70, height: 1.45, fontSize: 12),
+        style: const TextStyle(
+          color: Colors.white70,
+          height: 1.45,
+          fontSize: 12,
+        ),
       ),
     );
   }
 }
 
 class _EmptyBox extends StatelessWidget {
-  const _EmptyBox({required this.icon, required this.text});
+  const _EmptyBox({
+    required this.icon,
+    required this.text,
+  });
 
   final IconData icon;
   final String text;
@@ -999,7 +1121,10 @@ class _EmptyBox extends StatelessWidget {
           Text(
             text,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white54, height: 1.5),
+            style: const TextStyle(
+              color: Colors.white54,
+              height: 1.5,
+            ),
           ),
         ],
       ),
