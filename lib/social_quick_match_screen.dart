@@ -6,6 +6,7 @@ import 'services/social_community_service.dart';
 import 'services/social_games_service.dart';
 import 'social_ai_games_screen.dart';
 import 'social_games_hub_screen.dart';
+import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// البحث عن لاعب حقيقي أولًا ثم التحويل التلقائي إلى صاحبي AI.
 class SocialQuickMatchScreen extends StatefulWidget {
@@ -249,9 +250,8 @@ class _SocialQuickMatchScreenState extends State<SocialQuickMatchScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: const Text('العب مع لاعب أو صاحبي AI'),
+        appBar: const Sa7biSubpageAppBar(
+          title: 'العب مع لاعب أو صاحبي AI',
         ),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
