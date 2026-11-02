@@ -6,8 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'app_diagnostics_screen.dart';
 import 'audio_player_service.dart';
-import 'chat_screen.dart';
-import 'config/service_keys.dart';
+import 'chat_tab_screen.dart';
 import 'home_screen.dart';
 import 'interactive_experiences_screen.dart';
 import 'khalasana_portal_screen.dart';
@@ -92,7 +91,8 @@ class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
 
   @override
-  State<MainContainerScreen> createState() => _MainContainerScreenState();
+  State<MainContainerScreen> createState() =>
+      _MainContainerScreenState();
 }
 
 class _MainContainerScreenState extends State<MainContainerScreen> {
@@ -152,16 +152,11 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
-      ChatScreen(
-        serviceKey: ServiceKeys.general,
-        serviceTitle: 'المحادثة العامة',
-        serviceContext:
-            'أنت صاحبي AI، مساعد عربي عام. أجب بوضوح وبشكل مفيد، '
-            'وحافظ على سياق المحادثة العامة.',
-        onProfileTap: openProfile,
-        onAudioTap: openAudioCenter,
-      ),
+
+      const ChatTabScreen(),
+
       const InteractiveExperiencesScreen(),
+
       ProfileScreen(
         onProfileTap: openProfile,
         onAudio: openAudioCenter,
@@ -180,7 +175,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
               children: pages,
             ),
 
-            // مشغل الصوت مخفي في الشات حتى لا يغطي مربع الكتابة.
+            // مشغل الصوت مخفي في الشات حتى لا يغطي الرسائل.
             if (!isChatTab)
               Positioned(
                 left: 10,
@@ -191,7 +186,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 ),
               ),
 
-            // زر التشخيص لا يظهر فوق مربع كتابة الشات.
+            // زر التشخيص لا يظهر فوق محتوى الشات.
             if (!isChatTab)
               Positioned(
                 left: 12,
@@ -233,7 +228,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 ),
               ),
 
-            // اختصار مركز التواصل يظهر في تبويب الألعاب فقط.
+            // اختصار مركز التواصل يظهر داخل تبويب الألعاب.
             if (index == 2)
               Positioned(
                 right: 10,
@@ -241,7 +236,8 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 child: Material(
                   color: Colors.transparent,
                   child: Tooltip(
-                    message: 'الرسائل والمجموعات واللعب مع الذكاء الاصطناعي',
+                    message:
+                        'الرسائل والمجموعات واللعب مع الذكاء الاصطناعي',
                     child: InkWell(
                       onTap: openSocialConnections,
                       borderRadius: BorderRadius.circular(24),
@@ -249,9 +245,13 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Sa7biTheme.surface.withValues(alpha: 0.98),
+                          color: Sa7biTheme.surface.withValues(
+                            alpha: 0.98,
+                          ),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Sa7biTheme.border),
+                          border: Border.all(
+                            color: Sa7biTheme.border,
+                          ),
                           boxShadow: const [
                             BoxShadow(
                               color: Color(0x55000000),
@@ -271,7 +271,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 ),
               ),
 
-            // روبوت خلصانة العائم متاح في كل التبويبات.
+            // روبوت خلّصانة العائم في التبويبات الرئيسية.
             Positioned(
               right: 8,
               bottom: isChatTab ? 100 : 76,
@@ -282,20 +282,25 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
           ],
         ),
       ),
+
+      // الشريط السفلي: أربع تبويبات صغيرة كما اتفقنا.
       bottomNavigationBar: NavigationBar(
         height: 60,
         backgroundColor: Sa7biTheme.surface,
         surfaceTintColor: Colors.transparent,
         indicatorColor: Sa7biTheme.cyan.withValues(alpha: 0.12),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        labelBehavior:
+            NavigationDestinationLabelBehavior.alwaysShow,
         selectedIndex: index,
         onDestinationSelected: (value) {
           if (!mounted) return;
 
           if (value == index) {
-            // الضغط على الرئيسية مرة أخرى يطلب تحديث الأخبار.
+            // الضغط على الرئيسية مرة أخرى يحدّث الأخبار.
             if (value == 0) {
-              unawaited(_homeKey.currentState?.refreshNews());
+              unawaited(
+                _homeKey.currentState?.refreshNews(),
+              );
             }
             return;
           }
@@ -309,18 +314,33 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             label: 'الرئيسية',
           ),
           NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded, size: 20),
+            icon: Icon(
+              Icons.chat_bubble_outline_rounded,
+              size: 20,
+            ),
             selectedIcon: Icon(Icons.chat_rounded, size: 21),
             label: 'الشات',
           ),
           NavigationDestination(
-            icon: Icon(Icons.sports_esports_outlined, size: 20),
-            selectedIcon: Icon(Icons.sports_esports_rounded, size: 21),
+            icon: Icon(
+              Icons.sports_esports_outlined,
+              size: 20,
+            ),
+            selectedIcon: Icon(
+              Icons.sports_esports_rounded,
+              size: 21,
+            ),
             label: 'الألعاب',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded, size: 20),
-            selectedIcon: Icon(Icons.person_rounded, size: 21),
+            icon: Icon(
+              Icons.person_outline_rounded,
+              size: 20,
+            ),
+            selectedIcon: Icon(
+              Icons.person_rounded,
+              size: 21,
+            ),
             label: 'حسابي',
           ),
         ],
@@ -389,7 +409,9 @@ class MiniAudioPlayer extends StatelessWidget {
                     ),
                   ),
                 ),
+
                 const SizedBox(width: 8),
+
                 Expanded(
                   child: GestureDetector(
                     onTap: () => Navigator.of(context).push<void>(
@@ -428,10 +450,12 @@ class MiniAudioPlayer extends StatelessWidget {
                     ),
                   ),
                 ),
+
                 StreamBuilder<PlaybackState>(
                   stream: handler.playbackState,
                   builder: (context, snapshot) {
-                    final playing = snapshot.data?.playing ?? false;
+                    final playing =
+                        snapshot.data?.playing ?? false;
 
                     return IconButton(
                       padding: EdgeInsets.zero,
@@ -456,6 +480,7 @@ class MiniAudioPlayer extends StatelessWidget {
                     );
                   },
                 ),
+
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
