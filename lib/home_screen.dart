@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -28,9 +29,14 @@ class HomeScreen extends StatefulWidget {
   HomeScreenState createState() => HomeScreenState();
 }
 
-class HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen>
+    with WidgetsBindingObserver {
   static const String _newsCacheKey = 'sa7bi_home_news_cache_v1';
   static const String _newsCacheTimeKey = 'sa7bi_home_news_cache_time_v1';
+  static const Duration _autoRefreshInterval =
+      Duration(minutes: 20);
+
+  Timer? _autoRefreshTimer;
 
   List<NewsItem> _news = [];
   bool _loading = true;
@@ -41,10 +47,49 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addObserver(this);
+
+    // تحديث دوري أثناء استخدام التطبيق فقط.
+    _autoRefreshTimer = Timer.periodic(
+      _autoRefreshInterval,
+      (_) {
+        if (!mounted ||
+            WidgetsBinding.instance.lifecycleState !=
+                AppLifecycleState.resumed) {
+          return;
+        }
+
+        unawaited(_loadNews(pullToRefresh: true));
+      },
+    );
+
     unawaited(_initializeNews());
   }
 
-  /// يعرض الأخبار المحفوظة أولًا، ثم يحاول جلب الأحدث من الإنترنت.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+
+    final lastUpdate = _lastUpdated;
+
+    final shouldRefresh = lastUpdate == null ||
+        DateTime.now().difference(lastUpdate) >=
+            _autoRefreshInterval;
+
+    if (shouldRefresh) {
+      unawaited(_loadNews(pullToRefresh: true));
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autoRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  /// يعرض الأخبار المحفوظة أولًا، ثم يجلب الأحدث من الإنترنت.
   Future<void> _initializeNews() async {
     await _loadCachedNews();
 
@@ -54,7 +99,8 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   /// يستدعيها الشريط السفلي عند الضغط على الرئيسية مرة أخرى.
-  Future<void> refreshNews() => _loadNews(pullToRefresh: true);
+  Future<void> refreshNews() =>
+      _loadNews(pullToRefresh: true);
 
   Future<void> _loadCachedNews() async {
     try {
@@ -82,13 +128,16 @@ class HomeScreenState extends State<HomeScreen> {
           pubDate: raw['pubDate']?.toString() ?? '',
         );
 
-        if (item.title.trim().isEmpty || item.link.trim().isEmpty) {
+        if (item.title.trim().isEmpty ||
+            item.link.trim().isEmpty) {
           continue;
         }
 
         final uri = Uri.tryParse(item.link.trim());
+
         if (uri == null ||
-            (uri.scheme != 'https' && uri.scheme != 'http')) {
+            (uri.scheme != 'https' &&
+                uri.scheme != 'http')) {
           continue;
         }
 
@@ -105,7 +154,8 @@ class HomeScreenState extends State<HomeScreen> {
             ? null
             : DateTime.fromMillisecondsSinceEpoch(cachedTime);
         _loading = false;
-        _error = 'تعرض الأخبار المحفوظة لحين تحديثها من الإنترنت.';
+        _error =
+            'تعرض الأخبار المحفوظة لحين تحديثها من الإنترنت.';
       });
     } catch (_) {
       // تلف الكاش لا يمنع تحميل الأخبار من الإنترنت.
@@ -138,11 +188,13 @@ class HomeScreenState extends State<HomeScreen> {
         savedAt.millisecondsSinceEpoch,
       );
     } catch (_) {
-      // فشل حفظ الكاش لا يمنع عرض الأخبار التي وصلت من الخادم.
+      // فشل حفظ الكاش لا يمنع عرض الأخبار.
     }
   }
 
-  Future<void> _loadNews({bool pullToRefresh = false}) async {
+  Future<void> _loadNews({
+    bool pullToRefresh = false,
+  }) async {
     if (!mounted || _refreshing) return;
 
     setState(() {
@@ -152,14 +204,13 @@ class HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final networkResult = await network_news.AiNewsService.getNews(
+      final networkResult =
+          await network_news.AiNewsService.getNews(
         forceRefresh: pullToRefresh,
       ).timeout(
         const Duration(seconds: 25),
       );
 
-      // تحويل نموذج الشبكة إلى نموذج الواجهة الحالي دون تغيير
-      // نوع NewsItem الذي تستخدمه بقية هذه الشاشة.
       final result = networkResult
           .map(
             (item) => NewsItem(
@@ -234,11 +285,14 @@ class HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openNews(NewsItem item) async {
     final url = item.link.trim();
+
     if (url.isEmpty || !mounted) return;
 
     final uri = Uri.tryParse(url);
+
     if (uri == null ||
-        (uri.scheme != 'https' && uri.scheme != 'http')) {
+        (uri.scheme != 'https' &&
+            uri.scheme != 'http')) {
       return;
     }
 
@@ -273,31 +327,53 @@ class HomeScreenState extends State<HomeScreen> {
             onProfileTap: widget.onProfile,
             onAudioTap: widget.onAudio,
           ),
+
+          // الهيدر والإعلان يظلان ثابتين أثناء تمرير الأخبار.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
+            child: const _HomeAdBanner(),
+          ),
+
           Expanded(
             child: RefreshIndicator(
               onRefresh: refreshNews,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 112),
+                padding: const EdgeInsets.fromLTRB(
+                  12,
+                  8,
+                  12,
+                  112,
+                ),
                 children: [
-                  const _HomeAdBanner(),
-                  const SizedBox(height: 12),
                   _buildNewsHeader(),
                   const SizedBox(height: 8),
+
                   if (_error != null && _news.isNotEmpty)
                     _buildOfflineStatus(),
+
                   if (_loading && _news.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 38),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
                     ),
-                  if (_error != null && _news.isEmpty) _buildErrorCard(),
-                  if (_news.isEmpty && !_loading && _error == null)
+
+                  if (_error != null && _news.isEmpty)
+                    _buildErrorCard(),
+
+                  if (_news.isEmpty &&
+                      !_loading &&
+                      _error == null)
                     _buildEmptyCard(),
+
                   ..._buildNewsItems(),
+
                   const SizedBox(height: 14),
                   const AffiliateCarousel(),
                   const SizedBox(height: 14),
+
                   Center(
                     child: Text(
                       _formatUpdatedAt(_lastUpdated),
@@ -338,7 +414,9 @@ class HomeScreenState extends State<HomeScreen> {
           const SizedBox(
             width: 15,
             height: 15,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+            ),
           )
         else
           Text(
@@ -355,11 +433,16 @@ class HomeScreenState extends State<HomeScreen> {
   Widget _buildOfflineStatus() {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 11,
+        vertical: 8,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFF182333),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0x3372D7FF)),
+        border: Border.all(
+          color: const Color(0x3372D7FF),
+        ),
       ),
       child: Row(
         children: [
@@ -406,7 +489,9 @@ class HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFF251A1A),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0x66FF7979)),
+        border: Border.all(
+          color: const Color(0x66FF7979),
+        ),
       ),
       child: Column(
         children: [
@@ -446,7 +531,10 @@ class HomeScreenState extends State<HomeScreen> {
       child: const Text(
         'الأخبار هتظهر هنا لما تكون متاحة.',
         textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.white70, fontSize: 12),
+        style: TextStyle(
+          color: Colors.white70,
+          fontSize: 12,
+        ),
       ),
     );
   }
@@ -478,15 +566,17 @@ class HomeScreenState extends State<HomeScreen> {
 
   /// بطاقة خبر أفقية صغيرة: الصورة على اليمين والتفاصيل على اليسار.
   Widget _buildNewsCard(NewsItem item, int index) {
-    final title =
-        item.title.trim().isEmpty ? 'خبر ${index + 1}' : item.title.trim();
+    final title = item.title.trim().isEmpty
+        ? 'خبر ${index + 1}'
+        : item.title.trim();
 
     final description = item.description.trim().isEmpty
         ? 'اضغط لقراءة تفاصيل الخبر.'
         : item.description.trim();
 
-    final source =
-        item.source.trim().isEmpty ? 'مصدر إخباري' : item.source.trim();
+    final source = item.source.trim().isEmpty
+        ? 'مصدر إخباري'
+        : item.source.trim();
 
     final imageUrl = item.imageUrl.trim();
 
@@ -515,7 +605,12 @@ class HomeScreenState extends State<HomeScreen> {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                  padding: const EdgeInsets.fromLTRB(
+                    10,
+                    8,
+                    10,
+                    8,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -592,7 +687,10 @@ class HomeScreenState extends State<HomeScreen> {
       alignment: Alignment.center,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF202B43), Color(0xFF151923)],
+          colors: [
+            Color(0xFF202B43),
+            Color(0xFF151923),
+          ],
         ),
       ),
       child: const Icon(
@@ -766,10 +864,14 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
         decoration: BoxDecoration(
           color: const Color(0xFF10141E),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0x22FFFFFF)),
+          border: Border.all(
+            color: const Color(0x22FFFFFF),
+          ),
         ),
         child: Text(
-          _failed ? 'الإعلانات غير متاحة حاليًا' : 'مساحة إعلانية',
+          _failed
+              ? 'الإعلانات غير متاحة حاليًا'
+              : 'مساحة إعلانية',
           style: const TextStyle(
             color: Colors.white38,
             fontSize: 10,
