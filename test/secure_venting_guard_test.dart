@@ -33,45 +33,62 @@ void main() {
       expect(security.isUnlocked, isFalse);
     });
 
-    test('locked venting history is not reported as an empty conversation',
-        () async {
-      await expectLater(
-        ChatHistoryService.instance.load(ServiceKeys.venting),
-        throwsA(isA<VentingSecurityException>()),
-      );
+    test(
+      'locked venting history is not reported as an empty conversation',
+      () async {
+        await expectLater(
+          ChatHistoryService.instance.load(ServiceKeys.venting),
+          throwsA(isA<VentingSecurityException>()),
+        );
 
-      expect(security.isUnlocked, isFalse);
-    });
+        expect(security.isUnlocked, isFalse);
+      },
+    );
 
-    test('saving private history is rejected while the vault is locked',
-        () async {
-      await expectLater(
-        ChatHistoryService.instance.save(
-          ServiceKeys.venting,
-          <Map<String, dynamic>>[
-            <String, dynamic>{'text': 'must not be saved while locked'},
-          ],
-        ),
-        throwsA(isA<VentingSecurityException>()),
-      );
-
-      expect(security.isUnlocked, isFalse);
-    });
-
-    testWidgets('does not mount the private chat before the vault is opened',
-        (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: SecureVentingScreen(
-            child: Text('PRIVATE_VENTING_CHILD_SENTINEL'),
+    test(
+      'saving private history is rejected while the vault is locked',
+      () async {
+        await expectLater(
+          ChatHistoryService.instance.save(
+            ServiceKeys.venting,
+            <Map<String, dynamic>>[
+              <String, dynamic>{
+                'text': 'must not be saved while locked',
+              },
+            ],
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+          throwsA(isA<VentingSecurityException>()),
+        );
 
-      expect(find.text('فضفضة سرية'), findsOneWidget);
-      expect(find.text('أنشئ قفل الفضفضة'), findsOneWidget);
-      expect(find.text('PRIVATE_VENTING_CHILD_SENTINEL'), findsNothing);
-    });
+        expect(security.isUnlocked, isFalse);
+      },
+    );
+
+    testWidgets(
+      'does not mount the private chat before the vault is opened',
+      (tester) async {
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: SecureVentingScreen(
+              child: Text('PRIVATE_VENTING_CHILD_SENTINEL'),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+
+        // الهيدر الموحد يظهر في الشاشة الأم داخل خلصانة،
+        // ولا نكرر عنوانًا أو AppBar داخل شاشة القفل نفسها.
+        expect(
+          find.text('أنشئ قفل الفضفضة'),
+          findsOneWidget,
+        );
+
+        expect(
+          find.text('PRIVATE_VENTING_CHILD_SENTINEL'),
+          findsNothing,
+        );
+      },
+    );
   });
 }
