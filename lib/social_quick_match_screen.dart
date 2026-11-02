@@ -295,7 +295,7 @@ class _SocialQuickMatchScreenState extends State<SocialQuickMatchScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         _introCard(
-          icon: Icons.group_search_rounded,
+          icon: Icons.groups_rounded,
           title: 'هنبحث لك عن لاعب حقيقي',
           description: 'لو مفيش لاعب متاح خلال 25 ثانية، نفس المباراة هتتحول تلقائيًا إلى مباراة ضد صاحبي AI.',
         ),
