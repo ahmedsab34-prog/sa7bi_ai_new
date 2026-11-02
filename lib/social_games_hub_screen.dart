@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -666,7 +667,8 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
-            value: _inviteGame,
+            // التصحيح: استخدام initialValue بدل value.
+            initialValue: _inviteGame,
             isExpanded: true,
             dropdownColor: const Color(0xFF172033),
             decoration: const InputDecoration(
