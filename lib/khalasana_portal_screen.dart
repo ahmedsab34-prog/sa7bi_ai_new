@@ -4,6 +4,7 @@ import 'chat_screen.dart';
 import 'config/service_keys.dart';
 import 'secure_venting_screen.dart';
 import 'service_config.dart';
+import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// الشاشة الرئيسية لخلصانة AI.
 ///
@@ -229,6 +230,10 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _background,
+      appBar: Sa7biSubpageAppBar(
+        title: _activeTarget.title,
+        subtitle: _activeTarget.service.description,
+      ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
