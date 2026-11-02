@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: sa7bi-canonical-apk-release
@@ -19,6 +20,7 @@ concurrency:
 env:
   APP_VERSION: "1.0.1"
   EXPECTED_APPLICATION_ID: "com.example.sa7bi_ai_new"
+  EXPECTED_RELEASE_CERT_SHA256: "8861f29093a09f80132873c09d3fd7f2252785ad7b8e6cf2241a60605cd254d9"
   FLUTTER_VERSION: "3.38.1"
   JAVA_VERSION: "17"
   APK_PATH: "build/app/outputs/flutter-apk/app-release.apk"
@@ -27,11 +29,12 @@ env:
 
 jobs:
   build-test-verify:
-    name: Analyze, test, and build the exact manually selected source commit
+    name: Analyze, test, and build the exact selected source commit
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
+      actions: read
 
     outputs:
       artifact_name: ${{ steps.identity.outputs.artifact_name }}
@@ -46,6 +49,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           EXPECTED_BRANCH="fix/build-692-network-client-lifecycle"
 
           echo "Repository: ${GITHUB_REPOSITORY}"
@@ -72,12 +76,43 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Determine version code after latest successful candidate
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          CANDIDATE_RUN_NUMBER="$(
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/build-candidate.yml/runs?branch=fix%2Fbuild-692-network-client-lifecycle&status=success&per_page=1" \
+              --jq '.workflow_runs[0].run_number // empty'
+          )"
+
+          if ! [[ "${CANDIDATE_RUN_NUMBER}" =~ ^[0-9]+$ ]]; then
+            echo "::error::Could not find a successful Candidate Build on the working branch."
+            exit 1
+          fi
+
+          # Candidate builds use 1000 + their run number.
+          # The official APK receives the next higher version code.
+          BUILD_NUMBER="$((1000 + CANDIDATE_RUN_NUMBER + 1))"
+
+          echo "Latest successful candidate run: ${CANDIDATE_RUN_NUMBER}"
+          echo "Official APK version code: ${BUILD_NUMBER}"
+
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "${GITHUB_ENV}"
+          echo "build_number=${BUILD_NUMBER}" >> "${GITHUB_OUTPUT}"
+
       - name: Create artifact identity
         id: identity
         shell: bash
         run: |
           set -euo pipefail
+
           ARTIFACT_NAME="sa7bi-ai-verified-${GITHUB_RUN_NUMBER}-${GITHUB_SHA}"
+
           echo "artifact_name=${ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
 
           {
@@ -88,10 +123,23 @@ jobs:
             echo "Run number: ${GITHUB_RUN_NUMBER}"
             echo "Run attempt: ${GITHUB_RUN_ATTEMPT}"
             echo "App version: ${APP_VERSION}"
-            echo "Expected application ID: ${EXPECTED_APPLICATION_ID}"
-            echo "Expected version code: $((1000 + GITHUB_RUN_NUMBER))"
+            echo "Application ID: ${EXPECTED_APPLICATION_ID}"
+            echo "Version code: ${BUILD_NUMBER}"
             echo "Artifact: ${ARTIFACT_NAME}"
           } | tee build-provenance.txt
+
+      - name: Verify dependency lockfile is committed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! git ls-files --error-unmatch pubspec.lock >/dev/null 2>&1; then
+            echo "::error::pubspec.lock must be committed before an official APK release."
+            exit 1
+          fi
+
+          test -s pubspec.lock
+          echo "Committed pubspec.lock found."
 
       - name: Configure permanent Android release signing
         shell: bash
@@ -107,14 +155,33 @@ jobs:
              [ -z "${SA7BI_RELEASE_STORE_PASSWORD}" ] ||
              [ -z "${SA7BI_RELEASE_KEY_ALIAS}" ] ||
              [ -z "${SA7BI_RELEASE_KEY_PASSWORD}" ]; then
-            echo "::error::Permanent Android signing is required. Configure all four SA7BI_RELEASE_* repository secrets before building or publishing an official APK."
+            echo "::error::Permanent Android signing is required. All four SA7BI_RELEASE_* secrets must be present."
             exit 1
           fi
 
           mkdir -p android
-          printf '%s' "${SA7BI_RELEASE_KEYSTORE_BASE64}" | base64 --decode > android/sa7bi-release.jks
-          test -s android/sa7bi-release.jks
+
+          if ! printf '%s' "${SA7BI_RELEASE_KEYSTORE_BASE64}" |
+            base64 --decode > android/sa7bi-release.jks; then
+            echo "::error::The release keystore secret is not valid Base64."
+            exit 1
+          fi
+
+          if [ ! -s android/sa7bi-release.jks ]; then
+            echo "::error::The decoded release keystore is empty."
+            exit 1
+          fi
+
           chmod 600 android/sa7bi-release.jks
+
+          if ! keytool -list \
+            -keystore android/sa7bi-release.jks \
+            -storepass "${SA7BI_RELEASE_STORE_PASSWORD}" \
+            -alias "${SA7BI_RELEASE_KEY_ALIAS}" \
+            >/dev/null; then
+            echo "::error::The release keystore, password, or alias could not be validated."
+            exit 1
+          fi
 
           python3 - <<'PY'
           import os
@@ -139,18 +206,35 @@ jobs:
               f"{key}={escape_property(value)}\n"
               for key, value in values.items()
           )
+
           path = Path("android/key.properties")
           path.write_text(content, encoding="utf-8")
           path.chmod(0o600)
           PY
 
       - name: Install locked project dependencies
-        run: flutter pub get
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+
+      - name: Confirm dependency lockfile did not change
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! git diff --exit-code -- pubspec.lock; then
+            echo "::error::flutter pub get changed pubspec.lock. Review and commit the intended lockfile before release."
+            exit 1
+          fi
+
+          echo "Dependency lockfile is unchanged."
 
       - name: Analyze the Flutter project
         shell: bash
         run: |
           set -euo pipefail
+
           flutter analyze --no-pub \
             --no-fatal-warnings \
             --no-fatal-infos \
@@ -160,6 +244,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           flutter test --no-pub --reporter expanded \
             2>&1 | tee flutter-test-report.txt
 
@@ -168,7 +253,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
           BUILD_ID="release-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
           SOURCE_ID="${GITHUB_REPOSITORY}@${GITHUB_SHA}"
 
@@ -181,26 +265,30 @@ jobs:
             --dart-define="APP_BUILD_ID=${BUILD_ID}" \
             --dart-define="APP_SOURCE_ID=${SOURCE_ID}"
 
-      - name: Verify package identity, APK integrity, and checksum
+      - name: Verify package, version, integrity, signature, and certificate
         shell: bash
         run: |
           set -euo pipefail
 
           APK="${APK_PATH}"
-          EXPECTED_BUILD_NUMBER="$((1000 + GITHUB_RUN_NUMBER))"
 
-          test -s "${APK}" || {
+          if [ ! -s "${APK}" ]; then
             echo "::error::APK is missing or empty."
             exit 1
-          }
+          fi
 
           APK_ANALYZER="$(
             find "${ANDROID_HOME}" -type f \
               -name apkanalyzer -perm -u+x -print -quit 2>/dev/null
           )"
 
-          if [ -z "${APK_ANALYZER}" ]; then
-            echo "::error::Android apkanalyzer was not found."
+          APK_SIGNER="$(
+            find "${ANDROID_HOME}/build-tools" -type f \
+              -name apksigner -perm -u+x -print -quit 2>/dev/null
+          )"
+
+          if [ -z "${APK_ANALYZER}" ] || [ -z "${APK_SIGNER}" ]; then
+            echo "::error::apkanalyzer or apksigner was not found in the Android SDK."
             exit 1
           fi
 
@@ -218,14 +306,57 @@ jobs:
 
           test "${ACTUAL_ID}" = "${EXPECTED_APPLICATION_ID}"
           test "${ACTUAL_VERSION}" = "${APP_VERSION}"
-          test "${ACTUAL_CODE}" = "${EXPECTED_BUILD_NUMBER}"
+          test "${ACTUAL_CODE}" = "${BUILD_NUMBER}"
           test "${APK_BYTES}" -gt 1000000
+
           unzip -t "${APK}" >/dev/null
           unzip -l "${APK}" | grep -q 'libapp.so'
 
+          if ! "${APK_SIGNER}" verify --verbose "${APK}"; then
+            echo "::error::APK signature verification failed."
+            exit 1
+          fi
+
+          SIGNATURE_REPORT="$(
+            "${APK_SIGNER}" verify --print-certs "${APK}"
+          )"
+
+          ACTUAL_CERT_SHA256="$(
+            printf '%s\n' "${SIGNATURE_REPORT}" |
+              awk 'tolower($0) ~ /certificate sha-256 digest:/ {
+                sub(/^.*digest:[[:space:]]*/, "");
+                print;
+                exit
+              }' |
+              tr -d ':[:space:]' |
+              tr '[:upper:]' '[:lower:]'
+          )"
+
+          EXPECTED_CERT_SHA256="$(
+            printf '%s' "${EXPECTED_RELEASE_CERT_SHA256}" |
+              tr -d ':[:space:]' |
+              tr '[:upper:]' '[:lower:]'
+          )"
+
+          if [ -z "${ACTUAL_CERT_SHA256}" ]; then
+            echo "::error::Could not read the APK signing certificate fingerprint."
+            exit 1
+          fi
+
+          if [ "${ACTUAL_CERT_SHA256}" != "${EXPECTED_CERT_SHA256}" ]; then
+            echo "::error::APK release certificate does not match the permanent certificate."
+            exit 1
+          fi
+
+          echo "Permanent release certificate fingerprint: MATCHED"
+
           mkdir -p release-artifact
+
           cp "${APK}" "release-artifact/${RELEASE_APK_NAME}"
-          printf '%s  %s\n' "${APK_SHA256}" "${RELEASE_APK_NAME}" \
+
+          printf '%s  %s\n' \
+            "${APK_SHA256}" \
+            "${RELEASE_APK_NAME}" \
             > "release-artifact/${RELEASE_APK_NAME}.sha256"
 
           {
@@ -234,16 +365,16 @@ jobs:
             echo "Commit=${GITHUB_SHA}"
             echo "RunID=${GITHUB_RUN_ID}"
             echo "RunAttempt=${GITHUB_RUN_ATTEMPT}"
-            echo "BuildID=release-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
-            echo "SourceID=${GITHUB_REPOSITORY}@${GITHUB_SHA}"
             echo "AppVersion=${ACTUAL_VERSION}"
             echo "ApplicationID=${ACTUAL_ID}"
             echo "VersionCode=${ACTUAL_CODE}"
             echo "APKSize=${APK_BYTES}"
             echo "APK_SHA256=${APK_SHA256}"
+            echo "SigningCertificateSHA256=${ACTUAL_CERT_SHA256}"
             echo "CanonicalFilename=${RELEASE_APK_NAME}"
             echo "CanonicalReleaseTag=${RELEASE_TAG}"
             echo "WorkerDeployment=not-performed"
+            echo "GitHubReleasePublication=not-performed-at-build-stage"
           } | tee -a build-provenance.txt
 
           cp build-provenance.txt release-artifact/build-provenance.txt
@@ -253,7 +384,7 @@ jobs:
           echo "APK_SIZE=${APK_BYTES}" >> "${GITHUB_ENV}"
           echo "APK_SHA256=${APK_SHA256}" >> "${GITHUB_ENV}"
 
-      - name: Upload the exact verified APK as a build artifact
+      - name: Upload the exact verified APK as an artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.identity.outputs.artifact_name }}
@@ -268,10 +399,9 @@ jobs:
           {
             echo "## Verified APK artifact created - not published"
             echo
-            echo "- Source commit: \`${GITHUB_SHA}\`"
-            echo "- Artifact: \`${{ steps.identity.outputs.artifact_name }}\`"
-            echo "- App version: \`${APP_VERSION}\`"
-            echo "- APK SHA-256: \`${APK_SHA256}\`"
+            echo "- Source commit: ${GITHUB_SHA}"
+            echo "- Version code: ${BUILD_NUMBER}"
+            echo "- APK SHA-256: ${APK_SHA256}"
             echo "- GitHub Release publication: NO"
             echo "- Worker deployment: NO"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -296,7 +426,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           cd release-artifact
+
           test -s "${RELEASE_APK_NAME}"
           sha256sum --check "${RELEASE_APK_NAME}.sha256"
           unzip -t "${RELEASE_APK_NAME}" >/dev/null
@@ -307,22 +439,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+
           cd release-artifact
 
           gh release view "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" >/dev/null
 
-          # Delete only the two canonical APK assets; preserve all other assets.
-          gh release delete-asset "${RELEASE_TAG}" "${RELEASE_APK_NAME}" \
-            --repo "${GITHUB_REPOSITORY}" --yes || true
-
-          gh release delete-asset "${RELEASE_TAG}" "${RELEASE_APK_NAME}.sha256" \
-            --repo "${GITHUB_REPOSITORY}" --yes || true
-
           gh release upload "${RELEASE_TAG}" \
             "${RELEASE_APK_NAME}" \
             "${RELEASE_APK_NAME}.sha256" \
-            --repo "${GITHUB_REPOSITORY}"
+            --repo "${GITHUB_REPOSITORY}" \
+            --clobber
 
       - name: Verify published APK size and SHA-256
         shell: bash
@@ -337,21 +464,29 @@ jobs:
               --json tagName,assets
           )"
 
-          test "$(echo "${RELEASE_JSON}" | jq -r '.tagName')" = "${RELEASE_TAG}"
+          test "$(
+            echo "${RELEASE_JSON}" |
+              jq -r '.tagName'
+          )" = "${RELEASE_TAG}"
 
           PUBLISHED_COUNT="$(
             echo "${RELEASE_JSON}" |
               jq --arg name "${RELEASE_APK_NAME}" \
                 '[.assets[] | select(.name == $name)] | length'
           )"
+
           test "${PUBLISHED_COUNT}" -eq 1
 
-          EXPECTED_SIZE="$(stat -c%s "release-artifact/${RELEASE_APK_NAME}")"
+          EXPECTED_SIZE="$(
+            stat -c%s "release-artifact/${RELEASE_APK_NAME}"
+          )"
+
           PUBLISHED_SIZE="$(
             echo "${RELEASE_JSON}" |
               jq --arg name "${RELEASE_APK_NAME}" \
                 -r '.assets[] | select(.name == $name) | .size'
           )"
+
           test "${PUBLISHED_SIZE}" = "${EXPECTED_SIZE}"
 
           PUBLISHED_SHA="$(
@@ -360,18 +495,24 @@ jobs:
                 -r '.assets[] | select(.name == $name) | .digest' |
               sed 's/^sha256://'
           )"
-          EXPECTED_SHA="$(awk '{print $1}' "release-artifact/${RELEASE_APK_NAME}.sha256")"
+
+          EXPECTED_SHA="$(
+            awk '{print $1}' \
+              "release-artifact/${RELEASE_APK_NAME}.sha256"
+          )"
+
           test -n "${PUBLISHED_SHA}"
           test "${PUBLISHED_SHA}" = "${EXPECTED_SHA}"
 
           {
             echo "## Canonical APK publication verified"
             echo
-            echo "- Source branch: \`${GITHUB_REF_NAME}\`"
-            echo "- Release tag: \`${RELEASE_TAG}\`"
-            echo "- APK: \`${RELEASE_APK_NAME}\`"
-            echo "- Size: \`${PUBLISHED_SIZE}\` bytes"
-            echo "- SHA-256: \`${PUBLISHED_SHA}\`"
+            echo "- Source branch: ${GITHUB_REF_NAME}"
+            echo "- Release tag: ${RELEASE_TAG}"
+            echo "- APK: ${RELEASE_APK_NAME}"
+            echo "- Size: ${PUBLISHED_SIZE} bytes"
+            echo "- SHA-256: ${PUBLISHED_SHA}"
+            echo "- Worker deployment: NO"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   publication-not-requested:
@@ -381,6 +522,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
     steps:
       - name: Record safe default
         shell: bash
