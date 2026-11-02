@@ -281,19 +281,12 @@ class SecureVentingScreenState extends State<SecureVentingScreen>
       );
     }
 
+    // هذه الشاشة مضمّنة داخل KhalasanaPortalScreen؛ الهيدر والرجوع
+    // يأتيان من الشاشة الأم حتى لا يظهر هيدر ثانٍ داخل خلّصانة.
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080C16),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          title: const Text(
-            'فضفضة سرية',
-            style: TextStyle(fontWeight: FontWeight.w900),
-          ),
-        ),
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
