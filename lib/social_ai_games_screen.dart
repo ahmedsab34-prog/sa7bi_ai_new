@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'services/social_community_service.dart';
 import 'services/social_games_service.dart';
 import 'social_games_hub_screen.dart';
+import 'widgets/sa7bi_chess_board.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
 class SocialAiGamesScreen extends StatefulWidget {
@@ -210,8 +211,6 @@ class SocialAiGameRoomScreen extends StatefulWidget {
 
 class _SocialAiGameRoomScreenState extends State<SocialAiGameRoomScreen> {
   final SocialGamesService _games = SocialGamesService.instance;
-  final TextEditingController _from = TextEditingController();
-  final TextEditingController _to = TextEditingController();
   Timer? _poll;
   late SocialGameRoom _room;
   bool _busy = false;
@@ -231,8 +230,6 @@ class _SocialAiGameRoomScreenState extends State<SocialAiGameRoomScreen> {
   @override
   void dispose() {
     _poll?.cancel();
-    _from.dispose();
-    _to.dispose();
     super.dispose();
   }
 
@@ -474,47 +471,43 @@ class _SocialAiGameRoomScreenState extends State<SocialAiGameRoomScreen> {
 
   Widget _buildChess() {
     final fen = _room.state['fen'];
-    final turn = _room.state['turn'];
+    final turn = _room.state['turn'] == 'b' ? 'b' : 'w';
+
+    if (fen is! String || fen.isEmpty) {
+      return const _AiNotice(
+        text: 'تعذر قراءة لوحة الشطرنج. حدّث المباراة للمحاولة مرة أخرى.',
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _AiNotice(text: 'أنت تلعب بالأبيض. صاحبي AI يلعب بالأسود. اكتب إحداثيات النقلة مثل e2 إلى e4.'),
-        const SizedBox(height: 9),
-        Text('الدور: ${turn == 'w' ? 'الأبيض — أنت' : 'الأسود — صاحبي AI'}', textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFFFD76A))),
-        if (fen is String) ...[
-          const SizedBox(height: 8),
-          SelectableText('FEN: $fen', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 10)),
-        ],
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _from,
-                textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(labelText: 'من', hintText: 'e2', border: OutlineInputBorder()),
-              ),
-            ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: TextField(
-                controller: _to,
-                textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(labelText: 'إلى', hintText: 'e4', border: OutlineInputBorder()),
-              ),
-            ),
-          ],
+        const _AiNotice(
+          text: 'أنت تلعب بالأبيض، وصاحبي AI يلعب بالأسود. اختر قطعتك ثم مربع الوصول.',
         ),
-        const SizedBox(height: 10),
-        FilledButton(
-          onPressed: _busy || turn != 'w'
-              ? null
-              : () => _move(() => _games.playChessMove(
-                    roomId: _room.id,
-                    from: _from.text.trim().toLowerCase(),
-                    to: _to.text.trim().toLowerCase(),
-                  )),
-          child: const Text('إرسال النقلة'),
+        const SizedBox(height: 9),
+        Text(
+          turn == 'w'
+              ? 'دورك الآن — الأبيض'
+              : 'صاحبي AI يفكر — الأسود',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xFFFFD76A),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Sa7biChessBoard(
+          fen: fen,
+          bottomSide: Sa7biChessSide.white,
+          enabled: _room.isPlaying && !_busy && turn == 'w',
+          onMove: (from, to) => _move(
+            () => _games.playChessMove(
+              roomId: _room.id,
+              from: from,
+              to: to,
+            ),
+          ),
         ),
       ],
     );
