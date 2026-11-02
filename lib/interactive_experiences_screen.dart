@@ -1,4 +1,3 @@
-
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import 'social_games_hub_screen.dart';
 import 'monetization_config.dart';
 import 'services/ads_service.dart';
 import 'widgets/rewarded_ad_button.dart';
+import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// يعرض الإعلان البيني عند نقطة طبيعية فقط، بعد كل خمس جولات مكتملة.
 /// إعدادات التفعيل وخدمة AdMob الحالية هي المصدر الوحيد للتحكم.
@@ -74,9 +74,8 @@ class _InteractiveExperiencesScreenState
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: const Text('الألعاب والتجارب'),
+        appBar: Sa7biSubpageAppBar(
+          title: 'الألعاب والتجارب',
           bottom: TabBar(
             controller: _tabs,
             tabs: const [
@@ -386,9 +385,8 @@ class _GamePage extends StatelessWidget {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF080B13),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF111827),
-          title: Text(title),
+        appBar: Sa7biSubpageAppBar(
+          title: title,
           actions: [
             IconButton(
               tooltip: 'إعادة اللعب',
@@ -980,7 +978,7 @@ class _IngredientRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 7),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
