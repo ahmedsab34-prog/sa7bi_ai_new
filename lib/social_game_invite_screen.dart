@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'services/social_games_service.dart';
 import 'social_games_hub_screen.dart';
+import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// شاشة استقبال دعوة لعبة، وتسجيل الدخول عند الحاجة ثم الانضمام.
 class SocialGameInviteScreen extends StatefulWidget {
@@ -195,9 +196,8 @@ class _SocialGameInviteScreenState
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('دعوة للعب'),
-          backgroundColor: const Color(0xFF111827),
+        appBar: const Sa7biSubpageAppBar(
+          title: 'دعوة للعب',
         ),
         body: SafeArea(
           child: _loading
@@ -302,7 +302,9 @@ class _SocialGameInviteScreenState
                               )
                             : const Icon(Icons.login_rounded),
                         label: Text(
-                          _busy ? 'جارٍ الانضمام...' : 'الانضمام للمباراة',
+                          _busy
+                              ? 'جارٍ الانضمام...'
+                              : 'الانضمام للمباراة',
                         ),
                       ),
                     ] else ...[
@@ -310,7 +312,9 @@ class _SocialGameInviteScreenState
                         controller: _username,
                         textDirection: TextDirection.ltr,
                         textCapitalization: TextCapitalization.none,
-                        autofillHints: const [AutofillHints.username],
+                        autofillHints: const [
+                          AutofillHints.username,
+                        ],
                         decoration: const InputDecoration(
                           labelText: 'اسم المستخدم',
                           prefixIcon: Icon(Icons.person_outline_rounded),
@@ -331,7 +335,8 @@ class _SocialGameInviteScreenState
                       ),
                       const SizedBox(height: 14),
                       FilledButton.icon(
-                        onPressed: _busy ? null : _authenticateAndJoin,
+                        onPressed:
+                            _busy ? null : _authenticateAndJoin,
                         icon: _busy
                             ? const SizedBox(
                                 width: 18,
