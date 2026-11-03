@@ -38,6 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _checkConnection() async {
     if (_isChecking) return;
+
     setState(() {
       _isChecking = true;
       _isConnected = null;
@@ -46,11 +47,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final connected = await AiService.checkConnection();
       await _profileService.saveAiConnection(connected);
+
       if (!mounted) return;
+
       setState(() {
         _isChecking = false;
         _isConnected = connected;
       });
+
       _showMessage(
         connected
             ? 'صاحبي AI متصل ويستجيب لاختبار الاتصال.'
@@ -58,11 +62,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } catch (_) {
       await _profileService.saveAiConnection(false);
+
       if (!mounted) return;
+
       setState(() {
         _isChecking = false;
         _isConnected = false;
       });
+
       _showMessage('حدث خطأ أثناء اختبار الاتصال.');
     }
   }
@@ -83,12 +90,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text(
           'الخصوصية والأمان',
           textDirection: TextDirection.rtl,
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+          ),
         ),
-        content: const Text(
-          'محادثات الذكاء الاصطناعي المحلية محفوظة داخل بيانات التطبيق. أما الرسائل الاجتماعية الخاصة فتُحفظ على الخادم، وهي ليست مشفرة من طرف إلى طرف في الإصدار الحالي. لا ترسل كلمات مرور أو بيانات مالية أو معلومات شديدة الحساسية.\n\nقفل PIN والتشفير المحلي لسجل فضفضة سرية لا يُعتبران مفعّلين في هذه النسخة؛ لن نعرضهما كميزة جاهزة قبل ربطهما واختبارهما فعليًا.',
-          textDirection: TextDirection.rtl,
-          style: TextStyle(color: Colors.white70, height: 1.55),
+        content: const SingleChildScrollView(
+          child: Text(
+            'محادثات الذكاء الاصطناعي العادية تُحفظ محليًا '
+            'داخل بيانات التطبيق.\n\n'
+            'الفضفضة السرية توفر حماية للسجل المحفوظ على '
+            'الجهاز باستخدام تشفير AES-256-GCM، مع حماية '
+            'مفتاح التشفير بواسطة PIN. ويمكن تفعيل البصمة '
+            'كوسيلة إضافية لفتح المحادثة.\n\n'
+            'هذه الحماية تخص السجل المخزن محليًا على الجهاز، '
+            'ولا تعني تشفيرًا طرفًا لطرف للرسائل المرسلة '
+            'إلى خدمة الذكاء الاصطناعي.\n\n'
+            'الرسائل الاجتماعية الخاصة ورسائل المجموعات '
+            'تُحفظ على الخادم، وهي غير مشفرة طرفًا لطرف '
+            'في الإصدار الحالي.\n\n'
+            'لا تشارك كلمات المرور أو البيانات المالية أو '
+            'المعلومات شديدة الحساسية داخل المحادثات.',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              color: Colors.white70,
+              height: 1.55,
+            ),
+          ),
         ),
         actions: [
           TextButton(
@@ -118,9 +146,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showMessage(String message) {
     if (!mounted) return;
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
   }
 
   @override
@@ -179,16 +210,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildAiConnectionCard() {
     final connected = _isConnected == true;
     final failed = _isConnected == false;
+
     final statusColor = connected
         ? const Color(0xFF61DDAA)
         : failed
             ? const Color(0xFFFF7777)
             : const Color(0xFFB7C5D8);
+
     final statusIcon = connected
         ? Icons.check_circle_rounded
         : failed
             ? Icons.error_outline_rounded
             : Icons.cloud_outlined;
+
     final statusText = connected
         ? 'الذكاء الاصطناعي متصل'
         : failed
@@ -201,7 +235,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         gradient: const LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [Color(0xFF182A40), Color(0xFF111827)],
+          colors: [
+            Color(0xFF182A40),
+            Color(0xFF111827),
+          ],
         ),
         borderRadius: BorderRadius.circular(19),
         border: Border.all(color: Colors.white12),
@@ -211,7 +248,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome_rounded, color: Color(0xFF5DE1E6)),
+              const Icon(
+                Icons.auto_awesome_rounded,
+                color: Color(0xFF5DE1E6),
+              ),
               const SizedBox(width: 9),
               const Expanded(
                 child: Text(
@@ -229,12 +269,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 10),
           Text(
             statusText,
-            style: TextStyle(color: statusColor, fontWeight: FontWeight.w800),
+            style: TextStyle(
+              color: statusColor,
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 6),
           const Text(
             'الاختبار يتحقق من اتصال الخدمة فقط، ولا ينفذ طلبًا مدفوعًا لإنشاء محتوى.',
-            style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45),
+            style: TextStyle(
+              color: Colors.white60,
+              fontSize: 12,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 14),
           FilledButton.icon(
@@ -243,10 +290,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ? const SizedBox(
                     width: 17,
                     height: 17,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
                   )
                 : const Icon(Icons.refresh_rounded),
-            label: Text(_isChecking ? 'جاري الاختبار...' : 'اختبار الاتصال الآن'),
+            label: Text(
+              _isChecking
+                  ? 'جاري الاختبار...'
+                  : 'اختبار الاتصال الآن',
+            ),
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF5DE1E6),
               foregroundColor: const Color(0xFF07111E),
@@ -272,7 +325,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: ListTile(
         onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 4,
+        ),
         leading: Container(
           width: 39,
           height: 39,
@@ -280,17 +336,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
             color: const Color(0xFF5DE1E6).withValues(alpha: .10),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: const Color(0xFF5DE1E6), size: 21),
+          child: Icon(
+            icon,
+            color: const Color(0xFF5DE1E6),
+            size: 21,
+          ),
         ),
         title: Text(
           title,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         subtitle: Text(
           subtitle,
-          style: const TextStyle(color: Colors.white54, fontSize: 11, height: 1.35),
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
+            height: 1.35,
+          ),
         ),
-        trailing: const Icon(Icons.chevron_left_rounded, color: Colors.white54),
+        trailing: const Icon(
+          Icons.chevron_left_rounded,
+          color: Colors.white54,
+        ),
       ),
     );
   }
