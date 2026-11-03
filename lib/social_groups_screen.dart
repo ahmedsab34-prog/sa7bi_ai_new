@@ -1,10 +1,11 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'services/social_community_service.dart';
 import 'services/social_games_service.dart';
+import 'services/social_invite_link_service.dart';
 import 'social_games_hub_screen.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
@@ -98,6 +99,24 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
       ),
     );
     await _initialize();
+  }
+
+  Future<void> _shareGroup(SocialPublicGroup group) async {
+    try {
+      await Share.share(
+        SocialInviteLinkService.buildGroupInviteMessage(
+          groupId: group.id,
+          groupName: group.name,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذرت مشاركة رابط المجموعة. حاول مرة أخرى.'),
+        ),
+      );
+    }
   }
 
   Future<void> _createGroup() async {
@@ -314,18 +333,33 @@ class _SocialGroupsScreenState extends State<SocialGroupsScreen> {
                                     height: 1.4,
                                   ),
                                 ),
-                                trailing: group.isMember
-                                    ? const Icon(
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: 'مشاركة دعوة المجموعة',
+                                      onPressed: () => _shareGroup(group),
+                                      icon: const Icon(
+                                        Icons.share_rounded,
+                                        color: Color(0xFF7FB4FF),
+                                        size: 19,
+                                      ),
+                                    ),
+                                    if (group.isMember)
+                                      const Icon(
                                         Icons.chevron_left_rounded,
                                         color: Colors.white60,
                                       )
-                                    : const Text(
+                                    else
+                                      const Text(
                                         'انضمام',
                                         style: TextStyle(
                                           color: Color(0xFFFFD76A),
                                           fontWeight: FontWeight.w800,
                                         ),
                                       ),
+                                  ],
+                                ),
                               ),
                             ),
                         const SizedBox(height: 18),
@@ -358,6 +392,7 @@ class SocialGroupChatScreen extends StatefulWidget {
 class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
   final SocialCommunityService _service =
       SocialCommunityService.instance;
+
   final TextEditingController _composer = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
@@ -464,6 +499,24 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
     }
   }
 
+  Future<void> _shareGroup() async {
+    try {
+      await Share.share(
+        SocialInviteLinkService.buildGroupInviteMessage(
+          groupId: widget.group.id,
+          groupName: widget.group.name,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذرت مشاركة رابط المجموعة. حاول مرة أخرى.'),
+        ),
+      );
+    }
+  }
+
   String _time(int milliseconds) {
     if (milliseconds <= 0) return '';
 
@@ -484,6 +537,11 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
           title: widget.group.name,
           subtitle: '${widget.group.memberCount} عضو',
           actions: [
+            IconButton(
+              tooltip: 'مشاركة دعوة المجموعة',
+              onPressed: _shareGroup,
+              icon: const Icon(Icons.share_rounded),
+            ),
             IconButton(
               tooltip: 'تحديث الرسائل',
               onPressed: () => _loadMessages(),
