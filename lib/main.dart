@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -22,6 +21,12 @@ import 'theme/sa7bi_theme.dart';
 import 'widgets/audio_center_with_header.dart';
 import 'widgets/khalasana_portal.dart';
 import 'widgets/social_invite_link_listener.dart';
+
+final GlobalKey<NavigatorState> _rootNavigatorKey =
+    GlobalKey<NavigatorState>();
+
+final _Sa7biNavigationObserver _sa7biNavigationObserver =
+    _Sa7biNavigationObserver();
 
 void main() {
   http.runWithClient(
@@ -78,16 +83,134 @@ class Sa7biAiApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _rootNavigatorKey,
+      navigatorObservers: <NavigatorObserver>[
+        _sa7biNavigationObserver,
+      ],
       debugShowCheckedModeBanner: false,
       title: 'صاحبي AI',
       theme: Sa7biTheme.dark(),
       routes: {
         '/diagnostics': (_) => const AppDiagnosticsScreen(),
       },
+      builder: (context, child) {
+        return ValueListenableBuilder<_Sa7biRouteSnapshot>(
+          valueListenable: _sa7biNavigationObserver.snapshot,
+          builder: (context, route, _) {
+            final keyboardIsOpen =
+                MediaQuery.viewInsetsOf(context).bottom > 0;
+
+            final hidePortal = route.isPopup ||
+                route.routeName == '/khalasana' ||
+                keyboardIsOpen;
+
+            // على الصفحة الرئيسية نرفع الروبوت فوق المشغل والشريط السفلي.
+            // داخل الصفحات الداخلية نقرّبه للأسفل حتى لا يحجب محتوى الشاشة.
+            final bottomOffset = route.depth <= 1 ? 146.0 : 82.0;
+
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                if (child != null) child,
+                if (!hidePortal)
+                  Positioned(
+                    right: 8,
+                    bottom: MediaQuery.viewPaddingOf(context).bottom +
+                        bottomOffset,
+                    child: KhalasanaPortal(
+                      onTap: _openGlobalKhalasana,
+                    ),
+                  ),
+              ],
+            );
+          },
+        );
+      },
       home: const SocialInviteLinkListener(
         child: MainContainerScreen(),
       ),
     );
+  }
+}
+
+void _openGlobalKhalasana() {
+  final navigator = _rootNavigatorKey.currentState;
+  if (navigator == null) return;
+
+  navigator.push<void>(
+    MaterialPageRoute<void>(
+      settings: const RouteSettings(name: '/khalasana'),
+      builder: (_) => const KhalasanaPortalScreen(),
+    ),
+  );
+}
+
+class _Sa7biRouteSnapshot {
+  const _Sa7biRouteSnapshot({
+    required this.depth,
+    required this.activeRoute,
+  });
+
+  final int depth;
+  final Route<dynamic>? activeRoute;
+
+  String? get routeName => activeRoute?.settings.name;
+
+  bool get isPopup => activeRoute is PopupRoute<dynamic>;
+}
+
+class _Sa7biNavigationObserver extends NavigatorObserver {
+  int _depth = 0;
+
+  final ValueNotifier<_Sa7biRouteSnapshot> snapshot =
+      ValueNotifier<_Sa7biRouteSnapshot>(
+    const _Sa7biRouteSnapshot(
+      depth: 0,
+      activeRoute: null,
+    ),
+  );
+
+  void _publish(Route<dynamic>? route) {
+    snapshot.value = _Sa7biRouteSnapshot(
+      depth: _depth,
+      activeRoute: route,
+    );
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _depth++;
+    _publish(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    if (_depth > 1) _depth--;
+    _publish(previousRoute);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didRemove(route, previousRoute);
+
+    if (_depth > 1) _depth--;
+
+    final activeRoute = snapshot.value.activeRoute;
+    _publish(activeRoute == route ? previousRoute : activeRoute);
+  }
+
+  @override
+  void didReplace({
+    Route<dynamic>? newRoute,
+    Route<dynamic>? oldRoute,
+  }) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+
+    if (oldRoute == snapshot.value.activeRoute) {
+      _publish(newRoute);
+    }
   }
 }
 
@@ -123,16 +246,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
     );
   }
 
-  void openKhalasana() {
-    if (!mounted) return;
-
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const KhalasanaPortalScreen(),
-      ),
-    );
-  }
-
   void openDiagnostics() {
     if (!mounted) return;
     Navigator.of(context).pushNamed('/diagnostics');
@@ -156,11 +269,8 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         onProfile: openProfile,
         onAudio: openAudioCenter,
       ),
-
       const ChatTabScreen(),
-
       const InteractiveExperiencesScreen(),
-
       ProfileScreen(
         onProfileTap: openProfile,
         onAudio: openAudioCenter,
@@ -274,15 +384,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                   ),
                 ),
               ),
-
-            // روبوت خلّصانة العائم في التبويبات الرئيسية.
-            Positioned(
-              right: 8,
-              bottom: isChatTab ? 100 : 76,
-              child: KhalasanaPortal(
-                onTap: openKhalasana,
-              ),
-            ),
           ],
         ),
       ),
@@ -293,8 +394,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         backgroundColor: Sa7biTheme.surface,
         surfaceTintColor: Colors.transparent,
         indicatorColor: Sa7biTheme.cyan.withValues(alpha: 0.12),
-        labelBehavior:
-            NavigationDestinationLabelBehavior.alwaysShow,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         selectedIndex: index,
         onDestinationSelected: (value) {
           if (!mounted) return;
@@ -302,9 +402,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
           if (value == index) {
             // الضغط على الرئيسية مرة أخرى يحدّث الأخبار.
             if (value == 0) {
-              unawaited(
-                _homeKey.currentState?.refreshNews(),
-              );
+              unawaited(_homeKey.currentState?.refreshNews());
             }
             return;
           }
@@ -413,9 +511,7 @@ class MiniAudioPlayer extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 const SizedBox(width: 8),
-
                 Expanded(
                   child: GestureDetector(
                     onTap: () => Navigator.of(context).push<void>(
@@ -454,12 +550,10 @@ class MiniAudioPlayer extends StatelessWidget {
                     ),
                   ),
                 ),
-
                 StreamBuilder<PlaybackState>(
                   stream: handler.playbackState,
                   builder: (context, snapshot) {
-                    final playing =
-                        snapshot.data?.playing ?? false;
+                    final playing = snapshot.data?.playing ?? false;
 
                     return IconButton(
                       padding: EdgeInsets.zero,
@@ -484,7 +578,6 @@ class MiniAudioPlayer extends StatelessWidget {
                     );
                   },
                 ),
-
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
