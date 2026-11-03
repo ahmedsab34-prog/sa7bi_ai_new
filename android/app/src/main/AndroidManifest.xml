@@ -1,4 +1,3 @@
-
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -60,11 +59,32 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
 
-            <!-- يستقبل روابط دعوات المباريات عبر app_links. -->
+            <!-- تستقبل App Links موثّقة من نطاق Worker نفسه. -->
             <meta-data
                 android:name="flutter_deeplinking_enabled"
                 android:value="false" />
 
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="sa7bi-ai-new.ahmedsab34.workers.dev"
+                    android:pathPrefix="/game/invite" />
+            </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="sa7bi-ai-new.ahmedsab34.workers.dev"
+                    android:pathPrefix="/groups/invite" />
+            </intent-filter>
+
+            <!-- توافق مع روابط دعوات المباريات القديمة. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -73,6 +93,17 @@
                     android:scheme="sa7bi"
                     android:host="game"
                     android:path="/invite" />
+            </intent-filter>
+
+            <!-- توافق مع روابط دعوات المجموعات الداخلية. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="sa7bi"
+                    android:host="community"
+                    android:path="/group" />
             </intent-filter>
 
             <intent-filter>
