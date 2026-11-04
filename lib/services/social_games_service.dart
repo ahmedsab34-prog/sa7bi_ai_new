@@ -1,13 +1,12 @@
-
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import 'sa7bi_network_client.dart';
 import 'social_invite_link_service.dart';
+import 'social_session_storage.dart';
 
 /// واجهة موحدة للتعامل مع حسابات الألعاب والمباريات المحفوظة.
 ///
@@ -18,7 +17,6 @@ class SocialGamesService {
 
   static final SocialGamesService instance = SocialGamesService._();
 
-  static const String _tokenKey = 'sa7bi_social_games_session_token';
   static const Duration _requestTimeout = Duration(seconds: 20);
 
   String? _token;
@@ -31,8 +29,8 @@ class SocialGamesService {
 
   /// استعادة جلسة الألعاب المحفوظة محليًا.
   ///
-  /// الرمز محفوظ محليًا لتجنب تسجيل الدخول عند كل فتح للتطبيق.
-  /// صلاحية الرمز النهائية يحددها الخادم.
+  /// تتم قراءة الرمز من التخزين الآمن، مع ترحيل الرمز القديم تلقائيًا
+  /// من SharedPreferences عند أول تشغيل بعد التحديث.
   Future<void> initialize() async {
     if (_token != null) return;
 
@@ -46,18 +44,11 @@ class SocialGamesService {
   }
 
   Future<void> _loadToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_tokenKey);
-
-    if (saved != null && saved.isNotEmpty) {
-      _token = saved;
-    }
+    _token = await SocialSessionStorage.instance.readToken();
   }
 
   Future<void> _saveToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.setString(_tokenKey, token);
+    await SocialSessionStorage.instance.writeToken(token);
     _token = token;
   }
 
@@ -120,9 +111,7 @@ class SocialGamesService {
   ///
   /// لا يحذف الحساب أو المباريات المحفوظة على الخادم.
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.remove(_tokenKey);
+    await SocialSessionStorage.instance.deleteToken();
     _token = null;
   }
 
@@ -604,7 +593,7 @@ class SocialGamesService {
       case 'NETWORK_TIMEOUT':
         return 'انتهت مهلة الاتصال. حاول مرة أخرى.';
       case 'SOCIAL_SERVICE_NOT_CONFIGURED':
-        return 'خدمة الألعاب لم تُفعّل على الخادم بعد.';
+        return 'خدمة الألعاب لم تُفعّل على الخادم الحالي.';
       default:
         return serverMessage is String && serverMessage.isNotEmpty
             ? serverMessage
