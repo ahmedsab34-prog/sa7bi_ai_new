@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import 'sa7bi_network_client.dart';
+import 'social_session_storage.dart';
 
 /// خدمة الدعوات داخل التطبيق والمحادثات الخاصة.
 /// تستخدم جلسة حساب الألعاب نفسها، ولا تنشئ حسابًا أو رمز دخول منفصلًا.
@@ -14,7 +14,6 @@ class SocialMessagingService {
 
   static final SocialMessagingService instance = SocialMessagingService._();
 
-  static const String _tokenKey = 'sa7bi_social_games_session_token';
   static const Duration _timeout = Duration(seconds: 20);
 
   String? _token;
@@ -35,11 +34,7 @@ class SocialMessagingService {
   }
 
   Future<void> _loadToken() async {
-    final preferences = await SharedPreferences.getInstance();
-    final saved = preferences.getString(_tokenKey);
-    if (saved != null && saved.isNotEmpty) {
-      _token = saved;
-    }
+    _token = await SocialSessionStorage.instance.readToken();
   }
 
   /// يعيد قراءة الجلسة عند الحاجة بعد تسجيل الدخول أو الخروج في شاشة أخرى.
@@ -278,7 +273,7 @@ class SocialMessagingService {
         utf8.decode(response.bodyBytes, allowMalformed: true),
       );
       if (value is! Map) {
-        throw const FormatException('Expected JSON object.');
+        throw const FormatException('Expected a JSON object.');
       }
       decoded = Map<String, dynamic>.from(value);
     } catch (_) {
