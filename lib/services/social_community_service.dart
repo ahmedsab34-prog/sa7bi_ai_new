@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import 'sa7bi_network_client.dart';
 import 'social_games_service.dart';
+import 'social_session_storage.dart';
 
 /// مجموعات عامة ومباريات ضد صاحبي AI.
 /// يستخدم جلسة حساب الألعاب نفسها ولا ينشئ جلسة منفصلة.
@@ -14,7 +14,6 @@ class SocialCommunityService {
   SocialCommunityService._();
 
   static final SocialCommunityService instance = SocialCommunityService._();
-  static const String _tokenKey = 'sa7bi_social_games_session_token';
   static const Duration _timeout = Duration(seconds: 20);
 
   String? _token;
@@ -38,9 +37,7 @@ class SocialCommunityService {
   }
 
   Future<void> _loadToken() async {
-    final preferences = await SharedPreferences.getInstance();
-    final saved = preferences.getString(_tokenKey);
-    if (saved != null && saved.isNotEmpty) _token = saved;
+    _token = await SocialSessionStorage.instance.readToken();
   }
 
   Future<List<SocialPublicGroup>> getGroups() async {
@@ -305,7 +302,6 @@ class SocialCommunityService {
     }
   }
 }
-
 
 class SocialQuickMatchResult {
   const SocialQuickMatchResult({
