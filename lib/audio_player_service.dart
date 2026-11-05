@@ -909,6 +909,42 @@ class Sa7biAudioHandler extends BaseAudioHandler
     });
   }
 
+  /// يستبدل قائمة الصوت بالكامل في عملية واحدة ثم يبدأ من العنصر المحدد.
+  ///
+  /// بخلاف حذف كل عنصر منفصلًا، هذا يعيد بناء AudioSource مرة واحدة فقط.
+  Future<void> replaceQueueAndPlay({
+    required List<MediaItem> items,
+    int initialIndex = 0,
+  }) async {
+    await _ensureInitialized();
+
+    final validItems = items
+        .where((item) => item.id.trim().isNotEmpty)
+        .toList(growable: false);
+
+    if (validItems.isEmpty) {
+      throw ArgumentError('Audio queue must contain at least one valid item');
+    }
+
+    final safeIndex =
+        initialIndex.clamp(0, validItems.length - 1).toInt();
+
+    return _runExclusive<void>(() async {
+      try {
+        await _setQueueSource(
+          items: validItems,
+          initialIndex: safeIndex,
+          autoplay: true,
+        );
+      } catch (error, stackTrace) {
+        debugPrint('Replacing audio queue failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        _broadcastState();
+        rethrow;
+      }
+    });
+  }
+
   @override
   Future<void> removeQueueItemAt(int index) async {
     await _ensureInitialized();
@@ -1211,6 +1247,17 @@ class AudioController {
       path: path,
       title: title,
       artist: artist,
+    );
+  }
+
+  static Future<void> replaceQueueAndPlay(
+    List<MediaItem> items, {
+    int initialIndex = 0,
+  }) async {
+    final handler = await initialize();
+    await handler.replaceQueueAndPlay(
+      items: items,
+      initialIndex: initialIndex,
     );
   }
 
