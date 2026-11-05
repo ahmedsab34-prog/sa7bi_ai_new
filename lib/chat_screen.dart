@@ -27,6 +27,9 @@ class ChatScreen extends StatefulWidget {
   final String? serviceContext;
   final String? serviceKey;
 
+  /// True when this chat is embedded inside a parent portal that owns the header.
+  final bool embedded;
+
   final VoidCallback? onProfileTap;
   final VoidCallback? onAudioTap;
 
@@ -35,6 +38,7 @@ class ChatScreen extends StatefulWidget {
     this.serviceTitle,
     this.serviceContext,
     this.serviceKey,
+    this.embedded = false,
     this.onProfileTap,
     this.onAudioTap,
   });
@@ -1147,7 +1151,7 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context, _) {
         return Scaffold(
           backgroundColor: const Color(0xFF070A10),
-          appBar: AppBar(
+          appBar: widget.embedded ? null : AppBar(
             elevation: 0,
             backgroundColor: const Color(0xFF0C1018),
             foregroundColor: Colors.white,
