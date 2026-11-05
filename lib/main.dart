@@ -225,13 +225,31 @@ class MainContainerScreen extends StatefulWidget {
 class _MainContainerScreenState extends State<MainContainerScreen> {
   // 0 الرئيسية، 1 الشات، 2 الألعاب، 3 حسابي.
   int index = 0;
+  late final PageController _pageController = PageController(initialPage: index);
 
   final GlobalKey<HomeScreenState> _homeKey =
       GlobalKey<HomeScreenState>();
 
+  void _goToPage(int value) {
+    if (!mounted || value < 0 || value > 3) return;
+
+    if (value == index) return;
+
+    setState(() => index = value);
+
+    if (_pageController.hasClients) {
+      unawaited(
+        _pageController.animateToPage(
+          value,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        ),
+      );
+    }
+  }
+
   void openProfile() {
-    if (!mounted) return;
-    setState(() => index = 3);
+    _goToPage(3);
   }
 
   void openAudioCenter() {
@@ -262,6 +280,12 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
   }
 
   @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
       HomeScreen(
@@ -284,9 +308,15 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            IndexedStack(
-              index: index,
-              children: pages,
+            PageView(
+              controller: _pageController,
+              onPageChanged: (value) {
+                if (!mounted || index == value) return;
+                setState(() => index = value);
+              },
+              children: [
+                for (final page in pages) _KeepAliveMainPage(child: page),
+              ],
             ),
 
             // مشغل الصوت مخفي في الشات حتى لا يغطي الرسائل.
@@ -407,7 +437,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
             return;
           }
 
-          setState(() => index = value);
+          _goToPage(value);
         },
         destinations: const [
           NavigationDestination(
@@ -448,6 +478,27 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
         ],
       ),
     );
+  }
+}
+
+class _KeepAliveMainPage extends StatefulWidget {
+  const _KeepAliveMainPage({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeepAliveMainPage> createState() => _KeepAliveMainPageState();
+}
+
+class _KeepAliveMainPageState extends State<_KeepAliveMainPage>
+    with AutomaticKeepAliveClientMixin<_KeepAliveMainPage> {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 
