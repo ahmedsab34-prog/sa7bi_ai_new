@@ -11,47 +11,20 @@ import 'ai_request_service.dart';
 /// خدمة الإعلانات المركزية في صاحبي AI.
 ///
 /// المسؤوليات:
-/// - تهيئة AdMob مرة واحدة بأمان.
-/// - Banner Ads.
-/// - Interstitial Ads.
-/// - Rewarded Ads.
-/// - إعداد AdMob Server-Side Verification (SSV).
-/// - إرسال Device ID داخل customData إلى AdMob.
-/// - حفظ عداد الـInterstitial.
-/// - حفظ حالة الـBanner.
+/// - تهيئة AdMob بأمان مع إمكانية إعادة المحاولة.
+/// - إدارة Banner Ads وInterstitial Ads وRewarded Ads.
+/// - إعداد AdMob Server-Side Verification.
+/// - ربط مكافأة الإعلان بمعرف تثبيت التطبيق.
+/// - عدم منح Credits من التطبيق مباشرة.
 ///
-/// مهم جدًا:
-/// - لا يوجد أي API Key داخل التطبيق.
-/// - لا يتم منح Credits من التطبيق مباشرة.
-/// - Rewarded Ad يستخدم AdMob SSV.
-/// - الـBackend هو الذي يقرر منح الـCredits بعد التحقق من Google.
-/// - onUserEarnedReward ليس مصدر السلطة لمنح الرصيد.
-///
-/// مسار Rewarded النهائي:
-///
-/// Flutter
-///   ↓
-/// AdMob Rewarded
-///   ↓
-/// onUserEarnedReward
-///   ↓
-/// AdMob SSV
-///   ↓
-/// Cloudflare Worker
-///   ↓
-/// Google Signature Verification
-///   ↓
-/// Durable Object Credits Ledger
-///
-/// الـDevice ID الموجود في customData يستخدم فقط لربط
-/// مكافأة AdMob بتثبيت التطبيق الصحيح.
+/// مصدر منح الرصيد هو Worker بعد تحقق Google SSV.
 class AdsService {
   AdsService._();
 
   static final AdsService instance = AdsService._();
 
   // ============================================================
-  // ADMOB PRODUCTION IDS
+  // ADMOB IDS
   // ============================================================
 
   static const String appId =
@@ -97,7 +70,11 @@ class AdsService {
   bool _isLoadingInterstitial = false;
   bool _isLoadingRewarded = false;
 
-  /// يمنع تشغيل تهيئة AdMob أكثر من مرة في نفس الوقت.
+  /// يتغير كلما ألغينا تحميل Banner سابقًا.
+  /// يمنع callback قديمًا من إعادة إعلان تم التخلص منه.
+  int _bannerLoadGeneration = 0;
+
+  /// يمنع تنفيذ التهيئة بالتوازي.
   Future<void>? _initializationFuture;
 
   // ============================================================
@@ -127,61 +104,87 @@ class AdsService {
       CreditsConfig.rewardedAdDailyLimit;
 
   // ============================================================
+  // SAFE DISPOSAL
+  // ============================================================
+
+  void _safeDispose(Ad? ad) {
+    if (ad == null) return;
+
+    try {
+      ad.dispose();
+    } catch (_) {
+      // لا نسمح لفشل التخلص من إعلان بإسقاط التطبيق.
+    }
+  }
+
+  // ============================================================
   // INITIALIZATION
   // ============================================================
 
   Future<void> initialize() {
+    if (_initialized && _adMobInitialized) {
+      return Future<void>.value();
+    }
+
     final existing = _initializationFuture;
 
     if (existing != null) {
       return existing;
     }
 
-    final future = _initializeInternal();
+    late final Future<void> tracked;
 
-    _initializationFuture = future;
+    tracked = _initializeInternal().whenComplete(() {
+      if (identical(_initializationFuture, tracked)) {
+        _initializationFuture = null;
+      }
+    });
 
-    return future;
+    _initializationFuture = tracked;
+
+    return tracked;
   }
 
   Future<void> _initializeInternal() async {
-    if (_initialized) {
-      return;
-    }
-
+    // تحميل إعدادات التطبيق مرة واحدة.
     try {
-      _preferences = await SharedPreferences.getInstance();
+      if (_preferences == null) {
+        _preferences =
+            await SharedPreferences.getInstance();
 
-      _interstitialCounter =
-          _preferences!.getInt(
-                _interstitialCounterKey,
-              ) ??
-              0;
+        _interstitialCounter =
+            _preferences!.getInt(
+                  _interstitialCounterKey,
+                ) ??
+                0;
 
-      _bannerEnabled =
-          _preferences!.getBool(
-                _bannerEnabledKey,
-              ) ??
-              true;
-
-      // AdMob
-      try {
-        await MobileAds.instance.initialize();
-
-        _adMobInitialized = true;
-      } catch (_) {
-        _adMobInitialized = false;
+        _bannerEnabled =
+            _preferences!.getBool(
+                  _bannerEnabledKey,
+                ) ??
+                true;
       }
 
       _initialized = true;
     } catch (_) {
-      _initialized = true;
+      _initialized = false;
       _adMobInitialized = false;
+      return;
+    }
+
+    // إذا فشلت تهيئة AdMob، تبقى قابلة لإعادة المحاولة.
+    if (!_adMobInitialized) {
+      try {
+        await MobileAds.instance.initialize();
+        _adMobInitialized = true;
+      } catch (_) {
+        _adMobInitialized = false;
+      }
     }
   }
 
   Future<void> _ensureInitialized() async {
-    if (!_initialized) {
+    if (!_initialized || !_adMobInitialized) {
       await initialize();
     }
   }
@@ -213,9 +216,11 @@ class AdsService {
     }
   }
 
-  /// تحميل Banner.
+  /// تحميل Banner وإرجاعه بعد onAdLoaded فقط.
   ///
-  /// لا يرجع الإعلان إلا بعد onAdLoaded.
+  /// AdsService هي المالكة للإعلان.
+  /// الشاشة التي تعرضه يجب أن تستدعي releaseBanner
+  /// بدلًا من استدعاء dispose مباشرة.
   Future<BannerAd?> loadBanner({
     AdSize adSize = AdSize.banner,
   }) async {
@@ -235,6 +240,8 @@ class AdsService {
 
     _isLoadingBanner = true;
 
+    final generation = ++_bannerLoadGeneration;
+
     final completer = Completer<BannerAd?>();
 
     late final BannerAd banner;
@@ -246,9 +253,7 @@ class AdsService {
       listener: BannerAdListener(
         onAdLoaded: (ad) {
           if (ad is! BannerAd) {
-            try {
-              ad.dispose();
-            } catch (_) {}
+            _safeDispose(ad);
 
             if (!completer.isCompleted) {
               completer.complete(null);
@@ -257,21 +262,41 @@ class AdsService {
             return;
           }
 
+          // تم إلغاء عملية التحميل أو تعطيل الإعلانات
+          // أثناء انتظار استجابة AdMob.
+          if (generation != _bannerLoadGeneration ||
+              !_bannerEnabled ||
+              !_adMobInitialized) {
+            _safeDispose(ad);
+
+            if (!completer.isCompleted) {
+              completer.complete(null);
+            }
+
+            return;
+          }
+
+          final previous = _bannerAd;
+
+          if (previous != null &&
+              !identical(previous, ad)) {
+            _safeDispose(previous);
+          }
+
           _bannerAd = ad;
 
           if (!completer.isCompleted) {
             completer.complete(ad);
           }
         },
-        onAdFailedToLoad: (
-          ad,
-          error,
-        ) {
-          try {
-            ad.dispose();
-          } catch (_) {}
+        onAdFailedToLoad: (ad, error) {
+          if (generation == _bannerLoadGeneration) {
+            if (identical(_bannerAd, ad)) {
+              _bannerAd = null;
+            }
+          }
 
-          _bannerAd = null;
+          _safeDispose(ad);
 
           if (!completer.isCompleted) {
             completer.complete(null);
@@ -283,21 +308,11 @@ class AdsService {
       ),
     );
 
-    try {
-      await banner.load();
-    } catch (_) {
-      try {
-        banner.dispose();
-      } catch (_) {}
-
-      if (!completer.isCompleted) {
-        completer.complete(null);
-      }
-    }
-
     BannerAd? result;
 
     try {
+      await banner.load();
+
       result = await completer.future.timeout(
         const Duration(seconds: 15),
         onTimeout: () => null,
@@ -307,13 +322,16 @@ class AdsService {
     }
 
     if (result == null) {
-      try {
-        banner.dispose();
-      } catch (_) {}
+      // إلغاء صلاحية أي callback متأخر من نفس العملية.
+      if (generation == _bannerLoadGeneration) {
+        _bannerLoadGeneration++;
 
-      if (identical(_bannerAd, banner)) {
-        _bannerAd = null;
+        if (identical(_bannerAd, banner)) {
+          _bannerAd = null;
+        }
       }
+
+      _safeDispose(banner);
     }
 
     _isLoadingBanner = false;
@@ -321,12 +339,26 @@ class AdsService {
     return result;
   }
 
-  void disposeBanner() {
-    try {
-      _bannerAd?.dispose();
-    } catch (_) {}
+  /// تحرير Banner من الشاشة التي كانت تعرضه.
+  ///
+  /// يمسح المرجع المركزي أيضًا حتى لا نعيد إعلانًا تم التخلص منه.
+  void releaseBanner(BannerAd banner) {
+    if (identical(_bannerAd, banner)) {
+      _bannerAd = null;
+      _bannerLoadGeneration++;
+    }
 
+    _safeDispose(banner);
+  }
+
+  /// التخلص من الإعلان الحالي وإلغاء صلاحية callbacks القديمة.
+  void disposeBanner() {
+    _bannerLoadGeneration++;
+
+    final banner = _bannerAd;
     _bannerAd = null;
+
+    _safeDispose(banner);
   }
 
   // ============================================================
@@ -410,17 +442,23 @@ class AdsService {
             ad.fullScreenContentCallback =
                 FullScreenContentCallback(
               onAdDismissedFullScreenContent: (ad) {
-                ad.dispose();
+                _safeDispose(ad);
 
-                _interstitialAd = null;
+                if (identical(_interstitialAd, ad)) {
+                  _interstitialAd = null;
+                }
 
                 unawaited(loadInterstitial());
               },
-              onAdFailedToShowFullScreenContent:
-                  (ad, error) {
-                ad.dispose();
+              onAdFailedToShowFullScreenContent: (
+                ad,
+                error,
+              ) {
+                _safeDispose(ad);
 
-                _interstitialAd = null;
+                if (identical(_interstitialAd, ad)) {
+                  _interstitialAd = null;
+                }
 
                 unawaited(loadInterstitial());
               },
@@ -443,9 +481,9 @@ class AdsService {
       if (!completer.isCompleted) {
         completer.complete(false);
       }
+    } finally {
+      _isLoadingInterstitial = false;
     }
-
-    _isLoadingInterstitial = false;
 
     try {
       return await completer.future.timeout(
@@ -477,9 +515,7 @@ class AdsService {
       ad.show();
       return true;
     } catch (_) {
-      try {
-        ad.dispose();
-      } catch (_) {}
+      _safeDispose(ad);
 
       unawaited(loadInterstitial());
 
@@ -503,15 +539,13 @@ class AdsService {
     return CreditsConfig.rewardedAdCredits;
   }
 
-  /// يجهز بيانات SSV للإعلان.
-  ///
-  /// customData تحتوي على Device ID ومصدر العملية.
-  /// لا نرسل API Key أو بيانات حساسة.
+  /// ضبط SSV قبل السماح بعرض الإعلان.
   Future<bool> _configureRewardedSsv(
     RewardedAd ad,
   ) async {
     try {
-      final deviceId = await AiRequestService.getDeviceId();
+      final deviceId =
+          await AiRequestService.getDeviceId();
 
       if (deviceId.trim().isEmpty) {
         return false;
@@ -598,18 +632,16 @@ class AdsService {
     }
   }
 
-  /// لا يتم اعتبار الإعلان جاهزًا قبل نجاح ضبط SSV.
   Future<void> _finishRewardedLoad(
     RewardedAd ad,
     Completer<bool> completer,
   ) async {
     try {
-      final ssvReady = await _configureRewardedSsv(ad);
+      final ssvReady =
+          await _configureRewardedSsv(ad);
 
       if (!ssvReady) {
-        try {
-          ad.dispose();
-        } catch (_) {}
+        _safeDispose(ad);
 
         _rewardedAd = null;
         _isLoadingRewarded = false;
@@ -628,9 +660,7 @@ class AdsService {
         completer.complete(true);
       }
     } catch (_) {
-      try {
-        ad.dispose();
-      } catch (_) {}
+      _safeDispose(ad);
 
       _rewardedAd = null;
       _isLoadingRewarded = false;
@@ -643,8 +673,8 @@ class AdsService {
 
   /// عرض Rewarded Ad.
   ///
-  /// onUserEarnedReward لا يمنح Credits محليًا.
-  /// المكافأة الحقيقية تأتي من AdMob SSV ثم Cloudflare.
+  /// callback المكافأة لا يضيف رصيدًا محليًا.
+  /// Worker فقط يمنح الرصيد بعد Google SSV.
   Future<bool> showRewarded({
     void Function(int amount)? onRewardEarned,
   }) async {
@@ -680,7 +710,7 @@ class AdsService {
     ad.fullScreenContentCallback =
         FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
-        ad.dispose();
+        _safeDispose(ad);
 
         if (!completer.isCompleted) {
           completer.complete(rewardEarned);
@@ -692,7 +722,7 @@ class AdsService {
         ad,
         error,
       ) {
-        ad.dispose();
+        _safeDispose(ad);
 
         if (!completer.isCompleted) {
           completer.complete(false);
@@ -713,16 +743,13 @@ class AdsService {
               ? amount
               : CreditsConfig.rewardedAdCredits;
 
-          // لا نضيف Credits هنا.
-          // هذه callback من AdMob فقط.
-          // المكافأة الحقيقية تأتي من SSV.
+          // إعلام الواجهة فقط.
+          // لا يوجد تعديل محلي لرصيد المستخدم.
           onRewardEarned?.call(safeAmount);
         },
       );
     } catch (_) {
-      try {
-        ad.dispose();
-      } catch (_) {}
+      _safeDispose(ad);
 
       if (!completer.isCompleted) {
         completer.complete(false);
@@ -741,16 +768,14 @@ class AdsService {
   Future<void> dispose() async {
     disposeBanner();
 
-    try {
-      _interstitialAd?.dispose();
-    } catch (_) {}
-
-    try {
-      _rewardedAd?.dispose();
-    } catch (_) {}
+    final interstitial = _interstitialAd;
+    final rewarded = _rewardedAd;
 
     _interstitialAd = null;
     _rewardedAd = null;
+
+    _safeDispose(interstitial);
+    _safeDispose(rewarded);
   }
 }
 
