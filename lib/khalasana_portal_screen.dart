@@ -60,7 +60,8 @@ class KhalasanaPortalScreen extends StatefulWidget {
 class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
   static const Color _background = Color(0xFF070A12);
   static const double _railWidth = 47;
-  static const double _minimumWidthForTwoRails = 410;
+  static const double _minimumWidthForTwoRails = 840;
+  static const double _mobileTabsBreakpoint = 640;
 
   static final List<_KhalasanaTarget> _targets = <_KhalasanaTarget>[
     _KhalasanaTarget(
@@ -123,6 +124,7 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
       serviceKey: target.serviceKey,
       serviceTitle: target.title,
       serviceContext: contextText,
+      embedded: true,
     );
 
     if (target.serviceKey == ServiceKeys.venting) {
@@ -159,6 +161,32 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
 
   bool _useTwoRails(double availableWidth) =>
       availableWidth >= _minimumWidthForTwoRails;
+
+  Widget _buildHorizontalServiceTabs() {
+    return SizedBox(
+      height: 74,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        reverse: true,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        itemCount: _targets.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 7),
+        itemBuilder: (context, index) {
+          final target = _targets[index];
+          return _KhalasanaMobileServiceTab(
+            title: target.isGeneral ? 'عام' : target.title,
+            icon: target.service.icon,
+            color: target.isGeneral
+                ? const Color(0xFF63E6FF)
+                : target.service.color,
+            selected: _selectedServiceKey == target.serviceKey,
+            onTap: () => _selectTarget(target),
+          );
+        },
+      ),
+    );
+  }
 
   String _shortServiceName(String key) {
     switch (key) {
@@ -237,7 +265,28 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
+            final mobileLayout =
+                constraints.maxWidth < _mobileTabsBreakpoint;
             final splitRails = _useTwoRails(constraints.maxWidth);
+
+            if (mobileLayout) {
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(5, 4, 5, 7),
+                child: Column(
+                  children: [
+                    _buildHorizontalServiceTabs(),
+                    const SizedBox(height: 3),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(17),
+                        child: _buildChatStack(),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
             final rightTargets = splitRails
                 ? _targets.skip(1).take(5).toList(growable: false)
                 : _targets.skip(1).toList(growable: false);
@@ -293,6 +342,76 @@ class _KhalasanaTarget {
   final String context;
   final Sa7biService service;
   final bool isGeneral;
+}
+
+class _KhalasanaMobileServiceTab extends StatelessWidget {
+  const _KhalasanaMobileServiceTab({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? Colors.white : const Color(0xFFCBD5E1);
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: title,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: 78,
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+            decoration: BoxDecoration(
+              color: selected
+                  ? color.withValues(alpha: 0.20)
+                  : const Color(0xCC151D2A),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected
+                    ? color.withValues(alpha: 0.95)
+                    : const Color(0x553F536B),
+                width: selected ? 1.3 : 0.8,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: color, size: 21),
+                const SizedBox(height: 3),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  textDirection: TextDirection.rtl,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 10,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _GeneralModeTab extends StatelessWidget {
