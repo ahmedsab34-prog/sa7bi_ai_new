@@ -1,4 +1,5 @@
-// Sa7bi AI Worker entry point for social features and verified invite links.
+// Sa7bi AI Worker entry point for social features, verified invite links,
+// and the additive Arabic QuranEnc tafsir-text endpoints.
 // No production deployment or environment changes are performed by this file.
 
 import worker, {
@@ -10,7 +11,13 @@ import { handleSocialMessaging } from "./social_messaging.js";
 import { handleSocialCommunity } from "./social_community.js";
 import { handleSocialMatchmaking } from "./social_matchmaking.js";
 
+import {
+  handleTafsirText,
+  handleTafsirTextBooks,
+} from "./content/tafsir-text.js";
+
 const ANDROID_PACKAGE_NAME = "com.example.sa7bi_ai_new";
+
 const ANDROID_SIGNING_FINGERPRINT =
   "8861F29093A09F80132873C09D3FD7F2252785AD7B8E6CF2241A60605CD254D9";
 
@@ -213,6 +220,20 @@ export default {
       path === "/groups/invite"
     ) {
       return handleGroupInviteLanding(url);
+    }
+
+    if (
+      request.method === "GET" &&
+      path === "/v1/tafsir-text/books"
+    ) {
+      return handleTafsirTextBooks(request);
+    }
+
+    if (
+      request.method === "GET" &&
+      path === "/v1/tafsir-text"
+    ) {
+      return handleTafsirText(request);
     }
 
     return worker.fetch(request, env, ctx);
