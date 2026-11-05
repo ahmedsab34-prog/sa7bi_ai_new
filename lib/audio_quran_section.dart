@@ -42,14 +42,94 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         ? selectedReciter.moshaf.first
         : null;
 
+    final availableSuwar = moshaf == null
+        ? data.suwar
+        : _availableQuranSuwar(moshaf, data);
+
     setState(() {
       _quran = data;
       _reciter = selectedReciter;
       _moshaf = moshaf;
-      _sura = data.suwar.first;
+      _sura = availableSuwar.isNotEmpty
+          ? availableSuwar.first
+          : data.suwar.first;
       _error = '';
     });
   }
+
+  // ============================================================
+  // SUPPORTED SURAS FOR SELECTED MOSHAF
+  // ============================================================
+
+  List<QuranSura> _availableQuranSuwar(
+    QuranMoshaf moshaf,
+    QuranCatalog catalog,
+  ) {
+    final raw = moshaf.surahList.trim();
+
+    if (raw.isEmpty) {
+      return catalog.suwar;
+    }
+
+    final supportedIds = <int>{};
+
+    final tokens = raw.split(
+      RegExp(r'[,;|\s]+'),
+    );
+
+    for (final token in tokens) {
+      if (token.isEmpty) {
+        continue;
+      }
+
+      final directId = int.tryParse(token);
+
+      if (directId != null &&
+          directId >= 1 &&
+          directId <= 114) {
+        supportedIds.add(directId);
+        continue;
+      }
+
+      final range = RegExp(
+        r'^(\d+)-(\d+)$',
+      ).firstMatch(token);
+
+      if (range == null) {
+        continue;
+      }
+
+      final first = int.tryParse(range.group(1) ?? '');
+      final last = int.tryParse(range.group(2) ?? '');
+
+      if (first == null || last == null) {
+        continue;
+      }
+
+      final start = first < last ? first : last;
+      final end = first > last ? first : last;
+
+      for (var id = start; id <= end && id <= 114; id++) {
+        if (id >= 1) {
+          supportedIds.add(id);
+        }
+      }
+    }
+
+    if (supportedIds.isEmpty) {
+      return catalog.suwar;
+    }
+
+    final filtered = catalog.suwar
+        .where((sura) => supportedIds.contains(sura.id))
+        .toList();
+
+    return filtered.isEmpty ? catalog.suwar : filtered;
+  }
+
+  // ============================================================
+  // QURAN URL
+  // ============================================================
 
   String? _quranUrl(
     QuranMoshaf moshaf,
@@ -70,6 +150,45 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         '.mp3';
   }
 
+  // ============================================================
+  // CLEAR OLD QUEUE AND START A COMPLETE QURAN QUEUE
+  // ============================================================
+
+  Future<void> _replaceAudioQueue(
+    Sa7biAudioHandler handler,
+    List<MediaItem> items,
+  ) async {
+    if (items.isEmpty) {
+      throw StateError('Quran queue is empty');
+    }
+
+    // Stop the previous source first.
+    await handler.stop();
+
+    // Remove every item from the previous source.
+    // Removing from the end avoids shifting the next index.
+    while (handler.queue.value.isNotEmpty) {
+      final lastIndex = handler.queue.value.length - 1;
+
+      await handler.removeQueueItemAt(lastIndex);
+    }
+
+    // Add the complete Quran queue in one operation.
+    // The handler prepares the queue without starting playback.
+    await handler.addQueueItems(items);
+
+    if (handler.queue.value.isEmpty) {
+      throw StateError('Quran queue could not be prepared');
+    }
+
+    // Start from the first item, which is the selected sura.
+    await handler.skipToQueueItem(0);
+  }
+
+  // ============================================================
+  // PLAY QURAN
+  // ============================================================
+
   Future<void> _playQuran() async {
     if (_switchingAudio) {
       return;
@@ -77,20 +196,37 @@ extension _AudioQuranSection on _AudioCenterScreenState {
 
     final moshaf = _moshaf;
     final sura = _sura;
+    final catalog = _quran;
 
-    if (moshaf == null || sura == null) {
+    if (moshaf == null || sura == null || catalog == null) {
       _message(
         'اختار القارئ والرواية والسورة أولًا.',
       );
       return;
     }
 
-    final url = _quranUrl(
+    final availableSuwar = _availableQuranSuwar(
+      moshaf,
+      catalog,
+    );
+
+    final selectedIndex = availableSuwar.indexWhere(
+      (item) => item.id == sura.id,
+    );
+
+    if (selectedIndex < 0) {
+      _message(
+        'السورة المختارة غير متاحة في الرواية الحالية.',
+      );
+      return;
+    }
+
+    final selectedUrl = _quranUrl(
       moshaf,
       sura,
     );
 
-    if (url == null || url.isEmpty) {
+    if (selectedUrl == null || selectedUrl.isEmpty) {
       _message(
         'رابط الصوت غير متاح لهذه الرواية.',
       );
@@ -104,58 +240,48 @@ extension _AudioQuranSection on _AudioCenterScreenState {
     try {
       final handler = await AudioController.initialize();
 
-      final first = MediaItem(
-        id: url,
-        title: sura.name,
-        artist: _reciter?.name ?? 'القرآن الكريم',
-        album: 'القرآن الكريم',
-      );
+      final queueItems = <MediaItem>[];
 
-      await handler.playMediaItem(first);
+      // Build the complete queue before playback begins.
+      // The selected sura is always the first item.
+      for (
+        var i = selectedIndex;
+        i < availableSuwar.length;
+        i++
+      ) {
+        final nextSura = availableSuwar[i];
 
-      final catalog = _quran;
-
-      if (catalog != null) {
-        final selectedIndex = catalog.suwar.indexWhere(
-          (item) => item.id == sura.id,
+        final nextUrl = _quranUrl(
+          moshaf,
+          nextSura,
         );
 
-        final start = selectedIndex < 0
-            ? 0
-            : selectedIndex + 1;
-
-        final remaining = <MediaItem>[];
-
-        for (var i = start; i < catalog.suwar.length; i++) {
-          final nextSura = catalog.suwar[i];
-
-          final nextUrl = _quranUrl(
-            moshaf,
-            nextSura,
-          );
-
-          if (nextUrl == null || nextUrl.isEmpty) {
-            continue;
-          }
-
-          remaining.add(
-            MediaItem(
-              id: nextUrl,
-              title: nextSura.name,
-              artist: _reciter?.name ?? 'القرآن الكريم',
-              album: 'القرآن الكريم',
-            ),
-          );
+        if (nextUrl == null || nextUrl.isEmpty) {
+          continue;
         }
 
-        if (remaining.isNotEmpty) {
-          try {
-            await handler.addQueueItems(remaining);
-          } catch (_) {
-            // تشغيل السورة الحالية يظل صالحًا.
-          }
-        }
+        queueItems.add(
+          MediaItem(
+            id: nextUrl,
+            title: nextSura.name,
+            artist: _reciter?.name ?? 'القرآن الكريم',
+            album: 'القرآن الكريم',
+          ),
+        );
       }
+
+      if (queueItems.isEmpty ||
+          queueItems.first.id != selectedUrl) {
+        _message(
+          'تعذر تجهيز رابط السورة المختارة.',
+        );
+        return;
+      }
+
+      await _replaceAudioQueue(
+        handler,
+        queueItems,
+      );
 
       if (!mounted) {
         return;
@@ -167,10 +293,10 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         _playing = true;
         _error = '';
       });
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         _message(
-          'تعذر تشغيل القرآن حاليًا. جرّب سورة أخرى.',
+          'تعذر تجهيز قائمة تشغيل القرآن. تحقق من الاتصال وحاول مرة أخرى.',
         );
       }
     } finally {
@@ -210,6 +336,10 @@ extension _AudioQuranSection on _AudioCenterScreenState {
       );
     }
 
+    final availableSuwar = _moshaf == null
+        ? quran.suwar
+        : _availableQuranSuwar(_moshaf!, quran);
+
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
@@ -232,11 +362,23 @@ extension _AudioQuranSection on _AudioCenterScreenState {
               return;
             }
 
+            final nextMoshaf = value.moshaf.isNotEmpty
+                ? value.moshaf.first
+                : null;
+
+            final nextSuwar = nextMoshaf == null
+                ? quran.suwar
+                : _availableQuranSuwar(
+                    nextMoshaf,
+                    quran,
+                  );
+
             setState(() {
               _reciter = value;
-              _moshaf = value.moshaf.isNotEmpty
-                  ? value.moshaf.first
-                  : null;
+              _moshaf = nextMoshaf;
+              _sura = nextSuwar.isNotEmpty
+                  ? nextSuwar.first
+                  : quran.suwar.first;
             });
           },
         ),
@@ -251,8 +393,25 @@ extension _AudioQuranSection on _AudioCenterScreenState {
             text: (item) =>
                 item.name.isEmpty ? 'الرواية' : item.name,
             onChanged: (value) {
+              if (value == null) {
+                return;
+              }
+
+              final nextSuwar = _availableQuranSuwar(
+                value,
+                quran,
+              );
+
               setState(() {
                 _moshaf = value;
+
+                if (!nextSuwar.any(
+                  (item) => item.id == _sura?.id,
+                )) {
+                  _sura = nextSuwar.isNotEmpty
+                      ? nextSuwar.first
+                      : quran.suwar.first;
+                }
               });
             },
           ),
@@ -260,8 +419,14 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         const SizedBox(height: 10),
 
         _dropdown<QuranSura>(
-          value: _sura,
-          items: quran.suwar,
+          value: availableSuwar.any(
+            (item) => item.id == _sura?.id,
+          )
+              ? _sura
+              : availableSuwar.isNotEmpty
+                  ? availableSuwar.first
+                  : null,
+          items: availableSuwar,
           label: 'اختار السورة',
           text: (item) => '${item.id}. ${item.name}',
           onChanged: (value) {
@@ -289,7 +454,7 @@ extension _AudioQuranSection on _AudioCenterScreenState {
                 ),
           label: Text(
             _switchingAudio
-                ? 'جاري التشغيل...'
+                ? 'جاري تجهيز قائمة التشغيل...'
                 : 'تشغيل السورة والمتابعة تلقائيًا',
           ),
           style: ElevatedButton.styleFrom(
@@ -311,7 +476,7 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         _infoCard(
           Icons.queue_music_rounded,
           'تشغيل متواصل',
-          'بعد السورة المختارة يكمل المشغل السور التالية تلقائيًا.',
+          'يتم تجهيز السورة المختارة والسور التالية في قائمة واحدة قبل بدء التشغيل.',
         ),
 
         const SizedBox(height: 10),
