@@ -1,0 +1,414 @@
+name: Sa7bi AI - Approved Worker Deployment from Feature Branch
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_workers:
+        description: "Set true only to approve production deployment of both Workers from the current feature branch."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa7bi-approved-worker-deployment
+  cancel-in-progress: false
+
+env:
+  EXPECTED_BRANCH: "fix/build-692-network-client-lifecycle"
+  WORKER_URL: "https://sa7bi-ai-new.ahmedsab34.workers.dev"
+  FALLBACK_WORKER_URL: "https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev"
+
+jobs:
+  deployment-not-approved:
+    name: Confirm safe default when deployment is not approved
+    if: ${{ inputs.deploy_workers != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Record that no deployment was performed
+        shell: bash
+        run: |
+          {
+            echo "## No Worker deployment performed"
+            echo
+            echo "The deploy_workers input was false."
+            echo "Neither Worker was modified."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  deploy-workers:
+    name: Test, deploy and verify both Workers
+    if: ${{ inputs.deploy_workers == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout selected source commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Enforce feature branch restriction
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF_NAME}" != "${EXPECTED_BRANCH}" ]; then
+            echo "::error::Deployment is allowed only from ${EXPECTED_BRANCH}."
+            exit 1
+          fi
+
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+
+          if [ "${ACTUAL_SHA}" != "${GITHUB_SHA}" ]; then
+            echo "::error::The checked-out commit differs from the selected source commit."
+            exit 1
+          fi
+
+          echo "Approved branch: ${GITHUB_REF_NAME}"
+          echo "Approved source commit: ${GITHUB_SHA}"
+
+      - name: Check Cloudflare credentials without printing secrets
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not configured."
+            exit 1
+          fi
+
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID is not configured."
+            exit 1
+          fi
+
+          echo "Cloudflare credential presence check passed."
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm install \
+            --no-package-lock \
+            --no-audit \
+            --no-fund
+
+      - name: Run all backend tests before deployment
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check
+
+      - name: Validate primary and fallback Worker bundles
+        working-directory: backend
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          npx wrangler deploy \
+            --dry-run \
+            --config wrangler.toml
+
+          npx wrangler deploy \
+            --dry-run \
+            --config wrangler-fallback.toml
+
+      - name: Deploy primary Worker
+        working-directory: backend
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          npx wrangler deploy \
+            --config wrangler.toml
+
+      - name: Verify primary Worker health
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --location \
+            --connect-timeout 15 \
+            --max-time 45 \
+            "${WORKER_URL}/health"
+
+          echo
+          echo "Primary Worker health check passed."
+
+      - name: Verify primary religious content routes
+        shell: bash
+        env:
+          BASE_URL: ${{ env.WORKER_URL }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+          base = os.environ["BASE_URL"].rstrip("/")
+
+          def get_json(path):
+              url = base + path
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "Accept": "application/json",
+                      "User-Agent": "Sa7bi-AI-Worker-Verification/1.0",
+                  },
+              )
+
+              with urllib.request.urlopen(
+                  request,
+                  timeout=35,
+              ) as response:
+                  if response.status != 200:
+                      raise RuntimeError(
+                          f"{path}: HTTP {response.status}"
+                      )
+
+                  data = json.loads(response.read().decode("utf-8"))
+
+              if not isinstance(data, dict) or data.get("ok") is not True:
+                  raise RuntimeError(
+                      f"{path}: API did not return ok=true: {data}"
+                  )
+
+              return data
+
+          # Hadith provider must return actual Arabic content.
+          hadith = get_json(
+              "/v1/hadith?book=bukhari&limit=3"
+          )
+
+          hadith_items = hadith.get("items")
+          if not isinstance(hadith_items, list) or not hadith_items:
+              raise RuntimeError(
+                  "Hadith endpoint returned no actual hadith items."
+              )
+
+          print(
+              f"PASS: Hadith returned {len(hadith_items)} item(s)."
+          )
+
+          # Radio route must return a valid station collection.
+          radio = get_json(
+              "/v1/radio/stations?country=EG&limit=20"
+          )
+
+          stations = radio.get("stations")
+          if not isinstance(stations, list):
+              raise RuntimeError(
+                  "Radio endpoint did not return a stations list."
+              )
+
+          invalid_streams = [
+              station
+              for station in stations
+              if not str(station.get("streamUrl", "")).startswith("https://")
+          ]
+
+          if invalid_streams:
+              raise RuntimeError(
+                  "Radio endpoint returned a non-HTTPS stream."
+              )
+
+          if not stations:
+              print(
+                  "WARNING: Radio route is healthy, but Egypt returned "
+                  "zero HTTPS stations in this probe."
+              )
+          else:
+              print(
+                  f"PASS: Radio returned {len(stations)} HTTPS station(s)."
+              )
+
+          # QuranEnc Arabic tafsir catalogue must be available.
+          books = get_json(
+              "/v1/tafsir-text/books"
+          )
+
+          tafsir_books = books.get("items")
+          if not isinstance(tafsir_books, list) or not tafsir_books:
+              raise RuntimeError(
+                  "QuranEnc returned no Arabic tafsir books."
+              )
+
+          key = str(
+              tafsir_books[0].get("key", "")
+          ).strip()
+
+          if not key:
+              raise RuntimeError(
+                  "The first QuranEnc tafsir book has no key."
+              )
+
+          encoded_key = urllib.parse.quote(
+              key,
+              safe="",
+          )
+
+          # The actual tafsir text, not only the catalogue, must work.
+          tafsir = get_json(
+              f"/v1/tafsir-text?key={encoded_key}&sura=1"
+          )
+
+          tafsir_items = tafsir.get("items")
+          if not isinstance(tafsir_items, list) or not tafsir_items:
+              raise RuntimeError(
+                  "QuranEnc returned no tafsir text for Surah 1."
+              )
+
+          print(
+              f"PASS: QuranEnc returned {len(tafsir_items)} tafsir block(s)."
+          )
+          PY
+
+      - name: Deploy fallback Worker
+        working-directory: backend
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          npx wrangler deploy \
+            --config wrangler-fallback.toml
+
+      - name: Verify fallback Worker and service binding
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 12); do
+            rm -f /tmp/sa7bi-fallback-headers.txt
+            rm -f /tmp/sa7bi-fallback-body.txt
+
+            status="$(
+              curl \
+                --silent \
+                --show-error \
+                --location \
+                --connect-timeout 15 \
+                --max-time 45 \
+                --dump-header /tmp/sa7bi-fallback-headers.txt \
+                --output /tmp/sa7bi-fallback-body.txt \
+                --write-out "%{http_code}" \
+                "${FALLBACK_WORKER_URL}/health" || true
+            )"
+
+            if [ "${status}" = "200" ] &&
+               grep -qi "^x-sa7bi-network-fallback:" \
+                 /tmp/sa7bi-fallback-headers.txt &&
+               grep -q '"ok":true' \
+                 /tmp/sa7bi-fallback-body.txt; then
+              cat /tmp/sa7bi-fallback-body.txt
+              echo
+              echo "Fallback Worker health check passed."
+              exit 0
+            fi
+
+            echo "Fallback attempt ${attempt}/12 returned HTTP ${status}."
+
+            if [ "${attempt}" -lt 12 ]; then
+              sleep 5
+            fi
+          done
+
+          echo "::error::Fallback Worker verification failed."
+          cat /tmp/sa7bi-fallback-headers.txt 2>/dev/null || true
+          cat /tmp/sa7bi-fallback-body.txt 2>/dev/null || true
+          exit 1
+
+      - name: Verify religious routes through fallback Worker
+        shell: bash
+        env:
+          BASE_URL: ${{ env.FALLBACK_WORKER_URL }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          base = os.environ["BASE_URL"].rstrip("/")
+
+          paths = [
+              "/v1/hadith?book=bukhari&limit=3",
+              "/v1/radio/countries",
+              "/v1/tafsir-text/books",
+          ]
+
+          for path in paths:
+              request = urllib.request.Request(
+                  base + path,
+                  headers={
+                      "Accept": "application/json",
+                      "User-Agent": "Sa7bi-AI-Fallback-Verification/1.0",
+                  },
+              )
+
+              with urllib.request.urlopen(
+                  request,
+                  timeout=35,
+              ) as response:
+                  if response.status != 200:
+                      raise RuntimeError(
+                          f"{path}: HTTP {response.status}"
+                      )
+
+                  data = json.loads(
+                      response.read().decode("utf-8")
+                  )
+
+              if not isinstance(data, dict) or data.get("ok") is not True:
+                  raise RuntimeError(
+                      f"{path}: fallback did not return ok=true"
+                  )
+
+              print(f"PASS: fallback {path}")
+          PY
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo "## Worker deployment completed"
+            echo
+            echo "- Source branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- Primary Worker: ${WORKER_URL}"
+            echo "- Fallback Worker: ${FALLBACK_WORKER_URL}"
+            echo "- Backend tests: passed before deployment"
+            echo "- APK build or publication: not performed"
+          } >> "${GITHUB_STEP_SUMMARY}"
