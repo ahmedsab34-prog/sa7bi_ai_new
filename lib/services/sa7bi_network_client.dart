@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 
@@ -203,14 +202,28 @@ class _Sa7biFailoverClient extends http.BaseClient {
       final isHadithRequest = path == '/v1/hadith' ||
           path.startsWith('/v1/hadith/');
 
+      final isRadioRequest = path.startsWith('/v1/radio/');
+
+      final isTafsirRequest = path == '/v1/tafsir' ||
+          path.startsWith('/v1/tafsir/') ||
+          path == '/v1/tafsir-text' ||
+          path.startsWith('/v1/tafsir-text/');
+
+      // مزودو الراديو والتفسير قد يحتاجون وقتًا أطول من المهلة العامة.
+      // ننتظر حتى يكتمل طلب Worker قبل التحويل إلى الخادم الاحتياطي.
+      // ونستخدم محاولة واحدة لتجنب تكرار الطلبات البطيئة على الخادم الأساسي.
       final requestTimeout = isNewsRequest
           ? const Duration(seconds: 10)
-          : isHadithRequest
-              ? const Duration(seconds: 5)
+          : (isRadioRequest || isHadithRequest || isTafsirRequest)
+              ? const Duration(seconds: 12)
               : Sa7biNetworkClient.safeRequestTimeout;
 
-      // الأخبار والحديث لا يكرران الطلب على الأساسي.
-      final attempts = (isNewsRequest || isHadithRequest)
+      final attempts = (
+        isNewsRequest ||
+        isHadithRequest ||
+        isRadioRequest ||
+        isTafsirRequest
+      )
           ? 1
           : Sa7biNetworkClient.maximumAttempts;
 
@@ -378,11 +391,26 @@ class _Sa7biFailoverClient extends http.BaseClient {
 
     final future = fallback.send(request);
     final method = original.method.toUpperCase();
+    final path = original.url.path.toLowerCase();
 
     if (method == 'GET' || method == 'HEAD') {
-      return future.timeout(
-        Sa7biNetworkClient.fallbackRequestTimeout,
-      );
+      final isRadioRequest = path.startsWith('/v1/radio/');
+      final isHadithRequest = path == '/v1/hadith' ||
+          path.startsWith('/v1/hadith/');
+      final isTafsirRequest = path == '/v1/tafsir' ||
+          path.startsWith('/v1/tafsir/') ||
+          path == '/v1/tafsir-text' ||
+          path.startsWith('/v1/tafsir-text/');
+
+      final timeout = (
+        isRadioRequest ||
+        isHadithRequest ||
+        isTafsirRequest
+      )
+          ? const Duration(seconds: 12)
+          : Sa7biNetworkClient.fallbackRequestTimeout;
+
+      return future.timeout(timeout);
     }
 
     // لا نعيد POST تلقائيًا عند انتهاء المهلة.
