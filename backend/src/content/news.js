@@ -8,12 +8,98 @@ import {
 
 const BACKEND_VERSION = "6.4.1";
 const MAX_ITEMS = 40;
-const RSS_TIMEOUT_MS = 5000;
+const RSS_TIMEOUT_MS = 6500;
+const USER_AGENT = "Sa7bi-AI-News/6.4.1";
 
-/* Parse RSS items */
-function parseRssItems(xml, fallbackSource = "News") {
+function decodeXml(value) {
+  return String(value || "")
+    .replace(/^<!\[CDATA\[/i, "")
+    .replace(/\]\]>$/i, "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function cleanUrl(value) {
+  const raw = decodeXml(value).trim();
+  if (!raw) return "";
+
+  try {
+    const uri = new URL(raw);
+
+    if (
+      uri.protocol !== "https:" &&
+      uri.protocol !== "http:"
+    ) {
+      return "";
+    }
+
+    uri.hash = "";
+
+    for (const key of [...uri.searchParams.keys()]) {
+      if (
+        key.toLowerCase().startsWith("utm_") ||
+        [
+          "fbclid",
+          "gclid",
+          "dclid",
+          "mc_cid",
+          "mc_eid",
+          "igshid",
+          "ref",
+          "ref_src",
+          "source",
+          "si",
+        ].includes(key.toLowerCase())
+      ) {
+        uri.searchParams.delete(key);
+      }
+    }
+
+    if (uri.pathname.length > 1) {
+      uri.pathname = uri.pathname.replace(/\/+$/, "");
+    }
+
+    return uri.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+function parsePublishedDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+
+  const timestamp = Date.parse(raw);
+
+  return Number.isFinite(timestamp)
+    ? timestamp
+    : null;
+}
+
+function normalizeTitle(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[^\u0600-\u06FFa-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function parseRssItems(
+  xml,
+  fallbackSource = "News",
+) {
   const blocks =
-    String(xml || "").match(/<item\b[\s\S]*?<\/item>/gi) || [];
+    String(xml || "").match(
+      /<item\b[\s\S]*?<\/item>/gi,
+    ) || [];
 
   const items = [];
 
@@ -27,15 +113,18 @@ function parseRssItems(xml, fallbackSource = "News") {
     const link = cleanUrl(
       firstMatch(block, [
         /<link[^>]*>([\s\S]*?)<\/link>/i,
+        /<guid[^>]*>([\s\S]*?)<\/guid>/i,
       ]),
     );
 
-    const pubDate = firstMatch(block, [
-      /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i,
-      /<published[^>]*>([\s\S]*?)<\/published>/i,
-      /<updated[^>]*>([\s\S]*?)<\/updated>/i,
-      /<dc:date[^>]*>([\s\S]*?)<\/dc:date>/i,
-    ]);
+    const pubDate = decodeXml(
+      firstMatch(block, [
+        /<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i,
+        /<published[^>]*>([\s\S]*?)<\/published>/i,
+        /<updated[^>]*>([\s\S]*?)<\/updated>/i,
+        /<dc:date[^>]*>([\s\S]*?)<\/dc:date>/i,
+      ]),
+    ).trim();
 
     const description = firstMatch(block, [
       /<description[^>]*>([\s\S]*?)<\/description>/i,
@@ -50,7 +139,7 @@ function parseRssItems(xml, fallbackSource = "News") {
         ]),
       ) || fallbackSource;
 
-    const image = extractNewsImage(block);
+    const image = extractNewsImage(block) || "";
 
     if (!title || !link) continue;
 
@@ -58,50 +147,27 @@ function parseRssItems(xml, fallbackSource = "News") {
       id: link,
       title: title.trim(),
       link,
-      pubDate: pubDate?.trim() || "",
-      description: stripHtml(description || ""),
-      image: image || "",
-      imageUrl: image || "",
-      source,
+      pubDate,
+      description: stripHtml(
+        decodeXml(description || ""),
+      ),
+      image,
+      imageUrl: image,
+      source: String(source).trim() || fallbackSource,
     });
   }
 
   return items;
 }
 
-/* URL helpers */
-function cleanUrl(value) {
-  let result = String(value || "").trim();
-
-  if (!result) return "";
-
-  result = result
-    .replace(/^<!\[CDATA\[/i, "")
-    .replace(/\]\]>$/i, "")
-    .trim();
-
-  result = decodeXml(result);
-
-  return /^https?:\/\//i.test(result) ? result : "";
-}
-
-function decodeXml(value) {
-  return String(value || "")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">");
-}
-
-/* Fetch a feed with a strict timeout */
 async function fetchRssFeed(url) {
   const response = await fetch(url, {
     method: "GET",
     headers: {
-      "User-Agent": "Sa7bi-AI/6.4.1",
-      Accept: "application/rss+xml, application/xml, text/xml, */*",
+      "User-Agent": USER_AGENT,
+      Accept:
+        "application/rss+xml, application/xml, text/xml, */*",
+      "Cache-Control": "no-cache",
     },
     redirect: "follow",
     signal: AbortSignal.timeout(RSS_TIMEOUT_MS),
@@ -114,8 +180,10 @@ async function fetchRssFeed(url) {
   return response.text();
 }
 
-/* Fetch feeds concurrently and deduplicate results */
-async function fetchFeedsInParallel(feeds, sourceName) {
+async function fetchFeedsInParallel(
+  feeds,
+  sourceName,
+) {
   const results = await Promise.allSettled(
     feeds.map(async (url) => {
       const xml = await fetchRssFeed(url);
@@ -124,82 +192,134 @@ async function fetchFeedsInParallel(feeds, sourceName) {
   );
 
   const items = [];
-  const seen = new Set();
 
   for (const result of results) {
-    if (result.status !== "fulfilled") continue;
-
-    for (const item of result.value) {
-      if (!item.link || seen.has(item.link)) continue;
-
-      seen.add(item.link);
-      items.push(item);
-
-      if (items.length >= MAX_ITEMS) {
-        return items;
-      }
+    if (result.status === "fulfilled") {
+      items.push(...result.value);
     }
   }
 
   return items;
 }
 
-async function fetchGoogleNews() {
-  const feeds = [
-    "https://news.google.com/rss?hl=ar&gl=EG&ceid=EG:ar",
-    "https://news.google.com/rss/search?q=%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar",
-    "https://news.google.com/rss/search?q=%D8%AA%D9%83%D9%86%D9%88%D9%84%D9%88%D8%AC%D9%8A%D8%A7&hl=ar&gl=EG&ceid=EG:ar",
-  ];
-
-  return fetchFeedsInParallel(feeds, "Google News");
+export async function fetchGoogleNews() {
+  return fetchFeedsInParallel(
+    [
+      "https://news.google.com/rss?hl=ar&gl=EG&ceid=EG:ar",
+      "https://news.google.com/rss/search?q=%D9%85%D8%B5%D8%B1&hl=ar&gl=EG&ceid=EG:ar",
+      "https://news.google.com/rss/search?q=%D8%AA%D9%83%D9%86%D9%88%D9%84%D9%88%D8%AC%D9%8A%D8%A7&hl=ar&gl=EG&ceid=EG:ar",
+    ],
+    "Google News",
+  );
 }
 
-async function fetchBingNews() {
-  const feeds = [
-    "https://www.bing.com/news/search?q=Egypt&format=rss&setlang=ar",
-    "https://www.bing.com/news/search?q=Egypt%20technology&format=rss&setlang=ar",
-    "https://www.bing.com/news/search?q=Egypt%20AI&format=rss&setlang=ar",
-  ];
-
-  return fetchFeedsInParallel(feeds, "Bing News");
+export async function fetchBingNews() {
+  return fetchFeedsInParallel(
+    [
+      "https://www.bing.com/news/search?q=Egypt&format=rss&setlang=ar",
+      "https://www.bing.com/news/search?q=Egypt%20technology&format=rss&setlang=ar",
+      "https://www.bing.com/news/search?q=Egypt%20AI&format=rss&setlang=ar",
+    ],
+    "Bing News",
+  );
 }
 
-/* Aggregate both providers */
-async function fetchAllNews() {
-  const [googleResult, bingResult] = await Promise.allSettled([
-    fetchGoogleNews(),
-    fetchBingNews(),
-  ]);
+function normalizeAndSortItems(input) {
+  const byLink = new Set();
+  const byTitle = new Set();
+  const cleaned = [];
 
-  const google =
-    googleResult.status === "fulfilled" ? googleResult.value : [];
-  const bing =
-    bingResult.status === "fulfilled" ? bingResult.value : [];
+  for (const item of input) {
+    const title = String(item.title || "").trim();
+    const link = cleanUrl(item.link);
+    const titleKey = normalizeTitle(title);
 
-  const combined = [];
-  const seen = new Set();
+    if (
+      !title ||
+      !link ||
+      !titleKey ||
+      byLink.has(link) ||
+      byTitle.has(titleKey)
+    ) {
+      continue;
+    }
 
-  for (const item of [...google, ...bing]) {
-    if (!item.link || seen.has(item.link)) continue;
+    byLink.add(link);
+    byTitle.add(titleKey);
 
-    seen.add(item.link);
-    combined.push(item);
-
-    if (combined.length >= MAX_ITEMS) break;
+    cleaned.push({
+      ...item,
+      id: link,
+      title,
+      link,
+      source:
+        String(item.source || "الأخبار").trim() ||
+        "الأخبار",
+      pubDate: String(item.pubDate || "").trim(),
+      description: String(item.description || "").trim(),
+      image: String(
+        item.image || item.imageUrl || "",
+      ).trim(),
+      imageUrl: String(
+        item.imageUrl || item.image || "",
+      ).trim(),
+      _publishedAt: parsePublishedDate(item.pubDate),
+    });
   }
 
-  return combined;
+  cleaned.sort((a, b) => {
+    if (
+      a._publishedAt == null &&
+      b._publishedAt != null
+    ) {
+      return 1;
+    }
+
+    if (
+      a._publishedAt != null &&
+      b._publishedAt == null
+    ) {
+      return -1;
+    }
+
+    if (
+      a._publishedAt != null &&
+      b._publishedAt != null
+    ) {
+      return b._publishedAt - a._publishedAt;
+    }
+
+    return 0;
+  });
+
+  return cleaned
+    .slice(0, MAX_ITEMS)
+    .map(({ _publishedAt, ...item }) => item);
 }
 
-/*
- * Important:
- * Do not fetch each article page just to discover an optional image
- * before returning the news list. That extra work can cause timeouts
- * on weak mobile data or Wi-Fi.
- *
- * Images already present in RSS remain available. Missing images
- * are optional and must not block the news response.
- */
+export async function fetchAllNews() {
+  const [googleResult, bingResult] =
+    await Promise.allSettled([
+      fetchGoogleNews(),
+      fetchBingNews(),
+    ]);
+
+  const google =
+    googleResult.status === "fulfilled"
+      ? googleResult.value
+      : [];
+
+  const bing =
+    bingResult.status === "fulfilled"
+      ? bingResult.value
+      : [];
+
+  return normalizeAndSortItems([
+    ...google,
+    ...bing,
+  ]);
+}
+
 export async function handleNews() {
   try {
     const items = await fetchAllNews();
@@ -213,6 +333,7 @@ export async function handleNews() {
           items: [],
           count: 0,
           backendVersion: BACKEND_VERSION,
+          refreshedAt: new Date().toISOString(),
         },
         502,
         {
@@ -227,11 +348,11 @@ export async function handleNews() {
         items,
         count: items.length,
         backendVersion: BACKEND_VERSION,
+        refreshedAt: new Date().toISOString(),
       },
       200,
       {
-        "Cache-Control":
-          "public, max-age=30, s-maxage=60, stale-while-revalidate=180",
+        "Cache-Control": "no-store, max-age=0",
       },
     );
   } catch (error) {
@@ -243,6 +364,7 @@ export async function handleNews() {
         items: [],
         count: 0,
         backendVersion: BACKEND_VERSION,
+        refreshedAt: new Date().toISOString(),
       },
       502,
       {
@@ -253,11 +375,8 @@ export async function handleNews() {
 }
 
 export {
-  parseRssItems,
   fetchRssFeed,
-  fetchGoogleNews,
-  fetchBingNews,
-  fetchAllNews,
+  normalizeAndSortItems,
 };
 
 export default {
