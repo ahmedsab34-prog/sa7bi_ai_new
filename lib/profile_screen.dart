@@ -322,12 +322,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   )
                 : LayoutBuilder(
                     builder: (context, constraints) {
-                      return SizedBox.expand(
-                        child: FittedBox(
-                          alignment: Alignment.topCenter,
-                          fit: BoxFit.scaleDown,
-                          child: SizedBox(
-                            width: constraints.maxWidth,
+                      final contentWidth = constraints.maxWidth
+                          .clamp(280.0, 720.0)
+                          .toDouble();
+
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(
+                          width: contentWidth,
+                          child: SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
                             child: _buildProfileContent(),
                           ),
                         ),
