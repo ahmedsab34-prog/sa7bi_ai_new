@@ -1,4 +1,3 @@
-
 // backend/src/content/hadith.js
 // Sa7bi AI Backend - Hadith content module.
 //
@@ -22,12 +21,17 @@ const PROVIDER_TIMEOUT_MS = 10000;
 const BOOKS = [
   { id: "bukhari", name: "صحيح البخاري" },
   { id: "muslim", name: "صحيح مسلم" },
-  { id: "abudawud", name: "سنن أبي داود" },
+  { id: "abu-daud", name: "سنن أبي داود" },
   { id: "tirmidzi", name: "جامع الترمذي" },
   { id: "nasai", name: "سنن النسائي" },
   { id: "ibnu-majah", name: "سنن ابن ماجه" },
   { id: "ahmad", name: "مسند أحمد" },
+  { id: "darimi", name: "سنن الدارمي" },
+  { id: "malik", name: "موطأ مالك" },
 ];
+
+const FIRST_HADITH_NUMBER = 1;
+const MAX_RANGE_SIZE = 300;
 
 function normalizeLimit(value) {
   const parsed = Number(value);
@@ -61,7 +65,11 @@ function safeProviderError(error) {
 }
 
 async function fetchBookHadiths(book) {
-  const endpoint = `${HADITH_API}/${encodeURIComponent(book.id)}`;
+  // The provider requires an explicit range and limits each request to 300.
+  const rangeEnd = FIRST_HADITH_NUMBER + MAX_RANGE_SIZE - 1;
+  const endpoint =
+    `${HADITH_API}/${encodeURIComponent(book.id)}` +
+    `?range=${FIRST_HADITH_NUMBER}-${rangeEnd}`;
   const controller = new AbortController();
 
   const timeout = setTimeout(
