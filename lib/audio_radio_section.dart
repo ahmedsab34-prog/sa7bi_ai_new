@@ -1,5 +1,4 @@
-
- // ignore_for_file: invalid_use_of_protected_member
+// ignore_for_file: invalid_use_of_protected_member
 
 part of 'audio_center_screen.dart';
 
@@ -72,18 +71,14 @@ extension _AudioRadioSection on _AudioCenterScreenState {
 
       for (final station in stations) {
         final url = station.url.trim();
-        final uri = Uri.tryParse(url);
 
-        // لا نعرض رابطًا فارغًا أو رابطًا لا يحتوي على مضيف صالح.
-        // نسمح بـ HTTP لأن بعض محطات الراديو لا توفر HTTPS.
-        if (uri == null ||
-            !uri.hasAuthority ||
-            uri.host.isEmpty ||
-            (uri.scheme != 'https' && uri.scheme != 'http')) {
+        // AndroidManifest.xml يمنع cleartext traffic على مستوى التطبيق.
+        // نقبل HTTPS فقط حتى لا نعرض محطات ستفشل عند التشغيل.
+        if (!_isSecureRadioStream(url)) {
           continue;
         }
 
-        if (seen.add(uri.toString().toLowerCase())) {
+        if (seen.add(url.toLowerCase())) {
           cleanStations.add(station);
         }
       }
@@ -91,7 +86,7 @@ extension _AudioRadioSection on _AudioCenterScreenState {
       setState(() {
         _stations = cleanStations;
         _error = cleanStations.isEmpty
-            ? 'لم نجد محطات بروابط صالحة لهذه الدولة. جرّب دولة أخرى أو حدّث القائمة.'
+            ? 'لا توجد محطات HTTPS صالحة لهذه الدولة. جرّب دولة أخرى أو حدّث القائمة.'
             : '';
       });
     } on TimeoutException {
@@ -107,6 +102,16 @@ extension _AudioRadioSection on _AudioCenterScreenState {
         _error = 'تعذر تحميل المحطات. تحقق من الإنترنت وحاول مرة أخرى.';
       });
     }
+  }
+
+  bool _isSecureRadioStream(String value) {
+    final uri = Uri.tryParse(value.trim());
+
+    return uri != null &&
+        uri.scheme.toLowerCase() == 'https' &&
+        uri.hasAuthority &&
+        uri.host.isNotEmpty &&
+        uri.userInfo.isEmpty;
   }
 
   Future<void> _changeCountry(RadioCountry? country) async {
@@ -285,10 +290,10 @@ extension _AudioRadioSection on _AudioCenterScreenState {
                   final uri = Uri.tryParse(station.url.trim());
 
                   if (uri == null ||
-                      !uri.hasAuthority ||
-                      uri.host.isEmpty ||
-                      (uri.scheme != 'https' && uri.scheme != 'http')) {
-                    _message('رابط المحطة غير صالح؛ اختر محطة أخرى.');
+                      !_isSecureRadioStream(uri.toString())) {
+                    _message(
+                      'المحطة دي بتستخدم HTTP غير مشفّر؛ اختر محطة HTTPS آمنة.',
+                    );
                     return;
                   }
 
