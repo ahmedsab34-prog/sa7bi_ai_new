@@ -1,3 +1,4 @@
+
 // backend/src/ai/ai-router.js
 // Sa7bi AI - AI Provider Router
 //
@@ -168,6 +169,25 @@ export async function runTextOrVisionWithFallback({
         )
       : [];
 
+  const normalizedMessages =
+    Array.isArray(messages)
+      ? messages.filter(
+          (message) =>
+            message &&
+            typeof message === "object" &&
+            typeof message.content === "string" &&
+            message.content.trim()
+        )
+      : [];
+
+  const hasUserPrompt =
+    normalizedMessages.some(
+      (message) =>
+        message.role !== "assistant" &&
+        message.role !== "model" &&
+        message.content.trim()
+    );
+
   const forcedFallback =
     isForcedFallback(request);
 
@@ -291,13 +311,12 @@ export async function runTextOrVisionWithFallback({
   /* ------------------------------------------------------------------------ */
   /* Fallback: Workers AI Vision                                              */
   /* ------------------------------------------------------------------------ */
+  // Gemini can receive multiple images in a single request. Workers AI Vision
+  // is called once per image to match the configured Llama Vision interface.
   //
-  // Gemini can receive multiple images in a single request.
-  //
-  // The Workers AI vision provider is intentionally called
-  // once per image. This keeps the provider request shape
-  // compatible with the configured Llama Vision model.
-  //
+  // Important: the Flutter client already sends the actual analysis prompt in
+  // `messages`. Do not append a second generic prompt to that conversation.
+  // Only use `imagePrompt` as a fallback when the request has no user message.
 
   if (
     !isWorkersAIConfigured(env)
@@ -315,6 +334,14 @@ export async function runTextOrVisionWithFallback({
 
   const visionAnswers = [];
 
+  const fallbackVisionPrompt =
+    hasUserPrompt
+      ? ""
+      : (
+          imagePrompt ||
+          "حلل الصورة المرفقة بدقة، واقرأ النصوص الواضحة فيها، واشرح الأشياء المهمة الظاهرة فقط دون تخمين."
+        );
+
   for (
     let index = 0;
     index < images.length;
@@ -327,8 +354,7 @@ export async function runTextOrVisionWithFallback({
         messages,
 
         prompt:
-          imagePrompt ||
-          "حلل الصورة المرفقة بدقة، واقرأ النصوص الواضحة فيها، واشرح الأشياء المهمة الظاهرة فقط دون تخمين.",
+          fallbackVisionPrompt,
 
         systemInstruction:
           instructions,
