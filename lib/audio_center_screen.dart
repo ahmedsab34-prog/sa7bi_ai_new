@@ -12,6 +12,7 @@ import 'ai_service.dart';
 import 'audio_player_service.dart';
 import 'audio_rain_visualizer.dart';
 import 'services/chat_voice_service.dart';
+import 'services/religious_content_service.dart';
 
 part 'audio_quran_section.dart';
 part 'audio_radio_section.dart';
@@ -71,6 +72,11 @@ class _AudioCenterScreenState
   TafsirBook? _tafsirBook;
   List<TafsirItem> _tafsirItems = [];
   int? _tafsirSura;
+
+  List<TafsirTextBook> _tafsirTextBooks = [];
+  TafsirTextBook? _tafsirTextBook;
+  List<TafsirTextItem> _tafsirTextItems = [];
+  String _tafsirTextError = '';
 
   QuranCatalog? _quran;
   QuranReciter? _reciter;
@@ -145,6 +151,8 @@ class _AudioCenterScreenState
       _audioItems = [];
       _hadithItems = [];
       _tafsirItems = [];
+      _tafsirTextItems = [];
+      _tafsirTextError = '';
       _stations = [];
       _searchController.clear();
 
@@ -718,7 +726,7 @@ class _AudioCenterScreenState
 
   Future<void> _loadHadith() async {
     try {
-      final books = await AiService.getHadithBooks();
+      final books = await ReligiousContentService.getHadithBooks();
 
       if (!mounted) return;
 
@@ -728,7 +736,7 @@ class _AudioCenterScreenState
         selected = books.isNotEmpty ? books.first : null;
       }
 
-      final items = await AiService.searchHadith(
+      final items = await ReligiousContentService.searchHadith(
         query: _searchController.text.trim(),
         book: selected?.id,
         limit: 20,
@@ -741,14 +749,21 @@ class _AudioCenterScreenState
         _hadithBook = selected;
         _hadithItems = items;
         _error = items.isEmpty
-            ? 'لم يتم العثور على أحاديث حاليًا.'
+            ? 'لم يتم العثور على أحاديث تطابق البحث في المصدر الحالي.'
             : '';
       });
+    } on ReligiousContentException catch (error) {
+      if (mounted) {
+        setState(() {
+          _hadithItems = [];
+          _error = error.message;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
           _hadithItems = [];
-          _error = 'تعذر تحميل الأحاديث حاليًا.';
+          _error = 'تعذر تحميل الأحاديث بسبب مشكلة في الاتصال.';
         });
       }
     }
@@ -918,48 +933,93 @@ class _AudioCenterScreenState
   // ============================================================
 
   Future<void> _loadTafsir() async {
+    List<TafsirBook> audioBooks = [];
+    List<TafsirTextBook> textBooks = [];
+    List<TafsirItem> audioItems = [];
+    List<TafsirTextItem> textItems = [];
+    String audioError = '';
+    String textError = '';
+
     try {
-      final books = await AiService.getTafsirBooks();
+      audioBooks = await AiService.getTafsirBooks();
 
-      if (!mounted) return;
-
-      TafsirBook? selected = _tafsirBook;
-
-      if (selected == null || !books.contains(selected)) {
-        selected = books.isNotEmpty ? books.first : null;
+      TafsirBook? selectedAudio = _tafsirBook;
+      if (selectedAudio == null || !audioBooks.contains(selectedAudio)) {
+        selectedAudio = audioBooks.isNotEmpty ? audioBooks.first : null;
       }
 
-      if (selected == null) {
+      if (selectedAudio != null) {
+        audioItems = await AiService.searchTafsir(
+          tafsirId: selectedAudio.id,
+          query: _searchController.text.trim(),
+          sura: _tafsirSura,
+        );
+      }
+
+      if (audioBooks.isEmpty) {
+        audioError = 'لا توجد مصادر صوتية متاحة حاليًا.';
+      }
+
+      if (mounted) {
         setState(() {
-          _tafsirBooks = [];
-          _tafsirBook = null;
-          _tafsirItems = [];
-          _error = 'لم يتم العثور على كتب تفسير متاحة.';
+          _tafsirBooks = audioBooks;
+          _tafsirBook = selectedAudio;
+          _tafsirItems = audioItems;
+          _error = audioError;
         });
-        return;
+      }
+    } catch (_) {
+      audioError = 'تعذر تحميل قائمة التفسير الصوتي.';
+    }
+
+    try {
+      textBooks = await ReligiousContentService.getTafsirTextBooks();
+
+      TafsirTextBook? selectedText = _tafsirTextBook;
+      if (selectedText == null || !textBooks.contains(selectedText)) {
+        selectedText = textBooks.isNotEmpty ? textBooks.first : null;
       }
 
-      final items = await AiService.searchTafsir(
-        tafsirId: selected.id,
-        query: _searchController.text.trim(),
-        sura: _tafsirSura,
-      );
+      final query = _searchController.text.trim();
+      if (selectedText != null && query.isNotEmpty) {
+        textItems = await ReligiousContentService.searchTafsirText(
+          key: selectedText.key,
+          query: query,
+        );
+      }
 
-      if (!mounted) return;
+      if (textBooks.isEmpty) {
+        textError = 'لا توجد كتب تفسير نصية متاحة حاليًا.';
+      } else if (query.isEmpty) {
+        textError = 'اكتب كلمة أو عبارة للبحث في نص التفسير.';
+      } else if (textItems.isEmpty) {
+        textError = 'لم يتم العثور على نتائج في التفسير النصي.';
+      }
 
-      setState(() {
-        _tafsirBooks = books;
-        _tafsirBook = selected;
-        _tafsirItems = items;
-        _error = items.isEmpty
-            ? 'لم يتم العثور على نتائج تفسير حاليًا.'
-            : '';
-      });
+      if (mounted) {
+        setState(() {
+          _tafsirTextBooks = textBooks;
+          _tafsirTextBook = selectedText;
+          _tafsirTextItems = textItems;
+          _tafsirTextError = textError;
+          _error = audioError;
+        });
+      }
+    } on ReligiousContentException catch (error) {
+      if (mounted) {
+        setState(() {
+          _tafsirTextBooks = textBooks;
+          _tafsirTextItems = [];
+          _tafsirTextError = error.message;
+          _error = audioError;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _tafsirItems = [];
-          _error = 'تعذر تحميل التفسير حاليًا.';
+          _tafsirTextItems = [];
+          _tafsirTextError = 'تعذر تحميل التفسير النصي بسبب مشكلة في الاتصال.';
+          _error = audioError;
         });
       }
     }
@@ -1038,52 +1098,170 @@ class _AudioCenterScreenState
       children: [
         Row(
           children: [
-            Expanded(
-              child: _sectionTitle('التفسير'),
-            ),
+            Expanded(child: _sectionTitle('التفسير')),
             IconButton(
               tooltip: 'تحديث',
               onPressed: _loading ? null : _loadTafsir,
-              icon: Icon(
-                Icons.refresh_rounded,
-                color: _gold,
+              icon: Icon(Icons.refresh_rounded, color: _gold),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_tafsirTextBooks.isNotEmpty)
+          _dropdown<TafsirTextBook>(
+            value: _tafsirTextBook,
+            items: _tafsirTextBooks,
+            label: 'كتاب التفسير النصي',
+            text: (book) => book.name,
+            onChanged: (book) async {
+              if (book == null) return;
+              setState(() {
+                _tafsirTextBook = book;
+                _loading = true;
+              });
+              await _loadTafsir();
+              if (mounted) setState(() => _loading = false);
+            },
+          ),
+        if (_tafsirTextBook != null &&
+            _tafsirTextBook!.description.trim().isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            _tafsirTextBook!.description,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        if (_tafsirBooks.isNotEmpty)
+          _dropdown<TafsirBook>(
+            value: _tafsirBook,
+            items: _tafsirBooks,
+            label: 'مصدر التفسير الصوتي',
+            text: (book) => book.name,
+            onChanged: (book) async {
+              if (book == null) return;
+              setState(() {
+                _tafsirBook = book;
+                _loading = true;
+              });
+              await _loadTafsir();
+              if (mounted) setState(() => _loading = false);
+            },
+          ),
+        const SizedBox(height: 10),
+        _searchBox(),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'التفسير النصي',
+                style: TextStyle(
+                  color: _gold,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const Text(
+              'QuranEnc',
+              style: TextStyle(
+                color: Colors.white54,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        if (_tafsirBooks.isNotEmpty)
-          _dropdown<TafsirBook>(
-            value: _tafsirBook,
-            items: _tafsirBooks,
-            label: 'كتاب التفسير',
-            text: (book) => book.name,
-            onChanged: (book) async {
-              if (book == null) return;
-
-              setState(() {
-                _tafsirBook = book;
-                _loading = true;
-              });
-
-              await _loadTafsir();
-
-              if (mounted) {
-                setState(() {
-                  _loading = false;
-                });
-              }
-            },
+        if (_tafsirTextItems.isNotEmpty)
+          ..._tafsirTextItems.map(_tafsirTextCard)
+        else
+          _emptyText(
+            _tafsirTextError.isNotEmpty
+                ? _tafsirTextError
+                : 'اكتب كلمة للبحث في التفسير النصي.',
           ),
-        const SizedBox(height: 10),
-        _searchBox(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 18),
+        Text(
+          'التفسير الصوتي',
+          style: TextStyle(
+            color: _gold,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
         ..._tafsirItems.map((item) => _tafsirCard(item)),
         if (_tafsirItems.isEmpty)
           _emptyText(
-            _error.isNotEmpty ? _error : 'ابحث عن تفسير.',
+            _error.isNotEmpty ? _error : 'لا توجد نتائج صوتية مطابقة حاليًا.',
           ),
+        const SizedBox(height: 10),
+        _infoCard(
+          Icons.info_outline_rounded,
+          'مصادر المحتوى',
+          'النص من QuranEnc مع الحفاظ على النص ونسبته للمصدر، والصوت من مصدر التفسير الصوتي المتاح.',
+        ),
       ],
+    );
+  }
+
+  Widget _tafsirTextCard(TafsirTextItem item) {
+    final ayaRange = item.toAya > item.fromAya
+        ? 'الآيات ${item.fromAya} - ${item.toAya}'
+        : 'الآية ${item.fromAya}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _gold.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'سورة ${item.sura} • $ayaRange',
+                  style: TextStyle(
+                    color: _gold,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const Icon(Icons.menu_book_rounded, color: _gold, size: 19),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SelectableText(
+            item.text,
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.justify,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              height: 1.85,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Divider(color: Colors.white12, height: 1),
+          const SizedBox(height: 7),
+          Text(
+            'المصدر: ${item.source} • QuranEnc.com',
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+        ],
+      ),
     );
   }
 
