@@ -1,5 +1,4 @@
-
- // backend/src/media/radio.js
+// backend/src/media/radio.js
 // Sa7bi AI Backend - Radio Module
 // Version: 6.3.1
 
@@ -157,14 +156,42 @@ function isSafeHttpUrl(value) {
   }
 }
 
+function isSafeHttpsUrl(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value.trim());
+    const hostname = url.hostname.toLowerCase();
+
+    return url.protocol === "https:" &&
+      url.hostname.length > 0 &&
+      !url.username &&
+      !url.password &&
+      hostname !== "localhost" &&
+      hostname !== "127.0.0.1" &&
+      hostname !== "::1" &&
+      !hostname.endsWith(".localhost") &&
+      !hostname.endsWith(".local");
+  } catch (_) {
+    return false;
+  }
+}
+
 function normalizeStation(station, index = 0) {
   if (!station || typeof station !== "object") {
     return null;
   }
 
-  const streamUrl = station.url_resolved || station.url || null;
+  // Android blocks cleartext traffic, so choose a usable HTTPS stream.
+  // A resolved HTTP URL must not hide an HTTPS original URL.
+  const streamUrl = [
+    station.url_resolved,
+    station.url,
+  ].find((candidate) => isSafeHttpsUrl(candidate)) || null;
 
-  if (!isSafeHttpUrl(streamUrl)) {
+  if (!streamUrl) {
     return null;
   }
 
@@ -376,6 +403,7 @@ export async function handleRadioSearch(request) {
 
     const params = new URLSearchParams();
     params.set("hidebroken", "true");
+    params.set("is_https", "true");
     params.set("order", "votes");
     params.set("reverse", "true");
     params.set("limit", String(limit));
@@ -399,7 +427,7 @@ export async function handleRadioSearch(request) {
       try {
         const fallbackEndpoint =
           `${RADIO_BASE_URL}/stations/byname/${encodeURIComponent(query)}` +
-          `?hidebroken=true&order=votes&reverse=true&limit=${limit}`;
+          `?hidebroken=true&is_https=true&order=votes&reverse=true&limit=${limit}`;
 
         const fallbackData = await fetchRadioJson(fallbackEndpoint);
 
@@ -504,6 +532,7 @@ export async function handleRadioByCountry(countryCode, limit = 50) {
     const params = new URLSearchParams();
 
     params.set("hidebroken", "true");
+    params.set("is_https", "true");
     params.set("order", "votes");
     params.set("reverse", "true");
     params.set("limit", String(safeLimit));
@@ -575,10 +604,10 @@ export async function handleRadioStationClick(stationUuid) {
     const data = await fetchRadioJson(endpoint);
     const streamUrl = data?.url || null;
 
-    if (!isSafeHttpUrl(streamUrl)) {
+    if (!isSafeHttpsUrl(streamUrl)) {
       return json({
         ok: false,
-        error: "Station stream unavailable",
+        error: "Station HTTPS stream unavailable",
         backendVersion: BACKEND_VERSION,
       }, 404);
     }
@@ -609,7 +638,7 @@ export async function handleRadioStationClick(stationUuid) {
  * Check whether a radio stream URL is reachable.
  */
 export async function checkRadioStream(streamUrl) {
-  if (!isSafeHttpUrl(streamUrl)) {
+  if (!isSafeHttpsUrl(streamUrl)) {
     return false;
   }
 
