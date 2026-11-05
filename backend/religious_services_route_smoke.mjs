@@ -1,242 +1,125 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
-import worker from "./src/index-v2.js";
+// This smoke test validates route registration without importing the Worker
+// entry point. The Cloudflare Worker runtime uses platform-specific modules
+// which Node.js cannot load directly (for example cloudflare:workers).
+// Provider behavior is tested separately by the Hadith, Radio and Tafsir
+// provider smoke tests.
 
-const originalFetch = globalThis.fetch;
+const [baseWorkerSource, extendedWorkerSource] = await Promise.all([
+  readFile(new URL("./src/index.js", import.meta.url), "utf8"),
+  readFile(new URL("./src/index-v2.js", import.meta.url), "utf8"),
+]);
 
-function jsonResponse(value, status = 200) {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-    },
-  });
+function getRouteBlock(source, routePath, label) {
+  const marker = `path === "${routePath}"`;
+  const position = source.indexOf(marker);
+
+  assert.notEqual(
+    position,
+    -1,
+    `${label}: route ${routePath} is not registered.`,
+  );
+
+  return source.slice(
+    Math.max(0, position - 180),
+    Math.min(source.length, position + 900),
+  );
 }
 
-async function workerGet(path) {
-  const request = new Request(
-    `https://worker.test${path}`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-    },
+function assertGetRoute(source, routePath, handlerName, label) {
+  const block = getRouteBlock(source, routePath, label);
+
+  assert.match(
+    block,
+    /request\.method\s*===\s*"GET"/,
+    `${label}: ${routePath} must be a GET route.`,
   );
 
-  const response = await worker.fetch(request, {});
-  const body = await response.json();
-
-  return {
-    response,
-    body,
-  };
+  assert.ok(
+    block.includes(`return ${handlerName}(`),
+    `${label}: ${routePath} must dispatch to ${handlerName}.`,
+  );
 }
 
-try {
-  globalThis.fetch = async (input) => {
-    const url = new URL(String(input));
+// Core Worker provider routes.
+const coreRoutes = [
+  ["/v1/hadith", "handleHadithSearch"],
+  ["/v1/hadith/books", "handleHadithBooks"],
+  ["/v1/tafsir", "handleTafsirSearch"],
+  ["/v1/tafsir/books", "handleTafsirBooks"],
+  ["/v1/tafsir/audio", "handleTafsirAudio"],
+  ["/v1/radio/search", "handleRadioSearch"],
+  ["/v1/radio/countries", "handleRadioCountries"],
+  ["/v1/radio/country", "handleRadioByCountry"],
+  ["/v1/radio/station", "handleRadioStationClick"],
+  ["/v1/radio/stations", "handleRadioSearch"],
+  ["/v1/radio/health", "handleRadioHealth"],
+];
 
-    // HADITH PROVIDER
-    if (url.hostname === "api.hadith.gading.dev") {
-      assert.equal(
-        url.pathname,
-        "/books/bukhari",
-        "Hadith route must use the selected book slug.",
-      );
-
-      assert.equal(
-        url.searchParams.get("range"),
-        "1-300",
-        "Hadith route must request a supported range.",
-      );
-
-      return jsonResponse({
-        data: {
-          hadiths: [
-            {
-              number: 1,
-              arab: "إنما الأعمال بالنيات",
-            },
-            {
-              number: 2,
-              arab: "الدين النصيحة",
-            },
-          ],
-        },
-      });
-    }
-
-    // RADIO BROWSER PROVIDER
-    if (
-      url.hostname.endsWith("api.radio-browser.info")
-    ) {
-      assert.equal(
-        url.pathname,
-        "/json/stations/search",
-      );
-
-      assert.equal(
-        url.searchParams.get("countrycode"),
-        "EG",
-      );
-
-      assert.equal(
-        url.searchParams.get("is_https"),
-        "true",
-        "Radio requests must ask the provider for HTTPS streams.",
-      );
-
-      return jsonResponse([
-        {
-          stationuuid: "route-smoke-radio-1",
-          name: "Sa7bi Test Radio",
-          url: "https://radio.example.test/live",
-          url_resolved: "https://radio.example.test/live",
-          country: "Egypt",
-          countrycode: "EG",
-          codec: "MP3",
-          bitrate: 128,
-          lastcheckok: 1,
-        },
-        {
-          stationuuid: "route-smoke-radio-2",
-          name: "Unsafe HTTP Radio",
-          url: "http://radio.example.test/live",
-          url_resolved: "http://radio.example.test/live",
-          country: "Egypt",
-          countrycode: "EG",
-          lastcheckok: 1,
-        },
-      ]);
-    }
-
-    // QURANENC PROVIDER
-    if (url.hostname === "quranenc.com") {
-      if (
-        url.pathname ===
-        "/api/v1/tafsirs/list/ar"
-      ) {
-        return jsonResponse({
-          tafsirs: [
-            {
-              key: "arabic_saadi",
-              language_iso_code: "ar",
-              title: "تفسير السعدي",
-              description: "تفسير عربي",
-              version: "1.0",
-            },
-          ],
-        });
-      }
-
-      if (
-        url.pathname ===
-        "/api/v1/tafsir/sura/arabic_saadi/1"
-      ) {
-        return jsonResponse({
-          result: [
-            {
-              id: 1,
-              sura: 1,
-              from_aya: 1,
-              to_aya: 7,
-              type: "tafsir",
-              text: "<p>نص تفسير اختباري من المصدر.</p>",
-            },
-          ],
-        });
-      }
-    }
-
-    throw new Error(
-      `Unexpected provider request: ${url.toString()}`,
-    );
-  };
-
-  // ----------------------------------------------------------
-  // HADITH ROUTE THROUGH index-v2
-  // ----------------------------------------------------------
-
-  const hadithResult = await workerGet(
-    "/v1/hadith?book=bukhari&limit=3",
+for (const [routePath, handlerName] of coreRoutes) {
+  assertGetRoute(
+    baseWorkerSource,
+    routePath,
+    handlerName,
+    "Core Worker",
   );
-
-  assert.equal(hadithResult.response.status, 200);
-  assert.equal(hadithResult.body.ok, true);
-  assert.equal(
-    hadithResult.body.items.length,
-    2,
-  );
-  assert.equal(
-    hadithResult.body.items[0].text,
-    "إنما الأعمال بالنيات",
-  );
-
-  // ----------------------------------------------------------
-  // RADIO ROUTE THROUGH index-v2
-  // ----------------------------------------------------------
-
-  const radioResult = await workerGet(
-    "/v1/radio/stations?country=EG&limit=10",
-  );
-
-  assert.equal(radioResult.response.status, 200);
-  assert.equal(radioResult.body.ok, true);
-  assert.equal(
-    radioResult.body.stations.length,
-    1,
-    "Only the valid HTTPS station should be returned.",
-  );
-  assert.equal(
-    radioResult.body.stations[0].streamUrl,
-    "https://radio.example.test/live",
-  );
-
-  // ----------------------------------------------------------
-  // QURANENC TAFSIR BOOKS ROUTE THROUGH index-v2
-  // ----------------------------------------------------------
-
-  const tafsirBooksResult = await workerGet(
-    "/v1/tafsir-text/books",
-  );
-
-  assert.equal(
-    tafsirBooksResult.response.status,
-    200,
-  );
-  assert.equal(
-    tafsirBooksResult.body.ok,
-    true,
-  );
-  assert.equal(
-    tafsirBooksResult.body.items[0].key,
-    "arabic_saadi",
-  );
-
-  // ----------------------------------------------------------
-  // QURANENC TAFSIR CONTENT ROUTE THROUGH index-v2
-  // ----------------------------------------------------------
-
-  const tafsirResult = await workerGet(
-    "/v1/tafsir-text?key=arabic_saadi&sura=1",
-  );
-
-  assert.equal(tafsirResult.response.status, 200);
-  assert.equal(tafsirResult.body.ok, true);
-  assert.equal(tafsirResult.body.items.length, 1);
-  assert.equal(
-    tafsirResult.body.items[0].text,
-    "نص تفسير اختباري من المصدر.",
-  );
-  assert.equal(
-    tafsirResult.body.items[0].source,
-    "QuranEnc",
-  );
-
-  console.log(
-    "PASS: Hadith, Radio and QuranEnc Tafsir routes through index-v2.",
-  );
-} finally {
-  globalThis.fetch = originalFetch;
 }
+
+// QuranEnc text routes are additive and live in the extended Worker entry.
+const tafsirTextRoutes = [
+  ["/v1/tafsir-text/books", "handleTafsirTextBooks"],
+  ["/v1/tafsir-text", "handleTafsirText"],
+];
+
+for (const [routePath, handlerName] of tafsirTextRoutes) {
+  assertGetRoute(
+    extendedWorkerSource,
+    routePath,
+    handlerName,
+    "Extended Worker",
+  );
+}
+
+// Confirm the extended Worker delegates all other API routes to index.js.
+assert.match(
+  extendedWorkerSource,
+  /from\s+["']\.\/index\.js["']/,
+  "Extended Worker must import the core Worker entry point.",
+);
+
+assert.ok(
+  extendedWorkerSource.includes("return worker.fetch(request, env, ctx);"),
+  "Extended Worker must delegate unhandled routes to the core Worker.",
+);
+
+// Confirm the route handlers are connected to their real provider modules.
+assert.match(
+  baseWorkerSource,
+  /handleHadithSearch[\s\S]*?from\s+["']\.\/content\/hadith\.js["']/,
+  "Hadith handler must be imported from the Hadith provider module.",
+);
+
+assert.match(
+  baseWorkerSource,
+  /handleTafsirSearch[\s\S]*?from\s+["']\.\/content\/tafsir\.js["']/,
+  "MP3Quran Tafsir handler must be imported from the Tafsir provider module.",
+);
+
+assert.match(
+  baseWorkerSource,
+  /handleRadioSearch[\s\S]*?from\s+["']\.\/media\/radio\.js["']/,
+  "Radio handlers must be imported from the Radio provider module.",
+);
+
+assert.match(
+  extendedWorkerSource,
+  /handleTafsirText[\s\S]*?from\s+["']\.\/content\/tafsir-text\.js["']/,
+  "QuranEnc text handlers must be imported from the Tafsir text provider module.",
+);
+
+console.log(
+  "religious services route wiring smoke test: PASS " +
+  "(route registration verified; provider behavior is tested separately).",
+);
