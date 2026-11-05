@@ -50,7 +50,6 @@ class HomeScreenState extends State<HomeScreen>
 
     WidgetsBinding.instance.addObserver(this);
 
-    // تحديث دوري أثناء استخدام التطبيق فقط.
     _autoRefreshTimer = Timer.periodic(
       _autoRefreshInterval,
       (_) {
@@ -89,7 +88,6 @@ class HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
-  /// يعرض الأخبار المحفوظة أولًا، ثم يجلب الأحدث من الإنترنت.
   Future<void> _initializeNews() async {
     await _loadCachedNews();
 
@@ -98,7 +96,6 @@ class HomeScreenState extends State<HomeScreen>
     await _loadNews();
   }
 
-  /// يستدعيها الشريط السفلي عند الضغط على الرئيسية مرة أخرى.
   Future<void> refreshNews() =>
       _loadNews(pullToRefresh: true);
 
@@ -328,7 +325,6 @@ class HomeScreenState extends State<HomeScreen>
             onAudioTap: widget.onAudio,
           ),
 
-          // الهيدر والإعلان يظلان ثابتين أثناء تمرير الأخبار.
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
             child: const _HomeAdBanner(),
@@ -550,7 +546,6 @@ class HomeScreenState extends State<HomeScreen>
         ),
       );
 
-      // مدخل ريلز واحد بعد كل خمسة أخبار فقط.
       if ((i + 1) % 5 == 0) {
         widgets.add(
           Padding(
@@ -564,7 +559,6 @@ class HomeScreenState extends State<HomeScreen>
     return widgets;
   }
 
-  /// بطاقة خبر أفقية صغيرة: الصورة على اليمين والتفاصيل على اليسار.
   Widget _buildNewsCard(NewsItem item, int index) {
     final title = item.title.trim().isEmpty
         ? 'خبر ${index + 1}'
@@ -782,14 +776,21 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
 
     if (MonetizationConfig.admobEnabled &&
         MonetizationConfig.homeBannerEnabled) {
-      _loadBanner();
+      unawaited(_loadBanner());
     }
   }
 
   @override
   void dispose() {
     _retryTimer?.cancel();
-    _banner?.dispose();
+
+    final banner = _banner;
+    _banner = null;
+
+    if (banner != null) {
+      AdsService.instance.releaseBanner(banner);
+    }
+
     super.dispose();
   }
 
@@ -807,7 +808,9 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
           .timeout(const Duration(seconds: 12));
 
       if (!mounted) {
-        ad?.dispose();
+        if (ad != null) {
+          AdsService.instance.releaseBanner(ad);
+        }
         return;
       }
 
@@ -825,7 +828,9 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
       _scheduleRetry();
     } finally {
       if (mounted) {
-        setState(() => _loading = false);
+        setState(() {
+          _loading = false;
+        });
       }
     }
   }
@@ -843,7 +848,9 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
     _retryTimer = Timer(
       Duration(seconds: 4 * _attempts),
       () {
-        if (mounted) unawaited(_loadBanner());
+        if (mounted) {
+          unawaited(_loadBanner());
+        }
       },
     );
   }
