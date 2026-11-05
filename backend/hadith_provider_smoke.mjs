@@ -1,4 +1,3 @@
-
 import assert from "node:assert/strict";
 
 import {
@@ -12,23 +11,33 @@ async function call(query = "") {
   return handleHadithSearch(new Request(url));
 }
 
-try {
-  // مصدر يعمل ويرجع حديثًا عربيًا.
-  globalThis.fetch = async () => new Response(JSON.stringify({
-    data: {
-      hadiths: [
-        {
-          number: 1,
-          arab: "إنما الأعمال بالنيات",
-        },
-      ],
-    },
-  }), {
-    status: 200,
+function jsonResponse(value, status = 200) {
+  return new Response(JSON.stringify(value), {
+    status,
     headers: {
       "Content-Type": "application/json",
     },
   });
+}
+
+try {
+  // The provider requires a bounded range. Verify both path and range.
+  globalThis.fetch = async (url) => {
+    const requested = new URL(String(url));
+    assert.equal(requested.pathname, "/books/bukhari");
+    assert.equal(requested.searchParams.get("range"), "1-300");
+
+    return jsonResponse({
+      data: {
+        hadiths: [
+          {
+            number: 1,
+            arab: "إنما الأعمال بالنيات",
+          },
+        ],
+      },
+    });
+  };
 
   const success = await call("?book=bukhari&limit=3");
   const successBody = await success.json();
@@ -42,7 +51,7 @@ try {
     "إنما الأعمال بالنيات",
   );
 
-  // المصدر يعمل لكن نص البحث غير موجود.
+  // A real search with no matching text is an empty success, not an outage.
   const noMatch = await call(
     "?book=bukhari&q=كلمة_غير_موجودة",
   );
@@ -53,16 +62,38 @@ try {
   assert.equal(noMatchBody.ok, true);
   assert.equal(noMatchBody.count, 0);
 
-  // المصدر متعطل: يجب ألا يرجع نجاحًا وهميًا.
-  globalThis.fetch = async () => new Response(
-    "upstream unavailable",
-    {
+  // Correct provider slug for Sunan Abi Dawud.
+  globalThis.fetch = async (url) => {
+    const requested = new URL(String(url));
+    assert.equal(requested.pathname, "/books/abu-daud");
+    assert.equal(requested.searchParams.get("range"), "1-300");
+
+    return jsonResponse({
+      data: {
+        hadiths: [
+          {
+            number: 1,
+            arab: "حديث تجريبي من أبي داود",
+          },
+        ],
+      },
+    });
+  };
+
+  const abuDaud = await call("?book=abu-daud&limit=1");
+  const abuDaudBody = await abuDaud.json();
+
+  assert.equal(abuDaud.status, 200);
+  assert.equal(abuDaudBody.items[0].book, "abu-daud");
+
+  // Provider outage must never be reported as an empty successful search.
+  globalThis.fetch = async () =>
+    new Response("upstream unavailable", {
       status: 503,
       headers: {
         "Content-Type": "text/plain",
       },
-    },
-  );
+    });
 
   const unavailable = await call("?book=bukhari");
   const unavailableBody = await unavailable.json();
