@@ -151,41 +151,6 @@ extension _AudioQuranSection on _AudioCenterScreenState {
   }
 
   // ============================================================
-  // CLEAR OLD QUEUE AND START A COMPLETE QURAN QUEUE
-  // ============================================================
-
-  Future<void> _replaceAudioQueue(
-    Sa7biAudioHandler handler,
-    List<MediaItem> items,
-  ) async {
-    if (items.isEmpty) {
-      throw StateError('Quran queue is empty');
-    }
-
-    // Stop the previous source first.
-    await handler.stop();
-
-    // Remove every item from the previous source.
-    // Removing from the end avoids shifting the next index.
-    while (handler.queue.value.isNotEmpty) {
-      final lastIndex = handler.queue.value.length - 1;
-
-      await handler.removeQueueItemAt(lastIndex);
-    }
-
-    // Add the complete Quran queue in one operation.
-    // The handler prepares the queue without starting playback.
-    await handler.addQueueItems(items);
-
-    if (handler.queue.value.isEmpty) {
-      throw StateError('Quran queue could not be prepared');
-    }
-
-    // Start from the first item, which is the selected sura.
-    await handler.skipToQueueItem(0);
-  }
-
-  // ============================================================
   // PLAY QURAN
   // ============================================================
 
@@ -238,8 +203,6 @@ extension _AudioQuranSection on _AudioCenterScreenState {
     });
 
     try {
-      final handler = await AudioController.initialize();
-
       final queueItems = <MediaItem>[];
 
       // Build the complete queue before playback begins.
@@ -278,8 +241,7 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         return;
       }
 
-      await _replaceAudioQueue(
-        handler,
+      await AudioController.replaceQueueAndPlay(
         queueItems,
       );
 
