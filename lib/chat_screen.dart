@@ -322,6 +322,9 @@ class _ChatScreenState extends State<ChatScreen> {
             text: error.message,
             isUser: false,
           );
+          if (_isSafeProviderFailure(error)) {
+            _offerSafeTextRetry(text, history);
+          }
         }
       } catch (_) {
         if (mounted) {
@@ -337,6 +340,110 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } finally {
       _sending = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  bool _isSafeProviderFailure(AiRequestException error) {
+    return error.statusCode == 502 &&
+        error.message ==
+            'تعذر تشغيل الذكاء الاصطناعي حاليًا. حاول مرة أخرى.';
+  }
+
+  void _offerSafeTextRetry(
+    String prompt,
+    List<Map<String, String>> history,
+  ) {
+    if (!mounted) return;
+    final savedHistory = history
+        .map((item) => Map<String, String>.from(item))
+        .toList(growable: false);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF202633),
+          duration: const Duration(seconds: 14),
+          content: const Text(
+            'فشل مزوّد الذكاء الاصطناعي. يمكنك إعادة المحاولة الآن.',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(color: Colors.white),
+          ),
+          action: SnackBarAction(
+            label: 'إعادة المحاولة',
+            textColor: const Color(0xFFFFD76A),
+            onPressed: () {
+              _retryTextRequest(prompt, savedHistory);
+            },
+          ),
+        ),
+      );
+  }
+
+  Future<void> _retryTextRequest(
+    String prompt,
+    List<Map<String, String>> history,
+  ) async {
+    if (!mounted ||
+        !_initialized ||
+        _sending ||
+        _generatingImage ||
+        _chatController.isLoading) {
+      return;
+    }
+    _sending = true;
+    try {
+      await _creditsService.initialize();
+      final canAfford = await _creditsService.canAfford(
+        CreditsConfig.textMessageCost,
+      );
+      if (!canAfford) {
+        _showMessage('رصيدك من Credits غير كافٍ لإعادة المحاولة.');
+        return;
+      }
+      _chatController.setLoading(true);
+      try {
+        final reply = await AiRequestService.getResponse(
+          prompt: prompt,
+          serviceTitle: _title,
+          serviceContext: widget.serviceContext,
+          history: history,
+        );
+        if (mounted) {
+          await _chatController.addTextMessage(
+            text: reply,
+            isUser: false,
+          );
+        }
+      } on AiRequestException catch (error) {
+        if (mounted) {
+          await _chatController.addTextMessage(
+            text: error.message,
+            isUser: false,
+          );
+          if (_isSafeProviderFailure(error)) {
+            _offerSafeTextRetry(prompt, history);
+          }
+        }
+      } catch (_) {
+        if (mounted) {
+          await _chatController.addTextMessage(
+            text: 'حصلت مشكلة مؤقتة أثناء إعادة المحاولة.',
+            isUser: false,
+          );
+        }
+      } finally {
+        _chatController.setLoading(false);
+        await _creditsService.refresh();
+        _scrollToBottom();
+      }
+    } catch (_) {
+      if (mounted) {
+        _showMessage('تعذر التحقق من الرصيد أو بدء إعادة المحاولة.');
+      }
+    } finally {
+      _sending = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -544,8 +651,9 @@ class _ChatScreenState extends State<ChatScreen> {
   // ============================================================
 
   Future<void> _analyzeImageCollection(
-    List<Uint8List> images,
-  ) async {
+    List<Uint8List> images, {
+    bool addUserMessage = true,
+  }) async {
     if (images.isEmpty || _chatController.isLoading) {
       return;
     }
@@ -559,13 +667,15 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    await _chatController.addImageMessage(
-      text: images.length > 1
-          ? 'أرسلت ${images.length} صور لتحليلها.'
-          : 'أرسلت صورة لتحليلها.',
-      isUser: true,
-      image: images.first,
-    );
+    if (addUserMessage) {
+      await _chatController.addImageMessage(
+        text: images.length > 1
+            ? 'أرسلت ${images.length} صور لتحليلها.'
+            : 'أرسلت صورة لتحليلها.',
+        isUser: true,
+        image: images.first,
+      );
+    }
 
     _scrollToBottom();
     _chatController.setLoading(true);
@@ -594,6 +704,9 @@ class _ChatScreenState extends State<ChatScreen> {
           text: error.message,
           isUser: false,
         );
+        if (_isSafeProviderFailure(error)) {
+          _offerSafeImageRetry(images);
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -605,622 +718,3 @@ class _ChatScreenState extends State<ChatScreen> {
     } finally {
       _chatController.setLoading(false);
       await _creditsService.refresh();
-      _scrollToBottom();
-    }
-  }
-
-  // ============================================================
-  // VIDEO
-  // ============================================================
-
-  Future<void> _pickVideo() async {
-    if (_chatController.isLoading || _generatingImage) {
-      return;
-    }
-
-    final video = await _mediaService.pickVideo();
-
-    if (video == null) return;
-
-    final fileName = video.name.trim().isEmpty ? 'فيديو' : video.name;
-
-    final canAfford = await _creditsService.canAfford(
-      CreditsConfig.videoAnalysisCost,
-    );
-
-    if (!canAfford) {
-      _showMessage('رصيدك من Credits غير كافٍ لتحليل الفيديو.');
-      return;
-    }
-
-    await _chatController.addVideoMessage(
-      text: 'أرسلت فيديو: $fileName\nجاري تجهيز لقطات منه للتحليل...',
-      isUser: true,
-    );
-
-    _scrollToBottom();
-    _chatController.setLoading(true);
-
-    try {
-      final frames = await VideoAnalysisService.extractFrames(video);
-
-      if (frames.isEmpty) {
-        throw const AiRequestException(
-          'لم نستطع استخراج لقطات من الفيديو. جرّب فيديو آخر أو أقصر.',
-        );
-      }
-
-      final reply = await AiRequestService.analyzeVideoFrames(
-        frames,
-        serviceTitle: _title,
-        serviceContext: widget.serviceContext,
-      );
-
-      if (mounted) {
-        await _chatController.addTextMessage(
-          text: reply,
-          isUser: false,
-        );
-      }
-    } on AiRequestException catch (error) {
-      if (mounted) {
-        await _chatController.addTextMessage(
-          text: error.message,
-          isUser: false,
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        await _chatController.addTextMessage(
-          text: 'حصل خطأ أثناء تحليل الفيديو. حاول بفيديو أقصر.',
-          isUser: false,
-        );
-      }
-    } finally {
-      _chatController.setLoading(false);
-      await _creditsService.refresh();
-      _scrollToBottom();
-    }
-  }
-
-  // ============================================================
-  // SPEECH TO TEXT
-  // ============================================================
-
-  Future<void> _toggleSpeechToText() async {
-    if (_chatController.isLoading || _generatingImage) {
-      return;
-    }
-
-    if (_listening) {
-      await _voiceService.stopListening();
-
-      if (mounted) {
-        setState(() {
-          _listening = false;
-        });
-      }
-
-      return;
-    }
-
-    final permission = await Permission.microphone.request();
-
-    if (!permission.isGranted) {
-      _showMessage('اسمح للتطبيق باستخدام الميكروفون.');
-      return;
-    }
-
-    final started = await _voiceService.startListening(
-      localeId: 'ar-EG',
-      onResult: (String text, bool isFinal) {
-        if (!mounted) return;
-
-        if (text.trim().isNotEmpty) {
-          _textController.text = text.trim();
-          _textController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _textController.text.length),
-          );
-        }
-
-        setState(() {
-          _listening = !isFinal;
-        });
-
-        if (isFinal && _textController.text.trim().isNotEmpty) {
-          _send();
-        }
-      },
-    );
-
-    if (!mounted) return;
-
-    if (!started) {
-      setState(() {
-        _listening = false;
-      });
-
-      _showMessage('التعرف على الصوت غير متاح على الهاتف حاليًا.');
-      return;
-    }
-
-    setState(() {
-      _listening = true;
-    });
-  }
-
-  // ============================================================
-  // TEXT TO SPEECH
-  // ============================================================
-
-  Future<void> _voiceAction() async {
-    if (_voiceService.isSpeaking) {
-      await _voiceService.stopSpeaking();
-
-      if (mounted) {
-        setState(() {});
-      }
-
-      return;
-    }
-
-    ChatMessage? latestAi;
-
-    for (final message in _chatController.messages.reversed) {
-      if (!message.isUser && message.text.trim().isNotEmpty) {
-        latestAi = message;
-        break;
-      }
-    }
-
-    if (latestAi == null) {
-      _showMessage('لسه مفيش رد من صاحبي عشان يتقرأ.');
-      return;
-    }
-
-    final cleaned = _cleanSpeech(latestAi.text);
-    final initialized = await _voiceService.initializeTts();
-
-    if (!initialized) {
-      _showMessage('تعذر تهيئة الصوت على الهاتف حاليًا.');
-      return;
-    }
-
-    final success = await _voiceService.speak(
-      cleaned,
-      language: 'ar-EG',
-      rate: 0.48,
-      pitch: 1.0,
-      volume: 1.0,
-    );
-
-    if (!success) {
-      _showMessage('تعذر تشغيل الصوت حاليًا.');
-    }
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  // ============================================================
-  // IMAGE GENERATION / EDITING
-  // ============================================================
-
-  Future<void> _generateImage(
-    String prompt, {
-    List<Uint8List> images = const [],
-    bool isEditing = false,
-  }) async {
-    if (_chatController.isLoading || _generatingImage) {
-      return;
-    }
-
-    final cost = CreditsConfig.imageGenerationCost;
-
-    final canAfford = await _creditsService.canAfford(cost);
-
-    if (!canAfford) {
-      _showMessage(
-        isEditing
-            ? 'رصيدك من Credits غير كافٍ لتعديل الصورة.'
-            : 'رصيدك من Credits غير كافٍ لإنشاء الصورة.',
-      );
-      return;
-    }
-
-    setState(() {
-      _generatingImage = true;
-    });
-
-    await _chatController.addTextMessage(
-      text: isEditing
-          ? 'طلب تعديل ${images.length > 1 ? 'الصور' : 'الصورة'}:\n$prompt'
-          : 'طلب إنشاء صورة:\n$prompt',
-      isUser: true,
-    );
-
-    _scrollToBottom();
-    _chatController.setLoading(true);
-
-    try {
-      final result = await _imageService.generate(
-        prompt,
-        serviceContext: widget.serviceContext,
-        serviceTitle: _title,
-        images: images,
-      );
-
-      if (!mounted) return;
-
-      if (!result.isSuccess) {
-        await _chatController.addTextMessage(
-          text: result.error ?? 'تعذر تنفيذ طلب الصورة حاليًا.',
-          isUser: false,
-        );
-        return;
-      }
-
-      if (result.bytes != null && result.bytes!.isNotEmpty) {
-        await _chatController.addImageMessage(
-          text: isEditing
-              ? 'تم تعديل الصورة بالذكاء الاصطناعي.'
-              : 'تم إنشاء الصورة.',
-          isUser: false,
-          image: result.bytes!,
-        );
-      } else if (result.imageUrl != null &&
-          result.imageUrl!.trim().isNotEmpty) {
-        await _chatController.addTextMessage(
-          text:
-              '${isEditing ? 'تم تعديل الصورة' : 'تم إنشاء الصورة'}:\n'
-              '${result.imageUrl}',
-          isUser: false,
-        );
-      }
-    } on AiRequestException catch (error) {
-      if (mounted) {
-        await _chatController.addTextMessage(
-          text: error.message,
-          isUser: false,
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        await _chatController.addTextMessage(
-          text: 'حصل خطأ أثناء تنفيذ طلب الصورة. حاول مرة أخرى.',
-          isUser: false,
-        );
-      }
-    } finally {
-      _chatController.setLoading(false);
-      await _creditsService.refresh();
-
-      if (mounted) {
-        setState(() {
-          _generatingImage = false;
-        });
-      }
-
-      _scrollToBottom();
-    }
-  }
-
-  Future<String?> _showEditPrompt() async {
-    final controller = TextEditingController();
-
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF151923),
-          title: const Text(
-            'تعديل الصورة',
-            textDirection: TextDirection.rtl,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          content: TextField(
-            controller: controller,
-            maxLines: 5,
-            autofocus: true,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'اكتب التعديل المطلوب، مثل: غيّر الخلفية أو أضف...',
-              hintTextDirection: TextDirection.rtl,
-              filled: true,
-              fillColor: const Color(0xFF202532),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                controller.text,
-              ),
-              child: const Text('تعديل'),
-            ),
-          ],
-        );
-      },
-    );
-
-    controller.dispose();
-    return result;
-  }
-
-  Future<void> _showImageGenerator() async {
-    if (_chatController.isLoading || _generatingImage || _sending) {
-      return;
-    }
-
-    final promptController = TextEditingController();
-
-    final prompt = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF151923),
-          title: Text(
-            _chatController.isKhalasana
-                ? 'خلصانة AI — إنشاء صورة'
-                : 'إنشاء صورة',
-            textDirection: TextDirection.rtl,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          content: TextField(
-            controller: promptController,
-            maxLines: 5,
-            autofocus: true,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.right,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'اكتب وصف الصورة...',
-              hintTextDirection: TextDirection.rtl,
-              filled: true,
-              fillColor: const Color(0xFF202532),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('إلغاء'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-                promptController.text,
-              ),
-              child: const Text('إنشاء'),
-            ),
-          ],
-        );
-      },
-    );
-
-    promptController.dispose();
-
-    if (prompt == null || prompt.trim().isEmpty) {
-      return;
-    }
-
-    await _generateImage(prompt.trim());
-  }
-
-  // ============================================================
-  // CLEAR
-  // ============================================================
-
-  Future<void> _clearChat() async {
-    if (_chatController.isLoading || _sending || _generatingImage) {
-      return;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF171B25),
-          title: const Text(
-            'مسح المحادثة؟',
-            textDirection: TextDirection.rtl,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          content: const Text(
-            'سيتم حذف المحادثة المحفوظة لهذه الخدمة فقط.',
-            textDirection: TextDirection.rtl,
-            style: TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('إلغاء'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('مسح'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) return;
-
-    await _chatController.clearChat();
-
-    if (mounted) {
-      _showMessage('تم مسح محادثة $_title فقط.');
-    }
-  }
-
-  // ============================================================
-  // HELPERS
-  // ============================================================
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-
-      final max = _scrollController.position.maxScrollExtent;
-
-      _scrollController.animateTo(
-        max,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    });
-  }
-
-  bool _looksLikeImageRequest(String text) {
-    return ImageIntentDetector.isGenerationRequest(text);
-  }
-
-  String _cleanSpeech(String value) {
-    var text = value;
-
-    text = text.replaceAll(
-      RegExp(
-        r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
-        unicode: true,
-      ),
-      ' ',
-    );
-
-    text = text.replaceAll(RegExp(r'[*_#~`]+'), ' ');
-    text = text.replaceAll(RegExp(r'\s+'), ' ');
-
-    return text.trim();
-  }
-
-  void _showMessage(String text) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF202633),
-          content: Text(
-            text,
-            textDirection: TextDirection.rtl,
-            style: const TextStyle(color: Colors.white),
-          ),
-        ),
-      );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_initialized) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF070A10),
-        body: Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFFFFD76A),
-          ),
-        ),
-      );
-    }
-
-    return AnimatedBuilder(
-      animation: _chatController,
-      builder: (context, _) {
-        return Scaffold(
-          backgroundColor: const Color(0xFF070A10),
-          appBar: widget.embedded ? null : AppBar(
-            elevation: 0,
-            backgroundColor: const Color(0xFF0C1018),
-            foregroundColor: Colors.white,
-            centerTitle: true,
-            title: Text(
-              _title,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            actions: [
-              if (_voiceService.isSpeaking)
-                IconButton(
-                  tooltip: 'إيقاف الصوت',
-                  onPressed: () async {
-                    await _voiceService.stopSpeaking();
-
-                    if (mounted) {
-                      setState(() {});
-                    }
-                  },
-                  icon: const Icon(
-                    Icons.volume_off_rounded,
-                    color: Color(0xFFFFD76A),
-                  ),
-                ),
-            ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(56),
-              child: SizedBox(
-                height: 56,
-                child: AppHeader(
-                  onProfileTap: _openProfile,
-                  onAudioTap: _openAudioCenter,
-                ),
-              ),
-            ),
-          ),
-          body: ChatScreenBody(
-            chatController: _chatController,
-            profileService: _profileService,
-            textController: _textController,
-            focusNode: _focusNode,
-            scrollController: _scrollController,
-            title: _title,
-            topic: _chatController.isKhalasana
-                ? 'محادثة تتغير حسب الموضوع'
-                : widget.serviceContext,
-            enabled: !_chatController.isLoading &&
-                !_sending &&
-                !_generatingImage,
-            isListening: _listening,
-            isGeneratingImage: _generatingImage,
-            onSend: _send,
-            onCamera: _takePhoto,
-            onGallery: _pickImage,
-            onVideo: _pickVideo,
-            onVoice: _voiceAction,
-            onText: () {
-              _focusNode.requestFocus();
-            },
-            onSpeechToText: _toggleSpeechToText,
-            onImageGeneration: _showImageGenerator,
-            onClear: _clearChat,
-          ),
-        );
-      },
-    );
-  }
-}
