@@ -1,10 +1,9 @@
-
 import 'package:flutter/material.dart';
 
 import '../services/chat_theme_service.dart';
 import 'chat_ai_avatar.dart';
 
-/// واجهة بداية المحادثة بتصميم مدمج ومساحة أوسع.
+/// واجهة بداية المحادثة.
 class ChatEmptyState extends StatelessWidget {
   final ChatThemeData theme;
   final String title;
@@ -12,6 +11,12 @@ class ChatEmptyState extends StatelessWidget {
   final ValueChanged<String>? onSuggestionTap;
   final List<String> suggestions;
   final bool showTitle;
+
+  /// عنوان يظهر في نفس السطر مع العبارة المصاحبة.
+  final String? inlineHeading;
+
+  /// العبارة المصاحبة للعنوان المدمج.
+  final String? inlineTagline;
 
   const ChatEmptyState({
     super.key,
@@ -21,6 +26,8 @@ class ChatEmptyState extends StatelessWidget {
     this.onSuggestionTap,
     this.suggestions = const [],
     this.showTitle = true,
+    this.inlineHeading,
+    this.inlineTagline,
   });
 
   @override
@@ -33,11 +40,24 @@ class ChatEmptyState extends StatelessWidget {
             ? subtitle!.trim()
             : 'اتكلم معايا براحتك، وأنا هساعدك على قد ما أقدر';
 
+    final heading = inlineHeading?.trim() ?? '';
+    final tagline = inlineTagline?.trim() ?? '';
+
+    final showInline =
+        heading.isNotEmpty || tagline.isNotEmpty;
+
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(12, 18, 12, 16),
+        padding: const EdgeInsets.fromLTRB(
+          12,
+          18,
+          12,
+          16,
+        ),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
+          constraints: const BoxConstraints(
+            maxWidth: 520,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -64,7 +84,47 @@ class ChatEmptyState extends StatelessWidget {
                   animated: true,
                 ),
               ),
-              if (showTitle) ...[
+
+              if (showInline) ...[
+                const SizedBox(height: 12),
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      if (heading.isNotEmpty)
+                        TextSpan(
+                          text: heading,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      if (heading.isNotEmpty &&
+                          tagline.isNotEmpty)
+                        const TextSpan(
+                          text: '  •  ',
+                          style: TextStyle(
+                            color: Colors.white38,
+                            fontSize: 15,
+                          ),
+                        ),
+                      if (tagline.isNotEmpty)
+                        TextSpan(
+                          text: tagline,
+                          style: TextStyle(
+                            color: theme.secondary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                    ],
+                  ),
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ] else if (showTitle) ...[
                 const SizedBox(height: 12),
                 Text(
                   safeTitle,
@@ -77,9 +137,13 @@ class ChatEmptyState extends StatelessWidget {
                   ),
                 ),
               ],
+
               const SizedBox(height: 8),
+
               ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 390),
+                constraints: const BoxConstraints(
+                  maxWidth: 390,
+                ),
                 child: Text(
                   safeSubtitle,
                   textDirection: TextDirection.rtl,
@@ -92,6 +156,7 @@ class ChatEmptyState extends StatelessWidget {
                   ),
                 ),
               ),
+
               if (suggestions.isNotEmpty) ...[
                 const SizedBox(height: 18),
                 _Suggestions(
@@ -138,7 +203,9 @@ class _Suggestions extends StatelessWidget {
         return _SuggestionChip(
           theme: theme,
           text: suggestion,
-          onTap: onTap == null ? null : () => onTap!(suggestion),
+          onTap: onTap == null
+              ? null
+              : () => onTap!(suggestion),
         );
       }).toList(),
     );
@@ -164,7 +231,9 @@ class _SuggestionChip extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 190),
+          constraints: const BoxConstraints(
+            maxWidth: 190,
+          ),
           padding: const EdgeInsets.symmetric(
             horizontal: 11,
             vertical: 8,
