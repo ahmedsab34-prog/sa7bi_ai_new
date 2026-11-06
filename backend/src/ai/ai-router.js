@@ -1,32 +1,6 @@
-
-// backend/src/ai/ai-router.js
-// Sa7bi AI - AI Provider Router
-//
-// Architecture:
-//   Flutter App
-//       ↓
-//   Cloudflare Worker
-//       ↓
-//   Gemini (Primary)
-//       ↓ on failure/unavailable
-//   Cloudflare Workers AI (Fallback)
-//
-// Responsibilities:
-// - Text generation routing
-// - Vision/image analysis routing
-// - Image generation routing
-// - Automatic Gemini → Workers AI fallback
-// - Explicit fallback testing
-// - Provider/capability status
-//
-// Security:
-// - No API keys are exposed here.
-// - Gemini key is read only by gemini.js from Worker secrets.
-// - Workers AI uses the Cloudflare AI binding.
-
-/* -------------------------------------------------------------------------- */
-/* Providers                                                                  */
-/* -------------------------------------------------------------------------- */
+// Sa7bi AI - AI provider router.
+// Text and image generation keep their existing Gemini -> Workers AI flow.
+// Vision uses Gemini first, then Moondream 3.1 through the existing AI binding.
 
 import {
   generateGeminiText,
@@ -37,30 +11,22 @@ import {
 
 import {
   generateWorkersText,
-  generateWorkersVision,
   generateWorkersImage,
   isWorkersAIConfigured,
   getWorkersAIModels,
 } from "./workers-ai.js";
 
-/* -------------------------------------------------------------------------- */
-/* Error helpers                                                              */
-/* -------------------------------------------------------------------------- */
+import {
+  generateMoondreamVision,
+  MOONDREAM_VISION_MODEL,
+} from "./moondream-vision.js";
 
 function getErrorCode(error) {
-  return (
-    error?.code ||
-    error?.name ||
-    "AI_PROVIDER_ERROR"
-  );
+  return error?.code || error?.name || "AI_PROVIDER_ERROR";
 }
 
 function getErrorMessage(error) {
-  return (
-    error?.message ||
-    String(error) ||
-    "Unknown AI provider error"
-  );
+  return error?.message || String(error) || "Unknown AI provider error";
 }
 
 function normalizeProviderError(error) {
@@ -70,87 +36,74 @@ function normalizeProviderError(error) {
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Provider selection                                                         */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Force Workers AI for testing.
- *
- * Supported:
- *
- * Header:
- *   X-Sa7bi-Force-Fallback: 1
- *
- * Query:
- *   ?provider=workers
- *   ?provider=workers-ai
- *   ?provider=fallback
- *
- * This is intentionally a test mechanism.
- * It does not expose any provider credentials.
- */
 function isForcedFallback(request) {
-  if (!request) {
-    return false;
-  }
+  if (!request) return false;
 
   try {
-    const headerValue =
-      request.headers.get(
-        "X-Sa7bi-Force-Fallback"
-      ) || "";
+    const value = (request.headers.get("X-Sa7bi-Force-Fallback") || "")
+      .trim()
+      .toLowerCase();
 
-    const normalizedHeader =
-      headerValue
-        .trim()
-        .toLowerCase();
+    if (["1", "true", "yes"].includes(value)) return true;
 
-    if (
-      normalizedHeader === "1" ||
-      normalizedHeader === "true" ||
-      normalizedHeader === "yes"
-    ) {
-      return true;
-    }
+    const provider = (new URL(request.url).searchParams.get("provider") || "")
+      .trim()
+      .toLowerCase();
 
-    const url =
-      new URL(request.url);
-
-    const provider =
-      (
-        url.searchParams.get(
-          "provider"
-        ) || ""
-      )
-        .trim()
-        .toLowerCase();
-
-    return (
-      provider === "workers" ||
-      provider === "workers-ai" ||
-      provider === "fallback"
-    );
-  } catch {
+    return ["workers", "workers-ai", "fallback"].includes(provider);
+  } catch (_) {
     return false;
   }
 }
 
-/**
- * Create the standard fallback reason.
- */
 function forcedFallbackReason() {
   return {
     code: "FORCED_FALLBACK",
-    message:
-      "Workers AI fallback was explicitly requested.",
+    message: "Workers AI fallback was explicitly requested.",
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Text / Vision router                                                       */
-/* -------------------------------------------------------------------------- */
+function normalizeMessages(messages) {
+  if (!Array.isArray(messages)) return [];
 
+  return messages.filter((message) =>
+    message &&
+    typeof message === "object" &&
+    typeof message.content === "string" &&
+    message.content.trim(),
+  );
+}
+
+function buildVisionQuestion({ instructions, messages, imagePrompt }) {
+  const rows = [];
+  if (typeof instructions === "string" && instructions.trim()) {
+    rows.push(`تعليمات المساعد:\n${instructions.trim().slice(0, 5000)}`);
+  }
+
+  const conversation = normalizeMessages(messages)
+    .slice(-8)
+    .map((message) => {
+      const role = message.role === "assistant" ? "المساعد" : "المستخدم";
+      return `${role}: ${message.content.trim()}`;
+    });
+
+  if (conversation.length) {
+    rows.push(`طلب المستخدم وسياق المحادثة:\n${conversation.join("\n")}`);
+  } else if (typeof imagePrompt === "string" && imagePrompt.trim()) {
+    rows.push(imagePrompt.trim());
+  }
+
+  rows.push(
+    "حلل الصورة الفعلية المرفقة. اذكر العناصر والنصوص الواضحة، وافصل بين ما تراه وما لا تستطيع التأكد منه. لا تخترع تفاصيل.",
+  );
+
+  return rows.join("\n\n").slice(0, 12000);
+}
+
+/**
+ * Run text chat or image analysis. Images are analysed one by one by Moondream
+ * when Gemini is unavailable, then combined into one user-facing answer.
+ */
 export async function runTextOrVisionWithFallback({
   request,
   env,
@@ -160,286 +113,132 @@ export async function runTextOrVisionWithFallback({
   imagePrompt = "",
   maxOutputTokens = 1200,
 } = {}) {
-  const images =
-    Array.isArray(imageDataUrls)
-      ? imageDataUrls.filter(
-          (item) =>
-            typeof item === "string" &&
-            item.trim()
-        )
-      : [];
-
-  const normalizedMessages =
-    Array.isArray(messages)
-      ? messages.filter(
-          (message) =>
-            message &&
-            typeof message === "object" &&
-            typeof message.content === "string" &&
-            message.content.trim()
-        )
-      : [];
-
-  const hasUserPrompt =
-    normalizedMessages.some(
-      (message) =>
-        message.role !== "assistant" &&
-        message.role !== "model" &&
-        message.content.trim()
-    );
-
-  const forcedFallback =
-    isForcedFallback(request);
-
+  const images = Array.isArray(imageDataUrls)
+    ? imageDataUrls.filter((item) => typeof item === "string" && item.trim())
+    : [];
+  const cleanMessages = normalizeMessages(messages);
+  const forcedFallback = isForcedFallback(request);
   let geminiFailure = null;
 
-  /* ------------------------------------------------------------------------ */
-  /* Primary: Gemini                                                          */
-  /* ------------------------------------------------------------------------ */
-
-  if (
-    !forcedFallback &&
-    isGeminiConfigured(env)
-  ) {
+  if (!forcedFallback && isGeminiConfigured(env)) {
     try {
-      const result =
-        await generateGeminiText({
-          env,
-          messages,
-          instructions,
-          imageDataUrls: images,
-          imagePrompt,
-          maxOutputTokens,
-        });
+      const result = await generateGeminiText({
+        env,
+        messages: cleanMessages,
+        instructions,
+        imageDataUrls: images,
+        imagePrompt,
+        maxOutputTokens,
+      });
 
-      if (
-        typeof result?.answer === "string" &&
-        result.answer.trim()
-      ) {
+      if (typeof result?.answer === "string" && result.answer.trim()) {
         return {
-          answer:
-            result.answer.trim(),
-
-          provider:
-            "gemini",
-
-          fallback:
-            false,
-
-          fallbackReason:
-            null,
-
-          model:
-            result.model || null,
-
-          raw:
-            result.raw,
+          answer: result.answer.trim(),
+          provider: "gemini",
+          fallback: false,
+          fallbackReason: null,
+          model: result.model || null,
+          raw: result.raw,
         };
       }
 
       geminiFailure = {
-        code:
-          "GEMINI_EMPTY_RESPONSE",
-
-        message:
-          "Gemini returned no usable answer.",
+        code: "GEMINI_EMPTY_RESPONSE",
+        message: "Gemini returned no usable answer.",
       };
     } catch (error) {
-      geminiFailure =
-        normalizeProviderError(
-          error
-        );
+      geminiFailure = normalizeProviderError(error);
     }
   } else if (!forcedFallback) {
     geminiFailure = {
-      code:
-        "GEMINI_NOT_CONFIGURED",
-
-      message:
-        "Gemini is not configured.",
+      code: "GEMINI_NOT_CONFIGURED",
+      message: "Gemini is not configured.",
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Fallback: Workers AI text                                                */
-  /* ------------------------------------------------------------------------ */
+  if (images.length === 0) {
+    const result = await generateWorkersText({
+      env,
+      messages: cleanMessages,
+      prompt: imagePrompt,
+      systemInstruction: instructions,
+      maxOutputTokens,
+    });
 
-  if (!images.length) {
-    const result =
-      await generateWorkersText({
-        env,
-        messages,
-        prompt: imagePrompt,
-        systemInstruction:
-          instructions,
-        maxOutputTokens,
-      });
-
-    const answer =
-      typeof result?.answer ===
-        "string"
-        ? result.answer.trim()
-        : "";
-
+    const answer = typeof result?.answer === "string" ? result.answer.trim() : "";
     if (!answer) {
-      throw new Error(
-        "WORKERS_TEXT_EMPTY"
-      );
+      const error = new Error("WORKERS_TEXT_EMPTY");
+      error.code = "WORKERS_TEXT_EMPTY";
+      throw error;
     }
 
     return {
       answer,
-
-      provider:
-        "cloudflare-workers-ai",
-
-      fallback:
-        true,
-
-      fallbackReason:
-        geminiFailure ||
-        forcedFallbackReason(),
-
-      model:
-        result.model || null,
-
-      raw:
-        result.raw,
+      provider: "cloudflare-workers-ai",
+      fallback: true,
+      fallbackReason: geminiFailure || forcedFallbackReason(),
+      model: result.model || null,
+      raw: result.raw,
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Fallback: Workers AI Vision                                              */
-  /* ------------------------------------------------------------------------ */
-  // Gemini can receive multiple images in a single request. Workers AI Vision
-  // is called once per image to match the configured Llama Vision interface.
-  //
-  // Important: the Flutter client already sends the actual analysis prompt in
-  // `messages`. Do not append a second generic prompt to that conversation.
-  // Only use `imagePrompt` as a fallback when the request has no user message.
-
-  if (
-    !isWorkersAIConfigured(env)
-  ) {
-    const error =
-      new Error(
-        "WORKERS_AI_BINDING_MISSING"
-      );
-
-    error.code =
-      "WORKERS_AI_BINDING_MISSING";
-
+  if (!isWorkersAIConfigured(env)) {
+    const error = new Error("WORKERS_AI_BINDING_MISSING");
+    error.code = "WORKERS_AI_BINDING_MISSING";
     throw error;
   }
 
-  const visionAnswers = [];
+  const question = buildVisionQuestion({
+    instructions,
+    messages: cleanMessages,
+    imagePrompt,
+  });
 
-  const fallbackVisionPrompt =
-    hasUserPrompt
-      ? ""
-      : (
-          imagePrompt ||
-          "حلل الصورة المرفقة بدقة، واقرأ النصوص الواضحة فيها، واشرح الأشياء المهمة الظاهرة فقط دون تخمين."
-        );
-
-  for (
-    let index = 0;
-    index < images.length;
-    index += 1
-  ) {
-    const result =
-      await generateWorkersVision({
+  const answers = [];
+  try {
+    for (let index = 0; index < images.length; index += 1) {
+      const result = await generateMoondreamVision({
         env,
-
-        messages,
-
-        prompt:
-          fallbackVisionPrompt,
-
-        systemInstruction:
-          instructions,
-
-        imageDataUrls: [
-          images[index],
-        ],
-
-        maxOutputTokens,
+        imageDataUrl: images[index],
+        question,
       });
 
-    const answer =
-      typeof result?.answer ===
-        "string"
-        ? result.answer.trim()
-        : "";
-
-    if (answer) {
-      visionAnswers.push(
-        answer
-      );
+      if (result.answer) answers.push(result.answer);
     }
+  } catch (error) {
+    const wrapped = new Error("ALL_AI_PROVIDERS_FAILED");
+    wrapped.code = "ALL_AI_PROVIDERS_FAILED";
+    wrapped.cause = {
+      message: getErrorCode(error),
+    };
+    throw wrapped;
   }
 
-  if (!visionAnswers.length) {
-    const error =
-      new Error(
-        "WORKERS_VISION_EMPTY"
-      );
-
-    error.code =
-      "WORKERS_VISION_EMPTY";
-
+  if (answers.length === 0) {
+    const error = new Error("MOONDREAM_VISION_EMPTY_RESPONSE");
+    error.code = "MOONDREAM_VISION_EMPTY_RESPONSE";
     throw error;
   }
 
-  const combinedAnswer =
-    visionAnswers.length === 1
-      ? visionAnswers[0]
-      : visionAnswers
-          .map(
-            (
-              answer,
-              index
-            ) =>
-              `الصورة ${index + 1}:\n${answer}`
-          )
-          .join("\n\n");
+  const answer = answers.length === 1
+    ? answers[0]
+    : answers.map((item, index) => `الصورة ${index + 1}:\n${item}`).join("\n\n");
 
   return {
-    answer:
-      combinedAnswer,
-
-    provider:
-      "cloudflare-workers-ai",
-
-    fallback:
-      true,
-
-    fallbackReason:
-      geminiFailure ||
-      forcedFallbackReason(),
-
-    model:
-      getWorkersAIModels(
-        env
-      ).vision,
-
+    answer,
+    provider: "cloudflare-workers-ai",
+    fallback: true,
+    fallbackReason: geminiFailure || forcedFallbackReason(),
+    model: MOONDREAM_VISION_MODEL,
     raw: {
-      imageCount:
-        images.length,
-
-      analyzedImages:
-        visionAnswers.length,
-
-      results:
-        visionAnswers,
+      imageCount: images.length,
+      analyzedImages: answers.length,
+      results: answers,
     },
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Image generation router                                                   */
-/* -------------------------------------------------------------------------- */
-
+/** Keep current image creation/editing path intact. */
 export async function runImageWithFallback({
   request,
   env,
@@ -448,195 +247,89 @@ export async function runImageWithFallback({
   aspectRatio = "1:1",
   imageSize = "1K",
 } = {}) {
-  const forcedFallback =
-    isForcedFallback(request);
-
+  const forcedFallback = isForcedFallback(request);
   let geminiFailure = null;
 
-  /* ------------------------------------------------------------------------ */
-  /* Primary: Gemini Image                                                    */
-  /* ------------------------------------------------------------------------ */
-
-  if (
-    !forcedFallback &&
-    isGeminiConfigured(env)
-  ) {
+  if (!forcedFallback && isGeminiConfigured(env)) {
     try {
-      const result =
-        await generateGeminiImage({
-          env,
+      const result = await generateGeminiImage({
+        env,
+        prompt,
+        imageDataUrls,
+        aspectRatio,
+        imageSize,
+      });
 
-          prompt,
-
-          imageDataUrls,
-
-          aspectRatio,
-
-          imageSize,
-        });
-
-      if (
-        result?.imageDataUrl
-      ) {
+      if (result?.imageDataUrl) {
         return {
-          imageDataUrl:
-            result.imageDataUrl,
-
-          mimeType:
-            result.mimeType ||
-            "image/png",
-
-          provider:
-            "gemini",
-
-          fallback:
-            false,
-
-          fallbackReason:
-            null,
-
-          model:
-            result.model ||
-            null,
-
-          text:
-            result.text ||
-            "",
-
-          raw:
-            result.raw,
+          imageDataUrl: result.imageDataUrl,
+          mimeType: result.mimeType || "image/png",
+          provider: "gemini",
+          fallback: false,
+          fallbackReason: null,
+          model: result.model || null,
+          text: result.text || "",
+          raw: result.raw,
         };
       }
 
       geminiFailure = {
-        code:
-          "GEMINI_NO_IMAGE_RESULT",
-
-        message:
-          "Gemini returned no usable generated image.",
+        code: "GEMINI_NO_IMAGE_RESULT",
+        message: "Gemini returned no usable generated image.",
       };
     } catch (error) {
-      geminiFailure =
-        normalizeProviderError(
-          error
-        );
+      geminiFailure = normalizeProviderError(error);
     }
   } else if (!forcedFallback) {
     geminiFailure = {
-      code:
-        "GEMINI_NOT_CONFIGURED",
-
-      message:
-        "Gemini is not configured.",
+      code: "GEMINI_NOT_CONFIGURED",
+      message: "Gemini is not configured.",
     };
   }
 
-  /* ------------------------------------------------------------------------ */
-  /* Fallback: Workers AI / FLUX                                             */
-  /* ------------------------------------------------------------------------ */
-
-  const result =
-    await generateWorkersImage({
-      env,
-      prompt,
-    });
-
+  const result = await generateWorkersImage({ env, prompt });
   if (!result?.imageDataUrl) {
-    const error =
-      new Error(
-        "WORKERS_IMAGE_EMPTY"
-      );
-
-    error.code =
-      "WORKERS_IMAGE_EMPTY";
-
+    const error = new Error("WORKERS_IMAGE_EMPTY");
+    error.code = "WORKERS_IMAGE_EMPTY";
     throw error;
   }
 
   return {
-    imageDataUrl:
-      result.imageDataUrl,
-
-    mimeType:
-      result.mimeType ||
-      "image/jpeg",
-
-    provider:
-      "cloudflare-workers-ai",
-
-    fallback:
-      true,
-
-    fallbackReason:
-      geminiFailure ||
-      forcedFallbackReason(),
-
-    model:
-      result.model ||
-      null,
-
-    text:
-      "",
-
-    raw:
-      result.raw,
+    imageDataUrl: result.imageDataUrl,
+    mimeType: result.mimeType || "image/jpeg",
+    provider: "cloudflare-workers-ai",
+    fallback: true,
+    fallbackReason: geminiFailure || forcedFallbackReason(),
+    model: result.model || null,
+    text: "",
+    raw: result.raw,
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* AI status                                                                  */
-/* -------------------------------------------------------------------------- */
-
 export function getAIStatus(env) {
-  const geminiConfigured =
-    isGeminiConfigured(env);
-
-  const workersConfigured =
-    isWorkersAIConfigured(env);
+  const geminiConfigured = isGeminiConfigured(env);
+  const workersConfigured = isWorkersAIConfigured(env);
+  const workersModels = getWorkersAIModels(env) || {};
 
   return {
-    ok:
-      geminiConfigured ||
-      workersConfigured,
-
-    primary:
-      "gemini",
-
-    fallback:
-      "cloudflare-workers-ai",
-
+    ok: geminiConfigured || workersConfigured,
+    primary: "gemini",
+    fallback: "cloudflare-workers-ai",
     gemini: {
-      configured:
-        geminiConfigured,
-
-      models:
-        getGeminiModels(
-          env
-        ),
+      configured: geminiConfigured,
+      models: getGeminiModels(env),
     },
-
     workersAI: {
-      configured:
-        workersConfigured,
-
-      models:
-        getWorkersAIModels(
-          env
-        ),
+      configured: workersConfigured,
+      models: {
+        ...workersModels,
+        vision: MOONDREAM_VISION_MODEL,
+      },
     },
-
     capabilities: {
-      text:
-        geminiConfigured ||
-        workersConfigured,
-
-      vision:
-        geminiConfigured ||
-        workersConfigured,
-
-      imageGeneration:
-        geminiConfigured ||
-        workersConfigured,
+      text: geminiConfigured || workersConfigured,
+      vision: geminiConfigured || workersConfigured,
+      imageGeneration: geminiConfigured || workersConfigured,
     },
   };
 }
