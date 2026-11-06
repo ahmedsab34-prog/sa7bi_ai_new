@@ -4,15 +4,6 @@ on:
   push:
     branches:
       - fix/build-692-network-client-lifecycle
-    paths:
-      - ".github/workflows/build-candidate.yml"
-      - "lib/**"
-      - "test/**"
-      - "android/**"
-      - "assets/**"
-      - "app_icon.png"
-      - "pubspec.yaml"
-      - "pubspec.lock"
   workflow_dispatch:
 
 permissions:
@@ -20,7 +11,7 @@ permissions:
 
 concurrency:
   group: sa7bi-candidate-build-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   FLUTTER_VERSION: "3.38.1"
@@ -67,6 +58,48 @@ jobs:
             echo "::error::Checked-out source does not match the triggering commit."
             exit 1
           fi
+
+      # All backend and Worker-source checks run on this exact GITHUB_SHA.
+      # They are gates for this APK build; no Worker deployment is performed.
+      - name: Set up Node.js for backend validation
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-package-lock --no-audit --no-fund
+
+      - name: Run all backend provider and route tests
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check
+
+      - name: Verify AdMob identifiers and reward policy
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          node verify-admob-config.mjs
+
+      - name: Validate primary Worker bundle without deploying
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config wrangler.toml
+
+      - name: Validate fallback Worker bundle without deploying
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config wrangler-fallback.toml
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -465,6 +498,28 @@ jobs:
           echo "APK_SIZE=${APK_BYTES}" >> candidate-build-status.txt
           echo "APK verification completed successfully."
 
+      - name: Reject APK if the feature branch advanced during this build
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const expectedBranch = "fix/build-692-network-client-lifecycle";
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: expectedBranch,
+            });
+
+            core.info(`APK source commit: ${context.sha}`);
+            core.info(`Current branch tip: ${branch.commit.sha}`);
+
+            if (branch.commit.sha !== context.sha) {
+              core.setFailed(
+                "The feature branch advanced while this APK was building. " +
+                "This artifact is rejected; the newer commit must be built instead."
+              );
+            }
+
       - name: Upload validated APK artifact
         if: success()
         uses: actions/upload-artifact@v4
@@ -505,6 +560,8 @@ jobs:
             echo
             echo "- Branch: ${GITHUB_REF_NAME}"
             echo "- Source commit: ${GITHUB_SHA}"
+            echo "- Backend provider and route tests: passed before APK build"
+            echo "- AdMob and primary/fallback Worker bundle checks: passed without deployment"
             echo "- APK mode: ${BUILD_MODE:-not-reached}"
             echo "- Dependency lockfile committed: ${LOCKFILE_TRACKED:-unknown}"
             echo "- APK status: see candidate-build-status.txt and apk-verification-report.txt"
