@@ -157,29 +157,44 @@ export async function runTextOrVisionWithFallback({
   }
 
   if (images.length === 0) {
-    const result = await generateWorkersText({
-      env,
-      messages: cleanMessages,
-      prompt: imagePrompt,
-      systemInstruction: instructions,
-      maxOutputTokens,
-    });
+    try {
+      const result = await generateWorkersText({
+        env,
+        messages: cleanMessages,
+        prompt: imagePrompt,
+        systemInstruction: instructions,
+        maxOutputTokens,
+      });
 
-    const answer = typeof result?.answer === "string" ? result.answer.trim() : "";
-    if (!answer) {
-      const error = new Error("WORKERS_TEXT_EMPTY");
-      error.code = "WORKERS_TEXT_EMPTY";
-      throw error;
+      const answer =
+        typeof result?.answer === "string"
+          ? result.answer.trim()
+          : "";
+
+      if (!answer) {
+        const error = new Error("WORKERS_TEXT_EMPTY");
+        error.code = "WORKERS_TEXT_EMPTY";
+        throw error;
+      }
+
+      return {
+        answer,
+        provider: "cloudflare-workers-ai",
+        fallback: true,
+        fallbackReason: geminiFailure || forcedFallbackReason(),
+        model: result.model || null,
+        raw: result.raw,
+      };
+    } catch (error) {
+      // index.js releases the request's reserved Credits before returning
+      // this exact code to Flutter. The client may then offer a user retry.
+      const wrapped = new Error("ALL_AI_PROVIDERS_FAILED");
+      wrapped.code = "ALL_AI_PROVIDERS_FAILED";
+      wrapped.cause = {
+        message: getErrorCode(error),
+      };
+      throw wrapped;
     }
-
-    return {
-      answer,
-      provider: "cloudflare-workers-ai",
-      fallback: true,
-      fallbackReason: geminiFailure || forcedFallbackReason(),
-      model: result.model || null,
-      raw: result.raw,
-    };
   }
 
   if (!isWorkersAIConfigured(env)) {
