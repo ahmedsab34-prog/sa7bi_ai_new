@@ -6,14 +6,14 @@ import 'secure_venting_screen.dart';
 import 'service_config.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
-const double _kKhalasanaRailWidth = 52;
-const double _kKhalasanaTabWidth = 48;
-const double _kKhalasanaTabHeight = 50;
+const double _kKhalasanaRailWidth = 46;
+const double _kKhalasanaTabWidth = 42;
+const double _kKhalasanaTabHeight = 44;
 
 /// الشاشة الرئيسية لخلصانة AI.
 ///
-/// تعرض المحادثة في المساحة الأساسية، والخدمات العشرة
-/// في شريط جانبي رأسي على الموبايل والتابلت والكمبيوتر.
+/// تعرض المحادثة في المساحة الأساسية والخدمات في شريط جانبي
+/// صغير، مع الاحتفاظ بمحادثة كل خدمة عند التبديل.
 class KhalasanaPortalScreen extends StatefulWidget {
   const KhalasanaPortalScreen({super.key});
 
@@ -55,7 +55,8 @@ class KhalasanaPortalScreen extends StatefulWidget {
       _KhalasanaPortalScreenState();
 }
 
-class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
+class _KhalasanaPortalScreenState
+    extends State<KhalasanaPortalScreen> {
   static const Color _background = Color(0xFF070A12);
 
   static final List<_KhalasanaTarget> _targets =
@@ -78,8 +79,9 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
 
   String _selectedServiceKey = ServiceKeys.khalasana;
 
-  /// نحفظ الشاشات بعد إنشائها حتى لا تضيع المحادثات عند التبديل.
-  final Map<String, Widget> _chatScreens = <String, Widget>{};
+  /// نحفظ الشاشات بعد إنشائها حتى لا تضيع المحادثات.
+  final Map<String, Widget> _chatScreens =
+      <String, Widget>{};
 
   final GlobalKey<SecureVentingScreenState> _ventingKey =
       GlobalKey<SecureVentingScreenState>();
@@ -90,6 +92,7 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
         return target;
       }
     }
+
     return _targets.first;
   }
 
@@ -148,7 +151,8 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
     );
 
     final activeIndex = _targets.indexWhere(
-      (target) => target.serviceKey == active.serviceKey,
+      (target) =>
+          target.serviceKey == active.serviceKey,
     );
 
     return IndexedStack(
@@ -203,11 +207,15 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
                 _selectedServiceKey == ServiceKeys.khalasana,
             onTap: () => _selectTarget(_targets.first),
           ),
-          const SizedBox(height: 5),
+
+          const SizedBox(height: 4),
+
           Expanded(
             child: ListView.separated(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(vertical: 2),
+              padding: const EdgeInsets.symmetric(
+                vertical: 2,
+              ),
               itemCount: serviceTargets.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: 3),
@@ -241,16 +249,21 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(4, 4, 4, 6),
+          padding: const EdgeInsets.fromLTRB(
+            3,
+            4,
+            3,
+            5,
+          ),
           child: Row(
             textDirection: TextDirection.rtl,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildServiceRail(),
-              const SizedBox(width: 4),
+              const SizedBox(width: 3),
               Expanded(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(15),
                   child: _buildChatStack(),
                 ),
               ),
@@ -303,13 +316,13 @@ class _GeneralModeTab extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(11),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 170),
               width: _kKhalasanaTabWidth,
-              height: 48,
+              height: 42,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(11),
                 color: selected
                     ? const Color(0xFF63E6FF)
                     : const Color(0xCC151D2A),
@@ -324,15 +337,15 @@ class _GeneralModeTab extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.auto_awesome_rounded,
-                    size: 18,
+                    size: 16,
                     color: foreground,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   Text(
                     'عام',
                     style: TextStyle(
                       color: foreground,
-                      fontSize: 9,
+                      fontSize: 8,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -373,15 +386,20 @@ class _KhalasanaServiceTab extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(11),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 170),
               curve: Curves.easeOut,
               width: _kKhalasanaTabWidth,
               height: _kKhalasanaTabHeight,
-              padding: const EdgeInsets.fromLTRB(2, 4, 2, 3),
+              padding: const EdgeInsets.fromLTRB(
+                1,
+                3,
+                1,
+                2,
+              ),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(11),
                 color: selected
                     ? color.withValues(alpha: 0.19)
                     : const Color(0xCC151D2A),
@@ -389,14 +407,14 @@ class _KhalasanaServiceTab extends StatelessWidget {
                   color: selected
                       ? color.withValues(alpha: 0.9)
                       : const Color(0x553F536B),
-                  width: selected ? 1.3 : 0.8,
+                  width: selected ? 1.2 : 0.8,
                 ),
                 boxShadow: selected
                     ? [
                         BoxShadow(
-                          color: color.withValues(alpha: 0.18),
-                          blurRadius: 9,
-                          spreadRadius: 0.4,
+                          color: color.withValues(alpha: 0.16),
+                          blurRadius: 7,
+                          spreadRadius: 0.3,
                         ),
                       ]
                     : const <BoxShadow>[],
@@ -407,9 +425,9 @@ class _KhalasanaServiceTab extends StatelessWidget {
                   Icon(
                     service.icon,
                     color: color,
-                    size: selected ? 20 : 18,
+                    size: selected ? 18 : 16,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   SizedBox(
                     width: double.infinity,
                     child: FittedBox(
@@ -422,7 +440,7 @@ class _KhalasanaServiceTab extends StatelessWidget {
                           color: selected
                               ? Colors.white
                               : const Color(0xFFCDD6E2),
-                          fontSize: 8,
+                          fontSize: 7.5,
                           fontWeight: selected
                               ? FontWeight.w900
                               : FontWeight.w700,
