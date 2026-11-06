@@ -1,4 +1,3 @@
-
 import {
   json,
   firstMatch,
@@ -8,8 +7,11 @@ import {
 
 const BACKEND_VERSION = "6.4.1";
 const MAX_ITEMS = 40;
+const MAX_NEWS_AGE_DAYS = 7;
+const MAX_FUTURE_SKEW_MS = 24 * 60 * 60 * 1000;
 const RSS_TIMEOUT_MS = 6500;
 const USER_AGENT = "Sa7bi-AI-News/6.4.1";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function decodeXml(value) {
   return String(value || "")
@@ -40,8 +42,10 @@ function cleanUrl(value) {
     uri.hash = "";
 
     for (const key of [...uri.searchParams.keys()]) {
+      const lower = key.toLowerCase();
+
       if (
-        key.toLowerCase().startsWith("utm_") ||
+        lower.startsWith("utm_") ||
         [
           "fbclid",
           "gclid",
@@ -53,7 +57,7 @@ function cleanUrl(value) {
           "ref_src",
           "source",
           "si",
-        ].includes(key.toLowerCase())
+        ].includes(lower)
       ) {
         uri.searchParams.delete(key);
       }
@@ -71,13 +75,14 @@ function cleanUrl(value) {
 
 function parsePublishedDate(value) {
   const raw = String(value || "").trim();
+
   if (!raw) return null;
 
   const timestamp = Date.parse(raw);
 
   return Number.isFinite(timestamp)
-    ? timestamp
-    : null;
+      ? timestamp
+      : null;
 }
 
 function normalizeTitle(value) {
@@ -167,7 +172,8 @@ async function fetchRssFeed(url) {
       "User-Agent": USER_AGENT,
       Accept:
         "application/rss+xml, application/xml, text/xml, */*",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-store, max-age=0",
+      Pragma: "no-cache",
     },
     redirect: "follow",
     signal: AbortSignal.timeout(RSS_TIMEOUT_MS),
@@ -224,20 +230,74 @@ export async function fetchBingNews() {
   );
 }
 
-function normalizeAndSortItems(input) {
+/**
+ * تصفية الأخبار القديمة والمستقبلية، وإزالة التكرار،
+ * وترتيب الأخبار الأحدث أولًا.
+ *
+ * الأخبار التي لا يحمل مصدرها تاريخ نشر تظل موجودة،
+ * لكنها تظهر بعد الأخبار ذات التاريخ المعروف.
+ */
+export function filterAndNormalizeItems(
+  input,
+  {
+    now = Date.now(),
+    maxAgeDays = MAX_NEWS_AGE_DAYS,
+  } = {},
+) {
+  const currentTime = Number.isFinite(now)
+      ? now
+      : Date.now();
+
+  const safeAgeDays =
+      Number.isFinite(maxAgeDays) && maxAgeDays > 0
+          ? maxAgeDays
+          : MAX_NEWS_AGE_DAYS;
+
+  const cutoff =
+      currentTime - safeAgeDays * DAY_MS;
+
+  const futureLimit =
+      currentTime + MAX_FUTURE_SKEW_MS;
+
   const byLink = new Set();
   const byTitle = new Set();
   const cleaned = [];
+
+  const stats = {
+    staleDiscarded: 0,
+    futureDiscarded: 0,
+    undatedKept: 0,
+  };
 
   for (const item of input) {
     const title = String(item.title || "").trim();
     const link = cleanUrl(item.link);
     const titleKey = normalizeTitle(title);
 
+    if (!title || !link || !titleKey) {
+      continue;
+    }
+
+    const publishedAt =
+        parsePublishedDate(item.pubDate);
+
     if (
-      !title ||
-      !link ||
-      !titleKey ||
+      publishedAt != null &&
+      publishedAt < cutoff
+    ) {
+      stats.staleDiscarded++;
+      continue;
+    }
+
+    if (
+      publishedAt != null &&
+      publishedAt > futureLimit
+    ) {
+      stats.futureDiscarded++;
+      continue;
+    }
+
+    if (
       byLink.has(link) ||
       byTitle.has(titleKey)
     ) {
@@ -246,6 +306,10 @@ function normalizeAndSortItems(input) {
 
     byLink.add(link);
     byTitle.add(titleKey);
+
+    if (publishedAt == null) {
+      stats.undatedKept++;
+    }
 
     cleaned.push({
       ...item,
@@ -256,14 +320,15 @@ function normalizeAndSortItems(input) {
         String(item.source || "الأخبار").trim() ||
         "الأخبار",
       pubDate: String(item.pubDate || "").trim(),
-      description: String(item.description || "").trim(),
+      description:
+        String(item.description || "").trim(),
       image: String(
         item.image || item.imageUrl || "",
       ).trim(),
       imageUrl: String(
         item.imageUrl || item.image || "",
       ).trim(),
-      _publishedAt: parsePublishedDate(item.pubDate),
+      _publishedAt: publishedAt,
     });
   }
 
@@ -292,52 +357,117 @@ function normalizeAndSortItems(input) {
     return 0;
   });
 
-  return cleaned
+  const limited = cleaned
     .slice(0, MAX_ITEMS)
     .map(({ _publishedAt, ...item }) => item);
+
+  const latestTimestamp =
+      cleaned.find(
+        (item) => item._publishedAt != null,
+      )?._publishedAt ?? null;
+
+  return {
+    items: limited,
+    stats: {
+      ...stats,
+      maxAgeDays: safeAgeDays,
+      latestPublishedAt:
+        latestTimestamp == null
+            ? null
+            : new Date(latestTimestamp).toISOString(),
+    },
+  };
 }
 
-export async function fetchAllNews() {
+/**
+ * نفس الدالة القديمة للتوافق مع أي مستهلك آخر.
+ */
+export function normalizeAndSortItems(input) {
+  return filterAndNormalizeItems(input).items;
+}
+
+export async function fetchAllNewsWithStats({
+  now = Date.now(),
+  maxAgeDays = MAX_NEWS_AGE_DAYS,
+} = {}) {
   const [googleResult, bingResult] =
-    await Promise.allSettled([
-      fetchGoogleNews(),
-      fetchBingNews(),
-    ]);
+      await Promise.allSettled([
+        fetchGoogleNews(),
+        fetchBingNews(),
+      ]);
 
   const google =
-    googleResult.status === "fulfilled"
-      ? googleResult.value
-      : [];
+      googleResult.status === "fulfilled"
+          ? googleResult.value
+          : [];
 
   const bing =
-    bingResult.status === "fulfilled"
-      ? bingResult.value
-      : [];
+      bingResult.status === "fulfilled"
+          ? bingResult.value
+          : [];
 
-  return normalizeAndSortItems([
-    ...google,
-    ...bing,
-  ]);
+  const rawItems = [...google, ...bing];
+
+  const normalized = filterAndNormalizeItems(
+    rawItems,
+    {
+      now,
+      maxAgeDays,
+    },
+  );
+
+  const failedSources =
+      Number(googleResult.status === "rejected") +
+      Number(bingResult.status === "rejected");
+
+  return {
+    ...normalized,
+    rawCount: rawItems.length,
+    failedSources,
+  };
+}
+
+/**
+ * يحافظ على واجهة fetchAllNews القديمة.
+ */
+export async function fetchAllNews(options) {
+  const result = await fetchAllNewsWithStats(options);
+  return result.items;
 }
 
 export async function handleNews() {
-  try {
-    const items = await fetchAllNews();
+  const refreshedAt = new Date().toISOString();
 
-    if (!items.length) {
+  try {
+    const result = await fetchAllNewsWithStats();
+
+    const freshness = {
+      ...result.stats,
+      rawItemsReceived: result.rawCount,
+      sourceGroupsFailed: result.failedSources,
+    };
+
+    if (!result.items.length) {
+      const noFreshNews = result.rawCount > 0;
+
       return json(
         {
           ok: false,
-          error: "NEWS_SOURCES_UNAVAILABLE",
-          message: "مصادر الأخبار غير متاحة حاليًا.",
+          error: noFreshNews
+              ? "NO_FRESH_NEWS_AVAILABLE"
+              : "NEWS_SOURCES_UNAVAILABLE",
+          message: noFreshNews
+              ? "المصادر أعادت أخبارًا قديمة أو غير صالحة؛ لم نعرضها باعتبارها أخبارًا جديدة."
+              : "مصادر الأخبار غير متاحة حاليًا.",
           items: [],
           count: 0,
           backendVersion: BACKEND_VERSION,
-          refreshedAt: new Date().toISOString(),
+          refreshedAt,
+          freshness,
         },
         502,
         {
-          "Cache-Control": "no-store",
+          "Cache-Control": "no-store, max-age=0",
         },
       );
     }
@@ -345,10 +475,11 @@ export async function handleNews() {
     return json(
       {
         ok: true,
-        items,
-        count: items.length,
+        items: result.items,
+        count: result.items.length,
         backendVersion: BACKEND_VERSION,
-        refreshedAt: new Date().toISOString(),
+        refreshedAt,
+        freshness,
       },
       200,
       {
@@ -364,11 +495,11 @@ export async function handleNews() {
         items: [],
         count: 0,
         backendVersion: BACKEND_VERSION,
-        refreshedAt: new Date().toISOString(),
+        refreshedAt,
       },
       502,
       {
-        "Cache-Control": "no-store",
+        "Cache-Control": "no-store, max-age=0",
       },
     );
   }
@@ -376,7 +507,9 @@ export async function handleNews() {
 
 export {
   fetchRssFeed,
-  normalizeAndSortItems,
+  normalizeTitle,
+  parsePublishedDate,
+  MAX_NEWS_AGE_DAYS,
 };
 
 export default {
