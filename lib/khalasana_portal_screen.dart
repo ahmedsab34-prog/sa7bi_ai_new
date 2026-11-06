@@ -6,13 +6,14 @@ import 'secure_venting_screen.dart';
 import 'service_config.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
+const double _kKhalasanaRailWidth = 52;
+const double _kKhalasanaTabWidth = 48;
+const double _kKhalasanaTabHeight = 50;
+
 /// الشاشة الرئيسية لخلصانة AI.
 ///
-/// تعرض المحادثة في المساحة الأساسية، وتضع الخدمات العشرة
-/// في شريط جانبي رأسي ثابت على الموبايل والتابلت والكمبيوتر.
-///
-/// كل خدمة تحتفظ بمحادثتها داخل IndexedStack.
-/// الفضفضة السرية تظل محمية بقفلها المحلي.
+/// تعرض المحادثة في المساحة الأساسية، والخدمات العشرة
+/// في شريط جانبي رأسي على الموبايل والتابلت والكمبيوتر.
 class KhalasanaPortalScreen extends StatefulWidget {
   const KhalasanaPortalScreen({super.key});
 
@@ -57,10 +58,6 @@ class KhalasanaPortalScreen extends StatefulWidget {
 class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
   static const Color _background = Color(0xFF070A12);
 
-  static const double _railWidth = 52;
-  static const double _tabWidth = 48;
-  static const double _tabHeight = 50;
-
   static final List<_KhalasanaTarget> _targets =
       <_KhalasanaTarget>[
     _KhalasanaTarget(
@@ -81,7 +78,7 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
 
   String _selectedServiceKey = ServiceKeys.khalasana;
 
-  /// نحفظ الشاشات بعد إنشائها حتى لا تضيع المحادثات عند تبديل التبويبات.
+  /// نحفظ الشاشات بعد إنشائها حتى لا تضيع المحادثات عند التبديل.
   final Map<String, Widget> _chatScreens = <String, Widget>{};
 
   final GlobalKey<SecureVentingScreenState> _ventingKey =
@@ -93,7 +90,6 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
         return target;
       }
     }
-
     return _targets.first;
   }
 
@@ -102,7 +98,7 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
       return;
     }
 
-    // اقفل الفضفضة وامسح مفتاحها من الذاكرة عند مغادرتها.
+    // قفل الفضفضة عند مغادرتها.
     if (_selectedServiceKey == ServiceKeys.venting &&
         target.serviceKey != ServiceKeys.venting) {
       _ventingKey.currentState?.lock();
@@ -199,7 +195,7 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
         .toList(growable: false);
 
     return SizedBox(
-      width: _railWidth,
+      width: _kKhalasanaRailWidth,
       child: Column(
         children: [
           _GeneralModeTab(
@@ -244,26 +240,22 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
         subtitle: _activeTarget.service.description,
       ),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 6),
-              child: Row(
-                textDirection: TextDirection.rtl,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildServiceRail(),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: _buildChatStack(),
-                    ),
-                  ),
-                ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 4, 6),
+          child: Row(
+            textDirection: TextDirection.rtl,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildServiceRail(),
+              const SizedBox(width: 4),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: _buildChatStack(),
+                ),
               ),
-            );
-          },
+            ],
+          ),
         ),
       ),
     );
@@ -314,7 +306,7 @@ class _GeneralModeTab extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 170),
-              width: _tabWidth,
+              width: _kKhalasanaTabWidth,
               height: 48,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
@@ -385,8 +377,8 @@ class _KhalasanaServiceTab extends StatelessWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 170),
               curve: Curves.easeOut,
-              width: _tabWidth,
-              height: _tabHeight,
+              width: _kKhalasanaTabWidth,
+              height: _kKhalasanaTabHeight,
               padding: const EdgeInsets.fromLTRB(2, 4, 2, 3),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
