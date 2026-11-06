@@ -8,18 +8,16 @@ import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// الشاشة الرئيسية لخلصانة AI.
 ///
-/// تجمع المحادثة العامة والخدمات العشرة في شاشة واحدة:
-/// - المحادثة العامة هي الوضع الافتراضي.
-/// - الخدمات تظهر في ألسنة جانبية صغيرة.
-/// - كل خدمة لها سجل مستقل.
-/// - IndexedStack يحافظ على حالة الخدمات التي فتحها المستخدم.
-/// - الفضفضة لا تُنشأ داخل شجرة الواجهة إلا بعد فتح القفل المحلي.
-/// - لا نعرض هيدرًا ثانيًا داخل ChatScreen.
+/// تعرض المحادثة في المساحة الأساسية، وتضع الخدمات العشرة
+/// في شريط جانبي رأسي ثابت على الموبايل والتابلت والكمبيوتر.
+///
+/// كل خدمة تحتفظ بمحادثتها داخل IndexedStack.
+/// الفضفضة السرية تظل محمية بقفلها المحلي.
 class KhalasanaPortalScreen extends StatefulWidget {
   const KhalasanaPortalScreen({super.key});
 
   static const String contextText = '''
-أنت خلصانة AI، المساعد الشامل داخل تطبيق صاحبي.
+أنت خلصانة AI، المساعد الشامل داخل تطبيق صاحبي AI.
 
 ساعد المستخدم مباشرة في أي موضوع، حتى إذا لم يختر مجالًا من التبويبات.
 
@@ -42,7 +40,6 @@ class KhalasanaPortalScreen extends StatefulWidget {
 كن واضحًا ومفيدًا ومباشرًا، وحافظ على سياق المحادثة الخاص بكل مجال.
 ''';
 
-  /// التعريف الثابت لوضع المحادثة العامة داخل خلصانة.
   static const Sa7biService khalasanaService = Sa7biService(
     serviceKey: ServiceKeys.khalasana,
     title: 'خلصانة AI',
@@ -59,11 +56,13 @@ class KhalasanaPortalScreen extends StatefulWidget {
 
 class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
   static const Color _background = Color(0xFF070A12);
-  static const double _railWidth = 47;
-  static const double _minimumWidthForTwoRails = 840;
-  static const double _mobileTabsBreakpoint = 640;
 
-  static final List<_KhalasanaTarget> _targets = <_KhalasanaTarget>[
+  static const double _railWidth = 52;
+  static const double _tabWidth = 48;
+  static const double _tabHeight = 50;
+
+  static final List<_KhalasanaTarget> _targets =
+      <_KhalasanaTarget>[
     _KhalasanaTarget(
       serviceKey: ServiceKeys.khalasana,
       title: KhalasanaPortalScreen.khalasanaService.title,
@@ -82,8 +81,7 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
 
   String _selectedServiceKey = ServiceKeys.khalasana;
 
-  /// Store widgets rather than ChatScreen objects because the venting entry
-  /// is a lock wrapper. Its ChatScreen child is not mounted while locked.
+  /// نحفظ الشاشات بعد إنشائها حتى لا تضيع المحادثات عند تبديل التبويبات.
   final Map<String, Widget> _chatScreens = <String, Widget>{};
 
   final GlobalKey<SecureVentingScreenState> _ventingKey =
@@ -91,22 +89,28 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
 
   _KhalasanaTarget get _activeTarget {
     for (final target in _targets) {
-      if (target.serviceKey == _selectedServiceKey) return target;
+      if (target.serviceKey == _selectedServiceKey) {
+        return target;
+      }
     }
+
     return _targets.first;
   }
 
   void _selectTarget(_KhalasanaTarget target) {
-    if (_selectedServiceKey == target.serviceKey) return;
+    if (_selectedServiceKey == target.serviceKey) {
+      return;
+    }
 
-    // Remove the decrypted data key and unmount the private ChatScreen before
-    // changing tabs. The secure wrapper remains cached but shows its lock UI.
+    // اقفل الفضفضة وامسح مفتاحها من الذاكرة عند مغادرتها.
     if (_selectedServiceKey == ServiceKeys.venting &&
         target.serviceKey != ServiceKeys.venting) {
       _ventingKey.currentState?.lock();
     }
 
-    setState(() => _selectedServiceKey = target.serviceKey);
+    setState(() {
+      _selectedServiceKey = target.serviceKey;
+    });
   }
 
   Widget _createChatScreen(_KhalasanaTarget target) {
@@ -120,7 +124,9 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
             'والصوت والفيديو متاحة حسب إمكانات التطبيق.';
 
     final chat = ChatScreen(
-      key: ValueKey<String>('khalasana-chat-${target.serviceKey}'),
+      key: ValueKey<String>(
+        'khalasana-chat-${target.serviceKey}',
+      ),
       serviceKey: target.serviceKey,
       serviceTitle: target.title,
       serviceContext: contextText,
@@ -154,37 +160,9 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
       sizing: StackFit.expand,
       children: <Widget>[
         for (final target in _targets)
-          _chatScreens[target.serviceKey] ?? const SizedBox.shrink(),
+          _chatScreens[target.serviceKey] ??
+              const SizedBox.shrink(),
       ],
-    );
-  }
-
-  bool _useTwoRails(double availableWidth) =>
-      availableWidth >= _minimumWidthForTwoRails;
-
-  Widget _buildHorizontalServiceTabs() {
-    return SizedBox(
-      height: 74,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        reverse: true,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-        itemCount: _targets.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 7),
-        itemBuilder: (context, index) {
-          final target = _targets[index];
-          return _KhalasanaMobileServiceTab(
-            title: target.isGeneral ? 'عام' : target.title,
-            icon: target.service.icon,
-            color: target.isGeneral
-                ? const Color(0xFF63E6FF)
-                : target.service.color,
-            selected: _selectedServiceKey == target.serviceKey,
-            onTap: () => _selectTarget(target),
-          );
-        },
-      ),
     );
   }
 
@@ -215,35 +193,38 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
     }
   }
 
-  Widget _buildServiceRail({
-    required List<_KhalasanaTarget> targets,
-    required bool showGeneralTab,
-  }) {
+  Widget _buildServiceRail() {
+    final serviceTargets = _targets
+        .where((target) => !target.isGeneral)
+        .toList(growable: false);
+
     return SizedBox(
       width: _railWidth,
       child: Column(
         children: [
-          if (showGeneralTab) ...[
-            _GeneralModeTab(
-              selected: _selectedServiceKey == ServiceKeys.khalasana,
-              onTap: () => _selectTarget(_targets.first),
-            ),
-            const SizedBox(height: 6),
-          ],
+          _GeneralModeTab(
+            selected:
+                _selectedServiceKey == ServiceKeys.khalasana,
+            onTap: () => _selectTarget(_targets.first),
+          ),
+          const SizedBox(height: 5),
           Expanded(
             child: ListView.separated(
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              itemCount: targets.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 6),
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              itemCount: serviceTargets.length,
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: 3),
               itemBuilder: (context, index) {
-                final target = targets[index];
-                final service = target.service;
+                final target = serviceTargets[index];
 
                 return _KhalasanaServiceTab(
-                  service: service,
-                  shortName: _shortServiceName(target.serviceKey),
-                  selected: _selectedServiceKey == target.serviceKey,
+                  service: target.service,
+                  shortName: _shortServiceName(
+                    target.serviceKey,
+                  ),
+                  selected:
+                      _selectedServiceKey == target.serviceKey,
                   onTap: () => _selectTarget(target),
                 );
               },
@@ -265,59 +246,20 @@ class _KhalasanaPortalScreenState extends State<KhalasanaPortalScreen> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final mobileLayout =
-                constraints.maxWidth < _mobileTabsBreakpoint;
-            final splitRails = _useTwoRails(constraints.maxWidth);
-
-            if (mobileLayout) {
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(5, 4, 5, 7),
-                child: Column(
-                  children: [
-                    _buildHorizontalServiceTabs(),
-                    const SizedBox(height: 3),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(17),
-                        child: _buildChatStack(),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            final rightTargets = splitRails
-                ? _targets.skip(1).take(5).toList(growable: false)
-                : _targets.skip(1).toList(growable: false);
-            final leftTargets = splitRails
-                ? _targets.skip(6).toList(growable: false)
-                : const <_KhalasanaTarget>[];
-
             return Padding(
-              padding: const EdgeInsets.fromLTRB(5, 5, 5, 7),
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 6),
               child: Row(
                 textDirection: TextDirection.rtl,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildServiceRail(
-                    targets: rightTargets,
-                    showGeneralTab: true,
-                  ),
+                  _buildServiceRail(),
                   const SizedBox(width: 4),
                   Expanded(
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(17),
+                      borderRadius: BorderRadius.circular(16),
                       child: _buildChatStack(),
                     ),
                   ),
-                  if (splitRails) ...[
-                    const SizedBox(width: 4),
-                    _buildServiceRail(
-                      targets: leftTargets,
-                      showGeneralTab: false,
-                    ),
-                  ],
                 ],
               ),
             );
@@ -342,76 +284,6 @@ class _KhalasanaTarget {
   final String context;
   final Sa7biService service;
   final bool isGeneral;
-}
-
-class _KhalasanaMobileServiceTab extends StatelessWidget {
-  const _KhalasanaMobileServiceTab({
-    required this.title,
-    required this.icon,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String title;
-  final IconData icon;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = selected ? Colors.white : const Color(0xFFCBD5E1);
-
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: title,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            width: 78,
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
-            decoration: BoxDecoration(
-              color: selected
-                  ? color.withValues(alpha: 0.20)
-                  : const Color(0xCC151D2A),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: selected
-                    ? color.withValues(alpha: 0.95)
-                    : const Color(0x553F536B),
-                width: selected ? 1.3 : 0.8,
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: color, size: 21),
-                const SizedBox(height: 3),
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  textDirection: TextDirection.rtl,
-                  style: TextStyle(
-                    color: foreground,
-                    fontSize: 10,
-                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _GeneralModeTab extends StatelessWidget {
@@ -439,13 +311,13 @@ class _GeneralModeTab extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(12),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 170),
-              width: 43,
-              height: 54,
+              width: _tabWidth,
+              height: 48,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(13),
+                borderRadius: BorderRadius.circular(12),
                 color: selected
                     ? const Color(0xFF63E6FF)
                     : const Color(0xCC151D2A),
@@ -460,10 +332,10 @@ class _GeneralModeTab extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.auto_awesome_rounded,
-                    size: 19,
+                    size: 18,
                     color: foreground,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
                     'عام',
                     style: TextStyle(
@@ -509,15 +381,15 @@ class _KhalasanaServiceTab extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(12),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 170),
               curve: Curves.easeOut,
-              width: 43,
-              height: 56,
-              padding: const EdgeInsets.fromLTRB(2, 5, 2, 4),
+              width: _tabWidth,
+              height: _tabHeight,
+              padding: const EdgeInsets.fromLTRB(2, 4, 2, 3),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(13),
+                borderRadius: BorderRadius.circular(12),
                 color: selected
                     ? color.withValues(alpha: 0.19)
                     : const Color(0xCC151D2A),
@@ -530,9 +402,9 @@ class _KhalasanaServiceTab extends StatelessWidget {
                 boxShadow: selected
                     ? [
                         BoxShadow(
-                          color: color.withValues(alpha: 0.20),
-                          blurRadius: 11,
-                          spreadRadius: 0.5,
+                          color: color.withValues(alpha: 0.18),
+                          blurRadius: 9,
+                          spreadRadius: 0.4,
                         ),
                       ]
                     : const <BoxShadow>[],
@@ -543,9 +415,9 @@ class _KhalasanaServiceTab extends StatelessWidget {
                   Icon(
                     service.icon,
                     color: color,
-                    size: selected ? 21 : 19,
+                    size: selected ? 20 : 18,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   SizedBox(
                     width: double.infinity,
                     child: FittedBox(
