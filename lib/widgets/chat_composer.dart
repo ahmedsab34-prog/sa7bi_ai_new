@@ -1,7 +1,5 @@
-
 import 'package:flutter/material.dart';
 
-import '../interactive_experiences_screen.dart';
 import 'chat_toolbar.dart';
 
 class ChatComposer extends StatefulWidget {
@@ -46,8 +44,11 @@ class _ChatComposerState extends State<ChatComposer> {
   @override
   void initState() {
     super.initState();
+
     widget.controller.addListener(_onTextChanged);
-    _hasText = widget.controller.text.trim().isNotEmpty;
+
+    _hasText =
+        widget.controller.text.trim().isNotEmpty;
   }
 
   @override
@@ -57,56 +58,58 @@ class _ChatComposerState extends State<ChatComposer> {
   }
 
   @override
-  void didUpdateWidget(covariant ChatComposer oldWidget) {
+  void didUpdateWidget(
+    covariant ChatComposer oldWidget,
+  ) {
     super.didUpdateWidget(oldWidget);
+
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_onTextChanged);
       widget.controller.addListener(_onTextChanged);
-      _hasText = widget.controller.text.trim().isNotEmpty;
+
+      _hasText =
+          widget.controller.text.trim().isNotEmpty;
     }
   }
 
   void _onTextChanged() {
-    final value = widget.controller.text.trim().isNotEmpty;
+    final value =
+        widget.controller.text.trim().isNotEmpty;
+
     if (!mounted || value == _hasText) return;
-    setState(() => _hasText = value);
+
+    setState(() {
+      _hasText = value;
+    });
   }
 
   void _send() {
-    if (widget.isLoading || widget.isGeneratingImage) return;
-    if (widget.controller.text.trim().isEmpty) return;
+    if (widget.isLoading ||
+        widget.isGeneratingImage) {
+      return;
+    }
+
+    if (widget.controller.text.trim().isEmpty) {
+      return;
+    }
+
     widget.onSend();
-  }
-
-  Future<void> _openExperiences() async {
-    if (widget.isLoading || widget.isGeneratingImage) return;
-
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => InteractiveExperiencesScreen(
-          onShareResult: (message) {
-            final value = message.trim();
-            if (!mounted || value.isEmpty) return;
-
-            widget.controller.text = value;
-            widget.controller.selection = TextSelection.collapsed(
-              offset: value.length,
-            );
-            widget.focusNode.requestFocus();
-          },
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final disabled = widget.isLoading || widget.isGeneratingImage;
+    final disabled =
+        widget.isLoading || widget.isGeneratingImage;
 
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(7, 3, 7, 5),
+        padding: const EdgeInsets.fromLTRB(
+          7,
+          3,
+          7,
+          5,
+        ),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.25),
           border: Border(
@@ -128,12 +131,14 @@ class _ChatComposerState extends State<ChatComposer> {
                   disabled ? null : widget.onSpeechToText,
               onImageGeneration:
                   disabled ? null : widget.onImageGeneration,
-              onExperiences: disabled ? null : _openExperiences,
               enabled: !disabled,
               isListening: widget.isListening,
-              isGeneratingImage: widget.isGeneratingImage,
+              isGeneratingImage:
+                  widget.isGeneratingImage,
             ),
+
             const SizedBox(height: 3),
+
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -180,22 +185,28 @@ class _ChatComposerState extends State<ChatComposer> {
                         ),
                         border: InputBorder.none,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
+                        contentPadding:
+                            const EdgeInsets.symmetric(
                           horizontal: 14,
                           vertical: 11,
                         ),
                       ),
                       onSubmitted: (_) {
-                        if (!disabled && _hasText) _send();
+                        if (!disabled && _hasText) {
+                          _send();
+                        }
                       },
                     ),
                   ),
                 ),
+
                 const SizedBox(width: 6),
+
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: disabled || !_hasText ? null : _send,
+                    onTap:
+                        disabled || !_hasText ? null : _send,
                     borderRadius: BorderRadius.circular(22),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 160),
