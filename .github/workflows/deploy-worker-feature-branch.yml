@@ -126,11 +126,13 @@ jobs:
 
           npx wrangler deploy \
             --dry-run \
-            --config wrangler.toml
+            --config wrangler.toml \
+            --var "SA7BI_SOURCE_COMMIT:${GITHUB_SHA}"
 
           npx wrangler deploy \
             --dry-run \
-            --config wrangler-fallback.toml
+            --config wrangler-fallback.toml \
+            --var "SA7BI_SOURCE_COMMIT:${GITHUB_SHA}"
 
       - name: Deploy primary Worker
         working-directory: backend
@@ -142,7 +144,8 @@ jobs:
           set -euo pipefail
 
           npx wrangler deploy \
-            --config wrangler.toml
+            --config wrangler.toml \
+            --var "SA7BI_SOURCE_COMMIT:${GITHUB_SHA}"
 
       - name: Verify primary Worker health
         shell: bash
@@ -178,10 +181,12 @@ jobs:
 
           def get_json(path):
               url = base + path
+
               request = urllib.request.Request(
                   url,
                   headers={
                       "Accept": "application/json",
+                      "Cache-Control": "no-cache",
                       "User-Agent": "Sa7bi-AI-Worker-Verification/1.0",
                   },
               )
@@ -195,9 +200,14 @@ jobs:
                           f"{path}: HTTP {response.status}"
                       )
 
-                  data = json.loads(response.read().decode("utf-8"))
+                  data = json.loads(
+                      response.read().decode("utf-8")
+                  )
 
-              if not isinstance(data, dict) or data.get("ok") is not True:
+              if (
+                  not isinstance(data, dict)
+                  or data.get("ok") is not True
+              ):
                   raise RuntimeError(
                       f"{path}: API did not return ok=true: {data}"
                   )
@@ -210,7 +220,11 @@ jobs:
           )
 
           hadith_items = hadith.get("items")
-          if not isinstance(hadith_items, list) or not hadith_items:
+
+          if (
+              not isinstance(hadith_items, list)
+              or not hadith_items
+          ):
               raise RuntimeError(
                   "Hadith endpoint returned no actual hadith items."
               )
@@ -225,6 +239,7 @@ jobs:
           )
 
           stations = radio.get("stations")
+
           if not isinstance(stations, list):
               raise RuntimeError(
                   "Radio endpoint did not return a stations list."
@@ -233,7 +248,9 @@ jobs:
           invalid_streams = [
               station
               for station in stations
-              if not str(station.get("streamUrl", "")).startswith("https://")
+              if not str(
+                  station.get("streamUrl", "")
+              ).startswith("https://")
           ]
 
           if invalid_streams:
@@ -257,7 +274,11 @@ jobs:
           )
 
           tafsir_books = books.get("items")
-          if not isinstance(tafsir_books, list) or not tafsir_books:
+
+          if (
+              not isinstance(tafsir_books, list)
+              or not tafsir_books
+          ):
               raise RuntimeError(
                   "QuranEnc returned no Arabic tafsir books."
               )
@@ -282,7 +303,11 @@ jobs:
           )
 
           tafsir_items = tafsir.get("items")
-          if not isinstance(tafsir_items, list) or not tafsir_items:
+
+          if (
+              not isinstance(tafsir_items, list)
+              or not tafsir_items
+          ):
               raise RuntimeError(
                   "QuranEnc returned no tafsir text for Surah 1."
               )
@@ -302,7 +327,8 @@ jobs:
           set -euo pipefail
 
           npx wrangler deploy \
-            --config wrangler-fallback.toml
+            --config wrangler-fallback.toml \
+            --var "SA7BI_SOURCE_COMMIT:${GITHUB_SHA}"
 
       - name: Verify fallback Worker and service binding
         shell: bash
@@ -331,6 +357,7 @@ jobs:
                  /tmp/sa7bi-fallback-headers.txt &&
                grep -q '"ok":true' \
                  /tmp/sa7bi-fallback-body.txt; then
+
               cat /tmp/sa7bi-fallback-body.txt
               echo
               echo "Fallback Worker health check passed."
@@ -374,6 +401,7 @@ jobs:
                   base + path,
                   headers={
                       "Accept": "application/json",
+                      "Cache-Control": "no-cache",
                       "User-Agent": "Sa7bi-AI-Fallback-Verification/1.0",
                   },
               )
@@ -391,12 +419,96 @@ jobs:
                       response.read().decode("utf-8")
                   )
 
-              if not isinstance(data, dict) or data.get("ok") is not True:
+              if (
+                  not isinstance(data, dict)
+                  or data.get("ok") is not True
+              ):
                   raise RuntimeError(
                       f"{path}: fallback did not return ok=true"
                   )
 
               print(f"PASS: fallback {path}")
+          PY
+
+      # --------------------------------------------------------
+      # RELEASE IDENTITY GATE
+      # --------------------------------------------------------
+
+      - name: Verify exact source commit on both Workers
+        shell: bash
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
+          PRIMARY_WORKER_URL: ${{ env.WORKER_URL }}
+          FALLBACK_WORKER_URL: ${{ env.FALLBACK_WORKER_URL }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          expected = os.environ["EXPECTED_SOURCE_COMMIT"].strip()
+
+          workers = [
+              (
+                  "primary",
+                  os.environ["PRIMARY_WORKER_URL"],
+              ),
+              (
+                  "fallback",
+                  os.environ["FALLBACK_WORKER_URL"],
+              ),
+          ]
+
+          if not expected:
+              raise RuntimeError(
+                  "Expected source commit is empty."
+              )
+
+          for name, base in workers:
+              url = base.rstrip("/") + "/health"
+
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "Accept": "application/json",
+                      "Cache-Control": "no-cache",
+                      "Pragma": "no-cache",
+                      "User-Agent": "Sa7bi-AI-Commit-Identity/1.0",
+                  },
+              )
+
+              with urllib.request.urlopen(
+                  request,
+                  timeout=45,
+              ) as response:
+                  if response.status != 200:
+                      raise RuntimeError(
+                          f"{name} Worker health returned "
+                          f"HTTP {response.status}."
+                      )
+
+                  data = json.loads(
+                      response.read().decode("utf-8")
+                  )
+
+              actual = str(
+                  data.get("sourceCommit", "")
+              ).strip()
+
+              print(f"{name} expected commit: {expected}")
+              print(f"{name} actual commit:   {actual}")
+
+              if actual.lower() != expected.lower():
+                  raise RuntimeError(
+                      f"{name} Worker source commit mismatch. "
+                      f"Expected {expected}; received {actual or 'missing'}."
+                  )
+
+              print(
+                  f"PASS: {name} Worker matches the selected source commit."
+              )
           PY
 
       - name: Deployment summary
@@ -410,5 +522,6 @@ jobs:
             echo "- Primary Worker: ${WORKER_URL}"
             echo "- Fallback Worker: ${FALLBACK_WORKER_URL}"
             echo "- Backend tests: passed before deployment"
+            echo "- Primary and fallback source identity: verified"
             echo "- APK build or publication: not performed"
           } >> "${GITHUB_STEP_SUMMARY}"
