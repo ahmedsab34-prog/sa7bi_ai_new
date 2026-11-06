@@ -27,7 +27,6 @@
 // مهم:
 // الاتصال بين الـFallback والـPrimary يتم من خلال
 // Cloudflare Service Binding وليس عبر workers.dev.
-// لذلك لا يعتمد على DNS أو Internet routing بين الـWorkers.
 //
 
 const HOP_BY_HOP_HEADERS = new Set([
@@ -42,6 +41,14 @@ const HOP_BY_HOP_HEADERS = new Set([
   "host",
   "content-length",
 ]);
+
+function getSourceCommit(env) {
+  const value = String(
+    env?.SA7BI_SOURCE_COMMIT || "",
+  ).trim();
+
+  return value || "unknown";
+}
 
 function buildHeaders(request) {
   const headers = new Headers();
@@ -71,7 +78,10 @@ function buildHeaders(request) {
   return headers;
 }
 
-function withFallbackHeaders(response) {
+function withFallbackHeaders(
+  response,
+  env,
+) {
   const responseHeaders = new Headers(
     response.headers,
   );
@@ -86,6 +96,43 @@ function withFallbackHeaders(response) {
     "sa7bi-ai-new",
   );
 
+  // هذه الهوية تخص كود الـFallback نفسه،
+  // وليست Commit الـPrimary الموجود داخل جسم الرد.
+  responseHeaders.set(
+    "X-Sa7bi-Fallback-Source-Commit",
+    getSourceCommit(env),
+  );
+
+  // السماح للتطبيقات التي تستخدم CORS بقراءة
+  // ترويسات هوية الـFallback.
+  const exposedHeaders = new Set(
+    (
+      responseHeaders.get(
+        "Access-Control-Expose-Headers",
+      ) || ""
+    )
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+
+  exposedHeaders.add(
+    "X-Sa7bi-Network-Fallback",
+  );
+
+  exposedHeaders.add(
+    "X-Sa7bi-Fallback-Target",
+  );
+
+  exposedHeaders.add(
+    "X-Sa7bi-Fallback-Source-Commit",
+  );
+
+  responseHeaders.set(
+    "Access-Control-Expose-Headers",
+    [...exposedHeaders].join(", "),
+  );
+
   return new Response(
     response.body,
     {
@@ -96,7 +143,10 @@ function withFallbackHeaders(response) {
   );
 }
 
-function errorResponse(error) {
+function errorResponse(
+  error,
+  env,
+) {
   return new Response(
     JSON.stringify({
       ok: false,
@@ -110,12 +160,18 @@ function errorResponse(error) {
       headers: {
         "Content-Type":
           "application/json; charset=utf-8",
+
         "Access-Control-Allow-Origin":
           "*",
+
         "X-Sa7bi-Network-Fallback":
           "1",
+
         "X-Sa7bi-Fallback-Target":
           "sa7bi-ai-new",
+
+        "X-Sa7bi-Fallback-Source-Commit":
+          getSourceCommit(env),
       },
     },
   );
@@ -128,8 +184,7 @@ export default {
   ) {
     try {
       if (
-        request.method ===
-        "OPTIONS"
+        request.method === "OPTIONS"
       ) {
         return new Response(
           null,
@@ -138,12 +193,18 @@ export default {
             headers: {
               "Access-Control-Allow-Origin":
                 "*",
+
               "Access-Control-Allow-Methods":
                 "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+
               "Access-Control-Allow-Headers":
                 "*",
+
               "Access-Control-Max-Age":
                 "86400",
+
+              "Access-Control-Expose-Headers":
+                "X-Sa7bi-Network-Fallback, X-Sa7bi-Fallback-Target, X-Sa7bi-Fallback-Source-Commit",
             },
           },
         );
@@ -159,21 +220,20 @@ export default {
           new Error(
             "PRIMARY_WORKER service binding is not configured.",
           ),
+          env,
         );
       }
 
-      const headers =
-        buildHeaders(
-          request,
-        );
+      const headers = buildHeaders(
+        request,
+      );
 
-      const forwardedRequest =
-        new Request(
-          request,
-          {
-            headers,
-          },
-        );
+      const forwardedRequest = new Request(
+        request,
+        {
+          headers,
+        },
+      );
 
       /*
        * Service Binding:
@@ -191,10 +251,12 @@ export default {
 
       return withFallbackHeaders(
         response,
+        env,
       );
     } catch (error) {
       return errorResponse(
         error,
+        env,
       );
     }
   },
