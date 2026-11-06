@@ -448,27 +448,26 @@ jobs:
           import os
           import urllib.request
 
-          expected = os.environ["EXPECTED_SOURCE_COMMIT"].strip()
+          expected = os.environ[
+              "EXPECTED_SOURCE_COMMIT"
+          ].strip()
 
-          workers = [
-              (
-                  "primary",
-                  os.environ["PRIMARY_WORKER_URL"],
-              ),
-              (
-                  "fallback",
-                  os.environ["FALLBACK_WORKER_URL"],
-              ),
-          ]
+          primary_url = (
+              os.environ["PRIMARY_WORKER_URL"].rstrip("/")
+              + "/health"
+          )
+
+          fallback_url = (
+              os.environ["FALLBACK_WORKER_URL"].rstrip("/")
+              + "/health"
+          )
 
           if not expected:
               raise RuntimeError(
                   "Expected source commit is empty."
               )
 
-          for name, base in workers:
-              url = base.rstrip("/") + "/health"
-
+          def make_request(url):
               request = urllib.request.Request(
                   url,
                   headers={
@@ -479,36 +478,112 @@ jobs:
                   },
               )
 
-              with urllib.request.urlopen(
+              return urllib.request.urlopen(
                   request,
                   timeout=45,
-              ) as response:
-                  if response.status != 200:
-                      raise RuntimeError(
-                          f"{name} Worker health returned "
-                          f"HTTP {response.status}."
-                      )
-
-                  data = json.loads(
-                      response.read().decode("utf-8")
-                  )
-
-              actual = str(
-                  data.get("sourceCommit", "")
-              ).strip()
-
-              print(f"{name} expected commit: {expected}")
-              print(f"{name} actual commit:   {actual}")
-
-              if actual.lower() != expected.lower():
-                  raise RuntimeError(
-                      f"{name} Worker source commit mismatch. "
-                      f"Expected {expected}; received {actual or 'missing'}."
-                  )
-
-              print(
-                  f"PASS: {name} Worker matches the selected source commit."
               )
+
+          # ----------------------------------------------------
+          # PRIMARY IDENTITY
+          # ----------------------------------------------------
+
+          with make_request(primary_url) as response:
+              if response.status != 200:
+                  raise RuntimeError(
+                      "Primary Worker health returned "
+                      f"HTTP {response.status}."
+                  )
+
+              primary_data = json.loads(
+                  response.read().decode("utf-8")
+              )
+
+          primary_commit = str(
+              primary_data.get("sourceCommit", "")
+          ).strip()
+
+          print(f"Primary expected: {expected}")
+          print(f"Primary actual:   {primary_commit}")
+
+          if primary_commit.lower() != expected.lower():
+              raise RuntimeError(
+                  "Primary Worker source commit mismatch. "
+                  f"Expected {expected}; received "
+                  f"{primary_commit or 'missing'}."
+              )
+
+          print(
+              "PASS: Primary Worker matches the selected source commit."
+          )
+
+          # ----------------------------------------------------
+          # FALLBACK IDENTITY
+          #
+          # The JSON body is forwarded from the Primary Worker.
+          # The fallback's own source identity is therefore read
+          # from its dedicated response header.
+          # ----------------------------------------------------
+
+          with make_request(fallback_url) as response:
+              if response.status != 200:
+                  raise RuntimeError(
+                      "Fallback Worker health returned "
+                      f"HTTP {response.status}."
+                  )
+
+              fallback_data = json.loads(
+                  response.read().decode("utf-8")
+              )
+
+              fallback_route = (
+                  response.headers.get(
+                      "X-Sa7bi-Network-Fallback",
+                      "",
+                  ).strip()
+              )
+
+              fallback_commit = (
+                  response.headers.get(
+                      "X-Sa7bi-Fallback-Source-Commit",
+                      "",
+                  ).strip()
+              )
+
+          print(f"Fallback expected: {expected}")
+          print(f"Fallback actual:   {fallback_commit}")
+          print(f"Fallback route:    {fallback_route}")
+
+          if fallback_route != "1":
+              raise RuntimeError(
+                  "Fallback response did not confirm "
+                  "X-Sa7bi-Network-Fallback: 1."
+              )
+
+          if fallback_commit.lower() != expected.lower():
+              raise RuntimeError(
+                  "Fallback Worker source commit mismatch. "
+                  f"Expected {expected}; received "
+                  f"{fallback_commit or 'missing'}."
+              )
+
+          # The forwarded body must also identify the same Primary.
+          forwarded_primary_commit = str(
+              fallback_data.get("sourceCommit", "")
+          ).strip()
+
+          if (
+              forwarded_primary_commit.lower()
+              != expected.lower()
+          ):
+              raise RuntimeError(
+                  "Fallback forwarded a Primary response "
+                  "with a different source commit."
+              )
+
+          print(
+              "PASS: Fallback Worker and its Primary target "
+              "match the selected source commit."
+          )
           PY
 
       - name: Deployment summary
@@ -522,6 +597,7 @@ jobs:
             echo "- Primary Worker: ${WORKER_URL}"
             echo "- Fallback Worker: ${FALLBACK_WORKER_URL}"
             echo "- Backend tests: passed before deployment"
-            echo "- Primary and fallback source identity: verified"
+            echo "- Primary source identity: verified"
+            echo "- Fallback source identity: verified"
             echo "- APK build or publication: not performed"
           } >> "${GITHUB_STEP_SUMMARY}"
