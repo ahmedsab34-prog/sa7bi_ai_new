@@ -2,30 +2,53 @@ import assert from "node:assert/strict";
 
 import {
   handleHadithSearch,
+  handleHadithBooks,
 } from "./src/content/hadith.js";
 
 const originalFetch = globalThis.fetch;
 
 async function call(query = "") {
-  const url = `https://worker.test/v1/hadith${query}`;
-  return handleHadithSearch(new Request(url));
+  return handleHadithSearch(
+    new Request(
+      `https://worker.test/v1/hadith${query}`,
+    ),
+  );
 }
 
 function jsonResponse(value, status = 200) {
-  return new Response(JSON.stringify(value), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
+  return new Response(
+    JSON.stringify(value),
+    {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+      },
     },
-  });
+  );
 }
 
 try {
-  // The provider requires a bounded range. Verify both path and range.
+  // ==========================================================
+  // TEST 1: PRIMARY PROVIDER
+  // ==========================================================
+
   globalThis.fetch = async (url) => {
     const requested = new URL(String(url));
-    assert.equal(requested.pathname, "/books/bukhari");
-    assert.equal(requested.searchParams.get("range"), "1-300");
+
+    assert.equal(
+      requested.hostname,
+      "api.hadith.gading.dev",
+    );
+
+    assert.equal(
+      requested.pathname,
+      "/books/bukhari",
+    );
+
+    assert.equal(
+      requested.searchParams.get("range"),
+      "1-300",
+    );
 
     return jsonResponse({
       data: {
@@ -39,21 +62,119 @@ try {
     });
   };
 
-  const success = await call("?book=bukhari&limit=3");
-  const successBody = await success.json();
+  const primary = await call(
+    "?book=bukhari&limit=3",
+  );
 
-  assert.equal(success.status, 200);
-  assert.equal(successBody.ok, true);
-  assert.equal(successBody.count, 1);
-  assert.equal(successBody.items[0].book, "bukhari");
+  const primaryBody = await primary.json();
+
+  assert.equal(primary.status, 200);
+  assert.equal(primaryBody.ok, true);
+  assert.equal(primaryBody.count, 1);
+
   assert.equal(
-    successBody.items[0].text,
+    primaryBody.items[0].book,
+    "bukhari",
+  );
+
+  assert.equal(
+    primaryBody.items[0].text,
     "إنما الأعمال بالنيات",
   );
 
-  // A real search with no matching text is an empty success, not an outage.
+  assert.deepEqual(
+    primaryBody.providers,
+    ["gading"],
+  );
+
+  // ==========================================================
+  // TEST 2: FULL ARABIC EDITION FALLBACK
+  // ==========================================================
+
+  let fallbackCalls = 0;
+
+  globalThis.fetch = async (url) => {
+    const requested = new URL(String(url));
+
+    if (
+      requested.hostname === "api.hadith.gading.dev"
+    ) {
+      return jsonResponse({
+        data: {
+          hadiths: [
+            {
+              number: 1,
+              arab: "إنما الأعمال بالنيات",
+            },
+          ],
+        },
+      });
+    }
+
+    assert.equal(
+      requested.hostname,
+      "cdn.jsdelivr.net",
+    );
+
+    assert.equal(
+      requested.pathname,
+      "/gh/fawazahmed0/hadith-api@1/editions/ara-bukhari.min.json",
+    );
+
+    fallbackCalls += 1;
+
+    return jsonResponse({
+      metadata: {
+        name: "Sahih al-Bukhari",
+      },
+      hadiths: [
+        {
+          hadithnumber: 1,
+          arabicnumber: 1,
+          text: "إنما الأعمال بالنيات",
+        },
+        {
+          hadithnumber: 2,
+          arabicnumber: 2,
+          text: "الصبر ضياء",
+        },
+      ],
+    });
+  };
+
+  const fullEdition = await call(
+    "?book=bukhari&q=الصبر&limit=3",
+  );
+
+  const fullEditionBody = await fullEdition.json();
+
+  assert.equal(fullEdition.status, 200);
+  assert.equal(fullEditionBody.ok, true);
+  assert.equal(fullEditionBody.count, 1);
+
+  assert.equal(
+    fullEditionBody.items[0].number,
+    2,
+  );
+
+  assert.equal(
+    fullEditionBody.items[0].text,
+    "الصبر ضياء",
+  );
+
+  assert.deepEqual(
+    fullEditionBody.providers,
+    ["fawaz"],
+  );
+
+  assert.equal(fallbackCalls, 1);
+
+  // ==========================================================
+  // TEST 3: NO MATCH IS NOT AN OUTAGE
+  // ==========================================================
+
   const noMatch = await call(
-    "?book=bukhari&q=كلمة_غير_موجودة",
+    "?book=bukhari&q=لفظ_غير_موجود&limit=3",
   );
 
   const noMatchBody = await noMatch.json();
@@ -62,54 +183,121 @@ try {
   assert.equal(noMatchBody.ok, true);
   assert.equal(noMatchBody.count, 0);
 
-  // Correct provider slug for Sunan Abi Dawud.
+  assert.equal(
+    fallbackCalls,
+    1,
+    "The cached Arabic edition should be reused.",
+  );
+
+  // ==========================================================
+  // TEST 4: ABU DAWUD EDITION MAPPING
+  // ==========================================================
+
   globalThis.fetch = async (url) => {
     const requested = new URL(String(url));
-    assert.equal(requested.pathname, "/books/abu-daud");
-    assert.equal(requested.searchParams.get("range"), "1-300");
+
+    if (
+      requested.hostname === "api.hadith.gading.dev"
+    ) {
+      return new Response(
+        "primary unavailable",
+        { status: 503 },
+      );
+    }
+
+    assert.equal(
+      requested.pathname,
+      "/gh/fawazahmed0/hadith-api@1/editions/ara-abudawud.min.json",
+    );
 
     return jsonResponse({
-      data: {
-        hadiths: [
-          {
-            number: 1,
-            arab: "حديث تجريبي من أبي داود",
-          },
-        ],
-      },
+      hadiths: [
+        {
+          hadithnumber: 1,
+          text: "حديث تجريبي من أبي داود",
+        },
+      ],
     });
   };
 
-  const abuDaud = await call("?book=abu-daud&limit=1");
+  const abuDaud = await call(
+    "?book=abu-daud&limit=1",
+  );
+
   const abuDaudBody = await abuDaud.json();
 
   assert.equal(abuDaud.status, 200);
-  assert.equal(abuDaudBody.items[0].book, "abu-daud");
 
-  // Provider outage must never be reported as an empty successful search.
-  globalThis.fetch = async () =>
-    new Response("upstream unavailable", {
-      status: 503,
-      headers: {
-        "Content-Type": "text/plain",
-      },
-    });
+  assert.equal(
+    abuDaudBody.items[0].book,
+    "abu-daud",
+  );
 
-  const unavailable = await call("?book=bukhari");
+  assert.equal(
+    abuDaudBody.items[0].text,
+    "حديث تجريبي من أبي داود",
+  );
+
+  assert.equal(
+    abuDaudBody.warnings[0].fallback,
+    "fawazahmed0/hadith-api",
+  );
+
+  // ==========================================================
+  // TEST 5: BOTH PROVIDERS FAIL
+  // ==========================================================
+
+  globalThis.fetch = async () => {
+    return new Response(
+      "upstream unavailable",
+      { status: 503 },
+    );
+  };
+
+  const unavailable = await call(
+    "?book=muslim&limit=1",
+  );
+
   const unavailableBody = await unavailable.json();
 
   assert.equal(unavailable.status, 502);
   assert.equal(unavailableBody.ok, false);
+
   assert.equal(
     unavailableBody.error,
     "HADITH_SOURCES_UNAVAILABLE",
   );
+
   assert.equal(
-    unavailableBody.bookErrors[0].error,
+    unavailableBody.bookErrors[0].primaryError,
     "HTTP_503",
   );
 
-  console.log("hadith provider smoke test: PASS");
+  assert.equal(
+    unavailableBody.bookErrors[0].fallbackError,
+    "HTTP_503",
+  );
+
+  // ==========================================================
+  // TEST 6: FLUTTER-COMPATIBLE BOOK LIST
+  // ==========================================================
+
+  const booksResponse = await handleHadithBooks();
+
+  const booksBody = await booksResponse.json();
+
+  assert.equal(booksResponse.status, 200);
+  assert.equal(booksBody.ok, true);
+
+  assert.ok(
+    booksBody.items.some(
+      (book) => book.id === "abu-daud",
+    ),
+  );
+
+  console.log(
+    "hadith provider smoke test: PASS",
+  );
 } finally {
   globalThis.fetch = originalFetch;
 }
