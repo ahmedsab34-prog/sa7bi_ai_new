@@ -81,8 +81,8 @@ function parsePublishedDate(value) {
   const timestamp = Date.parse(raw);
 
   return Number.isFinite(timestamp)
-      ? timestamp
-      : null;
+    ? timestamp
+    : null;
 }
 
 function normalizeTitle(value) {
@@ -245,19 +245,19 @@ export function filterAndNormalizeItems(
   } = {},
 ) {
   const currentTime = Number.isFinite(now)
-      ? now
-      : Date.now();
+    ? now
+    : Date.now();
 
   const safeAgeDays =
-      Number.isFinite(maxAgeDays) && maxAgeDays > 0
-          ? maxAgeDays
-          : MAX_NEWS_AGE_DAYS;
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? maxAgeDays
+      : MAX_NEWS_AGE_DAYS;
 
   const cutoff =
-      currentTime - safeAgeDays * DAY_MS;
+    currentTime - safeAgeDays * DAY_MS;
 
   const futureLimit =
-      currentTime + MAX_FUTURE_SKEW_MS;
+    currentTime + MAX_FUTURE_SKEW_MS;
 
   const byLink = new Set();
   const byTitle = new Set();
@@ -279,7 +279,7 @@ export function filterAndNormalizeItems(
     }
 
     const publishedAt =
-        parsePublishedDate(item.pubDate);
+      parsePublishedDate(item.pubDate);
 
     if (
       publishedAt != null &&
@@ -362,9 +362,9 @@ export function filterAndNormalizeItems(
     .map(({ _publishedAt, ...item }) => item);
 
   const latestTimestamp =
-      cleaned.find(
-        (item) => item._publishedAt != null,
-      )?._publishedAt ?? null;
+    cleaned.find(
+      (item) => item._publishedAt != null,
+    )?._publishedAt ?? null;
 
   return {
     items: limited,
@@ -373,8 +373,8 @@ export function filterAndNormalizeItems(
       maxAgeDays: safeAgeDays,
       latestPublishedAt:
         latestTimestamp == null
-            ? null
-            : new Date(latestTimestamp).toISOString(),
+          ? null
+          : new Date(latestTimestamp).toISOString(),
     },
   };
 }
@@ -391,20 +391,20 @@ export async function fetchAllNewsWithStats({
   maxAgeDays = MAX_NEWS_AGE_DAYS,
 } = {}) {
   const [googleResult, bingResult] =
-      await Promise.allSettled([
-        fetchGoogleNews(),
-        fetchBingNews(),
-      ]);
+    await Promise.allSettled([
+      fetchGoogleNews(),
+      fetchBingNews(),
+    ]);
 
   const google =
-      googleResult.status === "fulfilled"
-          ? googleResult.value
-          : [];
+    googleResult.status === "fulfilled"
+      ? googleResult.value
+      : [];
 
   const bing =
-      bingResult.status === "fulfilled"
-          ? bingResult.value
-          : [];
+    bingResult.status === "fulfilled"
+      ? bingResult.value
+      : [];
 
   const rawItems = [...google, ...bing];
 
@@ -417,8 +417,8 @@ export async function fetchAllNewsWithStats({
   );
 
   const failedSources =
-      Number(googleResult.status === "rejected") +
-      Number(bingResult.status === "rejected");
+    Number(googleResult.status === "rejected") +
+    Number(bingResult.status === "rejected");
 
   return {
     ...normalized,
@@ -454,11 +454,11 @@ export async function handleNews() {
         {
           ok: false,
           error: noFreshNews
-              ? "NO_FRESH_NEWS_AVAILABLE"
-              : "NEWS_SOURCES_UNAVAILABLE",
+            ? "NO_FRESH_NEWS_AVAILABLE"
+            : "NEWS_SOURCES_UNAVAILABLE",
           message: noFreshNews
-              ? "المصادر أعادت أخبارًا قديمة أو غير صالحة؛ لم نعرضها باعتبارها أخبارًا جديدة."
-              : "مصادر الأخبار غير متاحة حاليًا.",
+            ? "المصادر أعادت أخبارًا قديمة أو غير صالحة؛ لم نعرضها باعتبارها أخبارًا جديدة."
+            : "مصادر الأخبار غير متاحة حاليًا.",
           items: [],
           count: 0,
           backendVersion: BACKEND_VERSION,
