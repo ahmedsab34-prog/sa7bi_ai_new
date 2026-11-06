@@ -1,7 +1,8 @@
-
 import 'package:flutter/material.dart';
 
-/// شريط أدوات محادثة مدمج مع الحفاظ على جميع الأدوات.
+/// شريط أدوات محادثة مدمج.
+/// الصورة والفيديو أصبحا تحت زر وسائط واحد.
+/// لا يوجد زر ألعاب هنا؛ الألعاب لها تبويب مستقل.
 class ChatToolbar extends StatelessWidget {
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
@@ -10,7 +11,6 @@ class ChatToolbar extends StatelessWidget {
   final VoidCallback? onText;
   final VoidCallback? onSpeechToText;
   final VoidCallback? onImageGeneration;
-  final VoidCallback? onExperiences;
 
   final bool enabled;
   final bool isListening;
@@ -25,11 +25,105 @@ class ChatToolbar extends StatelessWidget {
     this.onText,
     this.onSpeechToText,
     this.onImageGeneration,
-    this.onExperiences,
     this.enabled = true,
     this.isListening = false,
     this.isGeneratingImage = false,
   });
+
+  Future<void> _openMediaMenu(BuildContext context) async {
+    if (!enabled) return;
+
+    final hasMediaAction =
+        onCamera != null ||
+        onGallery != null ||
+        onVideo != null;
+
+    if (!hasMediaAction) return;
+
+    final action = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: const Color(0xFF111827),
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(22),
+        ),
+      ),
+      builder: (sheetContext) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                14,
+                4,
+                14,
+                18,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'إرسال صورة أو فيديو',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (onCamera != null)
+                    _MediaChoiceTile(
+                      icon: Icons.camera_alt_rounded,
+                      title: 'التقاط صورة بالكاميرا',
+                      subtitle: 'تصوير صورة جديدة للتحليل',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 1);
+                      },
+                    ),
+
+                  if (onGallery != null)
+                    _MediaChoiceTile(
+                      icon: Icons.photo_library_rounded,
+                      title: 'اختيار صورة من المعرض',
+                      subtitle: 'إرسال صورة محفوظة على الجهاز',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 2);
+                      },
+                    ),
+
+                  if (onVideo != null)
+                    _MediaChoiceTile(
+                      icon: Icons.videocam_rounded,
+                      title: 'اختيار فيديو',
+                      subtitle: 'إرسال فيديو لتحليل محتواه',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 3);
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!context.mounted || !enabled) return;
+
+    switch (action) {
+      case 1:
+        onCamera?.call();
+        break;
+      case 2:
+        onGallery?.call();
+        break;
+      case 3:
+        onVideo?.call();
+        break;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,32 +145,30 @@ class ChatToolbar extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ToolButton(
-              icon: Icons.camera_alt_rounded,
-              tooltip: 'الكاميرا',
-              onPressed: enabled ? onCamera : null,
-            ),
-            _ToolButton(
-              icon: Icons.photo_library_rounded,
-              tooltip: 'الصور والمعرض',
-              onPressed: enabled ? onGallery : null,
-            ),
-            _ToolButton(
-              icon: Icons.videocam_rounded,
-              tooltip: 'فيديو',
-              onPressed: enabled ? onVideo : null,
-            ),
+            if (onCamera != null ||
+                onGallery != null ||
+                onVideo != null)
+              _ToolButton(
+                icon: Icons.add_a_photo_rounded,
+                tooltip: 'صورة أو فيديو',
+                onPressed: enabled
+                    ? () => _openMediaMenu(context)
+                    : null,
+              ),
+
             _ToolButton(
               icon: Icons.mic_rounded,
               tooltip: isListening ? 'إيقاف التسجيل' : 'صوت',
               active: isListening,
               onPressed: enabled ? onVoice : null,
             ),
+
             _ToolButton(
               icon: Icons.keyboard_rounded,
               tooltip: 'كتابة',
               onPressed: enabled ? onText : null,
             ),
+
             _ToolButton(
               icon: isListening
                   ? Icons.stop_circle_rounded
@@ -87,6 +179,7 @@ class ChatToolbar extends StatelessWidget {
               active: isListening,
               onPressed: enabled ? onSpeechToText : null,
             ),
+
             _ToolButton(
               icon: isGeneratingImage
                   ? Icons.hourglass_top_rounded
@@ -100,14 +193,65 @@ class ChatToolbar extends StatelessWidget {
                   ? onImageGeneration
                   : null,
             ),
-            _ToolButton(
-              icon: Icons.sports_esports_rounded,
-              tooltip: 'الألعاب والتجارب التفاعلية',
-              emphasized: true,
-              onPressed: enabled ? onExperiences : null,
-            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MediaChoiceTile extends StatelessWidget {
+  const _MediaChoiceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 2,
+      ),
+      leading: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: const Color(0x2267E8F9),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Icon(
+          icon,
+          color: const Color(0xFF67E8F9),
+          size: 21,
+        ),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(
+          color: Colors.white54,
+          fontSize: 10,
+        ),
+      ),
+      trailing: const Icon(
+        Icons.chevron_left_rounded,
+        color: Colors.white38,
       ),
     );
   }
