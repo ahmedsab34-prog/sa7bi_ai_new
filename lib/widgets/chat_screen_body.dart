@@ -11,10 +11,7 @@ import 'credits_status.dart';
 import 'rewarded_ad_button.dart';
 
 /// جسم شاشة المحادثة.
-///
-/// مسؤول عن تركيب الواجهة فقط.
-/// منطق الذكاء الاصطناعي والوسائط والحفظ موجود في ChatScreen
-/// والخدمات المرتبطة به.
+/// منطق الذكاء والوسائط والحفظ موجود في ChatScreen والخدمات.
 class ChatScreenBody extends StatelessWidget {
   final ChatController chatController;
   final ProfileService profileService;
@@ -26,9 +23,7 @@ class ChatScreenBody extends StatelessWidget {
   final String title;
   final String? topic;
 
-  /// هل الشاشة تسمح بالتفاعل؟
   final bool enabled;
-
   final bool isListening;
   final bool isGeneratingImage;
 
@@ -67,6 +62,101 @@ class ChatScreenBody extends StatelessWidget {
     required this.onClear,
   });
 
+  Future<void> _showCreditsPanel(
+    BuildContext context, {
+    required bool showReward,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF101725),
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(22),
+        ),
+      ),
+      builder: (sheetContext) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                14,
+                4,
+                14,
+                20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'رصيد صاحبي AI',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (!showReward)
+                    const CreditsStatus(
+                      compact: false,
+                      showRewardButton: false,
+                    ),
+
+                  if (showReward)
+                    const RewardedAdButton(
+                      compact: false,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildUtilityRail(BuildContext context) {
+    return SizedBox(
+      width: 42,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+
+          _UtilityIconButton(
+            icon: Icons.bolt_rounded,
+            color: const Color(0xFFFFD76A),
+            tooltip: 'رصيد Credits',
+            onTap: () {
+              _showCreditsPanel(
+                context,
+                showReward: false,
+              );
+            },
+          ),
+
+          const SizedBox(height: 8),
+
+          _UtilityIconButton(
+            icon: Icons.play_circle_fill_rounded,
+            color: const Color(0xFF70E5C7),
+            tooltip: 'إعلان المكافأة',
+            onTap: () {
+              _showCreditsPanel(
+                context,
+                showReward: true,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -96,8 +186,6 @@ class ChatScreenBody extends StatelessWidget {
           child: SafeArea(
             child: Column(
               children: [
-                // رأس الحالة يحتفظ بالأيقونة والحالة ومسح المحادثة،
-                // لكن اسم الشاشة يظهر مرة واحدة فقط في AppBar.
                 ChatStatusHeader(
                   theme: theme,
                   title: title,
@@ -111,59 +199,53 @@ class ChatScreenBody extends StatelessWidget {
                   showTitle: false,
                 ),
 
-                // حالة الرصيد وزر المكافأة.
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    10,
-                    3,
-                    10,
-                    5,
-                  ),
+                Expanded(
                   child: Row(
+                    // نستخدم LTR في هذا الصف فقط حتى تكون
+                    // أيقونات الرصيد على يسار منطقة المحادثة.
+                    textDirection: TextDirection.ltr,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Expanded(
-                        child: CreditsStatus(
-                          compact: true,
-                          showRewardButton: false,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      RewardedAdButton(
-                        compact: true,
-                        onRewarded: () {
-                          // يعاد بناء حالة الرصيد عبر الخدمة
-                          // والمكونات المستمعة لها.
-                        },
+                      _buildUtilityRail(context),
+
+                      const SizedBox(width: 3),
+
+                      Expanded(
+                        child: messages.isEmpty
+                            ? ChatEmptyState(
+                                theme: theme,
+                                title: aiName,
+                                inlineHeading:
+                                    chatController.isKhalasana
+                                        ? 'خلصانة'
+                                        : null,
+                                inlineTagline:
+                                    chatController.isKhalasana
+                                        ? 'أنا معاك..'
+                                        : null,
+                                showTitle: false,
+                                subtitle:
+                                    chatController.isKhalasana
+                                        ? 'قول لي محتاج إيه، '
+                                            'ونبدأ مع بعض من غير ما تحتاج تختار مجال.'
+                                        : 'اتكلم معايا براحتك، '
+                                            'وأنا هساعدك على قد ما أقدر.',
+                              )
+                            : ChatMessageList(
+                                messages: messages,
+                                theme: theme,
+                                userName: userName,
+                                userPhoto: userPhoto,
+                                aiName: aiName,
+                                isLoading:
+                                    chatController.isLoading,
+                                controller: scrollController,
+                              ),
                       ),
                     ],
                   ),
                 ),
 
-                // الرسائل أو شاشة البداية من دون تكرار الاسم.
-                Expanded(
-                  child: messages.isEmpty
-                      ? ChatEmptyState(
-                          theme: theme,
-                          title: aiName,
-                          showTitle: false,
-                          subtitle: chatController.isKhalasana
-                              ? 'اتكلم مع خلصانة براحتك، '
-                                  'والمحادثة تتغير حسب الموضوع.'
-                              : 'اتكلم معايا براحتك، '
-                                  'وأنا هساعدك على قد ما أقدر.',
-                        )
-                      : ChatMessageList(
-                          messages: messages,
-                          theme: theme,
-                          userName: userName,
-                          userPhoto: userPhoto,
-                          aiName: aiName,
-                          isLoading: chatController.isLoading,
-                          controller: scrollController,
-                        ),
-                ),
-
-                // أدوات الكتابة والوسائط.
                 ChatComposer(
                   controller: textController,
                   focusNode: focusNode,
@@ -187,6 +269,50 @@ class ChatScreenBody extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _UtilityIconButton extends StatelessWidget {
+  const _UtilityIconButton({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: color.withValues(alpha: 0.28),
+              ),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 19,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
