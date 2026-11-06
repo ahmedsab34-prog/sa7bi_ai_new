@@ -1,38 +1,93 @@
 import 'package:flutter/material.dart';
 
+import 'audio_center_screen.dart';
+import 'chat_screen.dart';
+import 'profile_screen.dart';
+import 'secure_venting_screen.dart';
 import 'social_groups_screen.dart';
-import 'social_connections_screen.dart';
+import 'audio_center_screen.dart';
+import 'service_config.dart';
+import 'config/service_keys.dart';
+import 'widgets/app_header.dart';
+import 'widgets/audio_center_with_header.dart';
 import 'theme/sa7bi_theme.dart';
 
 /// تبويب الشات الرئيسي.
 ///
-/// الوضع العام يعرض المجموعات العامة والدردشة الجماعية.
-/// الوضع الخاص يعرض الدعوات والرسائل المباشرة.
+/// العام: المجموعات العامة الحالية.
+/// الخاص: فضفضة AI المشفرة والمحمية برقم سري.
 ///
-/// نستخدم IndexedStack حتى لا نفقد حالة الشاشة عند التبديل
-/// بين العام والخاص.
+/// يحتفظ IndexedStack بحالة كل شاشة عند التبديل.
 class ChatTabScreen extends StatefulWidget {
   const ChatTabScreen({super.key});
 
   @override
-  State<ChatTabScreen> createState() => _ChatTabScreenState();
+  State<ChatTabScreen> createState() =>
+      _ChatTabScreenState();
 }
 
 class _ChatTabScreenState extends State<ChatTabScreen> {
-  // 0 = الشات العام.
-  // 1 = الشات الخاص.
   int _selectedMode = 0;
 
-  // لا ننشئ شاشة الرسائل الخاصة إلا عند فتحها أول مرة.
-  // بعد ذلك تظل محفوظة داخل IndexedStack.
   Widget? _privateScreen;
+
+  void _openProfile() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfileScreen(
+          onProfileTap: null,
+          onAudio: _openAudioCenter,
+        ),
+      ),
+    );
+  }
+
+  void _openAudioCenter() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AudioCenterWithHeader(
+          onProfileTap: _openProfile,
+        ),
+      ),
+    );
+  }
+
+  String _ventingContext() {
+    for (final service in sa7biServices) {
+      if (service.serviceKey == ServiceKeys.venting) {
+        return service.aiRole;
+      }
+    }
+
+    return '''
+أنت مساعد فضفضة خاص في صاحبي AI.
+استمع للمستخدم باحترام وبدون أحكام.
+ساعده على ترتيب أفكاره واختيار خطوات عملية.
+لا تدّعي أنك طبيب أو معالج.
+''';
+  }
+
+  Widget _createPrivateVentingScreen() {
+    return SecureVentingScreen(
+      child: ChatScreen(
+        key: const ValueKey<String>(
+          'private-ai-venting-chat',
+        ),
+        serviceKey: ServiceKeys.venting,
+        serviceTitle: 'الفضفضة السرية',
+        serviceContext: _ventingContext(),
+        embedded: true,
+      ),
+    );
+  }
 
   void _selectMode(int mode) {
     if (mode == _selectedMode) return;
 
     setState(() {
       if (mode == 1) {
-        _privateScreen ??= const SocialConnectionsScreen();
+        _privateScreen ??=
+            _createPrivateVentingScreen();
       }
 
       _selectedMode = mode;
@@ -45,14 +100,26 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
       textDirection: TextDirection.rtl,
       child: Column(
         children: [
+          // الهيدر الموحد يظهر قبل اختيار نوع المحادثة.
+          AppHeader(
+            onProfileTap: _openProfile,
+            onAudioTap: _openAudioCenter,
+          ),
+
+          // اختيار العام والخاص أسفل الهيدر.
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
+            padding: const EdgeInsets.fromLTRB(
+              12,
+              5,
+              12,
+              7,
+            ),
             child: Container(
-              height: 49,
+              height: 46,
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: Sa7biTheme.surface,
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: Sa7biTheme.border,
                 ),
@@ -67,11 +134,13 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
                       onTap: () => _selectMode(0),
                     ),
                   ),
+
                   const SizedBox(width: 5),
+
                   Expanded(
                     child: _ChatModeButton(
-                      title: 'الشات الخاص',
-                      icon: Icons.forum_rounded,
+                      title: 'الفضفضة السرية',
+                      icon: Icons.lock_rounded,
                       selected: _selectedMode == 1,
                       onTap: () => _selectMode(1),
                     ),
@@ -86,7 +155,8 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
               index: _selectedMode,
               children: [
                 const SocialGroupsScreen(),
-                _privateScreen ?? const SizedBox.shrink(),
+                _privateScreen ??
+                    const SizedBox.shrink(),
               ],
             ),
           ),
@@ -125,12 +195,16 @@ class _ChatModeButton extends StatelessWidget {
             curve: Curves.easeOut,
             decoration: BoxDecoration(
               color: selected
-                  ? Sa7biTheme.cyan.withValues(alpha: 0.14)
+                  ? Sa7biTheme.cyan.withValues(
+                      alpha: 0.14,
+                    )
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(11),
               border: Border.all(
                 color: selected
-                    ? Sa7biTheme.cyan.withValues(alpha: 0.85)
+                    ? Sa7biTheme.cyan.withValues(
+                        alpha: 0.85,
+                      )
                     : Colors.transparent,
                 width: 1,
               ),
@@ -144,12 +218,14 @@ class _ChatModeButton extends StatelessWidget {
               children: [
                 Icon(
                   icon,
-                  size: 19,
+                  size: 18,
                   color: selected
                       ? Sa7biTheme.cyan
                       : Sa7biTheme.textSecondary,
                 ),
+
                 const SizedBox(width: 6),
+
                 Flexible(
                   child: Text(
                     title,
@@ -159,7 +235,7 @@ class _ChatModeButton extends StatelessWidget {
                       color: selected
                           ? Sa7biTheme.textPrimary
                           : Sa7biTheme.textSecondary,
-                      fontSize: 11,
+                      fontSize: 10.5,
                       fontWeight: selected
                           ? FontWeight.w900
                           : FontWeight.w700,
