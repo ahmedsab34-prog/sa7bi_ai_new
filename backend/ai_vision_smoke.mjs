@@ -29,6 +29,7 @@ const request = new Request("https://worker.test/v1/chat", {
   headers: { "X-Sa7bi-Force-Fallback": "1" },
 });
 
+// 1) Multiple-image analysis uses the configured Moondream model.
 const result = await runTextOrVisionWithFallback({
   request,
   env,
@@ -54,4 +55,69 @@ assert.match(result.answer, /الصورة 2:/);
 const status = getAIStatus(env);
 assert.equal(status.workersAI.models.vision, MOONDREAM_VISION_MODEL);
 
-console.log("AI vision smoke test passed (mocked env.AI; live provider not called).");
+// 2) A text-provider failure must be normalized to the one code that
+//    index.js handles by releasing the reserved credit operation.
+const textFailureRequest = new Request(
+  "https://worker.test/v1/chat",
+  {
+    method: "POST",
+    headers: { "X-Sa7bi-Force-Fallback": "1" },
+  },
+);
+
+const failingTextEnv = {
+  AI: {
+    async run() {
+      throw new Error("mock provider failure");
+    },
+  },
+};
+
+await assert.rejects(
+  () => runTextOrVisionWithFallback({
+    request: textFailureRequest,
+    env: failingTextEnv,
+    messages: [
+      { role: "user", content: "رسالة اختبار" },
+    ],
+  }),
+  (error) => {
+    assert.equal(error.code, "ALL_AI_PROVIDERS_FAILED");
+    assert.equal(
+      error.cause?.message,
+      "WORKERS_TEXT_REQUEST_FAILED",
+    );
+    return true;
+  },
+);
+
+// 3) An empty fallback answer is an explicit provider failure too.
+const emptyTextEnv = {
+  AI: {
+    async run() {
+      return { response: "" };
+    },
+  },
+};
+
+await assert.rejects(
+  () => runTextOrVisionWithFallback({
+    request: textFailureRequest,
+    env: emptyTextEnv,
+    messages: [
+      { role: "user", content: "رسالة اختبار" },
+    ],
+  }),
+  (error) => {
+    assert.equal(error.code, "ALL_AI_PROVIDERS_FAILED");
+    assert.equal(
+      error.cause?.message,
+      "WORKERS_TEXT_EMPTY",
+    );
+    return true;
+  },
+);
+
+console.log(
+  "AI vision + safe-retry routing smoke test passed (mocked env.AI; live provider not called).",
+);
