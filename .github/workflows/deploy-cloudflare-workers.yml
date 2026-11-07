@@ -64,7 +64,7 @@ jobs:
             exit 1
           fi
 
-          TRIGGER_VALUE="$(tr -d '\r\n' < .github/DEPLOY_CLOUDFLARE_WORKERS)"
+          TRIGGER_VALUE="$(sed '/^[[:space:]]*$/d; s/^[[:space:]]*//; s/[[:space:]]*$//' .github/DEPLOY_CLOUDFLARE_WORKERS | paste -sd ' ' -)"
           if [[ "${TRIGGER_VALUE}" != "DEPLOY PRIMARY AND FALLBACK" ]]; then
             echo "::error::The deployment trigger confirmation text is invalid."
             exit 1
