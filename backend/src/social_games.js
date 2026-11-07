@@ -1,4 +1,3 @@
-
 // backend/src/social_games.js
 // Sa7bi AI social accounts and persistent cross-device multiplayer games.
 // Room state and accounts are stored in a SQLite-backed Durable Object.
@@ -12,6 +11,8 @@ const PASSWORD_ITERATIONS = 120000;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_ROOM_HISTORY = 100;
 const MAX_SAVED_ROOMS = 100;
+const REGISTRATION_RATE_WINDOW_MS = 10 * 60 * 1000;
+const REGISTRATION_RATE_LIMIT = 60;
 
 const SUPPORTED_GAMES = new Set([
   "tic_tac_toe",
@@ -387,7 +388,85 @@ export class Sa7biSocial {
     return body;
   }
 
+  async checkRegistrationRateLimit(request) {
+    const sql = this.ctx.storage.sql;
+    const now = Date.now();
+    const windowStartedBefore = now - REGISTRATION_RATE_WINDOW_MS;
+    const clientIp = request.headers.get("CF-Connecting-IP")?.trim() || "unknown";
+    const ipHash = await sha256(`sa7bi-social-register:${clientIp}`);
+
+    sql.exec(`
+      CREATE TABLE IF NOT EXISTS social_registration_rate_limits (
+        ip_hash TEXT PRIMARY KEY,
+        window_started_at INTEGER NOT NULL,
+        attempt_count INTEGER NOT NULL
+      )
+    `);
+
+    sql.exec(
+      `DELETE FROM social_registration_rate_limits
+       WHERE window_started_at < ?`,
+      now - 24 * 60 * 60 * 1000,
+    );
+
+    sql.exec(
+      `INSERT INTO social_registration_rate_limits
+       (ip_hash, window_started_at, attempt_count)
+       VALUES (?, ?, 1)
+       ON CONFLICT(ip_hash) DO UPDATE SET
+         window_started_at = CASE
+           WHEN social_registration_rate_limits.window_started_at <= ?
+           THEN excluded.window_started_at
+           ELSE social_registration_rate_limits.window_started_at
+         END,
+         attempt_count = CASE
+           WHEN social_registration_rate_limits.window_started_at <= ?
+           THEN 1
+           ELSE social_registration_rate_limits.attempt_count + 1
+         END`,
+      ipHash,
+      now,
+      windowStartedBefore,
+      windowStartedBefore,
+    );
+
+    const row = sql
+      .exec(
+        `SELECT window_started_at, attempt_count
+         FROM social_registration_rate_limits
+         WHERE ip_hash = ?`,
+        ipHash,
+      )
+      .toArray()[0];
+
+    if (!row || Number(row.attempt_count) <= REGISTRATION_RATE_LIMIT) {
+      return null;
+    }
+
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil(
+        (Number(row.window_started_at) +
+          REGISTRATION_RATE_WINDOW_MS -
+          now) /
+          1000,
+      ),
+    );
+
+    return json(
+      {
+        ok: false,
+        error: "REGISTRATION_RATE_LIMITED",
+        retryAfterSeconds,
+      },
+      429,
+    );
+  }
+
   async register(request) {
+    const rateLimitResponse = await this.checkRegistrationRateLimit(request);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const body = await this.readBody(request);
 
     if (body.error) {
