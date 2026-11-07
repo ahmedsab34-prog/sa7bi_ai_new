@@ -265,7 +265,29 @@ class SocialMessagingService {
       );
     }
 
-    final response = await http.Response.fromStream(streamed);
+    late final http.Response response;
+
+    // مهلة مستقلة لقراءة جسم الرد، وليس لإرسال الطلب فقط.
+    try {
+      response = await http.Response.fromStream(streamed)
+          .timeout(_timeout);
+    } on TimeoutException {
+      throw const SocialMessagingException(
+        'NETWORK_TIMEOUT',
+        'الخادم تأخر في إرسال بيانات الرسالة. حاول مرة أخرى.',
+      );
+    } on http.ClientException {
+      throw const SocialMessagingException(
+        'NETWORK_ERROR',
+        'انقطع الاتصال أثناء استلام بيانات الرسالة. تحقق من الإنترنت.',
+      );
+    } catch (_) {
+      throw const SocialMessagingException(
+        'NETWORK_ERROR',
+        'تعذر استلام رد خدمة الرسائل. تحقق من الإنترنت.',
+      );
+    }
+
     Map<String, dynamic> decoded;
 
     try {
