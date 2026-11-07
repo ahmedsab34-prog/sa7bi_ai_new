@@ -33,7 +33,15 @@ db.exec(`
   CREATE TABLE users (
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL,
+    password_salt TEXT,
+    password_hash TEXT,
     created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
   );
 
   CREATE TABLE game_rooms (
@@ -165,6 +173,7 @@ async function call(
     method = 'GET',
     token = 'owner-token',
     body,
+    ip = '192.0.2.1',
   } = {},
 ) {
   const request = new Request(
@@ -173,6 +182,7 @@ async function call(
       method,
       headers: {
         Authorization: `Bearer ${token}`,
+        'CF-Connecting-IP': ip,
         ...(body !== undefined
           ? {
               'Content-Type': 'application/json',
@@ -202,6 +212,56 @@ async function call(
     data: await response.json(),
   };
 }
+
+// ------------------------------------------------------------
+// Guest registration and registration abuse protection.
+// A normal first-time install can create a guest account;
+// the 61st registration attempt from one IP in ten minutes
+// is rejected before password hashing.
+// ------------------------------------------------------------
+
+const registeredGuest = await call('/v1/social/register', {
+  method: 'POST',
+  ip: '198.51.100.10',
+  body: {
+    username: 'guest_smoke_2026',
+    password: 'SmokePassword2026!',
+  },
+});
+
+assert.equal(registeredGuest.status, 201);
+assert.equal(registeredGuest.data.ok, true);
+assert.equal(registeredGuest.data.user.username, 'guest_smoke_2026');
+assert.equal(registeredGuest.data.token.length, 64);
+
+for (let attempt = 0; attempt < 60; attempt++) {
+  const invalidRegistration = await call('/v1/social/register', {
+    method: 'POST',
+    ip: '198.51.100.60',
+    body: {
+      username: 'x',
+      password: 'short',
+    },
+  });
+
+  assert.equal(invalidRegistration.status, 400);
+}
+
+const rateLimitedRegistration = await call('/v1/social/register', {
+  method: 'POST',
+  ip: '198.51.100.60',
+  body: {
+    username: 'guest_rate_limited',
+    password: 'SmokePassword2026!',
+  },
+});
+
+assert.equal(rateLimitedRegistration.status, 429);
+assert.equal(
+  rateLimitedRegistration.data.error,
+  'REGISTRATION_RATE_LIMITED',
+);
+assert.ok(rateLimitedRegistration.data.retryAfterSeconds > 0);
 
 // ------------------------------------------------------------
 // Public groups: creation, discovery, joining, messages,
