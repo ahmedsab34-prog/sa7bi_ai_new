@@ -905,21 +905,6 @@ jobs:
             --title "Sa7bi AI - Latest Verified APK" \
             --notes-file release-notes.md
 
-          # Move the stable Git tag itself to the exact APK source commit.
-          TAG_REF_API="repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}"
-
-          if gh api "${TAG_REF_API}" >/dev/null 2>&1; then
-            gh api "${TAG_REF_API}" \
-              -X PATCH \
-              -f sha="${SOURCE_SHA}" \
-              -F force=true >/dev/null
-          else
-            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -X POST \
-              -f ref="refs/tags/${RELEASE_TAG}" \
-              -f sha="${SOURCE_SHA}" >/dev/null
-          fi
-
       - name: Verify the published asset, SHA-256, and exact Git tag target
         shell: bash
         env:
@@ -965,8 +950,35 @@ jobs:
           test -n "${PUBLISHED_SHA}"
           test "${PUBLISHED_SHA}" = "${EXPECTED_SHA}"
 
+          # Recheck the branch after asset verification and immediately before moving the stable tag.
+          CURRENT_BRANCH_SHA="$(
+            gh api "repos/${GITHUB_REPOSITORY}/branches/${EXPECTED_BRANCH}" \
+              --jq '.commit.sha'
+          )"
+
+          if [ "${CURRENT_BRANCH_SHA}" != "${SOURCE_SHA}" ]; then
+            echo "::error::The release branch advanced before the stable tag update."
+            exit 1
+          fi
+
+          # GitHub REST uses singular git/ref for GET, but plural git/refs for PATCH.
+          TAG_REF_GET_API="repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}"
+          TAG_REF_UPDATE_API="repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}"
+
+          if gh api "${TAG_REF_GET_API}" >/dev/null 2>&1; then
+            gh api "${TAG_REF_UPDATE_API}" \
+              -X PATCH \
+              -f sha="${SOURCE_SHA}" \
+              -F force=true >/dev/null
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -X POST \
+              -f ref="refs/tags/${RELEASE_TAG}" \
+              -f sha="${SOURCE_SHA}" >/dev/null
+          fi
+
           TAG_TARGET_SHA="$(
-            gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" \
+            gh api "${TAG_REF_GET_API}" \
               --jq '.object.sha'
           )"
 
