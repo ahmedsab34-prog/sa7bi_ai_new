@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 
 import 'ai_service.dart';
 import 'widgets/app_header.dart';
@@ -24,6 +25,9 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
   bool _loading = true;
   bool _refreshing = false;
   String _error = '';
+
+  int _activeIndex = 0;
+
   List<ShortVideoItem> _items = [];
 
   @override
@@ -52,16 +56,14 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
         setState(() {
           _error = _items.isEmpty
               ? 'لا توجد فيديوهات قصيرة متاحة حاليًا. اسحب الشاشة للتحديث أو حاول مرة أخرى.'
-              : 'لم تصل فيديوهات جديدة؛ ما زالت الفيديوهات السابقة ظاهرة.';
+              : 'لم تصل فيديوهات جديدة؛ احتفظنا بالفيديوهات السابقة.';
         });
         return;
       }
 
-      // تجاهل العناصر التي لا تحتوي على أي رابط صالح للعرض.
       final validItems = result.where((item) {
-        final video = _validHttpUri(item.videoUrl);
-        final thumbnail = _validHttpUri(item.thumbnail);
-        return video != null || thumbnail != null;
+        return _validHttpUri(item.videoUrl) != null ||
+            _validHttpUri(item.thumbnail) != null;
       }).toList(growable: false);
 
       if (!mounted) return;
@@ -70,17 +72,19 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
         setState(() {
           _error = _items.isEmpty
               ? 'وصلت بيانات فيديوهات، لكن روابطها غير صالحة للعرض.'
-              : 'روابط التحديث الجديد غير صالحة؛ ما زالت الفيديوهات السابقة ظاهرة.';
+              : 'روابط التحديث الجديد غير صالحة؛ احتفظنا بالفيديوهات السابقة.';
         });
         return;
       }
 
       setState(() {
         _items = validItems;
+        _activeIndex = 0;
         _error = '';
       });
     } on TimeoutException {
       if (!mounted) return;
+
       setState(() {
         _error = _items.isEmpty
             ? 'تأخر تحميل الفيديوهات بسبب بطء الاتصال. حاول مرة أخرى.'
@@ -88,6 +92,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _error = _items.isEmpty
             ? 'تعذر تحميل الفيديوهات حاليًا. تحقق من الإنترنت ثم أعد المحاولة.'
@@ -108,8 +113,10 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
     if (text.isEmpty) return null;
 
     final uri = Uri.tryParse(text);
+
     if (uri == null ||
         !uri.hasAuthority ||
+        uri.host.isEmpty ||
         (uri.scheme != 'https' && uri.scheme != 'http')) {
       return null;
     }
@@ -251,8 +258,17 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
           child: PageView.builder(
             scrollDirection: Axis.vertical,
             itemCount: _items.length,
+            onPageChanged: (index) {
+              setState(() => _activeIndex = index);
+            },
             itemBuilder: (context, index) {
-              return _ShortItemCard(item: _items[index]);
+              return _ShortItemCard(
+                key: ValueKey<String>(
+                  '$index:${_items[index].videoUrl}',
+                ),
+                item: _items[index],
+                active: index == _activeIndex,
+              );
             },
           ),
         ),
@@ -322,18 +338,40 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
   }
 }
 
-class _ShortItemCard extends StatelessWidget {
-  final ShortVideoItem item;
+class _ShortItemCard extends StatefulWidget {
+  const _ShortItemCard({
+    super.key,
+    required this.item,
+    required this.active,
+  });
 
-  const _ShortItemCard({required this.item});
+  final ShortVideoItem item;
+  final bool active;
+
+  @override
+  State<_ShortItemCard> createState() => _ShortItemCardState();
+}
+
+class _ShortItemCardState extends State<_ShortItemCard> {
+  VideoPlayerController? _controller;
+  VoidCallback? _controllerListener;
+
+  int _generation = 0;
+
+  bool _loadingVideo = false;
+  bool _isPlaying = false;
+
+  String? _playbackError;
 
   Uri? _validHttpUri(String value) {
     final text = value.trim();
     if (text.isEmpty) return null;
 
     final uri = Uri.tryParse(text);
+
     if (uri == null ||
         !uri.hasAuthority ||
+        uri.host.isEmpty ||
         (uri.scheme != 'https' && uri.scheme != 'http')) {
       return null;
     }
@@ -342,84 +380,284 @@ class _ShortItemCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        _buildBackground(context),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0x33000000),
-                Color(0x66000000),
-                Color(0xE6000000),
-              ],
-              stops: [0.0, 0.48, 1.0],
-            ),
-          ),
-        ),
-        Positioned(
-          right: 14,
-          left: 14,
-          bottom: 30,
-          child: _buildInfo(),
-        ),
-        Positioned(
-          left: 12,
-          bottom: 85,
-          child: _buildActions(context),
-        ),
-      ],
-    );
+  void initState() {
+    super.initState();
+
+    if (widget.active) {
+      unawaited(_startVideo());
+    }
   }
 
-  Widget _buildBackground(BuildContext context) {
-    final videoUri = _validHttpUri(item.videoUrl);
-    final thumbnailUri = _validHttpUri(item.thumbnail);
+  @override
+  void didUpdateWidget(covariant _ShortItemCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
-    if (videoUri == null) {
-      return _thumbnail(thumbnailUri?.toString() ?? '');
+    final sourceChanged =
+        oldWidget.item.videoUrl != widget.item.videoUrl;
+
+    if (sourceChanged) {
+      if (widget.active) {
+        unawaited(_startVideo());
+      } else {
+        unawaited(_stopVideo());
+      }
+      return;
     }
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        _thumbnail(thumbnailUri?.toString() ?? ''),
-        Center(
-          child: Semantics(
-            button: true,
-            label: 'تشغيل ${item.title}',
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () => _openVideo(context, videoUri),
-                child: Container(
-                  width: 76,
-                  height: 76,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xAA000000),
-                  ),
-                  child: const Icon(
-                    Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: 48,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+    if (oldWidget.active != widget.active) {
+      if (widget.active) {
+        unawaited(_startVideo());
+      } else {
+        unawaited(_stopVideo());
+      }
+    }
   }
 
-  Widget _thumbnail(String url) {
-    if (url.isEmpty) {
+  Future<void> _startVideo() async {
+    final generation = ++_generation;
+
+    final previous = _controller;
+    final previousListener = _controllerListener;
+
+    _controller = null;
+    _controllerListener = null;
+
+    if (previous != null) {
+      if (previousListener != null) {
+        previous.removeListener(previousListener);
+      }
+
+      try {
+        await previous.pause();
+      } catch (_) {}
+
+      try {
+        await previous.dispose();
+      } catch (_) {}
+    }
+
+    if (!mounted ||
+        !widget.active ||
+        generation != _generation) {
+      return;
+    }
+
+    final uri = _validHttpUri(widget.item.videoUrl);
+
+    if (uri == null) {
+      setState(() {
+        _loadingVideo = false;
+        _isPlaying = false;
+        _playbackError = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _loadingVideo = true;
+      _isPlaying = false;
+      _playbackError = null;
+    });
+
+    final controller = VideoPlayerController.networkUrl(
+      uri,
+      videoPlayerOptions: VideoPlayerOptions(
+        mixWithOthers: false,
+      ),
+    );
+
+    _controller = controller;
+
+    void listener() {
+      if (!mounted ||
+          generation != _generation ||
+          !identical(_controller, controller)) {
+        return;
+      }
+
+      final value = controller.value;
+
+      if (value.hasError) {
+        setState(() {
+          _loadingVideo = false;
+          _isPlaying = false;
+          _playbackError = 'تعذر تشغيل الفيديو من المصدر الحالي.';
+        });
+        return;
+      }
+
+      if (value.isInitialized) {
+        final nextPlaying = value.isPlaying;
+
+        if (_loadingVideo || _isPlaying != nextPlaying) {
+          setState(() {
+            _loadingVideo = false;
+            _isPlaying = nextPlaying;
+          });
+        }
+      }
+    }
+
+    _controllerListener = listener;
+    controller.addListener(listener);
+
+    try {
+      await controller.initialize().timeout(
+        const Duration(seconds: 20),
+      );
+
+      if (!mounted ||
+          !widget.active ||
+          generation != _generation ||
+          !identical(_controller, controller)) {
+        controller.removeListener(listener);
+        await controller.dispose();
+        return;
+      }
+
+      await controller.setLooping(true);
+      await controller.play();
+
+      if (!mounted ||
+          generation != _generation ||
+          !identical(_controller, controller)) {
+        return;
+      }
+
+      setState(() {
+        _loadingVideo = false;
+        _isPlaying = true;
+        _playbackError = null;
+      });
+    } on TimeoutException {
+      if (!mounted || generation != _generation) return;
+
+      setState(() {
+        _loadingVideo = false;
+        _isPlaying = false;
+        _playbackError = 'تأخر تشغيل الفيديو بسبب بطء الاتصال.';
+      });
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+
+      setState(() {
+        _loadingVideo = false;
+        _isPlaying = false;
+        _playbackError = 'لم يتمكن مشغل الفيديو من فتح هذا الرابط.';
+      });
+    }
+  }
+
+  Future<void> _stopVideo() async {
+    final generation = ++_generation;
+
+    final controller = _controller;
+    final listener = _controllerListener;
+
+    _controller = null;
+    _controllerListener = null;
+
+    if (controller != null) {
+      if (listener != null) {
+        controller.removeListener(listener);
+      }
+
+      try {
+        await controller.pause();
+      } catch (_) {}
+
+      try {
+        await controller.dispose();
+      } catch (_) {}
+    }
+
+    if (!mounted || generation != _generation) return;
+
+    setState(() {
+      _loadingVideo = false;
+      _isPlaying = false;
+    });
+  }
+
+  Future<void> _togglePlayback() async {
+    if (!widget.active) return;
+
+    final controller = _controller;
+
+    if (controller == null ||
+        !controller.value.isInitialized) {
+      await _startVideo();
+      return;
+    }
+
+    try {
+      if (controller.value.isPlaying) {
+        await controller.pause();
+      } else {
+        await controller.play();
+      }
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _playbackError = 'تعذر تغيير حالة تشغيل الفيديو.';
+      });
+    }
+  }
+
+  Future<void> _openExternal() async {
+    final uri = _validHttpUri(widget.item.videoUrl);
+    if (uri == null) return;
+
+    try {
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تعذر فتح رابط الفيديو خارج التطبيق.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تعذر فتح رابط الفيديو.'),
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+
+    final controller = _controller;
+    final listener = _controllerListener;
+
+    if (controller != null) {
+      if (listener != null) {
+        controller.removeListener(listener);
+      }
+
+      unawaited(controller.dispose());
+    }
+
+    _controller = null;
+    _controllerListener = null;
+
+    super.dispose();
+  }
+
+  Widget _buildThumbnail() {
+    final uri = _validHttpUri(widget.item.thumbnail);
+
+    if (uri == null) {
       return Container(
         color: const Color(0xFF111522),
         child: const Center(
@@ -433,7 +671,7 @@ class _ShortItemCard extends StatelessWidget {
     }
 
     return Image.network(
-      url,
+      uri.toString(),
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) {
         return Container(
@@ -450,16 +688,49 @@ class _ShortItemCard extends StatelessWidget {
     );
   }
 
+  Widget _buildMedia() {
+    final controller = _controller;
+
+    if (controller == null ||
+        !controller.value.isInitialized) {
+      return _buildThumbnail();
+    }
+
+    final size = controller.value.size;
+
+    if (size.width <= 0 || size.height <= 0) {
+      return _buildThumbnail();
+    }
+
+    return ColoredBox(
+      color: Colors.black,
+      child: FittedBox(
+        fit: BoxFit.cover,
+        clipBehavior: Clip.hardEdge,
+        child: SizedBox(
+          width: size.width,
+          height: size.height,
+          child: VideoPlayer(controller),
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfo() {
+    final creator = widget.item.creator.trim();
+    final title = widget.item.title.trim();
+    final description = widget.item.description.trim();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (item.creator.trim().isNotEmpty)
+        if (creator.isNotEmpty)
           Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 36,
+                height: 36,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
@@ -478,7 +749,7 @@ class _ShortItemCard extends StatelessWidget {
               const SizedBox(width: 9),
               Expanded(
                 child: Text(
-                  item.creator,
+                  creator,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -489,9 +760,9 @@ class _ShortItemCard extends StatelessWidget {
               ),
             ],
           ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 9),
         Text(
-          item.title.trim().isEmpty ? 'فيديو قصير' : item.title,
+          title.isEmpty ? 'فيديو قصير' : title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
@@ -501,10 +772,10 @@ class _ShortItemCard extends StatelessWidget {
             height: 1.25,
           ),
         ),
-        if (item.description.trim().isNotEmpty) ...[
+        if (description.isNotEmpty) ...[
           const SizedBox(height: 6),
           Text(
-            item.description,
+            description,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -518,54 +789,148 @@ class _ShortItemCard extends StatelessWidget {
     );
   }
 
-  Widget _buildActions(BuildContext context) {
-    final videoUri = _validHttpUri(item.videoUrl);
+  Widget _buildActions() {
+    final videoUri = _validHttpUri(widget.item.videoUrl);
 
     return Column(
       children: [
         _ActionButton(
-          icon: Icons.play_circle_fill_rounded,
-          label: 'تشغيل',
-          onTap: videoUri == null
-              ? null
-              : () => _openVideo(context, videoUri),
+          icon: _isPlaying
+              ? Icons.pause_rounded
+              : Icons.play_arrow_rounded,
+          label: _isPlaying ? 'إيقاف' : 'تشغيل',
+          onTap: videoUri == null ? null : _togglePlayback,
         ),
         const SizedBox(height: 12),
         _ActionButton(
           icon: Icons.open_in_new_rounded,
           label: 'فتح',
-          onTap: videoUri == null
-              ? null
-              : () => _openVideo(context, videoUri),
+          onTap: videoUri == null ? null : _openExternal,
         ),
       ],
     );
   }
 
-  void _openVideo(BuildContext context, Uri uri) {
-    if (uri.scheme != 'https' && uri.scheme != 'http') return;
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    final canShowProgress =
+        controller != null && controller.value.isInitialized;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => _ShortVideoWebView(
-          title: item.title.trim().isEmpty ? 'ريلز صاحبي' : item.title,
-          url: uri.toString(),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _togglePlayback,
+          child: _buildMedia(),
         ),
-      ),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0x22000000),
+                Color(0x33000000),
+                Color(0xDD000000),
+              ],
+              stops: [0.0, 0.45, 1.0],
+            ),
+          ),
+        ),
+        Positioned(
+          right: 14,
+          left: 14,
+          bottom: 34,
+          child: _buildInfo(),
+        ),
+        Positioned(
+          left: 12,
+          bottom: 95,
+          child: _buildActions(),
+        ),
+        if (_loadingVideo)
+          const Positioned.fill(
+            child: IgnorePointer(
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFFFFD76A),
+                ),
+              ),
+            ),
+          ),
+        if (_playbackError != null)
+          Positioned(
+            top: 18,
+            left: 16,
+            right: 16,
+            child: Material(
+              color: const Color(0xDD182333),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      color: Color(0xFFFFD76A),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _playbackError!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'إعادة التشغيل',
+                      onPressed: widget.active
+                          ? () => unawaited(_startVideo())
+                          : null,
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        color: Color(0xFFFFD76A),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (canShowProgress)
+          Positioned(
+            bottom: 7,
+            left: 14,
+            right: 14,
+            child: VideoProgressIndicator(
+              controller!,
+              allowScrubbing: true,
+              colors: const VideoProgressColors(
+                playedColor: Color(0xFFFFD76A),
+                bufferedColor: Colors.white38,
+                backgroundColor: Colors.white24,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
 
 class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
   const _ActionButton({
     required this.icon,
     required this.label,
     required this.onTap,
   });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -609,191 +974,6 @@ class _ActionButton extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ShortVideoWebView extends StatefulWidget {
-  final String title;
-  final String url;
-
-  const _ShortVideoWebView({
-    required this.title,
-    required this.url,
-  });
-
-  @override
-  State<_ShortVideoWebView> createState() => _ShortVideoWebViewState();
-}
-
-class _ShortVideoWebViewState extends State<_ShortVideoWebView> {
-  WebViewController? _controller;
-
-  int _progress = 0;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_loadInitialPage());
-  }
-
-  Future<void> _loadInitialPage() async {
-    final uri = Uri.tryParse(widget.url);
-    if (uri == null ||
-        !uri.hasAuthority ||
-        uri.host.isEmpty ||
-        (uri.scheme != 'https' && uri.scheme != 'http')) {
-      if (!mounted) return;
-      setState(() {
-        _progress = 100;
-        _error = 'رابط الفيديو غير صالح.';
-      });
-      return;
-    }
-
-    try {
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setBackgroundColor(Colors.black)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onProgress: (value) {
-              if (!mounted) return;
-              setState(() => _progress = value);
-            },
-            onPageFinished: (_) {
-              if (!mounted) return;
-              setState(() {
-                _progress = 100;
-                _error = null;
-              });
-            },
-            onWebResourceError: (error) {
-              if (!mounted || error.isForMainFrame == false) return;
-              setState(() {
-                _progress = 100;
-                _error =
-                    'تعذر فتح صفحة الفيديو. تحقق من الاتصال أو جرّب رابطًا آخر.';
-              });
-            },
-            onNavigationRequest: (request) {
-              final target = Uri.tryParse(request.url);
-              if (target == null ||
-                  !target.hasAuthority ||
-                  target.host.isEmpty ||
-                  (target.scheme != 'https' && target.scheme != 'http')) {
-                return NavigationDecision.prevent;
-              }
-              return NavigationDecision.navigate;
-            },
-          ),
-        );
-
-      _controller = controller;
-      if (mounted) {
-        setState(() {
-          _progress = 0;
-          _error = null;
-        });
-      }
-      await controller.loadRequest(uri);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _progress = 100;
-        _error = 'تعذر فتح رابط الفيديو.';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text(
-          widget.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-          ),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'إعادة تحميل الفيديو',
-            onPressed: () {
-              setState(() {
-                _error = null;
-                _progress = 0;
-              });
-              unawaited(_loadInitialPage());
-            },
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: Color(0xFFFFD76A),
-            ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          if (_error == null && _controller != null)
-            WebViewWidget(controller: _controller!)
-          else if (_error == null)
-            const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFFFFD76A),
-              ),
-            )
-          else
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.video_library_outlined,
-                      color: Colors.white38,
-                      size: 54,
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      _error!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        height: 1.6,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _error = null;
-                          _progress = 0;
-                        });
-                        unawaited(_loadInitialPage());
-                      },
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('إعادة المحاولة'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (_error == null && _progress < 100)
-            LinearProgressIndicator(
-              value: _progress == 0 ? null : _progress / 100,
-              color: const Color(0xFFFFD76A),
-              backgroundColor: Colors.transparent,
-            ),
-        ],
       ),
     );
   }
