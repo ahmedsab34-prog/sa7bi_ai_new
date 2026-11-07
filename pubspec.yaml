@@ -1,4 +1,3 @@
-
 name: sa7bi_ai
 description: Sa7bi AI - Your smart Arabic AI companion.
 publish_to: "none"
@@ -23,6 +22,7 @@ dependencies:
   http: ^1.2.2
   cronet_http: ^1.10.0
   webview_flutter: ^4.13.0
+  video_player: ^2.9.5
   shared_preferences: ^2.3.2
 
   image_picker: ^1.1.2
