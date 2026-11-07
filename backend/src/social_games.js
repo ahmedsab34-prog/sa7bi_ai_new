@@ -5,6 +5,7 @@
 // Every move is validated on the server before it is saved.
 
 import { Chess } from "chess.js";
+import { handleSocialCommunity } from "./social_community.js";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const PASSWORD_ITERATIONS = 120000;
@@ -293,6 +294,11 @@ export class Sa7biSocial {
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
+      // Route public groups and AI-opponent game actions through the same
+      // Durable Object instance so they share users, sessions and room data.
+      const communityResponse = await handleSocialCommunity(request, this);
+      if (communityResponse) return communityResponse;
+
       if (request.method === "POST" && path === "/v1/social/register") {
         return await this.register(request);
       }
