@@ -184,7 +184,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(6, 0, 6, 5),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 5,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context)
             .colorScheme
@@ -326,14 +329,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           .clamp(280.0, 720.0)
                           .toDouble();
 
-                      return Align(
-                        alignment: Alignment.topCenter,
-                        child: SizedBox(
-                          width: contentWidth,
-                          child: SingleChildScrollView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
-                            child: _buildProfileContent(),
+                      return SizedBox.expand(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: contentWidth,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                8,
+                                4,
+                                8,
+                                8,
+                              ),
+                              child: _buildProfileContent(),
+                            ),
                           ),
                         ),
                       );
