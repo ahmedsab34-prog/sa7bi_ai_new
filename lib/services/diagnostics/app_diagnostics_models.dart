@@ -197,6 +197,7 @@ class AppDiagnosticsReport {
           item.severity == 'FAIL' &&
           !item.blocked &&
           (
+            item.category == 'IMAGE' ||
             item.category == 'NEWS' ||
             item.category == 'QURAN' ||
             item.category == 'TAFSIR' ||
