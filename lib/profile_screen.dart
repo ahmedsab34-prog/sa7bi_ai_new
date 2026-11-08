@@ -1,3 +1,4 @@
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -183,10 +184,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         connected ? Colors.greenAccent : Colors.orangeAccent;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(6, 0, 6, 5),
+      margin: const EdgeInsets.fromLTRB(6, 0, 6, 8),
       padding: const EdgeInsets.symmetric(
         horizontal: 10,
-        vertical: 5,
+        vertical: 7,
       ),
       decoration: BoxDecoration(
         color: Theme.of(context)
@@ -202,8 +203,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           if (_checkingAi || _refreshing)
             SizedBox(
-              width: 9,
-              height: 9,
+              width: 10,
+              height: 10,
               child: CircularProgressIndicator(
                 strokeWidth: 1.7,
                 color: statusColor,
@@ -224,7 +225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-          const SizedBox(width: 7),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               connected
@@ -268,7 +269,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildCreditsSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 0, 6, 5),
+      padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
       child: Row(
         children: [
           const Expanded(
@@ -305,6 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ProfileActions(
           onMessage: _showMessage,
         ),
+        const SizedBox(height: 12),
       ],
     );
   }
@@ -329,18 +331,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           .clamp(280.0, 720.0)
                           .toDouble();
 
-                      return SizedBox.expand(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.topCenter,
+                      return Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: contentWidth,
+                          ),
                           child: SizedBox(
-                            width: contentWidth,
-                            child: Padding(
+                            width: double.infinity,
+                            height: constraints.maxHeight,
+                            child: SingleChildScrollView(
+                              physics:
+                                  const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.fromLTRB(
                                 8,
                                 4,
                                 8,
-                                8,
+                                12,
                               ),
                               child: _buildProfileContent(),
                             ),
