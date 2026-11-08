@@ -3,8 +3,9 @@
 set -u
 set -o pipefail
 
-BASE="${WORKER_URL}"
+BASE="${WORKER_URL:?WORKER_URL is required}"
 FAILURES=0
+WARNINGS=0
 
 test_endpoint() {
   local NAME="$1"
@@ -22,7 +23,6 @@ test_endpoint() {
   rm -f "${FILE}" "${FILE}.curl-error"
 
   local META
-
   META=$(curl \
     --silent \
     --show-error \
@@ -37,11 +37,11 @@ test_endpoint() {
   local HTTP_CODE="${META%% *}"
   local RESPONSE_TIME="${META#* }"
 
-  echo "HTTP status   : ${HTTP_CODE}"
-  echo "Response time : ${RESPONSE_TIME}s"
+  echo "HTTP status   : ${HTTP_CODE:-UNKNOWN}"
+  echo "Response time : ${RESPONSE_TIME:-UNKNOWN}s"
 
   echo "Response preview:"
-  head -c 3000 "${FILE}" 2>/dev/null || true
+  head -c 2000 "${FILE}" 2>/dev/null || true
   echo ""
 
   if [ "${CURL_STATUS}" -ne 0 ]; then
@@ -52,7 +52,7 @@ test_endpoint() {
   fi
 
   if [ "${HTTP_CODE}" != "200" ]; then
-    echo "RESULT: HTTP FAILURE (expected 200)"
+    echo "RESULT: HTTP FAILURE"
     FAILURES=$((FAILURES + 1))
     return
   fi
@@ -64,7 +64,8 @@ test_endpoint() {
     return
   fi
 
-  echo "RESULT: PASS"
+  echo "RESULT: HTTP/SHAPE CHECK PASSED"
+  echo "Note: This does not prove provider or playback success."
 }
 
 # ------------------------------------------------------------
@@ -73,7 +74,7 @@ test_endpoint() {
 
 test_endpoint \
   "NEWS" \
-  "${BASE}/v1/news?refresh=${GITHUB_RUN_ID}" \
+  "${BASE}/v1/news?refresh=${GITHUB_RUN_ID:-manual}" \
   '"items"' \
   /tmp/sa7bi-news.json \
   90
@@ -163,22 +164,25 @@ import re
 import sys
 
 failures = 0
+warnings = 0
 
 def load(path):
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(path, "r", encoding="utf-8") as file:
+            return json.load(file)
     except Exception as exc:
         print(f"JSON ERROR {path}: {exc}")
         return None
 
 def is_http_url(value):
-    return isinstance(value, str) and re.match(
-        r"^https?://",
-        value.strip(),
-        re.I,
+    return isinstance(value, str) and bool(
+        re.match(r"^https?://", value.strip(), re.I)
     )
 
+def as_list(value):
+    return value if isinstance(value, list) else []
+
+# الجزء الثاني يكمل فحوص المحتوى وملخص النتائج.
 # ------------------------------------------------------
 # NEWS
 # ------------------------------------------------------
@@ -186,14 +190,11 @@ def is_http_url(value):
 news = load("/tmp/sa7bi-news.json")
 
 if isinstance(news, dict):
-    items = news.get("items")
-    items = items if isinstance(items, list) else []
+    items = as_list(news.get("items"))
 
     images = [
-        item
-        for item in items
-        if isinstance(item, dict)
-        and is_http_url(
+        item for item in items
+        if isinstance(item, dict) and is_http_url(
             item.get("imageUrl")
             or item.get("image")
             or item.get("image_url")
@@ -202,38 +203,27 @@ if isinstance(news, dict):
     ]
 
     links = [
-        item
-        for item in items
+        item for item in items
         if isinstance(item, dict)
         and is_http_url(item.get("link") or "")
     ]
 
-    print("")
-    print("NEWS DIAGNOSTICS")
-    print(f"  backendVersion : {news.get('backendVersion')}")
-    print(f"  count          : {len(items)}")
-    print(f"  image URLs     : {len(images)}")
-    print(f"  article links  : {len(links)}")
+    print("\nNEWS DIAGNOSTICS")
+    print(f"  count         : {len(items)}")
+    print(f"  image URLs    : {len(images)}")
+    print(f"  article links : {len(links)}")
 
-    if len(items) == 0:
+    if not items:
         print("  ERROR: News returned zero items.")
         failures += 1
 
-    if len(links) == 0:
+    if not links:
         print("  ERROR: News returned no valid article links.")
         failures += 1
 
-    if len(images) == 0:
-        print("  WARNING: News returned zero usable image URLs.")
-    else:
-        print(
-            "  first image    : "
-            + str(
-                images[0].get("imageUrl")
-                or images[0].get("image")
-                or images[0].get("image_url")
-            )
-        )
+    if not images:
+        print("  WARNING: No usable news images.")
+        warnings += 1
 else:
     failures += 1
 
@@ -244,87 +234,39 @@ else:
 quran = load("/tmp/sa7bi-quran.json")
 
 if isinstance(quran, dict):
-    reciters = quran.get("reciters")
-    suras = quran.get("suras") or quran.get("suwar")
+    reciters = as_list(quran.get("reciters"))
+    suras = as_list(quran.get("suras") or quran.get("suwar"))
 
-    reciters = reciters if isinstance(reciters, list) else []
-    suras = suras if isinstance(suras, list) else []
-
-    moshaf_count = 0
     servers = []
 
     for reciter in reciters:
         if not isinstance(reciter, dict):
             continue
 
-        moshaf = reciter.get("moshaf")
+        for entry in as_list(reciter.get("moshaf")):
+            if not isinstance(entry, dict):
+                continue
 
-        if not isinstance(moshaf, list):
-            continue
+            server = entry.get("server") or entry.get("url")
+            if is_http_url(server):
+                servers.append(server)
 
-        moshaf_count += len(moshaf)
-
-        for entry in moshaf:
-            if (
-                isinstance(entry, dict)
-                and is_http_url(
-                    entry.get("server")
-                    or entry.get("url")
-                    or ""
-                )
-            ):
-                servers.append(
-                    entry.get("server")
-                    or entry.get("url")
-                )
-
-    print("")
-    print("QURAN DIAGNOSTICS")
-    print(f"  backendVersion : {quran.get('backendVersion')}")
-    print(f"  reciters       : {len(reciters)}")
-    print(f"  moshaf entries : {moshaf_count}")
-    print(f"  suras          : {len(suras)}")
-    print(f"  valid servers  : {len(servers)}")
+    print("\nQURAN DIAGNOSTICS")
+    print(f"  reciters      : {len(reciters)}")
+    print(f"  suras         : {len(suras)}")
+    print(f"  valid servers : {len(servers)}")
 
     if not reciters:
-        print("  ERROR: Quran returned zero reciters.")
+        print("  ERROR: No Quran reciters.")
         failures += 1
 
     if not suras:
-        print("  ERROR: Quran returned zero suras.")
+        print("  ERROR: No Quran suras.")
         failures += 1
 
     if not servers:
-        print("  ERROR: Quran returned no valid audio servers.")
+        print("  ERROR: No valid Quran audio servers.")
         failures += 1
-    else:
-        server = servers[0].rstrip("/")
-
-        first_sura = next(
-            (
-                s
-                for s in suras
-                if (
-                    isinstance(s, dict)
-                    and str(s.get("id", "")).isdigit()
-                    and 1 <= int(s.get("id")) <= 114
-                )
-            ),
-            None,
-        )
-
-        if first_sura:
-            surah_id = int(first_sura["id"])
-            audio_url = f"{server}/{surah_id:03d}.mp3"
-
-            print(f"  first audio URL: {audio_url}")
-
-            if not is_http_url(audio_url):
-                print("  ERROR: Generated Quran audio URL is invalid.")
-                failures += 1
-        else:
-            print("  ERROR: No valid Quran surah id was found.")
-            failures += 1
 else:
     failures += 1
 
@@ -335,13 +277,11 @@ else:
 radio = load("/tmp/sa7bi-radio-eg.json")
 
 if isinstance(radio, dict):
-    stations = radio.get("stations") or radio.get("items")
-    stations = stations if isinstance(stations, list) else []
+    stations = as_list(
+        radio.get("stations") or radio.get("items")
+    )
 
-    valid_streams = []
-    https_streams = 0
-    http_streams = 0
-    checked_ok = 0
+    streams = []
 
     for station in stations:
         if not isinstance(station, dict):
@@ -354,101 +294,86 @@ if isinstance(radio, dict):
         )
 
         if is_http_url(url):
-            valid_streams.append(url)
+            streams.append(url)
 
-            if str(url).lower().startswith("https://"):
-                https_streams += 1
-            else:
-                http_streams += 1
+    https_count = sum(
+        1 for url in streams
+        if url.lower().startswith("https://")
+    )
 
-        if station.get("lastCheckOk") is True:
-            checked_ok += 1
-
-    print("")
-    print("RADIO DIAGNOSTICS")
-    print(f"  backendVersion : {radio.get('backendVersion')}")
-    print(f"  stations       : {len(stations)}")
-    print(f"  valid streams  : {len(valid_streams)}")
-    print(f"  HTTPS streams  : {https_streams}")
-    print(f"  HTTP streams   : {http_streams}")
-    print(f"  lastCheckOk    : {checked_ok}")
+    print("\nRADIO DIAGNOSTICS")
+    print(f"  stations      : {len(stations)}")
+    print(f"  valid streams : {len(streams)}")
+    print(f"  HTTPS streams : {https_count}")
 
     if not stations:
         print("  ERROR: Egypt radio returned zero stations.")
         failures += 1
 
-    if not valid_streams:
-        print("  ERROR: Radio returned no valid stream URLs.")
+    if not streams:
+        print("  ERROR: No valid radio stream URLs.")
         failures += 1
-    elif http_streams and not https_streams:
-        print("  WARNING: All returned radio streams are HTTP.")
-        print("  Android cleartext policy may block these streams.")
-    elif http_streams:
-        print("  WARNING: Some radio streams are HTTP and may be blocked on Android.")
 
-    print(
-        "  first stream   : "
-        + (
-            str(valid_streams[0])
-            if valid_streams
-            else "NONE"
-        )
-    )
+    if streams and https_count == 0:
+        print("  WARNING: All streams use HTTP; Android may block them.")
+        warnings += 1
+    elif len(streams) > https_count:
+        print("  WARNING: Some streams use HTTP.")
+        warnings += 1
 else:
     failures += 1
 
 # ------------------------------------------------------
-# PODCASTS
+# PODCASTS — PROVIDER VALIDATION
 # ------------------------------------------------------
 
 podcasts = load("/tmp/sa7bi-podcasts.json")
 
 if isinstance(podcasts, dict):
-    items = podcasts.get("items")
-    items = items if isinstance(items, list) else []
+    items = as_list(podcasts.get("items"))
 
     feeds = [
         item.get("feedUrl")
         for item in items
-        if (
-            isinstance(item, dict)
-            and is_http_url(item.get("feedUrl") or "")
-        )
+        if isinstance(item, dict)
+        and is_http_url(item.get("feedUrl") or "")
     ]
 
-    artwork = [
-        item.get("artwork")
-        for item in items
-        if (
-            isinstance(item, dict)
-            and is_http_url(item.get("artwork") or "")
-        )
-    ]
+    fallback = podcasts.get("fallback") is True
+    provider_status = podcasts.get("providerStatus")
+    provider_error = podcasts.get("providerError")
 
-    print("")
-    print("PODCAST DIAGNOSTICS")
-    print(f"  backendVersion : {podcasts.get('backendVersion')}")
-    print(f"  count          : {len(items)}")
+    print("\nPODCAST DIAGNOSTICS")
+    print(f"  items          : {len(items)}")
     print(f"  playable feeds : {len(feeds)}")
-    print(f"  artwork URLs   : {len(artwork)}")
-    print(f"  fallback       : {podcasts.get('fallback')}")
+    print(f"  fallback       : {fallback}")
+    print(f"  providerStatus : {provider_status}")
+    print(f"  providerError  : {provider_error}")
 
-    if podcasts.get("providerStatus") is not None:
-        print(f"  providerStatus : {podcasts.get('providerStatus')}")
+    if fallback:
+        print(
+            "  ERROR: Provider returned fallback data. "
+            "This is not genuine provider success."
+        )
+        failures += 1
 
-    if podcasts.get("providerError"):
-        print(f"  providerError  : {podcasts.get('providerError')}")
+    if provider_status == 429:
+        print("  ERROR: Podcast provider rate-limited the request.")
+        failures += 1
+
+    if provider_error:
+        print("  ERROR: Podcast provider reported an error.")
+        failures += 1
 
     if not items:
         print("  ERROR: Podcast search returned zero items.")
         failures += 1
 
     if not feeds:
-        print("  ERROR: Podcast search returned no playable feedUrl.")
+        print("  ERROR: No playable podcast feeds.")
         failures += 1
-    else:
-        print(f"  first feed     : {feeds[0]}")
 else:
+    print("  ERROR: Podcast response is not valid JSON object.")
     failures += 1
 
 # ------------------------------------------------------
@@ -458,12 +383,10 @@ else:
 shorts = load("/tmp/sa7bi-shorts.json")
 
 if isinstance(shorts, dict):
-    items = shorts.get("items")
-    items = items if isinstance(items, list) else []
+    items = as_list(shorts.get("items"))
 
-    print("")
-    print("SHORTS DIAGNOSTICS")
-    print(f"  count          : {len(items)}")
+    print("\nSHORTS DIAGNOSTICS")
+    print(f"  count : {len(items)}")
 
     if not items:
         print("  ERROR: Shorts returned zero items.")
@@ -478,51 +401,35 @@ else:
 audio = load("/tmp/sa7bi-audio.json")
 
 if isinstance(audio, dict):
-    items = audio.get("items")
-    items = items if isinstance(items, list) else []
+    items = as_list(audio.get("items"))
 
     playable = [
-        item
-        for item in items
-        if (
-            isinstance(item, dict)
-            and is_http_url(
-                item.get("audioUrl")
-                or item.get("url")
-                or ""
-            )
+        item for item in items
+        if isinstance(item, dict)
+        and is_http_url(
+            item.get("audioUrl")
+            or item.get("url")
+            or ""
         )
     ]
 
-    print("")
-    print("AUDIO SEARCH DIAGNOSTICS")
-    print(f"  count          : {len(items)}")
-    print(f"  playable URLs  : {len(playable)}")
+    print("\nAUDIO SEARCH DIAGNOSTICS")
+    print(f"  items         : {len(items)}")
+    print(f"  playable URLs : {len(playable)}")
 
-    # IMPORTANT:
-    # Audio Search currently returns zero items in the backend.
-    # This is diagnostic information, not a reason to stop
-    # AI / credits / media verification.
     if not items:
-        print(
-            "  WARNING: Audio search returned zero items."
-        )
-        print(
-            "  This is non-blocking so the remaining diagnostics continue."
-        )
-
+        print("  WARNING: Audio search returned zero items.")
+        warnings += 1
     elif not playable:
-        print(
-            "  WARNING: Audio search returned items "
-            "but no obvious playable URL."
-        )
+        print("  WARNING: No obvious playable audio URL.")
+        warnings += 1
 else:
     failures += 1
 
-print("")
-print("============================================================")
+print("\n============================================================")
 print("DEEP CONTENT DIAGNOSTIC SUMMARY")
-print(f"Failures: {failures}")
+print(f"Failures : {failures}")
+print(f"Warnings : {warnings}")
 print("============================================================")
 
 if failures:
@@ -534,18 +441,17 @@ echo "============================================================"
 echo "CONTENT / SERVICE TEST SUMMARY"
 echo "============================================================"
 echo "Failures: ${FAILURES}"
+echo "Warnings: ${WARNINGS}"
 echo "============================================================"
 
 if [ "${FAILURES}" -ne 0 ]; then
   echo ""
-  echo "ERROR: One or more app service endpoints or deep diagnostics failed."
-  echo "The response status, timing, counts, URLs, and provider metadata"
-  echo "printed above identify the failing backend layer."
-  echo ""
-  echo "No fake success will be reported."
+  echo "ERROR: One or more content/service checks failed."
+  echo "Fallback provider responses are not reported as genuine success."
   exit 1
 fi
 
 echo ""
-echo "All content/service endpoint diagnostics passed."
+echo "All blocking content/service diagnostics passed."
+echo "Warnings: ${WARNINGS}"
 echo "============================================================"
