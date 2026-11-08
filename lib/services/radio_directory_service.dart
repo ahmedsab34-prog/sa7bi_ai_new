@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import '../ai_service.dart';
@@ -31,15 +30,6 @@ class RadioResolvedStream {
 }
 
 /// خدمة موحدة لمحطات الراديو في صاحبي AI.
-///
-/// المسؤوليات:
-/// - تحميل الدول والمحطات.
-/// - البحث من المصدر.
-/// - قبول روابط HTTPS فقط.
-/// - تخزين آخر قائمة محطات لكل دولة.
-/// - استرجاع القائمة المخزنة عند فشل الاتصال.
-/// - إدارة المفضلة محليًا.
-/// - طلب رابط التشغيل الحالي من Worker.
 class RadioDirectoryService {
   RadioDirectoryService._();
 
@@ -69,10 +59,6 @@ class RadioDirectoryService {
   // STATIONS
   // ============================================================
 
-  /// تحميل محطات الدولة.
-  ///
-  /// البحث يتم من المصدر عند إرسال query.
-  /// عند فشل الشبكة نسترجع آخر قائمة محفوظة للدولة.
   static Future<RadioStationsResult> loadStations(
     String country, {
     String query = '',
@@ -84,7 +70,9 @@ class RadioDirectoryService {
       throw ArgumentError('Radio country is empty.');
     }
 
-    final safeLimit = limit.clamp(1, maximumStations);
+    final safeLimit =
+        limit.clamp(1, maximumStations).toInt();
+
     final cleanQuery = query.trim();
 
     try {
@@ -94,8 +82,7 @@ class RadioDirectoryService {
         limit: safeLimit,
       );
 
-      // نحفظ القائمة الكاملة فقط، ولا نستبدل كاش الدولة
-      // بنتيجة بحث جزئية.
+      // لا نستبدل كاش الدولة بنتيجة بحث جزئية.
       if (cleanQuery.isEmpty) {
         await _saveCountryCache(
           cleanCountry,
@@ -107,14 +94,14 @@ class RadioDirectoryService {
         stations: stations,
         fromCache: false,
       );
-    } catch (error) {
-      // لا نعرض نتائج دولة أخرى على أنها نتائج الدولة الحالية.
+    } catch (_) {
       // البحث الجزئي لا يستخدم كاش القائمة الكاملة.
       if (cleanQuery.isNotEmpty) {
         rethrow;
       }
 
-      final cached = await _readCountryCache(cleanCountry);
+      final cached =
+          await _readCountryCache(cleanCountry);
 
       if (cached == null) {
         rethrow;
@@ -252,8 +239,7 @@ class RadioDirectoryService {
       }
     }
 
-    // لا نعيد ترتيب القائمة هنا.
-    // نحافظ على ترتيب الشعبية القادم من Radio Browser.
+    // نحافظ على ترتيب الشعبية القادم من المصدر.
     return result;
   }
 
@@ -262,7 +248,8 @@ class RadioDirectoryService {
   // ============================================================
 
   static Future<List<RadioStation>> getFavorites() async {
-    final saved = await _storage.getJsonList(_favoritesKey);
+    final saved =
+        await _storage.getJsonList(_favoritesKey);
 
     if (saved == null) {
       return [];
@@ -284,7 +271,7 @@ class RadioDirectoryService {
           result.add(station);
         }
       } catch (_) {
-        // تجاهل العنصر التالف مع الحفاظ على باقي المفضلة.
+        // تجاهل العنصر التالف.
       }
     }
 
@@ -349,10 +336,8 @@ class RadioDirectoryService {
     String country,
     List<RadioStation> stations,
   ) async {
-    final key = _cacheKey(country);
-
     await _storage.setJsonList(
-      key,
+      _cacheKey(country),
       stations.map(_stationToMap).toList(),
     );
   }
@@ -395,7 +380,10 @@ class RadioDirectoryService {
     final normalized = country
         .trim()
         .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
+        .replaceAll(
+          RegExp(r'[^a-z0-9_-]'),
+          '_',
+        );
 
     return '$_cachePrefix$normalized';
   }
@@ -404,12 +392,6 @@ class RadioDirectoryService {
   // STREAM RESOLUTION
   // ============================================================
 
-  /// يطلب رابط التشغيل الحالي من Worker.
-  ///
-  /// إذا تعذر تسجيل الضغطة أو تعذر الوصول للمصدر،
-  /// يسمح باستخدام رابط HTTPS الموجود في القائمة.
-  ///
-  /// registeredClick يوضح هل نجح تسجيل الضغطة وحل الرابط.
   static Future<RadioResolvedStream> resolveStream(
     RadioStation station,
   ) async {
@@ -446,13 +428,16 @@ class RadioDirectoryService {
               'Accept': 'application/json',
             },
           )
-          .timeout(const Duration(seconds: 12));
+          .timeout(
+            const Duration(seconds: 12),
+          );
 
       if (response.statusCode >= 200 &&
           response.statusCode < 300) {
         final decoded = jsonDecode(response.body);
 
-        if (decoded is Map && decoded['ok'] == true) {
+        if (decoded is Map &&
+            decoded['ok'] == true) {
           final resolved = (
             decoded['streamUrl'] ??
             decoded['url'] ??
@@ -468,8 +453,7 @@ class RadioDirectoryService {
         }
       }
     } catch (_) {
-      // نستعمل رابط HTTPS الأصلي كحل احتياطي.
-      // لا نعرض هذا كأنه تسجيل ضغطة ناجح.
+      // الرابط الأصلي يظل حلًا احتياطيًا.
     }
 
     return RadioResolvedStream(
@@ -500,8 +484,11 @@ class RadioDirectoryService {
   static RadioStation? _stationFromMap(
     Map<String, dynamic> map,
   ) {
-    final name = map['name']?.toString().trim() ?? '';
-    final url = map['url']?.toString().trim() ?? '';
+    final name =
+        map['name']?.toString().trim() ?? '';
+
+    final url =
+        map['url']?.toString().trim() ?? '';
 
     if (name.isEmpty || !_isHttpsUrl(url)) {
       return null;
@@ -544,7 +531,8 @@ class RadioDirectoryService {
 
     if (uri == null ||
         !uri.hasAuthority ||
-        (uri.scheme != 'https' && uri.scheme != 'http')) {
+        (uri.scheme != 'https' &&
+            uri.scheme != 'http')) {
       return '';
     }
 
@@ -556,14 +544,18 @@ class RadioDirectoryService {
       return value;
     }
 
-    return int.tryParse(value?.toString() ?? '') ?? 0;
+    return int.tryParse(
+          value?.toString() ?? '',
+        ) ??
+        0;
   }
 
   static bool _sameStation(
     RadioStation first,
     RadioStation second,
   ) {
-    if (first.id.isNotEmpty && second.id.isNotEmpty) {
+    if (first.id.isNotEmpty &&
+        second.id.isNotEmpty) {
       return first.id == second.id;
     }
 
