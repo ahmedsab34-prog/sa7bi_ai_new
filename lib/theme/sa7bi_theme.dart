@@ -1,8 +1,6 @@
-
 import 'package:flutter/material.dart';
 
 /// الهوية البصرية الموحدة لتطبيق صاحبي AI.
-/// الألوان والمسافات الأساسية التي تستخدمها الشاشات الجديدة.
 abstract final class Sa7biTheme {
   static const Color background = Color(0xFF080B14);
   static const Color surface = Color(0xFF111827);
@@ -12,7 +10,11 @@ abstract final class Sa7biTheme {
   static const Color cyan = Color(0xFF67E8F9);
   static const Color blue = Color(0xFF60A5FA);
   static const Color violet = Color(0xFF9B8CFF);
+  static const Color purple = Color(0xFFB39DFF);
   static const Color gold = Color(0xFFFFD76A);
+
+  static const Color success = Color(0xFF56E0B2);
+  static const Color danger = Color(0xFFFF777F);
 
   static const Color textPrimary = Color(0xFFF4F7FF);
   static const Color textSecondary = Color(0xFFA7B2C8);
@@ -22,9 +24,19 @@ abstract final class Sa7biTheme {
     begin: Alignment.topRight,
     end: Alignment.bottomLeft,
     colors: <Color>[
-      Color(0xFF67E8F9),
+      cyan,
       Color(0xFF818CF8),
-      Color(0xFFB39DFF),
+      purple,
+    ],
+  );
+
+  static const LinearGradient goldGradient = LinearGradient(
+    begin: Alignment.topRight,
+    end: Alignment.bottomLeft,
+    colors: <Color>[
+      Color(0xFFFFE9A6),
+      gold,
+      Color(0xFFB8862B),
     ],
   );
 
@@ -47,7 +59,7 @@ abstract final class Sa7biTheme {
       secondary: violet,
       tertiary: gold,
       surface: surface,
-      error: const Color(0xFFFF777F),
+      error: danger,
     );
 
     return ThemeData(
@@ -60,6 +72,7 @@ abstract final class Sa7biTheme {
       dividerColor: border,
       splashColor: cyan.withValues(alpha: 0.08),
       highlightColor: cyan.withValues(alpha: 0.04),
+
       appBarTheme: const AppBarTheme(
         backgroundColor: background,
         foregroundColor: textPrimary,
@@ -73,6 +86,7 @@ abstract final class Sa7biTheme {
           fontFamily: 'sans',
         ),
       ),
+
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceRaised,
@@ -101,6 +115,7 @@ abstract final class Sa7biTheme {
           borderSide: const BorderSide(color: cyan, width: 1.3),
         ),
       ),
+
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: cyan,
@@ -121,6 +136,7 @@ abstract final class Sa7biTheme {
           ),
         ),
       ),
+
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: cyan,
@@ -139,6 +155,7 @@ abstract final class Sa7biTheme {
           ),
         ),
       ),
+
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: cyan,
@@ -148,14 +165,17 @@ abstract final class Sa7biTheme {
           ),
         ),
       ),
+
       iconTheme: const IconThemeData(
         color: textSecondary,
         size: 21,
       ),
+
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: cyan,
         linearTrackColor: surfaceSoft,
       ),
+
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surfaceRaised,
         contentTextStyle: const TextStyle(
@@ -167,6 +187,7 @@ abstract final class Sa7biTheme {
           borderRadius: BorderRadius.circular(14),
         ),
       ),
+
       dialogTheme: DialogThemeData(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
