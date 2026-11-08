@@ -1,4 +1,4 @@
-// ============================================================
+ // ============================================================
 // FILE: lib/audio_center_screen.dart
 // ============================================================
 
@@ -397,8 +397,7 @@ class _AudioCenterScreenState
             if (_playing) _playingBar(),
             Expanded(
               child: RefreshIndicator(
-                color: _gold,
-                backgroundColor: _card,
+                                backgroundColor: _card,
                 onRefresh: _loadCategory,
                 child: _content(),
               ),
@@ -1535,8 +1534,7 @@ class _AudioCenterScreenState
       ),
     );
   }
-
-  Widget _podcastEpisodesView(PodcastItem podcast) {
+    Widget _podcastEpisodesView(PodcastItem podcast) {
     final artwork = podcast.artwork.trim();
 
     return ListView(
@@ -1812,8 +1810,7 @@ class _AudioCenterScreenState
       ),
     );
   }
-
-  // ============================================================
+    // ============================================================
   // SEARCH
   // ============================================================
 
