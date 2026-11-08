@@ -862,6 +862,12 @@ class AiService {
         return [];
       }
 
+      final isFallback = data['fallback'] == true;
+      final providerError =
+          data['providerError']?.toString() ?? '';
+      final providerStatus =
+          int.tryParse(data['providerStatus']?.toString() ?? '') ?? 0;
+
       final result = <PodcastItem>[];
 
       for (final raw in data['items'] as List) {
@@ -938,6 +944,9 @@ class AiService {
                     0,
             description:
                 raw['description']?.toString() ?? '',
+            isFallback: isFallback,
+            providerError: providerError,
+            providerStatus: providerStatus,
           ),
         );
       }
@@ -1059,8 +1068,7 @@ class AiService {
       return null;
     }
   }
-
-  static Future<List<PodcastEpisode>>
+    static Future<List<PodcastEpisode>>
       getPodcastEpisodes({
     required String feedUrl,
     int limit = 100,
@@ -1887,6 +1895,9 @@ class PodcastItem {
   final String releaseDate;
   final int episodeCount;
   final String description;
+  final bool isFallback;
+  final String providerError;
+  final int providerStatus;
 
   const PodcastItem({
     this.id = '',
@@ -1901,6 +1912,9 @@ class PodcastItem {
     this.releaseDate = '',
     this.episodeCount = 0,
     this.description = '',
+    this.isFallback = false,
+    this.providerError = '',
+    this.providerStatus = 0,
   });
 }
 
