@@ -1,9 +1,11 @@
+
 // ignore_for_file: invalid_use_of_protected_member
 
 part of 'audio_center_screen.dart';
 
 // ============================================================
-// RADIO
+// RADIO - SA7BI AI
+// Searchable HTTPS radio stations with safe playback.
 // ============================================================
 
 extension _AudioRadioSection on _AudioCenterScreenState {
@@ -48,11 +50,13 @@ extension _AudioRadioSection on _AudioCenterScreenState {
       await _loadStations(selected);
     } on TimeoutException {
       if (!mounted) return;
+
       setState(() {
         _error = 'الاتصال بطيء؛ انتهت مهلة تحميل الدول. حاول مرة أخرى.';
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _error = 'تعذر تحميل الدول بسبب مشكلة في الاتصال أو الخادم.';
       });
@@ -72,31 +76,39 @@ extension _AudioRadioSection on _AudioCenterScreenState {
       for (final station in stations) {
         final url = station.url.trim();
 
-        // AndroidManifest.xml يمنع cleartext traffic على مستوى التطبيق.
-        // نقبل HTTPS فقط حتى لا نعرض محطات ستفشل عند التشغيل.
         if (!_isSecureRadioStream(url)) {
           continue;
         }
 
-        if (seen.add(url.toLowerCase())) {
+        final key = url.toLowerCase();
+
+        if (seen.add(key)) {
           cleanStations.add(station);
         }
       }
 
+      cleanStations.sort((a, b) {
+        final aName = a.name.toLowerCase();
+        final bName = b.name.toLowerCase();
+        return aName.compareTo(bName);
+      });
+
       setState(() {
         _stations = cleanStations;
         _error = cleanStations.isEmpty
-            ? 'لا توجد محطات HTTPS صالحة لهذه الدولة. جرّب دولة أخرى أو حدّث القائمة.'
+            ? 'لم تصل محطات HTTPS صالحة لهذه الدولة. جرّب التحديث أو دولة أخرى.'
             : '';
       });
     } on TimeoutException {
       if (!mounted) return;
+
       setState(() {
         _stations = [];
         _error = 'تحميل المحطات استغرق وقتًا طويلًا بسبب بطء الاتصال.';
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _stations = [];
         _error = 'تعذر تحميل المحطات. تحقق من الإنترنت وحاول مرة أخرى.';
@@ -135,18 +147,89 @@ extension _AudioRadioSection on _AudioCenterScreenState {
     }
   }
 
+  List<RadioStation> _filteredRadioStations() {
+    final query = _searchController.text.trim().toLowerCase();
+
+    if (query.isEmpty) {
+      return _stations;
+    }
+
+    return _stations.where((station) {
+      final searchable = [
+        station.name,
+        station.tags,
+        station.codec,
+        station.homepage,
+      ].join(' ').toLowerCase();
+
+      return searchable.contains(query);
+    }).toList();
+  }
+
+  Widget _radioSearchBox() {
+    return TextField(
+      controller: _searchController,
+      onChanged: (_) {
+        if (mounted) setState(() {});
+      },
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 14,
+      ),
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        hintText: 'ابحث عن محطة أو نوع المحتوى...',
+        hintStyle: const TextStyle(
+          color: Colors.white54,
+          fontSize: 13,
+        ),
+        prefixIcon: const Icon(
+          Icons.search_rounded,
+          color: _AudioCenterScreenState._gold,
+        ),
+        suffixIcon: _searchController.text.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'مسح البحث',
+                onPressed: () {
+                  _searchController.clear();
+                  if (mounted) setState(() {});
+                },
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: Colors.white70,
+                ),
+              ),
+        filled: true,
+        fillColor: _AudioCenterScreenState._card,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 13,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
   // ============================================================
   // RADIO VIEW
   // ============================================================
 
   Widget _radioView() {
+    final visibleStations = _filteredRadioStations();
+
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 30),
       children: [
         Row(
           children: [
-            Expanded(child: _sectionTitle('الراديو')),
+            Expanded(
+              child: _sectionTitle('الراديو'),
+            ),
             IconButton(
               tooltip: 'تحديث الراديو',
               onPressed: _loading
@@ -175,14 +258,21 @@ extension _AudioRadioSection on _AudioCenterScreenState {
           ],
         ),
         const SizedBox(height: 8),
+
         if (_countries.isNotEmpty)
           DropdownButtonFormField<RadioCountry>(
-            value: _country,
+            value: _countries.contains(_country) ? _country : null,
+            isExpanded: true,
             dropdownColor: _AudioCenterScreenState._card,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+            ),
             decoration: InputDecoration(
               labelText: 'الدولة',
-              labelStyle: const TextStyle(color: Colors.white70),
+              labelStyle: const TextStyle(
+                color: Colors.white70,
+              ),
               filled: true,
               fillColor: _AudioCenterScreenState._card,
               border: OutlineInputBorder(
@@ -201,34 +291,97 @@ extension _AudioRadioSection on _AudioCenterScreenState {
             }).toList(),
             onChanged: _loading ? null : _changeCountry,
           ),
+
         const SizedBox(height: 12),
+
+        _radioSearchBox(),
+
+        const SizedBox(height: 12),
+
+        if (!_loading && _stations.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.radio_rounded,
+                  color: _AudioCenterScreenState._gold,
+                  size: 17,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  'المحطات: ${visibleStations.length} من ${_stations.length}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                const Text(
+                  'روابط HTTPS فقط',
+                  style: TextStyle(
+                    color: Colors.greenAccent,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
         if (_loading && _stations.isEmpty)
           const Padding(
-            padding: EdgeInsets.all(20),
+            padding: EdgeInsets.all(24),
             child: Center(
               child: CircularProgressIndicator(),
             ),
           ),
-        ..._stations.map(_radioCard),
+
+        if (!_loading && _stations.isNotEmpty && visibleStations.isEmpty)
+          _emptyText('لا توجد محطة تطابق كلمة البحث.'),
+
+        ...visibleStations.map(_radioCard),
+
         if (!_loading && _stations.isEmpty)
           _emptyText(
             _error.isNotEmpty
                 ? _error
                 : 'لا توجد محطات متاحة حاليًا.',
           ),
+
+        if (!_loading && _stations.isNotEmpty && _error.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _error,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.orangeAccent,
+                fontSize: 12,
+              ),
+            ),
+          ),
       ],
     );
   }
 
+  // ============================================================
+  // RADIO STATION CARD
+  // ============================================================
+
   Widget _radioCard(RadioStation station) {
     final favicon = station.favicon.trim();
+    final streamUrl = station.url.trim();
+    final secure = _isSecureRadioStream(streamUrl);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: _AudioCenterScreenState._card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(
+          color: Colors.white10,
+        ),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(
@@ -269,30 +422,36 @@ extension _AudioRadioSection on _AudioCenterScreenState {
             fontWeight: FontWeight.w800,
           ),
         ),
-        subtitle: Text(
-          [
-            if (station.codec.trim().isNotEmpty) station.codec.trim(),
-            if (station.bitrate > 0) '${station.bitrate} kbps',
-            if (station.tags.trim().isNotEmpty) station.tags.trim(),
-          ].join(' • '),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white60,
-            fontSize: 11,
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            [
+              if (station.codec.trim().isNotEmpty)
+                station.codec.trim(),
+              if (station.bitrate > 0)
+                '${station.bitrate} kbps',
+              if (station.tags.trim().isNotEmpty)
+                station.tags.trim(),
+            ].join(' • '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 11,
+            ),
           ),
         ),
         trailing: IconButton(
-          tooltip: 'تشغيل المحطة',
-          onPressed: _switchingAudio
+          tooltip: secure ? 'تشغيل المحطة' : 'رابط غير آمن',
+          onPressed: !secure || _switchingAudio
               ? null
               : () {
-                  final uri = Uri.tryParse(station.url.trim());
+                  final uri = Uri.tryParse(streamUrl);
 
                   if (uri == null ||
                       !_isSecureRadioStream(uri.toString())) {
                     _message(
-                      'المحطة دي بتستخدم HTTP غير مشفّر؛ اختر محطة HTTPS آمنة.',
+                      'رابط المحطة غير آمن. اختر محطة HTTPS.',
                     );
                     return;
                   }
@@ -301,12 +460,16 @@ extension _AudioRadioSection on _AudioCenterScreenState {
                     uri.toString(),
                     station.name,
                     artist: 'راديو ${_country?.name ?? ''}'.trim(),
-                    artwork: station.favicon,
+                    artwork: favicon.isEmpty ? null : favicon,
                   );
                 },
           icon: Icon(
-            Icons.play_circle_fill_rounded,
-            color: _AudioCenterScreenState._gold,
+            secure
+                ? Icons.play_circle_fill_rounded
+                : Icons.block_rounded,
+            color: secure
+                ? _AudioCenterScreenState._gold
+                : Colors.white24,
             size: 36,
           ),
         ),
