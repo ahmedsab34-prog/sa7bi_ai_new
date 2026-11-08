@@ -5,6 +5,9 @@ import '../ai_service.dart';
 import '../config/app_config.dart';
 import 'sa7bi_network_client.dart';
 
+export 'radio_directory_service.dart'
+    show RadioDirectoryService, RadioResolvedStream, RadioStationsResult;
+
 /// خدمات المحتوى الديني التي تحتاج إلى إظهار أخطاء المصدر
 /// بدل إرجاع قائمة فارغة توحي بأن البحث لم يجد نتائج.
 class ReligiousContentService {
