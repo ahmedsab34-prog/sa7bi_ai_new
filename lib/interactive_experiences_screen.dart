@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import 'services/social_guest_session_service.dart';
@@ -52,7 +53,7 @@ class _InteractiveExperiencesScreenState
   }
 
   Future<void> _retry() async {
-    if (!mounted) return;
+    if (!mounted || _loading) return;
 
     setState(() {
       _loading = true;
@@ -63,7 +64,7 @@ class _InteractiveExperiencesScreenState
   }
 
   Future<void> _open(Widget screen) async {
-    if (_loading || _error != null) return;
+    if (!mounted || _loading || _error != null) return;
 
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -80,59 +81,116 @@ class _InteractiveExperiencesScreenState
         backgroundColor: const Color(0xFF080B13),
         appBar: const Sa7biSubpageAppBar(
           title: 'الألعاب والتواصل',
-          subtitle: 'العب مع صاحبي AI أو مع أصحابك',
+          subtitle: 'اختار تجربتك وابدأ مع صاحبي AI',
         ),
-        body: _loading
-            ? const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(
-                      color: Color(0xFFFFD76A),
-                    ),
-                    SizedBox(height: 14),
-                    Text(
-                      'جاري تجهيز حسابك...',
-                      style: TextStyle(
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            : _error != null
-                ? _buildError()
-                : _buildOptions(),
+        body: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          child: _loading
+              ? _buildLoading()
+              : _error != null
+                  ? _buildError()
+                  : _buildOptions(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoading() {
+    return const Center(
+      key: ValueKey('loading'),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 34,
+            height: 34,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              color: Color(0xFFFFD76A),
+            ),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'جاري تجهيز حسابك...',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: 5),
+          Text(
+            'لحظات ونكون جاهزين للعب',
+            style: TextStyle(
+              color: Colors.white38,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildError() {
     return Center(
+      key: const ValueKey('error'),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(25),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.cloud_off_rounded,
-              size: 48,
-              color: Colors.orangeAccent,
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                color: const Color(0x22FFB45C),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: const Color(0x55FFB45C),
+                ),
+              ),
+              child: const Icon(
+                Icons.cloud_off_rounded,
+                size: 38,
+                color: Color(0xFFFFB45C),
+              ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 17),
+            const Text(
+              'مش قادرين نجهز اللعب دلوقتي',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 9),
             Text(
               _error!,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                color: Colors.white70,
+                color: Colors.white60,
                 height: 1.6,
+                fontSize: 12,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: _retry,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFFFD76A),
+                foregroundColor: const Color(0xFF171717),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 23,
+                  vertical: 12,
+                ),
+              ),
               icon: const Icon(Icons.refresh_rounded),
-              label: const Text('إعادة المحاولة'),
+              label: const Text(
+                'إعادة المحاولة',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
             ),
           ],
         ),
@@ -142,67 +200,33 @@ class _InteractiveExperiencesScreenState
 
   Widget _buildOptions() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      key: const ValueKey('options'),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(15, 13, 15, 100),
       children: [
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [
-                Color(0xFF26314D),
-                Color(0xFF111827),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: const Color(0x33FFD76A),
-            ),
-          ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.sports_esports_rounded,
-                color: Color(0xFFFFD76A),
-                size: 34,
-              ),
-              SizedBox(height: 12),
-              Text(
-                'اختار طريقة اللعب',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 6),
-              Text(
-                'حساب الضيف يتم تجهيزه تلقائيًا، وتُحفظ جلسة اللعب على جهازك.',
-                style: TextStyle(
-                  color: Colors.white70,
-                  height: 1.5,
-                ),
-              ),
-            ],
-          ),
+        _buildWelcomeCard(),
+        const SizedBox(height: 22),
+        const _SectionHeading(
+          title: 'اختار طريقة اللعب',
+          subtitle: 'كل تجربة لها طريقتها الخاصة',
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _ExperienceCard(
           icon: Icons.smart_toy_rounded,
           title: 'العب ضد صاحبي AI',
           description:
-              'مباريات فردية في إكس أو وحجر ورقة مقص والشطرنج.',
+              'تحدَّ الذكاء الاصطناعي في إكس أو وحجر ورقة مقص والشطرنج، وارجع لمبارياتك المحفوظة.',
           color: const Color(0xFF8EA8FF),
-          onTap: () => _open(
-            const SocialAiGamesScreen(),
-          ),
+          tag: 'ذكاء اصطناعي',
+          onTap: () => _open(const SocialAiGamesScreen()),
         ),
         _ExperienceCard(
           icon: Icons.people_alt_rounded,
           title: 'العب مع أصحابك',
           description:
-              'أنشئ غرفة، شارك رمز الدعوة، واحفظ مبارياتك.',
+              'أنشئ مباراة وشارك رمز الدعوة مع صاحبك أو انضم إلى مباراة موجودة.',
           color: const Color(0xFFFFD76A),
+          tag: 'تحديات مباشرة',
           onTap: () => _open(
             SocialGamesHubScreen(
               onShareInvite: widget.onShareResult,
@@ -213,10 +237,180 @@ class _InteractiveExperiencesScreenState
           icon: Icons.groups_rounded,
           title: 'المجموعات العامة',
           description:
-              'اكتشف المجموعات، انضم للمحادثات، وأنشئ مجموعتك.',
+              'اكتشف المجموعات، انضم للنقاشات، وشارك اهتماماتك مع الآخرين.',
           color: const Color(0xFF63E6FF),
-          onTap: () => _open(
-            const SocialGroupsScreen(),
+          tag: 'مجتمع صاحبي',
+          onTap: () => _open(const SocialGroupsScreen()),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF101827),
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.07),
+            ),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.save_outlined,
+                color: Color(0xFFFFD76A),
+                size: 21,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'يتم تجهيز جلسة ضيف تلقائيًا على جهازك. حفظ المباريات والرجوع إليها يعتمد على نجاح الاتصال بخدمات الألعاب.',
+                  style: TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                    height: 1.6,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWelcomeCard() {
+    return Container(
+      padding: const EdgeInsets.all(19),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(23),
+        gradient: const LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            Color(0xFF293653),
+            Color(0xFF171F32),
+            Color(0xFF101522),
+          ],
+        ),
+        border: Border.all(
+          color: const Color(0x55FFD76A),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 20,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'وقتك مع صاحبي أحلى',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'العب، اتحدى أصحابك، وشارك في مجتمع صاحبي AI.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.6,
+                  ),
+                ),
+                const SizedBox(height: 13),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0x22FFD76A),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0x55FFD76A),
+                    ),
+                  ),
+                  child: const Text(
+                    'جاهز للتحدي؟',
+                    style: TextStyle(
+                      color: Color(0xFFFFD76A),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFFFFE7A0),
+                  Color(0xFFFFC94D),
+                ],
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x44FFD76A),
+                  blurRadius: 20,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.sports_esports_rounded,
+              color: Color(0xFF182033),
+              size: 39,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading({
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            color: Colors.white54,
+            fontSize: 11,
           ),
         ),
       ],
@@ -230,6 +424,7 @@ class _ExperienceCard extends StatelessWidget {
     required this.title,
     required this.description,
     required this.color,
+    required this.tag,
     required this.onTap,
   });
 
@@ -237,6 +432,7 @@ class _ExperienceCard extends StatelessWidget {
   final String title;
   final String description;
   final Color color;
+  final String tag;
   final VoidCallback onTap;
 
   @override
@@ -244,52 +440,88 @@ class _ExperienceCard extends StatelessWidget {
     return Card(
       color: const Color(0xFF111827),
       margin: const EdgeInsets.only(bottom: 11),
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(17),
-        side: const BorderSide(
-          color: Colors.white10,
+        borderRadius: BorderRadius.circular(19),
+        side: BorderSide(
+          color: Colors.white.withValues(alpha: 0.08),
         ),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 15,
-          vertical: 10,
-        ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         onTap: onTap,
-        leading: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.13),
-            borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
+          child: Row(
+            children: [
+              Container(
+                width: 51,
+                height: 51,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      description,
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                        height: 1.55,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        tag,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 5),
+              Icon(
+                Icons.chevron_left_rounded,
+                color: color.withValues(alpha: 0.9),
+                size: 23,
+              ),
+            ],
           ),
-          child: Icon(
-            icon,
-            color: color,
-            size: 27,
-          ),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
-          child: Text(
-            description,
-            style: const TextStyle(
-              color: Colors.white60,
-              height: 1.4,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        trailing: const Icon(
-          Icons.chevron_left_rounded,
-          color: Colors.white60,
         ),
       ),
     );
