@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import 'chat_screen.dart';
@@ -5,23 +6,21 @@ import 'config/service_keys.dart';
 import 'profile_screen.dart';
 import 'secure_venting_screen.dart';
 import 'service_config.dart';
-import 'social_groups_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/app_header.dart';
 import 'widgets/audio_center_with_header.dart';
 
-/// تبويب الشات الرئيسي.
+/// تبويب الشات الرئيسي في صاحبي AI.
 ///
-/// العام: المجموعات العامة الحالية.
-/// الخاص: فضفضة AI المشفرة والمحمية برقم سري.
+/// الشات العام: محادثة مباشرة مع الذكاء الاصطناعي.
+/// الخاص: فضفضة AI السرية والمحمية برقم سري.
 ///
-/// يحتفظ IndexedStack بحالة كل شاشة عند التبديل.
+/// يحتفظ IndexedStack بحالة المحادثتين عند التبديل.
 class ChatTabScreen extends StatefulWidget {
   const ChatTabScreen({super.key});
 
   @override
-  State<ChatTabScreen> createState() =>
-      _ChatTabScreenState();
+  State<ChatTabScreen> createState() => _ChatTabScreenState();
 }
 
 class _ChatTabScreenState extends State<ChatTabScreen> {
@@ -62,15 +61,14 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
 استمع للمستخدم باحترام وبدون أحكام.
 ساعده على ترتيب أفكاره واختيار خطوات عملية.
 لا تدّعي أنك طبيب أو معالج.
+حافظ على خصوصية المحادثة ولا تطلب بيانات حساسة.
 ''';
   }
 
   Widget _createPrivateVentingScreen() {
     return SecureVentingScreen(
       child: ChatScreen(
-        key: const ValueKey<String>(
-          'private-ai-venting-chat',
-        ),
+        key: const ValueKey<String>('private-ai-venting-chat'),
         serviceKey: ServiceKeys.venting,
         serviceTitle: 'الفضفضة السرية',
         serviceContext: _ventingContext(),
@@ -84,8 +82,7 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
 
     setState(() {
       if (mode == 1) {
-        _privateScreen ??=
-            _createPrivateVentingScreen();
+        _privateScreen ??= _createPrivateVentingScreen();
       }
 
       _selectedMode = mode;
@@ -98,20 +95,13 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
       textDirection: TextDirection.rtl,
       child: Column(
         children: [
-          // الهيدر الموحد يظهر قبل اختيار نوع المحادثة.
           AppHeader(
             onProfileTap: _openProfile,
             onAudioTap: _openAudioCenter,
           ),
 
-          // اختيار العام والخاص أسفل الهيدر.
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              12,
-              5,
-              12,
-              7,
-            ),
+            padding: const EdgeInsets.fromLTRB(12, 5, 12, 7),
             child: Container(
               height: 46,
               padding: const EdgeInsets.all(4),
@@ -127,14 +117,12 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
                   Expanded(
                     child: _ChatModeButton(
                       title: 'الشات العام',
-                      icon: Icons.groups_rounded,
+                      icon: Icons.smart_toy_rounded,
                       selected: _selectedMode == 0,
                       onTap: () => _selectMode(0),
                     ),
                   ),
-
                   const SizedBox(width: 5),
-
                   Expanded(
                     child: _ChatModeButton(
                       title: 'الفضفضة السرية',
@@ -152,9 +140,13 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
             child: IndexedStack(
               index: _selectedMode,
               children: [
-                const SocialGroupsScreen(),
-                _privateScreen ??
-                    const SizedBox.shrink(),
+                const ChatScreen(
+                  key: ValueKey<String>('general-ai-chat'),
+                  serviceKey: ServiceKeys.general,
+                  serviceTitle: 'صاحبي AI',
+                  embedded: true,
+                ),
+                _privateScreen ?? const SizedBox.shrink(),
               ],
             ),
           ),
@@ -193,18 +185,13 @@ class _ChatModeButton extends StatelessWidget {
             curve: Curves.easeOut,
             decoration: BoxDecoration(
               color: selected
-                  ? Sa7biTheme.cyan.withValues(
-                      alpha: 0.14,
-                    )
+                  ? Sa7biTheme.cyan.withValues(alpha: 0.14)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(11),
               border: Border.all(
                 color: selected
-                    ? Sa7biTheme.cyan.withValues(
-                        alpha: 0.85,
-                      )
+                    ? Sa7biTheme.cyan.withValues(alpha: 0.85)
                     : Colors.transparent,
-                width: 1,
               ),
             ),
             padding: const EdgeInsets.symmetric(
@@ -221,9 +208,7 @@ class _ChatModeButton extends StatelessWidget {
                       ? Sa7biTheme.cyan
                       : Sa7biTheme.textSecondary,
                 ),
-
                 const SizedBox(width: 6),
-
                 Flexible(
                   child: Text(
                     title,
