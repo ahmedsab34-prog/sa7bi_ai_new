@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 
 set -u
@@ -158,13 +159,14 @@ echo "============================================================"
 echo "DEEP CONTENT DIAGNOSTICS"
 echo "============================================================"
 
-python3 - <<'PY'
+if python3 - <<'PY'
 import json
 import re
 import sys
 
 failures = 0
 warnings = 0
+
 
 def load(path):
     try:
@@ -174,15 +176,17 @@ def load(path):
         print(f"JSON ERROR {path}: {exc}")
         return None
 
+
 def is_http_url(value):
     return isinstance(value, str) and bool(
         re.match(r"^https?://", value.strip(), re.I)
     )
 
+
 def as_list(value):
     return value if isinstance(value, list) else []
 
-# الجزء الثاني يكمل فحوص المحتوى وملخص النتائج.
+
 # ------------------------------------------------------
 # NEWS
 # ------------------------------------------------------
@@ -227,6 +231,7 @@ if isinstance(news, dict):
 else:
     failures += 1
 
+
 # ------------------------------------------------------
 # QURAN
 # ------------------------------------------------------
@@ -269,6 +274,7 @@ if isinstance(quran, dict):
         failures += 1
 else:
     failures += 1
+
 
 # ------------------------------------------------------
 # RADIO
@@ -323,6 +329,7 @@ if isinstance(radio, dict):
 else:
     failures += 1
 
+
 # ------------------------------------------------------
 # PODCASTS — PROVIDER VALIDATION
 # ------------------------------------------------------
@@ -350,19 +357,17 @@ if isinstance(podcasts, dict):
     print(f"  providerStatus : {provider_status}")
     print(f"  providerError  : {provider_error}")
 
-    if fallback:
+    provider_failed = (
+        fallback
+        or provider_status == 429
+        or bool(provider_error)
+    )
+
+    if provider_failed:
         print(
-            "  ERROR: Provider returned fallback data. "
+            "  ERROR: Podcast provider failed or returned fallback data. "
             "This is not genuine provider success."
         )
-        failures += 1
-
-    if provider_status == 429:
-        print("  ERROR: Podcast provider rate-limited the request.")
-        failures += 1
-
-    if provider_error:
-        print("  ERROR: Podcast provider reported an error.")
         failures += 1
 
     if not items:
@@ -375,6 +380,7 @@ if isinstance(podcasts, dict):
 else:
     print("  ERROR: Podcast response is not valid JSON object.")
     failures += 1
+
 
 # ------------------------------------------------------
 # SHORTS
@@ -393,6 +399,7 @@ if isinstance(shorts, dict):
         failures += 1
 else:
     failures += 1
+
 
 # ------------------------------------------------------
 # AUDIO SEARCH
@@ -426,6 +433,7 @@ if isinstance(audio, dict):
 else:
     failures += 1
 
+
 print("\n============================================================")
 print("DEEP CONTENT DIAGNOSTIC SUMMARY")
 print(f"Failures : {failures}")
@@ -434,7 +442,15 @@ print("============================================================")
 
 if failures:
     sys.exit(1)
+
 PY
+then
+  echo "Python deep diagnostics completed."
+else
+  PYTHON_STATUS=$?
+  echo "ERROR: Python deep diagnostics failed (exit ${PYTHON_STATUS})."
+  FAILURES=$((FAILURES + 1))
+fi
 
 echo ""
 echo "============================================================"
