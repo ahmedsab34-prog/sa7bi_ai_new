@@ -1,4 +1,4 @@
-د// ignore_for_file: invalid_use_of_protected_member
+// ignore_for_file: invalid_use_of_protected_member
 
 part of 'audio_center_screen.dart';
 
