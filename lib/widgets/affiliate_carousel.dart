@@ -85,7 +85,7 @@ class _AffiliateCarouselState
         icon:
             Icons.shopping_cart_rounded,
         accent:
-            const Color(0xFFFFA726),
+            const Color(0xFF60A5FA),
         url:
             MonetizationConfig.amazonUrl,
         monetized: false,
@@ -109,7 +109,7 @@ class _AffiliateCarouselState
         icon:
             Icons.storefront_rounded,
         accent:
-            const Color(0xFFFFD76A),
+            const Color(0xFF67E8F9),
         url:
             MonetizationConfig.noonUrl,
         monetized: false,
@@ -149,6 +149,21 @@ class _AffiliateCarouselState
     }
   }
 
+  Color _sanitizeAccent(Color color) {
+    final isYellowOrOrange =
+        color.red >= 170 &&
+        color.green >= 115 &&
+        color.blue <= 155 &&
+        color.red > color.blue + 45 &&
+        color.green > color.blue + 25;
+
+    if (isYellowOrOrange) {
+      return const Color(0xFF60A5FA);
+    }
+
+    return color;
+  }
+
   Color _colorFromHex(
     String value,
   ) {
@@ -166,7 +181,7 @@ class _AffiliateCarouselState
       );
 
       if (parsed != null) {
-        return Color(parsed);
+        return _sanitizeAccent(Color(parsed));
       }
     }
 
@@ -178,12 +193,12 @@ class _AffiliateCarouselState
       );
 
       if (parsed != null) {
-        return Color(parsed);
+        return _sanitizeAccent(Color(parsed));
       }
     }
 
     return const Color(
-      0xFFFFD76A,
+      0xFF67E8F9,
     );
   }
 
@@ -215,7 +230,7 @@ class _AffiliateCarouselState
             const Icon(
               Icons.shopping_bag_rounded,
               color:
-                  Color(0xFFFFD76A),
+                  Color(0xFF67E8F9),
               size: 21,
             ),
             const SizedBox(
