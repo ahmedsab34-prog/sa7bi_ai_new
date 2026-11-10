@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// الهوية البصرية الموحدة لتطبيق صاحبي AI.
+/// اللون الأساسي سماوي، مع الأزرق والبنفسجي كلونين مساعدين.
 abstract final class Sa7biTheme {
   static const Color background = Color(0xFF080B14);
   static const Color surface = Color(0xFF111827);
@@ -11,8 +12,10 @@ abstract final class Sa7biTheme {
   static const Color blue = Color(0xFF60A5FA);
   static const Color violet = Color(0xFF9B8CFF);
   static const Color purple = Color(0xFFB39DFF);
-  static const Color gold = Color(0xFFFFD76A);
 
+  // أسماء التوافق القديمة تظل موجودة حتى لا تنكسر الملفات التي تستخدمها.
+  // لكنها تشير الآن إلى الهوية السماوية بدل الذهبي/الأصفر.
+  static const Color gold = cyan;
   static const Color success = Color(0xFF56E0B2);
   static const Color danger = Color(0xFFFF777F);
 
@@ -30,15 +33,7 @@ abstract final class Sa7biTheme {
     ],
   );
 
-  static const LinearGradient goldGradient = LinearGradient(
-    begin: Alignment.topRight,
-    end: Alignment.bottomLeft,
-    colors: <Color>[
-      Color(0xFFFFE9A6),
-      gold,
-      Color(0xFFB8862B),
-    ],
-  );
+  static const LinearGradient goldGradient = brandGradient;
 
   static const LinearGradient premiumGradient = LinearGradient(
     begin: Alignment.topRight,
@@ -57,7 +52,7 @@ abstract final class Sa7biTheme {
     ).copyWith(
       primary: cyan,
       secondary: violet,
-      tertiary: gold,
+      tertiary: blue,
       surface: surface,
       error: danger,
     );
@@ -72,7 +67,6 @@ abstract final class Sa7biTheme {
       dividerColor: border,
       splashColor: cyan.withValues(alpha: 0.08),
       highlightColor: cyan.withValues(alpha: 0.04),
-
       appBarTheme: const AppBarTheme(
         backgroundColor: background,
         foregroundColor: textPrimary,
@@ -86,22 +80,12 @@ abstract final class Sa7biTheme {
           fontFamily: 'sans',
         ),
       ),
-
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceRaised,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 12,
-        ),
-        hintStyle: const TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-        ),
-        labelStyle: const TextStyle(
-          color: textSecondary,
-          fontSize: 13,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        hintStyle: const TextStyle(color: textSecondary, fontSize: 13),
+        labelStyle: const TextStyle(color: textSecondary, fontSize: 13),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: border),
@@ -115,7 +99,6 @@ abstract final class Sa7biTheme {
           borderSide: const BorderSide(color: cyan, width: 1.3),
         ),
       ),
-
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: cyan,
@@ -123,71 +106,38 @@ abstract final class Sa7biTheme {
           disabledBackgroundColor: surfaceSoft,
           disabledForegroundColor: textSecondary,
           minimumSize: const Size(0, 42),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 10,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
         ),
       ),
-
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: cyan,
           minimumSize: const Size(0, 40),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 9,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           side: const BorderSide(color: border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
       ),
-
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: cyan,
-          textStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
       ),
-
-      iconTheme: const IconThemeData(
-        color: textSecondary,
-        size: 21,
-      ),
-
+      iconTheme: const IconThemeData(color: textSecondary, size: 21),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: cyan,
         linearTrackColor: surfaceSoft,
       ),
-
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surfaceRaised,
-        contentTextStyle: const TextStyle(
-          color: textPrimary,
-          fontSize: 12,
-        ),
+        contentTextStyle: const TextStyle(color: textPrimary, fontSize: 12),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
-
       dialogTheme: DialogThemeData(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
