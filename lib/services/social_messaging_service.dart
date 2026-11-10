@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import 'sa7bi_network_client.dart';
+import 'social_guest_session_service.dart';
 import 'social_session_storage.dart';
 
 /// خدمة الدعوات داخل التطبيق والمحادثات الخاصة.
@@ -21,19 +22,31 @@ class SocialMessagingService {
 
   bool get isSignedIn => _token != null && _token!.isNotEmpty;
 
+  /// يضمن وجود جلسة ضيف أو استعادة الجلسة السابقة،
+  /// ثم يقرأ رمز الدخول المشترك مع خدمة الألعاب.
   Future<void> initialize() async {
-    if (_token != null) return;
+    if (_token != null && _token!.isNotEmpty) return;
 
-    _loadingToken ??= _loadToken();
+    final pending = _loadingToken;
+    if (pending != null) {
+      await pending;
+      return;
+    }
+
+    final task = _initializeToken();
+    _loadingToken = task;
 
     try {
-      await _loadingToken;
+      await task;
     } finally {
-      _loadingToken = null;
+      if (identical(_loadingToken, task)) {
+        _loadingToken = null;
+      }
     }
   }
 
-  Future<void> _loadToken() async {
+  Future<void> _initializeToken() async {
+    await SocialGuestSessionService.instance.ensureSession();
     _token = await SocialSessionStorage.instance.readToken();
   }
 
@@ -226,7 +239,7 @@ class SocialMessagingService {
     if (token == null || token.isEmpty) {
       throw const SocialMessagingException(
         'AUTH_REQUIRED',
-        'سجّل الدخول إلى حساب الألعاب أولًا لاستخدام الدعوات والرسائل.',
+        'تعذر استعادة جلسة حسابك تلقائيًا. حاول مرة أخرى.',
       );
     }
 
@@ -341,7 +354,7 @@ class SocialMessagingService {
     switch (error) {
       case 'AUTH_REQUIRED':
       case 'SESSION_EXPIRED':
-        return 'انتهت جلسة الحساب. سجّل الدخول مرة أخرى.';
+        return 'انتهت جلسة الحساب. حاول استعادتها مرة أخرى.';
       case 'INVALID_RECIPIENT':
       case 'INVALID_USER_ID':
         return 'حساب اللاعب المحدد غير صحيح.';
