@@ -1,10 +1,13 @@
+
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// مشغّل الصوت المركزي لتطبيق صاحبي AI.
 ///
@@ -39,6 +42,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
   bool _interruptionActive = false;
   bool _resumeAfterInterruption = false;
   bool _wasDucked = false;
+
+  static const String _snapshotKey = 'sa7bi_audio_playback_snapshot_v1';
+  Timer? _snapshotTimer;
+  bool _restoringSnapshot = false;
 
   bool _microphoneCaptureActive = false;
   bool _resumeAfterMicrophone = false;
@@ -134,6 +141,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
       );
 
       _initialized = true;
+      await _restorePlaybackSnapshot();
       _broadcastState();
     } catch (error, stackTrace) {
       _initialized = false;
@@ -230,7 +238,163 @@ class Sa7biAudioHandler extends BaseAudioHandler
     }
 
     playbackState.add(_buildPlaybackState());
+    _schedulePlaybackSnapshotSave();
   }
+
+  // ============================================================
+  // PLAYBACK PERSISTENCE
+  // ============================================================
+
+  void _schedulePlaybackSnapshotSave({bool immediate = false}) {
+    if (_disposed || _restoringSnapshot) return;
+
+    if (immediate) {
+      _snapshotTimer?.cancel();
+      _snapshotTimer = null;
+      unawaited(_persistPlaybackSnapshot());
+      return;
+    }
+
+    // Position updates are frequent; throttle disk writes to one per 3 seconds.
+    if (_snapshotTimer?.isActive == true) return;
+
+    _snapshotTimer = Timer(
+      const Duration(seconds: 3),
+      () {
+        _snapshotTimer = null;
+        unawaited(_persistPlaybackSnapshot());
+      },
+    );
+  }
+
+  Future<void> _persistPlaybackSnapshot() async {
+    if (_disposed || _restoringSnapshot) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final items = queue.value;
+
+      if (items.isEmpty) {
+        await prefs.remove(_snapshotKey);
+        return;
+      }
+
+      final currentIndex = _player.currentIndex ?? 0;
+      final safeIndex = currentIndex.clamp(0, items.length - 1).toInt();
+      final positionMs = _player.position.inMilliseconds;
+
+      final serializedItems = items.map((item) {
+        return <String, dynamic>{
+          'id': item.id,
+          'title': item.title,
+          'artist': item.artist,
+          'album': item.album,
+          'durationMs': item.duration?.inMilliseconds,
+          'artUri': item.artUri?.toString(),
+        };
+      }).toList(growable: false);
+
+      await prefs.setString(
+        _snapshotKey,
+        jsonEncode({
+          'version': 1,
+          'items': serializedItems,
+          'index': safeIndex,
+          'positionMs': positionMs < 0 ? 0 : positionMs,
+          'savedAt': DateTime.now().millisecondsSinceEpoch,
+        }),
+      );
+    } catch (error) {
+      debugPrint('Audio playback snapshot save failed: $error');
+    }
+  }
+
+  Future<void> _restorePlaybackSnapshot() async {
+    if (_disposed) return;
+
+    _restoringSnapshot = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = prefs.getString(_snapshotKey);
+      if (encoded == null || encoded.trim().isEmpty) return;
+
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map) {
+        await prefs.remove(_snapshotKey);
+        return;
+      }
+
+      final rawItems = decoded['items'];
+      if (rawItems is! List || rawItems.isEmpty) {
+        await prefs.remove(_snapshotKey);
+        return;
+      }
+
+      final items = <MediaItem>[];
+      for (final raw in rawItems) {
+        if (raw is! Map) continue;
+
+        final id = raw['id']?.toString().trim() ?? '';
+        final title = raw['title']?.toString().trim() ?? '';
+        if (id.isEmpty || title.isEmpty) continue;
+
+        // Ignore local files removed since the last app session.
+        if (!id.startsWith('https://') && !id.startsWith('http://')) {
+          try {
+            if (!await File(id).exists()) continue;
+          } catch (_) {
+            continue;
+          }
+        }
+
+        final rawDuration = raw['durationMs'];
+        final artValue = raw['artUri']?.toString().trim() ?? '';
+
+        items.add(
+          MediaItem(
+            id: id,
+            title: title,
+            artist: raw['artist']?.toString(),
+            album: raw['album']?.toString(),
+            duration: rawDuration is num && rawDuration >= 0
+                ? Duration(milliseconds: rawDuration.toInt())
+                : null,
+            artUri: artValue.isEmpty ? null : Uri.tryParse(artValue),
+          ),
+        );
+      }
+
+      if (items.isEmpty) {
+        await prefs.remove(_snapshotKey);
+        return;
+      }
+
+      final rawIndex = decoded['index'];
+      final requestedIndex = rawIndex is num ? rawIndex.toInt() : 0;
+      final safeIndex = requestedIndex.clamp(0, items.length - 1).toInt();
+      final rawPosition = decoded['positionMs'];
+      final positionMs = rawPosition is num
+          ? rawPosition.toInt().clamp(0, 24 * 60 * 60 * 1000)
+          : 0;
+
+      await _setQueueSource(
+        items: items,
+        initialIndex: safeIndex,
+        initialPosition: Duration(milliseconds: positionMs),
+        autoplay: false,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Audio playback snapshot restore failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      _restoringSnapshot = false;
+      _schedulePlaybackSnapshotSave(immediate: true);
+    }
+  }
+
+  // ============================================================
+  // MEDIA ITEM
+  // ============================================================
 
   void _updateCurrentMediaItem(
     SequenceState? sequence,
@@ -503,6 +667,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
   Future<void> _setQueueSource({
     required List<MediaItem> items,
     required int initialIndex,
+    Duration initialPosition = Duration.zero,
     bool autoplay = false,
   }) async {
     if (items.isEmpty || _disposed) {
@@ -529,10 +694,16 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
     queue.add(List<MediaItem>.unmodifiable(items));
 
+    final selectedDuration = items[safeIndex].duration;
+    final safePosition = selectedDuration != null &&
+            initialPosition > selectedDuration
+        ? selectedDuration
+        : initialPosition;
+
     await _player.setAudioSource(
       source,
       initialIndex: safeIndex,
-      initialPosition: Duration.zero,
+      initialPosition: safePosition,
     );
 
     if (_disposed) {
@@ -541,6 +712,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
     mediaItem.add(items[safeIndex]);
     _broadcastState();
+    _schedulePlaybackSnapshotSave(immediate: true);
 
     if (autoplay) {
       _startPlayback('Autoplay queue source');
@@ -605,6 +777,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
         await _player.pause();
         _broadcastState();
+        _schedulePlaybackSnapshotSave(immediate: true);
       } catch (error, stackTrace) {
         debugPrint('Audio pause failed: $error');
         debugPrintStack(stackTrace: stackTrace);
@@ -628,6 +801,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
         await _player.stop();
 
         _broadcastState();
+        _schedulePlaybackSnapshotSave(immediate: true);
         await super.stop();
       } catch (error, stackTrace) {
         debugPrint('Audio stop failed: $error');
@@ -646,6 +820,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
       try {
         await _player.seek(position);
         _broadcastState();
+        _schedulePlaybackSnapshotSave(immediate: true);
       } catch (error, stackTrace) {
         debugPrint('Audio seek failed: $error');
         debugPrintStack(stackTrace: stackTrace);
@@ -967,6 +1142,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
         queue.add(const <MediaItem>[]);
         mediaItem.add(null);
         _broadcastState();
+        _schedulePlaybackSnapshotSave(immediate: true);
         return;
       }
 
@@ -1096,6 +1272,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
       return;
     }
 
+    _snapshotTimer?.cancel();
+    _snapshotTimer = null;
+    await _persistPlaybackSnapshot();
     _disposed = true;
 
     await _playerStateSubscription?.cancel();
