@@ -21,11 +21,13 @@ class Sa7biNetworkClient {
   static const Duration connectionTimeout =
       Duration(seconds: 12);
 
+  /// مهلة GET العامة؛ أطول لتناسب الشبكات الضعيفة والمتذبذبة.
   static const Duration safeRequestTimeout =
-      Duration(seconds: 4);
+      Duration(seconds: 8);
 
+  /// مهلة طلب GET على Worker الاحتياطي.
   static const Duration fallbackRequestTimeout =
-      Duration(seconds: 6);
+      Duration(seconds: 12);
 
   static const int maximumAttempts = 2;
 
