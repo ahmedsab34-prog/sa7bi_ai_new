@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -270,6 +269,36 @@ class HomeScreenState extends State<HomeScreen>
     }
   }
 
+  String _formatNewsPublishedAt(String value) {
+    final publishedAt = network_news.AiNewsService.parseNewsDate(value);
+
+    if (publishedAt == null) {
+      return 'وقت النشر غير متاح';
+    }
+
+    final local = publishedAt.toLocal();
+    final now = DateTime.now();
+    final time =
+        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+
+    if (local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day) {
+      return 'اليوم • $time';
+    }
+
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (local.year == yesterday.year &&
+        local.month == yesterday.month &&
+        local.day == yesterday.day) {
+      return 'أمس • $time';
+    }
+
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    return '$day/$month • $time';
+  }
+
   String _formatUpdatedAt(DateTime? value) {
     if (value == null) return 'لم يتم التحديث بعد';
 
@@ -393,7 +422,7 @@ class HomeScreenState extends State<HomeScreen>
       children: [
         const Icon(
           Icons.newspaper_rounded,
-          color: Color(0xFFFFD76A),
+          color: Color(0xFF67E8F9),
           size: 22,
         ),
         const SizedBox(width: 8),
@@ -469,7 +498,7 @@ class HomeScreenState extends State<HomeScreen>
             onPressed: _refreshing ? null : refreshNews,
             icon: const Icon(
               Icons.refresh_rounded,
-              color: Color(0xFFFFD76A),
+              color: Color(0xFF67E8F9),
               size: 18,
             ),
           ),
@@ -581,7 +610,7 @@ class HomeScreenState extends State<HomeScreen>
       child: InkWell(
         onTap: () => _openNews(item),
         child: SizedBox(
-          height: 124,
+          height: 140,
           child: Row(
             textDirection: TextDirection.rtl,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -608,21 +637,40 @@ class HomeScreenState extends State<HomeScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        source,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFFFFD76A),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              source,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Color(0xFF67E8F9),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _formatNewsPublishedAt(item.pubDate),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 9,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Expanded(
                         child: Text(
                           title,
-                          maxLines: 3,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: Colors.white,
@@ -635,7 +683,7 @@ class HomeScreenState extends State<HomeScreen>
                       const SizedBox(height: 3),
                       Text(
                         description,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white70,
@@ -690,7 +738,7 @@ class HomeScreenState extends State<HomeScreen>
       child: const Icon(
         Icons.newspaper_rounded,
         size: 30,
-        color: Color(0x66FFD76A),
+        color: Color(0x6667E8F9),
       ),
     );
   }
