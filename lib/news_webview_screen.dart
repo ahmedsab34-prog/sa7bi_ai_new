@@ -223,7 +223,7 @@ class _NewsWebViewScreenState
                     _isLoading ? null : _refreshPage,
                 icon: const Icon(
                   Icons.refresh_rounded,
-                  color: Color(0xFFFFD76A),
+                  color: Color(0xFF67E8F9),
                 ),
               ),
             ],
@@ -240,7 +240,7 @@ class _NewsWebViewScreenState
                     backgroundColor: Colors.transparent,
                     valueColor:
                         const AlwaysStoppedAnimation<Color>(
-                      Color(0xFFFFD76A),
+                      Color(0xFF67E8F9),
                     ),
                   ),
                 )
@@ -286,7 +286,7 @@ class _NewsWebViewScreenState
                         onPressed: _refreshPage,
                         icon: const Icon(
                           Icons.refresh_rounded,
-                          color: Color(0xFFFFD76A),
+                          color: Color(0xFF67E8F9),
                         ),
                       ),
                     ],
