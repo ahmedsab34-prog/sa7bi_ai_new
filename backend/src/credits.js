@@ -569,6 +569,21 @@ export class Sa7biCredits
       );
 
     if (existing) {
+      // منع استخدام نفس Request ID لعملية مختلفة
+      // أو بتكلفة مختلفة.
+      if (
+        existing.operation !==
+          normalizedOperation ||
+        Number(existing.cost) !== cost
+      ) {
+        return {
+          ok: false,
+          error:
+            "REQUEST_ALREADY_FINALIZED",
+        };
+      }
+
+      // الحجز النشط لا يسمح بتنفيذ مزوّد AI مرة ثانية.
       if (
         existing.state ===
         "reserved"
@@ -596,6 +611,82 @@ export class Sa7biCredits
           expiresAt:
             Number(
               existing.expires_at
+            ),
+
+          balance:
+            this.getState(),
+        };
+      }
+
+      // يسمح فقط بإعادة تفعيل الحجز الذي تم تحريره
+      // صراحةً بعد فشل تنفيذ AI.
+      // الحجز المنتهي أو الطلب المدفوع لا يعاد تشغيله.
+      if (
+        existing.state ===
+        "retryable"
+      ) {
+        const now =
+          Date.now();
+
+        const expiresAt =
+          now + RESERVATION_TTL_MS;
+
+        this.ctx.storage.sql.exec(
+          `
+          UPDATE reservations
+          SET
+            state = 'reserved',
+            created_at = ?,
+            expires_at = ?
+          WHERE request_id = ?
+            AND state = 'retryable'
+          `,
+          now,
+          expiresAt,
+          normalizedRequestId
+        );
+
+        const renewed =
+          this.selectReservation(
+            normalizedRequestId
+          );
+
+        if (
+          !renewed ||
+          renewed.state !== "reserved"
+        ) {
+          return {
+            ok: false,
+            error:
+              "REQUEST_ALREADY_FINALIZED",
+          };
+        }
+
+        return {
+          ok: true,
+
+          alreadyReserved:
+            false,
+
+          retry: true,
+
+          operation:
+            renewed.operation,
+
+          cost:
+            Number(
+              renewed.cost
+            ),
+
+          requestId:
+            renewed.request_id,
+
+          state:
+            renewed.state,
+
+          expiresAt:
+            Number(
+              renewed.expires_at
             ),
 
           balance:
@@ -891,6 +982,24 @@ export class Sa7biCredits
 
     if (
       reservation.state ===
+      "retryable"
+    ) {
+      return {
+        ok: true,
+
+        alreadyReleased:
+          true,
+
+        retryable:
+          true,
+
+        balance:
+          this.getState(),
+      };
+    }
+
+    if (
+      reservation.state ===
       "released"
     ) {
       return {
@@ -898,6 +1007,9 @@ export class Sa7biCredits
 
         alreadyReleased:
           true,
+
+        retryable:
+          false,
 
         balance:
           this.getState(),
@@ -919,8 +1031,9 @@ export class Sa7biCredits
     this.ctx.storage.sql.exec(
       `
       UPDATE reservations
-      SET state = 'released'
+      SET state = 'retryable'
       WHERE request_id = ?
+        AND state = 'reserved'
       `,
       normalizedRequestId
     );
@@ -929,6 +1042,8 @@ export class Sa7biCredits
       ok: true,
 
       released: true,
+
+      retryable: true,
 
       cost:
         Number(
