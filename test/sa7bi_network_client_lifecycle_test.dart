@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 
@@ -63,6 +62,26 @@ void main() {
       Sa7biNetworkClient.close();
       await serverSubscription.cancel();
       await server.close(force: true);
+    });
+
+    test('uses longer timeouts for weak connections', () {
+      expect(
+        Sa7biNetworkClient.connectionTimeout,
+        const Duration(seconds: 12),
+      );
+      expect(
+        Sa7biNetworkClient.safeRequestTimeout,
+        const Duration(seconds: 8),
+      );
+      expect(
+        Sa7biNetworkClient.fallbackRequestTimeout,
+        const Duration(seconds: 12),
+      );
+      expect(Sa7biNetworkClient.maximumAttempts, 2);
+      expect(
+        Sa7biNetworkClient.retryDelay,
+        const Duration(milliseconds: 500),
+      );
     });
 
     test('consecutive requests work in the same Zone', () async {
