@@ -69,7 +69,7 @@ class _HeaderWelcome extends StatelessWidget {
           ],
         ),
         border: Border.all(
-          color: const Color(0x33FFD76A),
+          color: const Color(0x3367E8F9),
         ),
       ),
       child: const Directionality(
@@ -133,11 +133,11 @@ class _HeaderAudioButton extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   color: playing
                       ? const Color(0x223DDCBA)
-                      : const Color(0x22FFD76A),
+                      : const Color(0x2267E8F9),
                   border: Border.all(
                     color: playing
                         ? const Color(0x8870E5C7)
-                        : const Color(0x66FFD76A),
+                        : const Color(0x6667E8F9),
                   ),
                 ),
                 child: Icon(
@@ -146,7 +146,7 @@ class _HeaderAudioButton extends StatelessWidget {
                       : Icons.headphones_rounded,
                   color: playing
                       ? const Color(0xFF70E5C7)
-                      : const Color(0xFFFFD76A),
+                      : const Color(0xFF67E8F9),
                   size: 21,
                 ),
               ),
@@ -237,24 +237,24 @@ class _ProfileAvatar extends StatelessWidget {
         gradient: hasReel
             ? const SweepGradient(
                 colors: [
-                  Color(0xFFFFD76A),
+                  Color(0xFF67E8F9),
                   Color(0xFFFF4D8D),
                   Color(0xFFB45CFF),
                   Color(0xFF63E6FF),
-                  Color(0xFFFFD76A),
+                  Color(0xFF67E8F9),
                 ],
               )
             : const LinearGradient(
                 colors: [
-                  Color(0xFFFFD76A),
-                  Color(0xFF8B6A25),
+                  Color(0xFF67E8F9),
+                  Color(0xFF2563EB),
                 ],
               ),
         boxShadow: [
           BoxShadow(
             color: (hasReel
                     ? const Color(0xFFB45CFF)
-                    : const Color(0xFFFFD76A))
+                    : const Color(0xFF67E8F9))
                 .withValues(alpha: 0.15),
             blurRadius: 7,
           ),
@@ -289,7 +289,7 @@ class _DefaultProfileIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Icon(
       Icons.person_rounded,
-      color: Color(0xFFFFD76A),
+      color: Color(0xFF67E8F9),
       size: 20,
     );
   }
@@ -316,11 +316,11 @@ class Sa7biLogo extends StatelessWidget {
               shape: BoxShape.circle,
               gradient: SweepGradient(
                 colors: [
-                  Color(0xFF8A1834),
+                  Color(0xFF6D4AFF),
                   Color(0xFF183D72),
                   Color(0xFF254F82),
-                  Color(0xFF5C1630),
-                  Color(0xFF8A1834),
+                  Color(0xFF3B2A78),
+                  Color(0xFF6D4AFF),
                 ],
               ),
             ),
@@ -343,7 +343,7 @@ class Sa7biLogo extends StatelessWidget {
                 errorBuilder: (context, error, stackTrace) {
                   return const Icon(
                     Icons.auto_awesome_rounded,
-                    color: Color(0xFFFFD76A),
+                    color: Color(0xFF67E8F9),
                     size: 21,
                   );
                 },
