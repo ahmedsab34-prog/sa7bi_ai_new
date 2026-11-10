@@ -33,8 +33,8 @@ class AudioCenterScreen extends StatefulWidget {
 
 class _AudioCenterScreenState
     extends State<AudioCenterScreen> {
-  static const Color _gold = Color(0xFFE6C875);
-  static const Color _goldDark = Color(0xFFB9913E);
+  static const Color _accent = Color(0xFF35C6E8);
+  static const Color _accentDark = Color(0xFF24589A);
   static const Color _bg = Color(0xFF07111F);
   static const Color _card = Color(0xFF132238);
 
@@ -72,6 +72,7 @@ class _AudioCenterScreenState
   TafsirBook? _tafsirBook;
   List<TafsirItem> _tafsirItems = [];
   int? _tafsirSura;
+  bool _loadingTafsirSuwarCatalog = false;
 
   List<TafsirTextBook> _tafsirTextBooks = [];
   TafsirTextBook? _tafsirTextBook;
@@ -437,9 +438,9 @@ class _AudioCenterScreenState
                       ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(14),
-                        color: selected ? _goldDark : _card,
+                        color: selected ? _accentDark : _card,
                         border: Border.all(
-                          color: selected ? _gold : Colors.white10,
+                          color: selected ? _accent : Colors.white10,
                         ),
                       ),
                       child: Center(
@@ -480,7 +481,7 @@ class _AudioCenterScreenState
         color: _card,
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
-          color: _gold.withValues(alpha: 0.30),
+          color: _accent.withValues(alpha: 0.30),
         ),
       ),
       child: Row(
@@ -504,7 +505,7 @@ class _AudioCenterScreenState
             onPressed: _switchingAudio ? null : _stop,
             icon: const Icon(
               Icons.stop_circle_rounded,
-              color: _gold,
+              color: _accent,
               size: 32,
             ),
           ),
@@ -590,73 +591,58 @@ class _AudioCenterScreenState
     );
   }
 
-  Widget _sectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 20,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-
   Widget _searchBox() {
     return TextField(
       controller: _searchController,
       textDirection: TextDirection.rtl,
-      style: const TextStyle(
-        color: Colors.white,
-      ),
-      textInputAction: TextInputAction.search,
-      onSubmitted: (_) => _search(),
+      style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
-        hintText: 'ابحث...',
-        hintStyle: const TextStyle(
-          color: Colors.white38,
-        ),
-        prefixIcon: const Icon(
-          Icons.search_rounded,
-          color: _gold,
-        ),
-        suffixIcon: IconButton(
-          tooltip: 'بحث',
-          onPressed: _loading ? null : _search,
-          icon: const Icon(
-            Icons.arrow_forward_rounded,
-            color: _gold,
-          ),
-        ),
+        hintText: 'ابحث هنا...',
+        hintStyle: const TextStyle(color: Colors.white54),
         filled: true,
         fillColor: _card,
+        prefixIcon: const Icon(
+          Icons.search_rounded,
+          color: Colors.white70,
+        ),
+        suffixIcon: IconButton(
+          onPressed: _loading ? null : _loadCategory,
+          icon: const Icon(
+            Icons.arrow_forward_rounded,
+            color: _accent,
+          ),
+        ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(15),
           borderSide: BorderSide.none,
         ),
+      ),
+      onSubmitted: (_) => _loadCategory(),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 20,
+        fontWeight: FontWeight.w900,
       ),
     );
   }
 
   Widget _emptyText(String text) {
-    return Container(
-      margin: const EdgeInsets.only(top: 18),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white10,
-        ),
-      ),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Colors.white70,
-          height: 1.5,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white54,
+            height: 1.6,
+          ),
         ),
       ),
     );
@@ -671,26 +657,13 @@ class _AudioCenterScreenState
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _gold.withValues(alpha: 0.14),
-        ),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white10),
       ),
       child: Row(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _goldDark.withValues(alpha: 0.22),
-            ),
-            child: Icon(
-              icon,
-              color: _gold,
-            ),
-          ),
-          const SizedBox(width: 12),
+          Icon(icon, color: _accent, size: 25),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -702,13 +675,13 @@ class _AudioCenterScreenState
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
                 Text(
                   description,
                   style: const TextStyle(
                     color: Colors.white60,
+                    height: 1.5,
                     fontSize: 12,
-                    height: 1.4,
                   ),
                 ),
               ],
@@ -725,90 +698,34 @@ class _AudioCenterScreenState
 
   Future<void> _loadHadith() async {
     try {
-      final books = await ReligiousContentService.getHadithBooks();
+      final books = await AiService.getHadithBooks();
 
-      if (!mounted) return;
-
-      HadithBook? selected = _hadithBook;
-
-      if (selected == null || !books.contains(selected)) {
-        selected = books.isNotEmpty ? books.first : null;
+      HadithBook? selectedBook = _hadithBook;
+      if (selectedBook == null || !books.contains(selectedBook)) {
+        selectedBook = books.isNotEmpty ? books.first : null;
       }
 
-      final items = await ReligiousContentService.searchHadith(
+      final items = await AiService.searchHadith(
         query: _searchController.text.trim(),
-        book: selected?.id,
-        limit: 20,
+        book: selectedBook?.id,
       );
 
       if (!mounted) return;
 
       setState(() {
         _hadithBooks = books;
-        _hadithBook = selected;
+        _hadithBook = selectedBook;
         _hadithItems = items;
-        _error = items.isEmpty
-            ? 'لم يتم العثور على أحاديث تطابق البحث في المصدر الحالي.'
+        _error = books.isEmpty
+            ? 'لا توجد كتب حديث متاحة حاليًا.'
             : '';
       });
-    } on ReligiousContentException catch (error) {
-      if (mounted) {
-        setState(() {
-          _hadithItems = [];
-          _error = error.message;
-        });
-      }
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _hadithItems = [];
-          _error = 'تعذر تحميل الأحاديث بسبب مشكلة في الاتصال.';
-        });
-      }
-    }
-  }
-
-  Future<void> _playHadith(HadithItem item) async {
-    final text = item.text.trim();
-
-    if (text.isEmpty) {
-      _message('نص الحديث غير متاح.');
-      return;
-    }
-
-    if (_switchingAudio) return;
-
-    setState(() {
-      _switchingAudio = true;
-    });
-
-    try {
-      await _voice.stopSpeaking();
-
-      final ok = await _voice.speak(
-        text,
-        language: 'ar-EG',
-        rate: 0.45,
-      );
-
       if (!mounted) return;
-
-      if (ok) {
-        setState(() {
-          _currentTitle =
-              '${item.bookName} — حديث ${item.number}';
-          _playing = true;
-          _error = '';
-        });
-      } else {
-        _message('تعذر تشغيل الحديث بالصوت.');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _switchingAudio = false;
-        });
-      }
+      setState(() {
+        _hadithItems = [];
+        _error = 'تعذر تحميل الأحاديث. حاول مرة أخرى.';
+      });
     }
   }
 
@@ -819,57 +736,44 @@ class _AudioCenterScreenState
       children: [
         Row(
           children: [
-            Expanded(
-              child: _sectionTitle('الحديث الشريف'),
-            ),
+            Expanded(child: _sectionTitle('الأحاديث النبوية')),
             IconButton(
               tooltip: 'تحديث',
               onPressed: _loading ? null : _loadHadith,
-              icon: Icon(
+              icon: const Icon(
                 Icons.refresh_rounded,
-                color: _gold,
+                color: _accent,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         if (_hadithBooks.isNotEmpty)
           _dropdown<HadithBook>(
             value: _hadithBook,
             items: _hadithBooks,
-            label: 'كتاب الحديث',
+            label: 'اختر كتاب الحديث',
             text: (book) => book.name,
             onChanged: (book) async {
               if (book == null) return;
-
               setState(() {
                 _hadithBook = book;
                 _loading = true;
               });
-
               await _loadHadith();
-
-              if (mounted) {
-                setState(() {
-                  _loading = false;
-                });
-              }
+              if (mounted) setState(() => _loading = false);
             },
           ),
         const SizedBox(height: 10),
         _searchBox(),
-        const SizedBox(height: 12),
-        ..._hadithItems.map((item) => _hadithCard(item)),
+        const SizedBox(height: 14),
         if (_hadithItems.isEmpty)
           _emptyText(
-            _error.isNotEmpty ? _error : 'ابحث عن حديث.',
+            _error.isNotEmpty
+                ? _error
+                : 'لا توجد أحاديث مطابقة للبحث.',
           ),
-        const SizedBox(height: 10),
-        _infoCard(
-          Icons.record_voice_over_rounded,
-          'تشغيل صوتي',
-          'الأحاديث التي يوفرها المصدر نصية، لذلك يستخدم التطبيق نطق الهاتف العربي لقراءتها.',
-        ),
+        ..._hadithItems.map(_hadithCard),
       ],
     );
   }
@@ -881,23 +785,35 @@ class _AudioCenterScreenState
       decoration: BoxDecoration(
         color: _card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white10,
-        ),
+        border: Border.all(color: Colors.white10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            item.bookName.isEmpty
-                ? 'حديث ${item.number}'
-                : '${item.bookName} — حديث ${item.number}',
-            style: TextStyle(
-              color: _gold,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.bookName.isNotEmpty
+                      ? item.bookName
+                      : item.book,
+                  style: const TextStyle(
+                    color: _accent,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (item.number.isNotEmpty)
+                Text(
+                  'حديث ${item.number}',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 11,
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             item.text,
             textDirection: TextDirection.rtl,
@@ -917,7 +833,7 @@ class _AudioCenterScreenState
                   : () => _playHadith(item),
               icon: Icon(
                 Icons.play_circle_fill_rounded,
-                color: _gold,
+                color: _accent,
                 size: 38,
               ),
             ),
@@ -932,6 +848,9 @@ class _AudioCenterScreenState
   // ============================================================
 
   Future<void> _loadTafsir() async {
+    // حمّل فهرس السور بالتوازي حتى يظهر مرشح السورة دون تأخير النتائج.
+    unawaited(_ensureTafsirSuwarCatalog());
+
     List<TafsirBook> audioBooks = [];
     List<TafsirTextBook> textBooks = [];
     List<TafsirItem> audioItems = [];
@@ -985,6 +904,12 @@ class _AudioCenterScreenState
           key: selectedText.key,
           query: query,
         );
+
+        if (_tafsirSura != null) {
+          textItems = textItems
+              .where((item) => item.sura == _tafsirSura)
+              .toList(growable: false);
+        }
       }
 
       if (textBooks.isEmpty) {
@@ -1021,6 +946,34 @@ class _AudioCenterScreenState
           _error = audioError;
         });
       }
+    }
+  }
+   Future<void> _ensureTafsirSuwarCatalog() async {
+    if (_loadingTafsirSuwarCatalog ||
+        (_quran?.suwar.isNotEmpty ?? false)) {
+      return;
+    }
+
+    _loadingTafsirSuwarCatalog = true;
+    try {
+      final catalog = await AiService.getQuranCatalog()
+          .timeout(const Duration(seconds: 25));
+
+      if (!mounted || catalog == null || catalog.suwar.isEmpty) {
+        return;
+      }
+
+      setState(() {
+        _quran = catalog;
+        if (_tafsirSura != null &&
+            !catalog.suwar.any((sura) => sura.id == _tafsirSura)) {
+          _tafsirSura = null;
+        }
+      });
+    } catch (_) {
+      // يظل التفسير النصي والصوتي متاحين حتى لو تعذر فهرس السور.
+    } finally {
+      _loadingTafsirSuwarCatalog = false;
     }
   }
 
@@ -1091,6 +1044,15 @@ class _AudioCenterScreenState
   }
 
   Widget _tafsirView() {
+    final tafsirSuraItems = <QuranSura>[
+      const QuranSura(id: 0, name: 'كل السور'),
+      ...(_quran?.suwar ?? const <QuranSura>[]),
+    ];
+    final selectedTafsirSura = tafsirSuraItems.firstWhere(
+      (sura) => sura.id == (_tafsirSura ?? 0),
+      orElse: () => tafsirSuraItems.first,
+    );
+
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 30),
@@ -1101,11 +1063,38 @@ class _AudioCenterScreenState
             IconButton(
               tooltip: 'تحديث',
               onPressed: _loading ? null : _loadTafsir,
-              icon: Icon(Icons.refresh_rounded, color: _gold),
+              icon: Icon(Icons.refresh_rounded, color: _accent),
             ),
           ],
         ),
         const SizedBox(height: 8),
+        if (_quran?.suwar.isNotEmpty ?? false) ...[
+          _dropdown<QuranSura>(
+            value: selectedTafsirSura,
+            items: tafsirSuraItems,
+            label: 'تصفية التفسير حسب السورة',
+            text: (sura) => sura.id == 0
+                ? sura.name
+                : 'سورة ${sura.name}',
+            onChanged: (sura) async {
+              if (sura == null) return;
+              final nextSura = sura.id == 0 ? null : sura.id;
+              if (_tafsirSura == nextSura) return;
+              setState(() {
+                _tafsirSura = nextSura;
+                _loading = true;
+              });
+              await _loadTafsir();
+              if (mounted) {
+                setState(() => _loading = false);
+              }
+            },
+          ),
+          const SizedBox(height: 10),
+        ] else if (_loadingTafsirSuwarCatalog) ...[
+          const LinearProgressIndicator(minHeight: 2),
+          const SizedBox(height: 10),
+        ],
         if (_tafsirTextBooks.isNotEmpty)
           _dropdown<TafsirTextBook>(
             value: _tafsirTextBook,
@@ -1160,7 +1149,7 @@ class _AudioCenterScreenState
               child: Text(
                 'التفسير النصي',
                 style: TextStyle(
-                  color: _gold,
+                  color: _accent,
                   fontSize: 17,
                   fontWeight: FontWeight.w900,
                 ),
@@ -1189,7 +1178,7 @@ class _AudioCenterScreenState
         Text(
           'التفسير الصوتي',
           style: TextStyle(
-            color: _gold,
+            color: _accent,
             fontSize: 17,
             fontWeight: FontWeight.w900,
           ),
@@ -1220,7 +1209,7 @@ class _AudioCenterScreenState
       decoration: BoxDecoration(
         color: _card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _gold.withValues(alpha: 0.16)),
+        border: Border.all(color: _accent.withValues(alpha: 0.16)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1231,13 +1220,142 @@ class _AudioCenterScreenState
                 child: Text(
                   'سورة ${item.sura} • $ayaRange',
                   style: TextStyle(
-                    color: _gold,
+                    color: _accent,
                     fontWeight: FontWeight.w900,
                     fontSize: 13,
                   ),
                 ),
               ),
-              const Icon(Icons.menu_book_rounded, color: _gold, size: 19),
+              const Icon(Icons.menu_book_rounded, color: _accent, size: 19),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SelectableText(
+            item.text,
+            textDirection: TextDirection.rtl,
+            textAlign: TextAlign.justify,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              height: 1.85,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Divider(color: Colors.white12, height: 1),
+          const SizedBox(height: 7),
+          Text(
+            'المصدر: ${item.source} • QuranEnc.com',
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(color: Colors.white54, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tafsirCard(TafsirItem item) {
+    final hasAudio = item.audioUrl.trim().isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white10,
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 13,
+          vertical: 5,
+        ),
+        title: Text(
+          item.suraName,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            item.tafsirName,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 11,
+            ),
+          ),
+        ),
+        trailing: IconButton(
+          tooltip: hasAudio ? 'تشغيل التفسير' : 'طلب الصوت',
+          onPressed: _switchingAudio ? null : () => _playTafsir(item),
+          icon: Icon(
+            Icons.play_circle_fill_rounded,
+            color: _accent,
+            size: 38,
+          ),
+        ),
+      ),
+    );
+  }
+             _tafsirTextError.isNotEmpty
+                ? _tafsirTextError
+                : 'اكتب كلمة للبحث في التفسير النصي.',
+          ),
+        const SizedBox(height: 18),
+        Text(
+          'التفسير الصوتي',
+          style: TextStyle(
+            color: _accent,
+            fontSize: 17,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ..._tafsirItems.map((item) => _tafsirCard(item)),
+        if (_tafsirItems.isEmpty)
+          _emptyText(
+            _error.isNotEmpty ? _error : 'لا توجد نتائج صوتية مطابقة حاليًا.',
+          ),
+        const SizedBox(height: 10),
+        _infoCard(
+          Icons.info_outline_rounded,
+          'مصادر المحتوى',
+          'النص من QuranEnc مع الحفاظ على النص ونسبته للمصدر، والصوت من مصدر التفسير الصوتي المتاح.',
+        ),
+      ],
+    );
+  }
+
+  Widget _tafsirTextCard(TafsirTextItem item) {
+    final ayaRange = item.toAya > item.fromAya
+        ? 'الآيات ${item.fromAya} - ${item.toAya}'
+        : 'الآية ${item.fromAya}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _accent.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'سورة ${item.sura} • $ayaRange',
+                  style: TextStyle(
+                    color: _accent,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const Icon(Icons.menu_book_rounded, color: _accent, size: 19),
             ],
           ),
           const SizedBox(height: 10),
@@ -1308,7 +1426,7 @@ class _AudioCenterScreenState
             hasAudio
                 ? Icons.play_circle_fill_rounded
                 : Icons.cloud_download_rounded,
-            color: _gold,
+            color: _accent,
             size: 36,
           ),
         ),
@@ -1439,7 +1557,7 @@ class _AudioCenterScreenState
               onPressed: _loading ? null : _search,
               icon: Icon(
                 Icons.refresh_rounded,
-                color: _gold,
+                color: _accent,
               ),
             ),
           ],
@@ -1469,7 +1587,7 @@ class _AudioCenterScreenState
         color: _card,
         borderRadius: BorderRadius.circular(17),
         border: Border.all(
-          color: _gold.withValues(alpha: 0.12),
+          color: _accent.withValues(alpha: 0.12),
         ),
       ),
       child: ListTile(
@@ -1482,7 +1600,7 @@ class _AudioCenterScreenState
           height: 58,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(13),
-            color: _goldDark.withValues(alpha: 0.22),
+            color: _accentDark.withValues(alpha: 0.22),
             image: artwork.isEmpty
                 ? null
                 : DecorationImage(
@@ -1493,7 +1611,7 @@ class _AudioCenterScreenState
           child: artwork.isEmpty
               ? const Icon(
                   Icons.podcasts_rounded,
-                  color: _gold,
+                  color: _accent,
                   size: 30,
                 )
               : null,
@@ -1525,7 +1643,7 @@ class _AudioCenterScreenState
         ),
         trailing: Icon(
           Icons.arrow_back_ios_new_rounded,
-          color: _gold,
+          color: _accent,
           size: 18,
         ),
         onTap: _loadingPodcastEpisodes
@@ -1550,7 +1668,7 @@ class _AudioCenterScreenState
                   : _closePodcastEpisodes,
               icon: Icon(
                 Icons.arrow_forward_rounded,
-                color: _gold,
+                color: _accent,
               ),
             ),
             Expanded(
@@ -1563,7 +1681,7 @@ class _AudioCenterScreenState
                   : () => _openPodcast(podcast),
               icon: Icon(
                 Icons.refresh_rounded,
-                color: _gold,
+                color: _accent,
               ),
             ),
           ],
@@ -1575,7 +1693,7 @@ class _AudioCenterScreenState
             color: _card,
             borderRadius: BorderRadius.circular(17),
             border: Border.all(
-              color: _gold.withValues(alpha: 0.14),
+              color: _accent.withValues(alpha: 0.14),
             ),
           ),
           child: Row(
@@ -1585,7 +1703,7 @@ class _AudioCenterScreenState
                 height: 72,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(15),
-                  color: _goldDark.withValues(alpha: 0.22),
+                  color: _accentDark.withValues(alpha: 0.22),
                   image: artwork.isEmpty
                       ? null
                       : DecorationImage(
@@ -1596,7 +1714,7 @@ class _AudioCenterScreenState
                 child: artwork.isEmpty
                     ? const Icon(
                         Icons.podcasts_rounded,
-                        color: _gold,
+                        color: _accent,
                         size: 34,
                       )
                     : null,
@@ -1659,7 +1777,87 @@ class _AudioCenterScreenState
           Text(
             'الحلقات',
             style: TextStyle(
-              color: _gold,
+              color: _accent,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (_podcastEpisodes.isEmpty)
+            _emptyText(
+              _error.isNotEmpty
+                  ? _error
+                  : 'لا توجد حلقات متاحة حاليًا.',
+            ),
+          ..._podcastEpisodes.map(
+            (episode) => _podcastEpisodeCard(
+              episode,
+              podcast,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      podcast.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    if (podcast.author.trim().isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        podcast.author.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                    if (podcast.description.trim().isNotEmpty) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        podcast.description.trim(),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (_loadingPodcastEpisodes)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 50),
+            child: Center(
+              child: CircularProgressIndicator(),
+            ),
+          )
+        else ...[
+          Text(
+            'الحلقات',
+            style: TextStyle(
+              color: _accent,
               fontSize: 18,
               fontWeight: FontWeight.w900,
             ),
@@ -1734,7 +1932,7 @@ class _AudioCenterScreenState
           height: 52,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: _goldDark.withValues(alpha: 0.20),
+            color: _accentDark.withValues(alpha: 0.20),
             image: image.isEmpty
                 ? null
                 : DecorationImage(
@@ -1745,7 +1943,7 @@ class _AudioCenterScreenState
           child: image.isEmpty
               ? const Icon(
                   Icons.headphones_rounded,
-                  color: _gold,
+                  color: _accent,
                 )
               : null,
         ),
@@ -1803,7 +2001,7 @@ class _AudioCenterScreenState
             hasAudio
                 ? Icons.play_circle_fill_rounded
                 : Icons.volume_off_rounded,
-            color: hasAudio ? _gold : Colors.white24,
+            color: hasAudio ? _accent : Colors.white24,
             size: 38,
           ),
         ),
@@ -1876,7 +2074,7 @@ class _AudioCenterScreenState
               onPressed: _loading ? null : _search,
               icon: Icon(
                 Icons.refresh_rounded,
-                color: _gold,
+                color: _accent,
               ),
             ),
           ],
@@ -1933,7 +2131,7 @@ class _AudioCenterScreenState
           height: 48,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            color: _goldDark.withValues(alpha: 0.22),
+            color: _accentDark.withValues(alpha: 0.22),
             image: item.artwork.trim().isEmpty
                 ? null
                 : DecorationImage(
@@ -1944,7 +2142,7 @@ class _AudioCenterScreenState
           child: item.artwork.trim().isEmpty
               ? Icon(
                   Icons.music_note_rounded,
-                  color: _gold,
+                  color: _accent,
                 )
               : null,
         ),
@@ -1979,7 +2177,7 @@ class _AudioCenterScreenState
             hasUrl
                 ? Icons.play_circle_fill_rounded
                 : Icons.volume_off_rounded,
-            color: hasUrl ? _gold : Colors.white24,
+            color: hasUrl ? _accent : Colors.white24,
             size: 36,
           ),
         ),
