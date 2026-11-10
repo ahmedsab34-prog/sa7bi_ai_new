@@ -89,6 +89,12 @@ class AiRequestService {
   static String _newRequestId() =>
       _generateId(prefix: 'sa7bi_request');
 
+  /// إنشاء Request ID جديد لعملية واحدة.
+  ///
+  /// يجب الاحتفاظ بنفس القيمة عند إعادة المحاولة الآمنة
+  /// للطلب نفسه، وعدم إنشاء قيمة جديدة أثناء إعادة المحاولة.
+  static String createRequestId() => _newRequestId();
+
   static Future<BackendConnectionResult> checkBackend() async {
     try {
       final response = await Sa7biNetworkClient.client
@@ -215,6 +221,7 @@ class AiRequestService {
     String? serviceContext,
     String? serviceTitle,
     List<Map<String, String>> history = const [],
+    String? requestId,
   }) async {
     final text = prompt.trim();
 
@@ -263,6 +270,7 @@ class AiRequestService {
       chatEndpoint,
       body: body,
       timeout: chatTimeout,
+      requestId: requestId,
     );
 
     return _readAnswer(response);
@@ -274,6 +282,7 @@ class AiRequestService {
         'حلل الصورة المرسلة بدقة وباختصار، واذكر الأشياء المهمة الظاهرة فيها.',
     String? serviceContext,
     String? serviceTitle,
+    String? requestId,
   }) async {
     final bytes = await file.readAsBytes();
 
@@ -292,6 +301,7 @@ class AiRequestService {
       prompt: prompt,
       serviceContext: serviceContext,
       serviceTitle: serviceTitle,
+      requestId: requestId,
     );
   }
 
@@ -300,6 +310,7 @@ class AiRequestService {
     String prompt = 'حلل الصورة المرسلة بدقة وباختصار.',
     String? serviceContext,
     String? serviceTitle,
+    String? requestId,
   }) async {
     if (bytes.isEmpty) {
       throw const AiRequestException('الصورة فارغة.');
@@ -314,6 +325,7 @@ class AiRequestService {
       prompt: prompt,
       serviceContext: serviceContext,
       serviceTitle: serviceTitle,
+      requestId: requestId,
     );
   }
 
@@ -323,6 +335,7 @@ class AiRequestService {
         'حلل الصور المرفقة معًا بدقة. اشرح ما يظهر فيها، واذكر أي نصوص أو أشخاص أو أدوات أو أشياء مهمة. لا تخمن ما لا يظهر بوضوح.',
     String? serviceContext,
     String? serviceTitle,
+    String? requestId,
   }) async {
     return _analyzeImageCollection(
       images,
@@ -330,6 +343,7 @@ class AiRequestService {
       serviceContext: serviceContext,
       serviceTitle: serviceTitle,
       isVideoAnalysis: false,
+      requestId: requestId,
     );
   }
 
@@ -339,6 +353,7 @@ class AiRequestService {
         'هذه لقطات مستخرجة من فيديو أرسله المستخدم. حلل اللقطات معًا وحاول فهم تسلسل ما يحدث بينها. اذكر الأشياء والأشخاص والأدوات والنصوص الظاهرة. إذا كانت معلومة غير واضحة، صرّح بذلك ولا تخمن.',
     String? serviceContext,
     String? serviceTitle,
+    String? requestId,
   }) async {
     return _analyzeImageCollection(
       frames,
@@ -346,6 +361,7 @@ class AiRequestService {
       serviceContext: serviceContext,
       serviceTitle: serviceTitle,
       isVideoAnalysis: true,
+      requestId: requestId,
     );
   }
 
@@ -355,6 +371,7 @@ class AiRequestService {
     required String? serviceContext,
     required String? serviceTitle,
     required bool isVideoAnalysis,
+    String? requestId,
   }) async {
     if (images.isEmpty) {
       throw AiRequestException(
@@ -427,6 +444,7 @@ class AiRequestService {
       chatEndpoint,
       body: body,
       timeout: imageTimeout,
+      requestId: requestId,
     );
 
     return _readAnswer(response);
@@ -439,6 +457,7 @@ class AiRequestService {
     List<Uint8List> images = const [],
     String aspectRatio = '1:1',
     String imageSize = '1K',
+    String? requestId,
   }) async {
     final cleanPrompt = prompt.trim();
 
@@ -494,6 +513,7 @@ class AiRequestService {
       imageEndpoint,
       body: body,
       timeout: imageTimeout,
+      requestId: requestId,
     );
 
     final data = _decodeMap(response.body);
@@ -593,10 +613,15 @@ class AiRequestService {
     String endpoint, {
     required Map<String, dynamic> body,
     required Duration timeout,
+    String? requestId,
   }) async {
     try {
       final deviceId = await getDeviceId();
-      final requestId = _newRequestId();
+      final suppliedRequestId = requestId?.trim();
+      final effectiveRequestId =
+          suppliedRequestId != null && suppliedRequestId.isNotEmpty
+              ? suppliedRequestId
+              : _newRequestId();
 
       return await Sa7biNetworkClient.client
           .post(
@@ -607,7 +632,7 @@ class AiRequestService {
               'Cache-Control': 'no-cache',
               'Pragma': 'no-cache',
               deviceIdHeader: deviceId,
-              requestIdHeader: requestId,
+              requestIdHeader: effectiveRequestId,
             },
             body: jsonEncode(body),
           )
