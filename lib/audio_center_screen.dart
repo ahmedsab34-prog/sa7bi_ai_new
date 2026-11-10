@@ -1,3 +1,4 @@
+
  // ============================================================
 // FILE: lib/audio_center_screen.dart
 // ============================================================
@@ -35,6 +36,8 @@ class _AudioCenterScreenState
     extends State<AudioCenterScreen> {
   static const Color _accent = Color(0xFF35C6E8);
   static const Color _accentDark = Color(0xFF24589A);
+  static const Color _gold = _accent;
+  static const Color _goldDark = _accentDark;
   static const Color _bg = Color(0xFF07111F);
   static const Color _card = Color(0xFF132238);
 
@@ -398,7 +401,7 @@ class _AudioCenterScreenState
             if (_playing) _playingBar(),
             Expanded(
               child: RefreshIndicator(
-                                backgroundColor: _card,
+                backgroundColor: _card,
                 onRefresh: _loadCategory,
                 child: _content(),
               ),
@@ -426,6 +429,7 @@ class _AudioCenterScreenState
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
+
                     horizontal: 2,
                   ),
                   child: GestureDetector(
@@ -729,6 +733,50 @@ class _AudioCenterScreenState
     }
   }
 
+  Future<void> _playHadith(HadithItem item) async {
+    final text = item.text.trim();
+
+    if (text.isEmpty) {
+      _message('نص الحديث غير متاح.');
+      return;
+    }
+
+    if (_switchingAudio) return;
+
+    setState(() {
+      _switchingAudio = true;
+    });
+
+    try {
+      await _voice.stopSpeaking();
+
+      final ok = await _voice.speak(
+        text,
+        language: 'ar-EG',
+        rate: 0.45,
+      );
+
+      if (!mounted) return;
+
+      if (ok) {
+        setState(() {
+          _currentTitle =
+              '${item.bookName} — حديث ${item.number}';
+          _playing = true;
+          _error = '';
+        });
+      } else {
+        _message('تعذر تشغيل الحديث بالصوت.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _switchingAudio = false;
+        });
+      }
+    }
+  }
+
   Widget _hadithView() {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -812,6 +860,7 @@ class _AudioCenterScreenState
                   ),
                 ),
             ],
+
           ),
           const SizedBox(height: 10),
           Text(
@@ -1299,140 +1348,6 @@ class _AudioCenterScreenState
       ),
     );
   }
-             _tafsirTextError.isNotEmpty
-                ? _tafsirTextError
-                : 'اكتب كلمة للبحث في التفسير النصي.',
-          ),
-        const SizedBox(height: 18),
-        Text(
-          'التفسير الصوتي',
-          style: TextStyle(
-            color: _accent,
-            fontSize: 17,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ..._tafsirItems.map((item) => _tafsirCard(item)),
-        if (_tafsirItems.isEmpty)
-          _emptyText(
-            _error.isNotEmpty ? _error : 'لا توجد نتائج صوتية مطابقة حاليًا.',
-          ),
-        const SizedBox(height: 10),
-        _infoCard(
-          Icons.info_outline_rounded,
-          'مصادر المحتوى',
-          'النص من QuranEnc مع الحفاظ على النص ونسبته للمصدر، والصوت من مصدر التفسير الصوتي المتاح.',
-        ),
-      ],
-    );
-  }
-
-  Widget _tafsirTextCard(TafsirTextItem item) {
-    final ayaRange = item.toAya > item.fromAya
-        ? 'الآيات ${item.fromAya} - ${item.toAya}'
-        : 'الآية ${item.fromAya}';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _accent.withValues(alpha: 0.16)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'سورة ${item.sura} • $ayaRange',
-                  style: TextStyle(
-                    color: _accent,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              const Icon(Icons.menu_book_rounded, color: _accent, size: 19),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SelectableText(
-            item.text,
-            textDirection: TextDirection.rtl,
-            textAlign: TextAlign.justify,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              height: 1.85,
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Divider(color: Colors.white12, height: 1),
-          const SizedBox(height: 7),
-          Text(
-            'المصدر: ${item.source} • QuranEnc.com',
-            textDirection: TextDirection.ltr,
-            style: const TextStyle(color: Colors.white54, fontSize: 10),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tafsirCard(TafsirItem item) {
-    final hasAudio = item.audioUrl.trim().isNotEmpty;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white10,
-        ),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 6,
-        ),
-        title: Text(
-          item.suraName,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        subtitle: Text(
-          item.tafsirName.isEmpty
-              ? 'تفسير سورة ${item.sura}'
-              : item.tafsirName,
-          style: const TextStyle(
-            color: Colors.white60,
-            fontSize: 12,
-          ),
-        ),
-        trailing: IconButton(
-          tooltip: hasAudio
-              ? 'تشغيل التفسير'
-              : 'جلب صوت التفسير وتشغيله',
-          onPressed: _switchingAudio
-              ? null
-              : () => _playTafsir(item),
-          icon: Icon(
-            hasAudio
-                ? Icons.play_circle_fill_rounded
-                : Icons.cloud_download_rounded,
-            color: _accent,
-            size: 36,
-          ),
-        ),
-      ),
-    );
-  }
 
   // ============================================================
   // MUSIC
@@ -1652,7 +1567,8 @@ class _AudioCenterScreenState
       ),
     );
   }
-    Widget _podcastEpisodesView(PodcastItem podcast) {
+
+  Widget _podcastEpisodesView(PodcastItem podcast) {
     final artwork = podcast.artwork.trim();
 
     return ListView(
@@ -1799,86 +1715,6 @@ class _AudioCenterScreenState
       ],
     );
   }
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      podcast.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    if (podcast.author.trim().isNotEmpty) ...[
-                      const SizedBox(height: 5),
-                      Text(
-                        podcast.author.trim(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                    if (podcast.description.trim().isNotEmpty) ...[
-                      const SizedBox(height: 7),
-                      Text(
-                        podcast.description.trim(),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        if (_loadingPodcastEpisodes)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 50),
-            child: Center(
-              child: CircularProgressIndicator(),
-            ),
-          )
-        else ...[
-          Text(
-            'الحلقات',
-            style: TextStyle(
-              color: _accent,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (_podcastEpisodes.isEmpty)
-            _emptyText(
-              _error.isNotEmpty
-                  ? _error
-                  : 'لا توجد حلقات متاحة حاليًا.',
-            ),
-          ..._podcastEpisodes.map(
-            (episode) => _podcastEpisodeCard(
-              episode,
-              podcast,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
 
   Widget _podcastEpisodeCard(
     PodcastEpisode episode,
@@ -1907,6 +1743,7 @@ class _AudioCenterScreenState
 
     if (episode.episode > 0) {
       metadata.add('الحلقة ${episode.episode}');
+
     }
 
     if (episode.explicit) {
@@ -2008,7 +1845,8 @@ class _AudioCenterScreenState
       ),
     );
   }
-    // ============================================================
+
+  // ============================================================
   // SEARCH
   // ============================================================
 
