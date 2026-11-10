@@ -22,8 +22,7 @@ import 'widgets/audio_center_with_header.dart';
 import 'widgets/khalasana_portal.dart';
 import 'widgets/social_invite_link_listener.dart';
 
-final GlobalKey<NavigatorState> _rootNavigatorKey =
-    GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final _Sa7biNavigationObserver _sa7biNavigationObserver =
     _Sa7biNavigationObserver();
@@ -32,9 +31,7 @@ void main() {
   http.runWithClient(
     () {
       WidgetsFlutterBinding.ensureInitialized();
-
       runApp(const Sa7biAiApp());
-
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => unawaited(_initializeApplicationServices()),
       );
@@ -50,7 +47,6 @@ Future<void> _initializeApplicationServices() async {
 
   try {
     final backend = await AiRequestService.checkBackend();
-
     if (backend.isAvailable) {
       await ProfileService.instance.markAiConnected();
     } else {
@@ -69,7 +65,6 @@ Future<void> _initializeApplicationServices() async {
   try {
     final ads = AdsService.instance;
     await ads.initialize();
-
     if (ads.isAdMobInitialized) {
       unawaited(ads.loadInterstitial());
       unawaited(ads.loadRewarded());
@@ -84,9 +79,7 @@ class Sa7biAiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _rootNavigatorKey,
-      navigatorObservers: <NavigatorObserver>[
-        _sa7biNavigationObserver,
-      ],
+      navigatorObservers: <NavigatorObserver>[_sa7biNavigationObserver],
       debugShowCheckedModeBanner: false,
       title: 'صاحبي AI',
       theme: Sa7biTheme.dark(),
@@ -97,15 +90,10 @@ class Sa7biAiApp extends StatelessWidget {
         return ValueListenableBuilder<_Sa7biRouteSnapshot>(
           valueListenable: _sa7biNavigationObserver.snapshot,
           builder: (context, route, _) {
-            final keyboardIsOpen =
-                MediaQuery.viewInsetsOf(context).bottom > 0;
-
+            final keyboardIsOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
             final hidePortal = route.isPopup ||
                 route.routeName == '/khalasana' ||
                 keyboardIsOpen;
-
-            // على الصفحة الرئيسية نرفع الروبوت فوق المشغل والشريط السفلي.
-            // داخل الصفحات الداخلية نقرّبه للأسفل حتى لا يحجب محتوى الشاشة.
             final bottomOffset = route.depth <= 1 ? 146.0 : 82.0;
 
             return Stack(
@@ -115,20 +103,15 @@ class Sa7biAiApp extends StatelessWidget {
                 if (!hidePortal)
                   Positioned(
                     right: 8,
-                    bottom: MediaQuery.viewPaddingOf(context).bottom +
-                        bottomOffset,
-                    child: KhalasanaPortal(
-                      onTap: _openGlobalKhalasana,
-                    ),
+                    bottom: MediaQuery.viewPaddingOf(context).bottom + bottomOffset,
+                    child: KhalasanaPortal(onTap: _openGlobalKhalasana),
                   ),
               ],
             );
           },
         );
       },
-      home: const SocialInviteLinkListener(
-        child: MainContainerScreen(),
-      ),
+      home: const SocialInviteLinkListener(child: MainContainerScreen()),
     );
   }
 }
@@ -136,7 +119,6 @@ class Sa7biAiApp extends StatelessWidget {
 void _openGlobalKhalasana() {
   final navigator = _rootNavigatorKey.currentState;
   if (navigator == null) return;
-
   navigator.push<void>(
     MaterialPageRoute<void>(
       settings: const RouteSettings(name: '/khalasana'),
@@ -146,35 +128,22 @@ void _openGlobalKhalasana() {
 }
 
 class _Sa7biRouteSnapshot {
-  const _Sa7biRouteSnapshot({
-    required this.depth,
-    required this.activeRoute,
-  });
-
+  const _Sa7biRouteSnapshot({required this.depth, required this.activeRoute});
   final int depth;
   final Route<dynamic>? activeRoute;
-
   String? get routeName => activeRoute?.settings.name;
-
   bool get isPopup => activeRoute is PopupRoute<dynamic>;
 }
 
 class _Sa7biNavigationObserver extends NavigatorObserver {
   int _depth = 0;
-
   final ValueNotifier<_Sa7biRouteSnapshot> snapshot =
       ValueNotifier<_Sa7biRouteSnapshot>(
-    const _Sa7biRouteSnapshot(
-      depth: 0,
-      activeRoute: null,
-    ),
+    const _Sa7biRouteSnapshot(depth: 0, activeRoute: null),
   );
 
   void _publish(Route<dynamic>? route) {
-    snapshot.value = _Sa7biRouteSnapshot(
-      depth: _depth,
-      activeRoute: route,
-    );
+    snapshot.value = _Sa7biRouteSnapshot(depth: _depth, activeRoute: route);
   }
 
   @override
@@ -194,23 +163,15 @@ class _Sa7biNavigationObserver extends NavigatorObserver {
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didRemove(route, previousRoute);
-
     if (_depth > 1) _depth--;
-
     final activeRoute = snapshot.value.activeRoute;
     _publish(activeRoute == route ? previousRoute : activeRoute);
   }
 
   @override
-  void didReplace({
-    Route<dynamic>? newRoute,
-    Route<dynamic>? oldRoute,
-  }) {
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
     super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
-
-    if (oldRoute == snapshot.value.activeRoute) {
-      _publish(newRoute);
-    }
+    if (oldRoute == snapshot.value.activeRoute) _publish(newRoute);
   }
 }
 
@@ -218,25 +179,18 @@ class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
 
   @override
-  State<MainContainerScreen> createState() =>
-      _MainContainerScreenState();
+  State<MainContainerScreen> createState() => _MainContainerScreenState();
 }
 
 class _MainContainerScreenState extends State<MainContainerScreen> {
   // 0 الرئيسية، 1 الشات، 2 الألعاب، 3 حسابي.
   int index = 0;
   late final PageController _pageController = PageController(initialPage: index);
-
-  final GlobalKey<HomeScreenState> _homeKey =
-      GlobalKey<HomeScreenState>();
+  final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
 
   void _goToPage(int value) {
-    if (!mounted || value < 0 || value > 3) return;
-
-    if (value == index) return;
-
+    if (!mounted || value < 0 || value > 3 || value == index) return;
     setState(() => index = value);
-
     if (_pageController.hasClients) {
       unawaited(
         _pageController.animateToPage(
@@ -248,18 +202,22 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
     }
   }
 
-  void openProfile() {
-    _goToPage(3);
+  void _onDestinationSelected(int value) {
+    if (!mounted) return;
+    if (value == index) {
+      if (value == 0) unawaited(_homeKey.currentState?.refreshNews());
+      return;
+    }
+    _goToPage(value);
   }
+
+  void openProfile() => _goToPage(3);
 
   void openAudioCenter() {
     if (!mounted) return;
-
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => AudioCenterWithHeader(
-          onProfileTap: openProfile,
-        ),
+        builder: (_) => AudioCenterWithHeader(onProfileTap: openProfile),
       ),
     );
   }
@@ -271,11 +229,8 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
   void openSocialConnections() {
     if (!mounted) return;
-
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const SocialCommunityHubScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const SocialCommunityHubScreen()),
     );
   }
 
@@ -283,6 +238,67 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  Widget _buildNavigationItem({
+    required int value,
+    required IconData icon,
+    required IconData selectedIcon,
+    required String label,
+  }) {
+    final selected = index == value;
+    return Expanded(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: InkWell(
+          onTap: () => _onDestinationSelected(value),
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            height: 48,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  width: 38,
+                  height: 25,
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? Sa7biTheme.cyan.withValues(alpha: 0.13)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    selected ? selectedIcon : icon,
+                    color: selected
+                        ? Sa7biTheme.cyan
+                        : Sa7biTheme.textSecondary,
+                    size: selected ? 20 : 18,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected
+                        ? Sa7biTheme.cyan
+                        : Sa7biTheme.textSecondary,
+                    fontSize: 9,
+                    height: 1.15,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -318,19 +334,13 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 for (final page in pages) _KeepAliveMainPage(child: page),
               ],
             ),
-
-            // مشغل الصوت مخفي في الشات حتى لا يغطي الرسائل.
             if (!isChatTab)
               Positioned(
                 left: 10,
                 right: 10,
                 bottom: 8,
-                child: MiniAudioPlayer(
-                  onProfileTap: openProfile,
-                ),
+                child: MiniAudioPlayer(onProfileTap: openProfile),
               ),
-
-            // زر التشخيص لا يظهر فوق محتوى الشات.
             if (!isChatTab)
               Positioned(
                 left: 12,
@@ -346,13 +356,9 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Sa7biTheme.surface.withValues(
-                            alpha: 0.96,
-                          ),
+                          color: Sa7biTheme.surface.withValues(alpha: 0.96),
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Sa7biTheme.border,
-                          ),
+                          border: Border.all(color: Sa7biTheme.border),
                           boxShadow: const [
                             BoxShadow(
                               color: Color(0x55000000),
@@ -371,8 +377,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                   ),
                 ),
               ),
-
-            // اختصار مركز التواصل يظهر داخل تبويب الألعاب.
             if (index == 2)
               Positioned(
                 right: 10,
@@ -380,8 +384,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 child: Material(
                   color: Colors.transparent,
                   child: Tooltip(
-                    message:
-                        'الرسائل والمجموعات واللعب مع الذكاء الاصطناعي',
+                    message: 'الرسائل والمجموعات واللعب مع الذكاء الاصطناعي',
                     child: InkWell(
                       onTap: openSocialConnections,
                       borderRadius: BorderRadius.circular(24),
@@ -389,13 +392,9 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Sa7biTheme.surface.withValues(
-                            alpha: 0.98,
-                          ),
+                          color: Sa7biTheme.surface.withValues(alpha: 0.98),
                           shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Sa7biTheme.border,
-                          ),
+                          border: Border.all(color: Sa7biTheme.border),
                           boxShadow: const [
                             BoxShadow(
                               color: Color(0x55000000),
@@ -417,65 +416,46 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
           ],
         ),
       ),
-
-      // الشريط السفلي: أربع تبويبات صغيرة كما اتفقنا.
-      bottomNavigationBar: NavigationBar(
-        height: 60,
-        backgroundColor: Sa7biTheme.surface,
-        surfaceTintColor: Colors.transparent,
-        indicatorColor: Sa7biTheme.cyan.withValues(alpha: 0.12),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        selectedIndex: index,
-        onDestinationSelected: (value) {
-          if (!mounted) return;
-
-          if (value == index) {
-            // الضغط على الرئيسية مرة أخرى يحدّث الأخبار.
-            if (value == 0) {
-              unawaited(_homeKey.currentState?.refreshNews());
-            }
-            return;
-          }
-
-          _goToPage(value);
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined, size: 20),
-            selectedIcon: Icon(Icons.home_rounded, size: 21),
-            label: 'الرئيسية',
+      // شريط سفلي مضغوط بأربع خانات مع إبقاء مساحة اللمس واضحة.
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Sa7biTheme.surface,
+          border: Border(top: BorderSide(color: Sa7biTheme.border)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 48,
+            child: Row(
+              children: [
+                _buildNavigationItem(
+                  value: 0,
+                  icon: Icons.home_outlined,
+                  selectedIcon: Icons.home_rounded,
+                  label: 'الرئيسية',
+                ),
+                _buildNavigationItem(
+                  value: 1,
+                  icon: Icons.chat_bubble_outline_rounded,
+                  selectedIcon: Icons.chat_rounded,
+                  label: 'الشات',
+                ),
+                _buildNavigationItem(
+                  value: 2,
+                  icon: Icons.sports_esports_outlined,
+                  selectedIcon: Icons.sports_esports_rounded,
+                  label: 'الألعاب',
+                ),
+                _buildNavigationItem(
+                  value: 3,
+                  icon: Icons.person_outline_rounded,
+                  selectedIcon: Icons.person_rounded,
+                  label: 'حسابي',
+                ),
+              ],
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(
-              Icons.chat_bubble_outline_rounded,
-              size: 20,
-            ),
-            selectedIcon: Icon(Icons.chat_rounded, size: 21),
-            label: 'الشات',
-          ),
-          NavigationDestination(
-            icon: Icon(
-              Icons.sports_esports_outlined,
-              size: 20,
-            ),
-            selectedIcon: Icon(
-              Icons.sports_esports_rounded,
-              size: 21,
-            ),
-            label: 'الألعاب',
-          ),
-          NavigationDestination(
-            icon: Icon(
-              Icons.person_outline_rounded,
-              size: 20,
-            ),
-            selectedIcon: Icon(
-              Icons.person_rounded,
-              size: 21,
-            ),
-            label: 'حسابي',
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -483,7 +463,6 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
 class _KeepAliveMainPage extends StatefulWidget {
   const _KeepAliveMainPage({required this.child});
-
   final Widget child;
 
   @override
@@ -503,12 +482,8 @@ class _KeepAliveMainPageState extends State<_KeepAliveMainPage>
 }
 
 class MiniAudioPlayer extends StatelessWidget {
+  const MiniAudioPlayer({super.key, required this.onProfileTap});
   final VoidCallback onProfileTap;
-
-  const MiniAudioPlayer({
-    super.key,
-    required this.onProfileTap,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -517,7 +492,6 @@ class MiniAudioPlayer extends StatelessWidget {
       builder: (context, mediaSnapshot) {
         final item = mediaSnapshot.data;
         if (item == null) return const SizedBox.shrink();
-
         final handler = AudioController.handler;
         if (handler == null) return const SizedBox.shrink();
 
@@ -543,9 +517,7 @@ class MiniAudioPlayer extends StatelessWidget {
                 GestureDetector(
                   onTap: () => Navigator.of(context).push<void>(
                     MaterialPageRoute<void>(
-                      builder: (_) => AudioCenterWithHeader(
-                        onProfileTap: onProfileTap,
-                      ),
+                      builder: (_) => AudioCenterWithHeader(onProfileTap: onProfileTap),
                     ),
                   ),
                   child: Container(
@@ -567,9 +539,7 @@ class MiniAudioPlayer extends StatelessWidget {
                   child: GestureDetector(
                     onTap: () => Navigator.of(context).push<void>(
                       MaterialPageRoute<void>(
-                        builder: (_) => AudioCenterWithHeader(
-                          onProfileTap: onProfileTap,
-                        ),
+                        builder: (_) => AudioCenterWithHeader(onProfileTap: onProfileTap),
                       ),
                     ),
                     child: Column(
@@ -605,13 +575,9 @@ class MiniAudioPlayer extends StatelessWidget {
                   stream: handler.playbackState,
                   builder: (context, snapshot) {
                     final playing = snapshot.data?.playing ?? false;
-
                     return IconButton(
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 38,
-                        minHeight: 38,
-                      ),
+                      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
                       onPressed: () {
                         if (playing) {
                           handler.pause();
@@ -620,9 +586,7 @@ class MiniAudioPlayer extends StatelessWidget {
                         }
                       },
                       icon: Icon(
-                        playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
+                        playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
                         color: Sa7biTheme.cyan,
                         size: 25,
                       ),
@@ -631,10 +595,7 @@ class MiniAudioPlayer extends StatelessWidget {
                 ),
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 30,
-                    minHeight: 38,
-                  ),
+                  constraints: const BoxConstraints(minWidth: 30, minHeight: 38),
                   onPressed: () => handler.stop(),
                   icon: const Icon(
                     Icons.close_rounded,
