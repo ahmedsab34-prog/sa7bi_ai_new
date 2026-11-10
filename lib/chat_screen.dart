@@ -302,12 +302,17 @@ class _ChatScreenState extends State<ChatScreen> {
       _scrollToBottom();
       _chatController.setLoading(true);
 
+      // معرّف واحد للعملية كلها، ويعاد استخدامه فقط
+      // عند إعادة المحاولة الآمنة لنفس الطلب.
+      final requestId = AiRequestService.createRequestId();
+
       try {
         final reply = await AiRequestService.getResponse(
           prompt: text,
           serviceTitle: _title,
           serviceContext: widget.serviceContext,
           history: history,
+          requestId: requestId,
         );
 
         if (mounted) {
@@ -323,7 +328,11 @@ class _ChatScreenState extends State<ChatScreen> {
             isUser: false,
           );
           if (_isSafeProviderFailure(error)) {
-            _offerSafeTextRetry(text, history);
+            _offerSafeTextRetry(
+              text,
+              history,
+              requestId,
+            );
           }
         }
       } catch (_) {
@@ -353,11 +362,14 @@ class _ChatScreenState extends State<ChatScreen> {
   void _offerSafeTextRetry(
     String prompt,
     List<Map<String, String>> history,
+    String requestId,
   ) {
     if (!mounted) return;
+
     final savedHistory = history
         .map((item) => Map<String, String>.from(item))
         .toList(growable: false);
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -373,7 +385,11 @@ class _ChatScreenState extends State<ChatScreen> {
             label: 'إعادة المحاولة',
             textColor: const Color(0xFFFFD76A),
             onPressed: () {
-              _retryTextRequest(prompt, savedHistory);
+              _retryTextRequest(
+                prompt,
+                savedHistory,
+                requestId,
+              );
             },
           ),
         ),
@@ -383,6 +399,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _retryTextRequest(
     String prompt,
     List<Map<String, String>> history,
+    String requestId,
   ) async {
     if (!mounted ||
         !_initialized ||
@@ -391,24 +408,32 @@ class _ChatScreenState extends State<ChatScreen> {
         _chatController.isLoading) {
       return;
     }
+
     _sending = true;
+
     try {
       await _creditsService.initialize();
+
       final canAfford = await _creditsService.canAfford(
         CreditsConfig.textMessageCost,
       );
+
       if (!canAfford) {
         _showMessage('رصيدك من Credits غير كافٍ لإعادة المحاولة.');
         return;
       }
+
       _chatController.setLoading(true);
+
       try {
         final reply = await AiRequestService.getResponse(
           prompt: prompt,
           serviceTitle: _title,
           serviceContext: widget.serviceContext,
           history: history,
+          requestId: requestId,
         );
+
         if (mounted) {
           await _chatController.addTextMessage(
             text: reply,
@@ -421,8 +446,13 @@ class _ChatScreenState extends State<ChatScreen> {
             text: error.message,
             isUser: false,
           );
+
           if (_isSafeProviderFailure(error)) {
-            _offerSafeTextRetry(prompt, history);
+            _offerSafeTextRetry(
+              prompt,
+              history,
+              requestId,
+            );
           }
         }
       } catch (_) {
@@ -653,6 +683,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _analyzeImageCollection(
     List<Uint8List> images, {
     bool addUserMessage = true,
+    String? requestId,
   }) async {
     if (images.isEmpty || _chatController.isLoading) {
       return;
@@ -666,6 +697,10 @@ class _ChatScreenState extends State<ChatScreen> {
       _showMessage('رصيدك من Credits غير كافٍ لتحليل الصور.');
       return;
     }
+
+    // إعادة استخدام نفس المعرّف في المحاولات المتتابعة.
+    final effectiveRequestId =
+        requestId ?? AiRequestService.createRequestId();
 
     if (addUserMessage) {
       await _chatController.addImageMessage(
@@ -690,6 +725,7 @@ class _ChatScreenState extends State<ChatScreen> {
             'اذكر الأشياء المهمة والنصوص الواضحة. '
             'إذا كانت الصور مرتبطة ببعضها، اشرح العلاقة بينها. '
             'لا تخمن أي شيء غير ظاهر بوضوح.',
+        requestId: effectiveRequestId,
       );
 
       if (mounted) {
@@ -704,8 +740,12 @@ class _ChatScreenState extends State<ChatScreen> {
           text: error.message,
           isUser: false,
         );
+
         if (_isSafeProviderFailure(error)) {
-          _offerSafeImageRetry(images);
+          _offerSafeImageRetry(
+            images,
+            effectiveRequestId,
+          );
         }
       }
     } catch (_) {
@@ -722,12 +762,17 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _offerSafeImageRetry(List<Uint8List> images) {
+  void _offerSafeImageRetry(
+    List<Uint8List> images,
+    String requestId,
+  ) {
     if (!mounted || images.isEmpty) return;
+
     final savedImages = images
         .where((image) => image.isNotEmpty)
         .map((image) => Uint8List.fromList(image))
         .toList(growable: false);
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -743,14 +788,20 @@ class _ChatScreenState extends State<ChatScreen> {
             label: 'إعادة المحاولة',
             textColor: const Color(0xFFFFD76A),
             onPressed: () {
-              _retryImageAnalysis(savedImages);
+              _retryImageAnalysis(
+                savedImages,
+                requestId,
+              );
             },
           ),
         ),
       );
   }
 
-  Future<void> _retryImageAnalysis(List<Uint8List> images) async {
+  Future<void> _retryImageAnalysis(
+    List<Uint8List> images,
+    String requestId,
+  ) async {
     if (!mounted ||
         images.isEmpty ||
         _sending ||
@@ -758,11 +809,14 @@ class _ChatScreenState extends State<ChatScreen> {
         _chatController.isLoading) {
       return;
     }
+
     _sending = true;
+
     try {
       await _analyzeImageCollection(
         images,
         addUserMessage: false,
+        requestId: requestId,
       );
     } catch (_) {
       if (mounted) {
