@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -22,6 +24,7 @@ class ShortsFeedScreen extends StatefulWidget {
 }
 
 class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
+  static const String _cacheKey = 'sa7bi_shorts_feed_cache_v1';
   bool _loading = true;
   bool _refreshing = false;
   String _error = '';
@@ -33,7 +36,83 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(_loadShorts());
+    unawaited(_initializeShorts());
+  }
+
+  Future<void> _initializeShorts() async {
+    await _loadCachedShorts();
+    if (!mounted) return;
+    await _loadShorts();
+  }
+
+  Future<void> _loadCachedShorts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedJson = prefs.getString(_cacheKey);
+      if (cachedJson == null || cachedJson.trim().isEmpty) return;
+
+      final decoded = jsonDecode(cachedJson);
+      if (decoded is! List) return;
+
+      final cachedItems = <ShortVideoItem>[];
+      for (final raw in decoded) {
+        if (raw is! Map) continue;
+
+        final item = ShortVideoItem(
+          id: raw['id']?.toString() ?? '',
+          title: raw['title']?.toString() ?? '',
+          creator: raw['creator']?.toString() ?? '',
+          videoUrl: raw['videoUrl']?.toString() ?? '',
+          thumbnail: raw['thumbnail']?.toString() ?? '',
+          description: raw['description']?.toString() ?? '',
+        );
+
+        if (item.title.trim().isEmpty ||
+            _validHttpUri(item.videoUrl) == null) {
+          continue;
+        }
+
+        cachedItems.add(item);
+      }
+
+      if (!mounted || cachedItems.isEmpty) return;
+
+      setState(() {
+        _items = cachedItems;
+        _activeIndex = 0;
+        _loading = false;
+        _error =
+            'تم عرض قائمة الريلز المحفوظة. تشغيل الفيديو نفسه يحتاج اتصالًا بالإنترنت.';
+      });
+    } catch (_) {
+      // فساد بيانات الكاش لا يمنع محاولة جلب القائمة من الإنترنت.
+    }
+  }
+
+  Future<void> _saveCachedShorts(List<ShortVideoItem> items) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final playableItems = items.where((item) {
+        return _validHttpUri(item.videoUrl) != null;
+      }).toList(growable: false);
+
+      final encoded = jsonEncode(
+        playableItems.map((item) {
+          return <String, String>{
+            'id': item.id,
+            'title': item.title,
+            'creator': item.creator,
+            'videoUrl': item.videoUrl,
+            'thumbnail': item.thumbnail,
+            'description': item.description,
+          };
+        }).toList(growable: false),
+      );
+
+      await prefs.setString(_cacheKey, encoded);
+    } catch (_) {
+      // تعذر حفظ القائمة لا يمنع عرض الفيديوهات الحالية.
+    }
   }
 
   Future<void> _loadShorts() async {
@@ -61,9 +140,9 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
         return;
       }
 
+      // الصورة المصغرة وحدها لا تعني وجود فيديو قابل للتشغيل.
       final validItems = result.where((item) {
-        return _validHttpUri(item.videoUrl) != null ||
-            _validHttpUri(item.thumbnail) != null;
+        return _validHttpUri(item.videoUrl) != null;
       }).toList(growable: false);
 
       if (!mounted) return;
@@ -82,6 +161,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
         _activeIndex = 0;
         _error = '';
       });
+      unawaited(_saveCachedShorts(validItems));
     } on TimeoutException {
       if (!mounted) return;
 
@@ -173,12 +253,12 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
                               height: 19,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Color(0xFFFFD76A),
+                                color: Color(0xFF67E8F9),
                               ),
                             )
                           : const Icon(
                               Icons.refresh_rounded,
-                              color: Color(0xFFFFD76A),
+                              color: Color(0xFF67E8F9),
                             ),
                     ),
                   ],
@@ -199,7 +279,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(
-              color: Color(0xFFFFD76A),
+              color: Color(0xFF67E8F9),
             ),
             SizedBox(height: 14),
             Text(
@@ -213,7 +293,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
 
     if (_items.isEmpty) {
       return RefreshIndicator(
-        color: const Color(0xFFFFD76A),
+        color: const Color(0xFF67E8F9),
         onRefresh: _loadShorts,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -253,7 +333,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
     return Stack(
       children: [
         RefreshIndicator(
-          color: const Color(0xFFFFD76A),
+          color: const Color(0xFF67E8F9),
           onRefresh: _loadShorts,
           child: PageView.builder(
             scrollDirection: Axis.vertical,
@@ -314,7 +394,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
                       onPressed: _refreshing ? null : _loadShorts,
                       icon: const Icon(
                         Icons.refresh_rounded,
-                        color: Color(0xFFFFD76A),
+                        color: Color(0xFF67E8F9),
                         size: 18,
                       ),
                     ),
@@ -329,7 +409,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
             left: 0,
             right: 0,
             child: LinearProgressIndicator(
-              color: Color(0xFFFFD76A),
+              color: Color(0xFF67E8F9),
               backgroundColor: Colors.transparent,
             ),
           ),
@@ -735,7 +815,7 @@ class _ShortItemCardState extends State<_ShortItemCard> {
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      Color(0xFFFFD76A),
+                      Color(0xFF67E8F9),
                       Color(0xFFB45CFF),
                     ],
                   ),
@@ -855,7 +935,7 @@ class _ShortItemCardState extends State<_ShortItemCard> {
             child: IgnorePointer(
               child: Center(
                 child: CircularProgressIndicator(
-                  color: Color(0xFFFFD76A),
+                  color: Color(0xFF67E8F9),
                 ),
               ),
             ),
@@ -874,7 +954,7 @@ class _ShortItemCardState extends State<_ShortItemCard> {
                   children: [
                     const Icon(
                       Icons.info_outline_rounded,
-                      color: Color(0xFFFFD76A),
+                      color: Color(0xFF67E8F9),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -893,7 +973,7 @@ class _ShortItemCardState extends State<_ShortItemCard> {
                           : null,
                       icon: const Icon(
                         Icons.refresh_rounded,
-                        color: Color(0xFFFFD76A),
+                        color: Color(0xFF67E8F9),
                       ),
                     ),
                   ],
@@ -910,7 +990,7 @@ class _ShortItemCardState extends State<_ShortItemCard> {
               controller!,
               allowScrubbing: true,
               colors: const VideoProgressColors(
-                playedColor: Color(0xFFFFD76A),
+                playedColor: Color(0xFF67E8F9),
                 bufferedColor: Colors.white38,
                 backgroundColor: Colors.white24,
               ),
