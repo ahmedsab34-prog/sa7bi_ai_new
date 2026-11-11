@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../profile_screen.dart';
@@ -5,9 +6,8 @@ import '../theme/sa7bi_theme.dart';
 import 'app_header.dart';
 import 'audio_center_with_header.dart';
 
-/// الهيدر الموحد للصفحات الداخلية في صاحبي AI.
-/// يجمع الهيدر الرئيسي والعنوان وزر الرجوع والإجراءات
-/// مع دعم TabBar عند الحاجة.
+/// هيدر الصفحات الفرعية.
+/// تم تقليل ارتفاعه مع الاحتفاظ بعنوان الصفحة تحت الهيدر الرئيسي.
 class Sa7biSubpageAppBar extends StatelessWidget
     implements PreferredSizeWidget {
   const Sa7biSubpageAppBar({
@@ -25,7 +25,10 @@ class Sa7biSubpageAppBar extends StatelessWidget
   final PreferredSizeWidget? bottom;
   final bool showBackButton;
 
-  static const double _toolbarHeight = 104;
+  static const double _headerHeight = 48;
+  static const double _titleRowHeight = 36;
+  static const double _toolbarHeight =
+      _headerHeight + _titleRowHeight;
 
   @override
   Size get preferredSize => Size.fromHeight(
@@ -80,45 +83,48 @@ class Sa7biSubpageAppBar extends StatelessWidget
       surfaceTintColor: Colors.transparent,
       iconTheme: const IconThemeData(
         color: Sa7biTheme.textPrimary,
-        size: 21,
+        size: 20,
       ),
       title: Padding(
         padding: const EdgeInsetsDirectional.fromSTEB(
           8,
-          2,
+          0,
           8,
-          2,
+          0,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(
-              height: 54,
+              height: _headerHeight,
               child: AppHeader(
                 onProfileTap: () => _openProfile(context),
                 onAudioTap: () => _openAudio(context),
               ),
             ),
             SizedBox(
-              height: 44,
+              height: _titleRowHeight,
               child: Row(
                 children: [
                   if (showBackButton)
                     SizedBox(
-                      width: 40,
+                      width: 36,
                       child: IconButton(
                         tooltip: 'رجوع',
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
                         onPressed: () {
                           Navigator.of(context).maybePop();
                         },
                         icon: const Icon(
                           Icons.arrow_forward_rounded,
+                          size: 19,
                         ),
                       ),
                     )
                   else
-                    const SizedBox(width: 40),
+                    const SizedBox(width: 36),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsetsDirectional.only(
@@ -135,7 +141,7 @@ class Sa7biSubpageAppBar extends StatelessWidget
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Sa7biTheme.textPrimary,
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
@@ -147,7 +153,7 @@ class Sa7biSubpageAppBar extends StatelessWidget
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 color: Sa7biTheme.textSecondary,
-                                fontSize: 10,
+                                fontSize: 9,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
