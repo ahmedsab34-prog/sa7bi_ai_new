@@ -1,0 +1,94 @@
+
+name: Sa7bi AI - Android UI Smoke Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa7bi-android-ui-smoke
+  cancel-in-progress: false
+
+jobs:
+  android-ui-smoke:
+    name: Run app screens on Android Emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      FLUTTER_VERSION: "3.38.1"
+      JAVA_VERSION: "17"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: fix/build-692-network-client-lifecycle
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "${{ env.FLUTTER_VERSION }}"
+          channel: stable
+          cache: true
+
+      - name: Resolve Flutter dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version
+          flutter pub get
+
+      - name: Run UI checks on a real Android system image
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            set -euo pipefail
+
+            # Keep the UI test isolated from production services.
+            adb shell settings put global airplane_mode_on 1 || true
+            adb shell am broadcast \
+              -a android.intent.action.AIRPLANE_MODE \
+              --ez state true || true
+
+            adb shell svc wifi disable || true
+            adb shell svc data disable || true
+
+            flutter test \
+              integration_test/sa7bi_app_smoke_test.dart \
+              --no-pub \
+              -d emulator-5554 \
+              --reporter expanded \
+              2>&1 | tee android-ui-smoke.log
+
+            {
+              echo "## Android UI smoke test passed"
+              echo
+              echo "- Home, Chat, Games and Profile navigation was exercised."
+              echo "- Local games hub was opened."
+              echo "- In-app diagnostics screen was opened."
+              echo "- Internet was disabled to prevent production writes."
+              echo "- This test does not prove paid AI inference or live ad inventory."
+            } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload Android UI test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sa7bi-android-ui-smoke-report
+          path: android-ui-smoke.log
+          if-no-files-found: ignore
+          retention-days: 14
