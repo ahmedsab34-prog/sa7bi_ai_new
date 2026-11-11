@@ -1,7 +1,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -1034,8 +1033,10 @@ class AppDiagnosticsV5Service {
     final stopwatch = Stopwatch()..start();
 
     try {
+      // getEngines is a Future property in flutter_tts.
+      // It is not a method and must not be invoked with parentheses.
       final rawEngines = await FlutterTts()
-          .getEngines()
+          .getEngines
           .timeout(const Duration(seconds: 6));
 
       final engines = rawEngines is List
