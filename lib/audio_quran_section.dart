@@ -9,6 +9,11 @@ part of 'audio_center_screen.dart';
 
 extension _AudioQuranSection on _AudioCenterScreenState {
   Future<void> _loadQuran() async {
+    // نحفظ اختيارات المستخدم قبل تحديث الكتالوج.
+    final previousReciterId = _reciter?.id;
+    final previousMoshafId = _moshaf?.id;
+    final previousSuraId = _sura?.id;
+
     try {
       final data = await AiService.getQuranCatalog()
           .timeout(const Duration(seconds: 25));
@@ -42,8 +47,17 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         return;
       }
 
-      final selectedReciter = validReciters.first;
-      final selectedMoshaf = selectedReciter.moshaf.first;
+      // استعادة القارئ السابق إن كان ما زال متاحًا.
+      final selectedReciter = validReciters.firstWhere(
+        (reciter) => reciter.id == previousReciterId,
+        orElse: () => validReciters.first,
+      );
+
+      // استعادة الرواية السابقة لهذا القارئ.
+      final selectedMoshaf = selectedReciter.moshaf.firstWhere(
+        (moshaf) => moshaf.id == previousMoshafId,
+        orElse: () => selectedReciter.moshaf.first,
+      );
 
       final availableSuwar = _availableQuranSuwar(
         selectedMoshaf,
@@ -61,18 +75,23 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         return;
       }
 
+      // الاحتفاظ بالسورة المختارة إن كانت مدعومة في الرواية الجديدة.
+      final selectedSura = availableSuwar.firstWhere(
+        (sura) => sura.id == previousSuraId,
+        orElse: () => availableSuwar.first,
+      );
+
       setState(() {
         _quran = data;
         _reciter = selectedReciter;
         _moshaf = selectedMoshaf;
-        _sura = availableSuwar.first;
+        _sura = selectedSura;
         _error = '';
       });
     } on TimeoutException {
       if (!mounted) return;
 
       setState(() {
-        _quran = null;
         _error =
             'الاتصال بطيء؛ انتهت مهلة تحميل قائمة القرآن. حاول مرة أخرى.';
       });
@@ -80,7 +99,6 @@ extension _AudioQuranSection on _AudioCenterScreenState {
       if (!mounted) return;
 
       setState(() {
-        _quran = null;
         _error = 'تعذر تحميل القرآن بسبب مشكلة في الاتصال.';
       });
     }
@@ -266,6 +284,9 @@ extension _AudioQuranSection on _AudioCenterScreenState {
         _message('تعذر تجهيز قائمة السور المختارة.');
         return;
       }
+
+      // يوقف أي TTS نشط في أي شاشة قبل بدء تلاوة القرآن.
+      await _voice.stopSpeaking();
 
       await AudioController.replaceQueueAndPlay(queueItems);
 
