@@ -5,16 +5,16 @@ import '../audio_player_service.dart';
 import '../services/profile_service.dart';
 
 /// الهيدر الموحد لتطبيق صاحبي AI.
-///
-/// نسخة أصغر بارتفاع 48 نقطة، مع زر صوت نابض عند التشغيل.
 class AppHeader extends StatelessWidget {
   final VoidCallback? onProfileTap;
   final VoidCallback? onAudioTap;
+  final String welcomeMessage;
 
   const AppHeader({
     super.key,
     this.onProfileTap,
     this.onAudioTap,
+    this.welcomeMessage = 'أنا معاك',
   });
 
   @override
@@ -28,17 +28,13 @@ class AppHeader extends StatelessWidget {
           children: [
             const Sa7biLogo(),
             const SizedBox(width: 5),
-            const Expanded(
-              child: _HeaderWelcome(),
+            Expanded(
+              child: _HeaderWelcome(message: welcomeMessage),
             ),
             const SizedBox(width: 4),
-            _HeaderAudioButton(
-              onTap: onAudioTap,
-            ),
+            _HeaderAudioButton(onTap: onAudioTap),
             const SizedBox(width: 3),
-            _HeaderProfileButton(
-              onTap: onProfileTap,
-            ),
+            _HeaderProfileButton(onTap: onProfileTap),
           ],
         ),
       ),
@@ -47,14 +43,14 @@ class AppHeader extends StatelessWidget {
 }
 
 class _HeaderWelcome extends StatelessWidget {
-  const _HeaderWelcome();
+  const _HeaderWelcome({required this.message});
+
+  final String message;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(
-        minHeight: 38,
-      ),
+      constraints: const BoxConstraints(minHeight: 38),
       padding: const EdgeInsets.symmetric(
         horizontal: 8,
         vertical: 3,
@@ -81,13 +77,13 @@ class _HeaderWelcome extends StatelessWidget {
           ),
         ],
       ),
-      child: const Directionality(
+      child: Directionality(
         textDirection: TextDirection.rtl,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
+            const Text(
               'صاحبي AI',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -97,12 +93,12 @@ class _HeaderWelcome extends StatelessWidget {
                 fontWeight: FontWeight.w900,
               ),
             ),
-            SizedBox(height: 1),
+            const SizedBox(height: 1),
             Text(
-              'أنا معاك',
+              message,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Color(0xFF9FCBFF),
                 fontSize: 8.5,
                 fontWeight: FontWeight.w700,
@@ -118,9 +114,7 @@ class _HeaderWelcome extends StatelessWidget {
 class _HeaderAudioButton extends StatefulWidget {
   final VoidCallback? onTap;
 
-  const _HeaderAudioButton({
-    required this.onTap,
-  });
+  const _HeaderAudioButton({required this.onTap});
 
   @override
   State<_HeaderAudioButton> createState() =>
@@ -130,7 +124,6 @@ class _HeaderAudioButton extends StatefulWidget {
 class _HeaderAudioButtonState extends State<_HeaderAudioButton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
-
   bool _playing = false;
 
   @override
@@ -220,13 +213,13 @@ class _HeaderAudioButtonState extends State<_HeaderAudioButton>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: _playing
-                          ? [
-                              const Color(0xFF123B50),
-                              const Color(0xFF122B3C),
+                          ? const [
+                              Color(0xFF123B50),
+                              Color(0xFF122B3C),
                             ]
-                          : [
-                              const Color(0xFF172B49),
-                              const Color(0xFF241528),
+                          : const [
+                              Color(0xFF172B49),
+                              Color(0xFF241528),
                             ],
                     ),
                     border: Border.all(
@@ -275,9 +268,7 @@ class _HeaderAudioButtonState extends State<_HeaderAudioButton>
 class _HeaderProfileButton extends StatelessWidget {
   final VoidCallback? onTap;
 
-  const _HeaderProfileButton({
-    required this.onTap,
-  });
+  const _HeaderProfileButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -300,9 +291,7 @@ class _HeaderProfileButton extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _ProfileAvatar(
-                      profile: profile,
-                    ),
+                    _ProfileAvatar(profile: profile),
                     const SizedBox(height: 1),
                     SizedBox(
                       width: 43,
@@ -333,9 +322,7 @@ class _HeaderProfileButton extends StatelessWidget {
 class _ProfileAvatar extends StatelessWidget {
   final ProfileService profile;
 
-  const _ProfileAvatar({
-    required this.profile,
-  });
+  const _ProfileAvatar({required this.profile});
 
   @override
   Widget build(BuildContext context) {
@@ -410,9 +397,7 @@ class _DefaultProfileIcon extends StatelessWidget {
 
 /// شعار التطبيق المصغر.
 class Sa7biLogo extends StatelessWidget {
-  const Sa7biLogo({
-    super.key,
-  });
+  const Sa7biLogo({super.key});
 
   @override
   Widget build(BuildContext context) {
