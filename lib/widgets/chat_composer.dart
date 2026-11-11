@@ -1,14 +1,16 @@
-import 'package:flutter/material.dart';
 
-import 'chat_toolbar.dart';
+import 'package:flutter/material.dart';
 
 class ChatComposer extends StatefulWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
+
   final bool isLoading;
   final bool isListening;
   final bool isGeneratingImage;
+
   final VoidCallback onSend;
+
   final VoidCallback? onCamera;
   final VoidCallback? onGallery;
   final VoidCallback? onVideo;
@@ -47,8 +49,19 @@ class _ChatComposerState extends State<ChatComposer> {
 
     widget.controller.addListener(_onTextChanged);
 
-    _hasText =
-        widget.controller.text.trim().isNotEmpty;
+    _hasText = widget.controller.text.trim().isNotEmpty;
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onTextChanged);
+      widget.controller.addListener(_onTextChanged);
+
+      _hasText = widget.controller.text.trim().isNotEmpty;
+    }
   }
 
   @override
@@ -57,24 +70,8 @@ class _ChatComposerState extends State<ChatComposer> {
     super.dispose();
   }
 
-  @override
-  void didUpdateWidget(
-    covariant ChatComposer oldWidget,
-  ) {
-    super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_onTextChanged);
-      widget.controller.addListener(_onTextChanged);
-
-      _hasText =
-          widget.controller.text.trim().isNotEmpty;
-    }
-  }
-
   void _onTextChanged() {
-    final value =
-        widget.controller.text.trim().isNotEmpty;
+    final value = widget.controller.text.trim().isNotEmpty;
 
     if (!mounted || value == _hasText) return;
 
@@ -84,8 +81,7 @@ class _ChatComposerState extends State<ChatComposer> {
   }
 
   void _send() {
-    if (widget.isLoading ||
-        widget.isGeneratingImage) {
+    if (widget.isLoading || widget.isGeneratingImage) {
       return;
     }
 
@@ -96,6 +92,101 @@ class _ChatComposerState extends State<ChatComposer> {
     widget.onSend();
   }
 
+  Future<void> _openMediaMenu(BuildContext context) async {
+    final disabled = widget.isLoading ||
+        widget.isGeneratingImage;
+
+    if (disabled) return;
+
+    final hasMediaAction =
+        widget.onCamera != null ||
+        widget.onGallery != null ||
+        widget.onVideo != null;
+
+    if (!hasMediaAction) return;
+
+    final action = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: const Color(0xFF111827),
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(22),
+        ),
+      ),
+      builder: (sheetContext) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                14,
+                4,
+                14,
+                18,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'إرسال صورة أو فيديو',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (widget.onCamera != null)
+                    _MediaChoiceTile(
+                      icon: Icons.camera_alt_rounded,
+                      title: 'التقاط صورة بالكاميرا',
+                      subtitle: 'تصوير صورة جديدة للتحليل',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 1);
+                      },
+                    ),
+                  if (widget.onGallery != null)
+                    _MediaChoiceTile(
+                      icon: Icons.photo_library_rounded,
+                      title: 'اختيار صورة من المعرض',
+                      subtitle: 'إرسال صورة محفوظة على الجهاز',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 2);
+                      },
+                    ),
+                  if (widget.onVideo != null)
+                    _MediaChoiceTile(
+                      icon: Icons.videocam_rounded,
+                      title: 'اختيار فيديو',
+                      subtitle: 'إرسال فيديو لتحليل محتواه',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 3);
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || disabled) return;
+
+    switch (action) {
+      case 1:
+        widget.onCamera?.call();
+        break;
+      case 2:
+        widget.onGallery?.call();
+        break;
+      case 3:
+        widget.onVideo?.call();
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final disabled =
@@ -103,157 +194,349 @@ class _ChatComposerState extends State<ChatComposer> {
 
     return SafeArea(
       top: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(
-          7,
-          3,
-          7,
-          5,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(
+            6,
+            5,
+            6,
+            5,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xCC080D18),
+            border: const Border(
+              top: BorderSide(
+                color: Color(0x334B6C9D),
+              ),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // خانة الكتابة تأخذ المساحة المتبقية.
+              Expanded(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  constraints: const BoxConstraints(
+                    minHeight: 40,
+                    maxHeight: 96,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topRight,
+                      end: Alignment.bottomLeft,
+                      colors: [
+                        Color(0xFF17243B),
+                        Color(0xFF0E1728),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: _hasText
+                          ? const Color(0xAA67B7FF)
+                          : const Color(0x554D6588),
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x22000000),
+                        blurRadius: 5,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    enabled: !disabled,
+                    minLines: 1,
+                    maxLines: 3,
+                    textInputAction: TextInputAction.newline,
+                    keyboardType: TextInputType.multiline,
+                    textDirection: TextDirection.rtl,
+                    textAlign: TextAlign.right,
+                    onTap: widget.onText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      height: 1.25,
+                    ),
+                    cursorColor: const Color(0xFF67B7FF),
+                    decoration: InputDecoration(
+                      hintText: widget.isListening
+                          ? 'جاري الاستماع...'
+                          : 'اكتب رسالتك لصاحبي...',
+                      hintTextDirection: TextDirection.rtl,
+                      hintStyle: const TextStyle(
+                        color: Color(0xFF8291A9),
+                        fontSize: 11,
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 10,
+                      ),
+                    ),
+                    onSubmitted: (_) {
+                      if (!disabled && _hasText) {
+                        _send();
+                      }
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 3),
+
+              if (widget.onCamera != null ||
+                  widget.onGallery != null ||
+                  widget.onVideo != null)
+                _ComposerIconButton(
+                  icon: Icons.add_photo_alternate_rounded,
+                  tooltip: 'صورة أو فيديو',
+                  enabled: !disabled,
+                  color: const Color(0xFF83C8FF),
+                  onTap: () => _openMediaMenu(context),
+                ),
+
+              if (widget.onSpeechToText != null)
+                _ComposerIconButton(
+                  icon: widget.isListening
+                      ? Icons.stop_circle_rounded
+                      : Icons.mic_rounded,
+                  tooltip: widget.isListening
+                      ? 'إيقاف تحويل الكلام'
+                      : 'تحدث واكتب',
+                  enabled: !disabled,
+                  active: widget.isListening,
+                  color: const Color(0xFF70E5C7),
+                  onTap: widget.onSpeechToText,
+                ),
+
+              if (widget.onVoice != null)
+                _ComposerIconButton(
+                  icon: Icons.record_voice_over_rounded,
+                  tooltip: 'قراءة آخر رد صوتيًا',
+                  enabled: !disabled,
+                  color: const Color(0xFF83C8FF),
+                  onTap: widget.onVoice,
+                ),
+
+              if (widget.onImageGeneration != null)
+                _ComposerIconButton(
+                  icon: widget.isGeneratingImage
+                      ? Icons.hourglass_top_rounded
+                      : Icons.auto_awesome_rounded,
+                  tooltip: widget.isGeneratingImage
+                      ? 'جاري إنشاء الصورة'
+                      : 'إنشاء صورة',
+                  enabled: !disabled,
+                  active: widget.isGeneratingImage,
+                  color: const Color(0xFFE6A1C0),
+                  onTap: widget.onImageGeneration,
+                ),
+
+              const SizedBox(width: 3),
+
+              _SendButton(
+                enabled: !disabled && _hasText,
+                loading: widget.isLoading,
+                onTap: _send,
+              ),
+            ],
+          ),
         ),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.25),
-          border: Border(
-            top: BorderSide(
-              color: Colors.white.withValues(alpha: 0.08),
+      ),
+    );
+  }
+}
+
+class _ComposerIconButton extends StatelessWidget {
+  const _ComposerIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.enabled,
+    required this.color,
+    required this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool enabled;
+  final Color color;
+  final VoidCallback? onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: enabled ? onTap : null,
+            borderRadius: BorderRadius.circular(11),
+            child: Container(
+              width: 31,
+              height: 37,
+              decoration: BoxDecoration(
+                color: active
+                    ? color.withValues(alpha: 0.18)
+                    : const Color(0x221D3555),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: active
+                      ? color.withValues(alpha: 0.8)
+                      : const Color(0x334B6C9D),
+                ),
+              ),
+              child: Icon(
+                icon,
+                size: 17,
+                color: !enabled
+                    ? const Color(0xFF536174)
+                    : color,
+              ),
             ),
           ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ChatToolbar(
-              onCamera: disabled ? null : widget.onCamera,
-              onGallery: disabled ? null : widget.onGallery,
-              onVideo: disabled ? null : widget.onVideo,
-              onVoice: disabled ? null : widget.onVoice,
-              onText: disabled ? null : widget.onText,
-              onSpeechToText:
-                  disabled ? null : widget.onSpeechToText,
-              onImageGeneration:
-                  disabled ? null : widget.onImageGeneration,
-              enabled: !disabled,
-              isListening: widget.isListening,
-              isGeneratingImage:
-                  widget.isGeneratingImage,
+      ),
+    );
+  }
+}
+
+class _SendButton extends StatelessWidget {
+  const _SendButton({
+    required this.enabled,
+    required this.loading,
+    required this.onTap,
+  });
+
+  final bool enabled;
+  final bool loading;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 36,
+          height: 37,
+          decoration: BoxDecoration(
+            gradient: enabled
+                ? const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF67B7FF),
+                      Color(0xFF397CD1),
+                    ],
+                  )
+                : null,
+            color: enabled
+                ? null
+                : const Color(0xFF1A263A),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: enabled
+                  ? const Color(0xFF83C8FF)
+                  : const Color(0x444B6C9D),
             ),
-
-            const SizedBox(height: 3),
-
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    constraints: const BoxConstraints(
-                      minHeight: 42,
-                      maxHeight: 112,
+            boxShadow: enabled
+                ? const [
+                    BoxShadow(
+                      color: Color(0x33397CD1),
+                      blurRadius: 7,
+                      offset: Offset(0, 2),
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.075),
-                      borderRadius: BorderRadius.circular(21),
-                      border: Border.all(
-                        color: _hasText
-                            ? const Color(0x6678E8F9)
-                            : Colors.white.withValues(alpha: 0.12),
-                      ),
+                  ]
+                : const <BoxShadow>[],
+          ),
+          child: Center(
+            child: loading
+                ? const SizedBox(
+                    width: 17,
+                    height: 17,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
                     ),
-                    child: TextField(
-                      controller: widget.controller,
-                      focusNode: widget.focusNode,
-                      enabled: !disabled,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.newline,
-                      keyboardType: TextInputType.multiline,
-                      textDirection: TextDirection.rtl,
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        height: 1.3,
-                      ),
-                      cursorColor: const Color(0xFF67E8F9),
-                      decoration: InputDecoration(
-                        hintText: widget.isListening
-                            ? 'جاري الاستماع...'
-                            : 'اكتب رسالتك لصاحبي...',
-                        hintTextDirection: TextDirection.rtl,
-                        hintStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
-                          fontSize: 13,
-                        ),
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding:
-                            const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 11,
-                        ),
-                      ),
-                      onSubmitted: (_) {
-                        if (!disabled && _hasText) {
-                          _send();
-                        }
-                      },
-                    ),
+                  )
+                : Icon(
+                    Icons.arrow_upward_rounded,
+                    color: enabled
+                        ? const Color(0xFF061326)
+                        : const Color(0xFF65748D),
+                    size: 21,
                   ),
-                ),
-
-                const SizedBox(width: 6),
-
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap:
-                        disabled || !_hasText ? null : _send,
-                    borderRadius: BorderRadius.circular(22),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: _hasText && !disabled
-                            ? const LinearGradient(
-                                colors: [
-                                  Color(0xFF67E8F9),
-                                  Color(0xFF9B8CFF),
-                                ],
-                              )
-                            : null,
-                        color: _hasText && !disabled
-                            ? null
-                            : Colors.white.withValues(alpha: 0.07),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.10),
-                        ),
-                      ),
-                      child: widget.isLoading
-                          ? const Padding(
-                              padding: EdgeInsets.all(11),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
-                              ),
-                            )
-                          : Icon(
-                              Icons.arrow_upward_rounded,
-                              color: _hasText && !disabled
-                                  ? const Color(0xFF080B14)
-                                  : Colors.white.withValues(alpha: 0.35),
-                              size: 23,
-                            ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _MediaChoiceTile extends StatelessWidget {
+  const _MediaChoiceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 2,
+      ),
+      leading: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: const Color(0x2267B7FF),
+          borderRadius: BorderRadius.circular(13),
+        ),
+        child: Icon(
+          icon,
+          color: const Color(0xFF83C8FF),
+          size: 21,
+        ),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(
+          color: Colors.white60,
+          fontSize: 10,
+        ),
+      ),
+      trailing: const Icon(
+        Icons.chevron_left_rounded,
+        color: Colors.white38,
       ),
     );
   }
