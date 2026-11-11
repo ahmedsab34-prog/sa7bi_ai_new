@@ -1,8 +1,6 @@
 
-/// يميز طلب إنشاء أو تعديل صورة صريحًا عن السؤال النصي العادي.
-/// يدعم الصياغات المصرية والعربية والإنجليزية.
-///
-/// لا يستخدم كلمة "صورة" وحدها لاتخاذ قرار إنشاء صورة.
+/// يميز طلب إنشاء صورة جديدًا عن طلبات وصف الصور أو تعديل صورة مرفقة.
+/// يعتمد على أوامر إنشاء واضحة حتى لا يحوّل أسئلة المستخدم العادية إلى توليد مدفوع.
 class ImageIntentDetector {
   ImageIntentDetector._();
 
@@ -15,27 +13,17 @@ class ImageIntentDetector {
         .replaceAll('آ', 'ا')
         .replaceAll('ى', 'ي')
         .replaceAll('ة', 'ه')
-        .replaceAll(
-          RegExp(r'[،,.!؟?؛;]+'),
-          ' ',
-        )
-        .replaceAll(
-          RegExp(r'\s+'),
-          ' ',
-        )
+        .replaceAll(RegExp(r'[،,.!؟?؛;]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }
 
   static bool isGenerationRequest(String input) {
     final text = _normalize(input);
-
     if (text.isEmpty) return false;
 
-    // ----------------------------------------------------------
-    // EXPLICIT ARABIC IMAGE CREATION REQUESTS
-    // ----------------------------------------------------------
-
-    const explicitArabicPhrases = <String>[
+    // الأوامر العربية الصريحة لإنشاء صورة أو تصميم جديد.
+    const arabicCreationPhrases = <String>[
       'انشئ صوره',
       'انشئلي صوره',
       'انشئ لي صوره',
@@ -51,9 +39,8 @@ class ImageIntentDetector {
       'عايز صوره',
       'عاوز صوره',
       'محتاج صوره',
-      'محتاج اعمل صوره',
-      'نفسي في صوره',
       'اريد صوره',
+      'نفسي في صوره',
       'صمم صوره',
       'صمملي صوره',
       'صمم لي صوره',
@@ -76,8 +63,6 @@ class ImageIntentDetector {
       'ارسم لي',
       'انشئلي',
       'انشئ لي',
-      'صوره بالذكاء الاصطناعي',
-      'صوره ai',
       'اعمل لوجو',
       'اعملي لوجو',
       'صمم لوجو',
@@ -90,17 +75,11 @@ class ImageIntentDetector {
       'صمم خلفيه',
       'اعمل غلاف',
       'صمم غلاف',
+      'صوره بالذكاء الاصطناعي',
+      'صوره ai',
     ];
 
-    if (explicitArabicPhrases.any(text.contains)) {
-      return true;
-    }
-
-    // ----------------------------------------------------------
-    // EXPLICIT ENGLISH IMAGE CREATION REQUESTS
-    // ----------------------------------------------------------
-
-    const explicitEnglishPhrases = <String>[
+    const englishCreationPhrases = <String>[
       'generate an image',
       'generate image',
       'create an image',
@@ -120,19 +99,22 @@ class ImageIntentDetector {
       'make a wallpaper',
       'generate artwork',
       'create artwork',
-      'ai image',
-      'ai picture',
+      'i need an image of',
+      'i want an image of',
+      'i need a picture of',
+      'i want a picture of',
+      'make me an image',
+      'draw me a',
     ];
 
-    if (explicitEnglishPhrases.any(text.contains)) {
-      return true;
-    }
+    final hasExplicitCreation =
+        arabicCreationPhrases.any(text.contains) ||
+            englishCreationPhrases.any(text.contains);
 
-    // ----------------------------------------------------------
-    // AVOID MISCLASSIFYING IMAGE ANALYSIS
-    // ----------------------------------------------------------
+    if (hasExplicitCreation) return true;
 
-    const analysisPhrases = <String>[
+    // طلبات الوصف والتحليل والقراءة ليست أوامر لإنشاء صورة جديدة.
+    const analysisOrEditingPhrases = <String>[
       'حلل الصوره',
       'حلللي الصوره',
       'اشرح الصوره',
@@ -148,67 +130,27 @@ class ImageIntentDetector {
       'هل الصوره واضحه',
       'فهمني الصوره',
       'فسر الصوره',
-      'analyze this image',
+      'عايز اعدل الصوره',
+      'عاوز اعدل الصوره',
+      'اريد تعديل الصوره',
+      'عدل الصوره',
+      'تعديل الصوره الموجوده',
+      'i need a description of this image',
+      'i want a description of this image',
       'describe this image',
+      'analyze this image',
       'what is in this image',
       'read the text in this image',
       'explain this picture',
+      'edit this image',
+      'change this image',
     ];
 
-    final isAnalysisOnly =
-        analysisPhrases.any(text.contains);
+    if (analysisOrEditingPhrases.any(text.contains)) return false;
 
-    if (isAnalysisOnly) {
-      // التحليل لا يصبح إنشاء إلا لو كتب المستخدم
-      // أمر إنشاء صريحًا آخر داخل نفس الرسالة.
-      const creationVerbs = <String>[
-        'انشئ',
-        'اعمل',
-        'اعملي',
-        'اعمللي',
-        'صمم',
-        'ارسم',
-        'ولد',
-        'create',
-        'generate',
-        'draw',
-        'design',
-        'make',
-      ];
-
-      final alsoRequestsCreation =
-          creationVerbs.any(text.contains);
-
-      if (!alsoRequestsCreation) {
-        return false;
-      }
-    }
-
-    // ----------------------------------------------------------
-    // GENERAL ARABIC DESIGN INTENT
-    // ----------------------------------------------------------
-
-    const arabicDesignObjects = <String>[
-      'صوره',
-      'صورة',
-      'تصميم',
-      'لوجو',
-      'شعار',
-      'بوستر',
-      'ملصق',
-      'خلفيه',
-      'خلفية',
-      'غلاف',
-      'رسمه',
-      'رسمية',
-      'ايقونه',
-      'أيقونة',
-      'بانر',
-      'صوره مصغره',
-      'صورة مصغرة',
-    ];
-
-    const arabicCreationVerbs = <String>[
+    // لا نستخدم "عايز/محتاج/need/want" وحدها كإشارة إنشاء؛
+    // يلزم معها فعل إنشاء فعلي أو صيغة إنجليزية واضحة أعلاه.
+    const arabicActions = <String>[
       'صمم',
       'صمملي',
       'صمم لي',
@@ -225,32 +167,42 @@ class ImageIntentDetector {
       'اعمللي',
       'اعمل لي',
       'ممكن تعمل',
-      'عايز',
-      'عاوز',
-      'محتاج',
-      'اريد',
-      'نفسي',
       'سوي',
       'سويلي',
       'سوي لي',
     ];
 
-    final hasArabicDesignObject =
-        arabicDesignObjects.any(text.contains);
+    const arabicObjects = <String>[
+      'صوره',
+      'تصميم',
+      'لوجو',
+      'شعار',
+      'بوستر',
+      'ملصق',
+      'خلفيه',
+      'غلاف',
+      'رسمه',
+      'ايقونه',
+      'بانر',
+      'صوره مصغره',
+    ];
 
-    final hasArabicCreationVerb =
-        arabicCreationVerbs.any(text.contains);
+    final hasArabicAction = arabicActions.any(text.contains);
+    final hasArabicObject = arabicObjects.any(text.contains);
 
-    if (hasArabicDesignObject &&
-        hasArabicCreationVerb) {
-      return true;
-    }
+    if (hasArabicAction && hasArabicObject) return true;
 
-    // ----------------------------------------------------------
-    // GENERAL ENGLISH DESIGN INTENT
-    // ----------------------------------------------------------
+    const englishActions = <String>[
+      'create',
+      'generate',
+      'draw',
+      'design',
+      'make',
+      'render',
+      'illustrate',
+    ];
 
-    const englishDesignObjects = <String>[
+    const englishObjects = <String>[
       'logo',
       'poster',
       'wallpaper',
@@ -266,24 +218,7 @@ class ImageIntentDetector {
       'design',
     ];
 
-    const englishCreationVerbs = <String>[
-      'create',
-      'generate',
-      'draw',
-      'design',
-      'make',
-      'render',
-      'illustrate',
-      'need',
-      'want',
-    ];
-
-    final hasEnglishObject =
-        englishDesignObjects.any(text.contains);
-
-    final hasEnglishCreationVerb =
-        englishCreationVerbs.any(text.contains);
-
-    return hasEnglishObject && hasEnglishCreationVerb;
+    return englishActions.any(text.contains) &&
+        englishObjects.any(text.contains);
   }
 }
