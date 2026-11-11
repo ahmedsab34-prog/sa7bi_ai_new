@@ -1,8 +1,8 @@
+
 name = "sa7bi-ai-new"
 main = "src/index-v2.js"
 compatibility_date = "2026-09-18"
 
-# Explicitly enable the public workers.dev endpoint.
 workers_dev = true
 
 [vars]
@@ -13,24 +13,20 @@ WORKERS_TEXT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 WORKERS_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
 WORKERS_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 
-# Must match the rewarded AdMob unit configured in Flutter.
 ADMOB_REWARDED_AD_UNIT_ID = "ca-app-pub-9077658292229374/4621745555"
 ADMOB_REWARD_ITEM = "credits"
 
 [ai]
 binding = "AI"
 
-# Existing server-authoritative credits ledger.
 [[durable_objects.bindings]]
 name = "SA7BI_CREDITS"
 class_name = "Sa7biCredits"
 
-# Existing social accounts and multiplayer rooms, extended with invitations and DMs.
 [[durable_objects.bindings]]
 name = "SA7BI_SOCIAL"
 class_name = "Sa7biSocial"
 
-# Preserve both existing SQLite Durable Object class exports.
 [exports.Sa7biCredits]
 type = "durable-object"
 storage = "sqlite"
@@ -38,6 +34,10 @@ storage = "sqlite"
 [exports.Sa7biSocial]
 type = "durable-object"
 storage = "sqlite"
+
+[[r2_buckets]]
+binding = "SA7BI_REELS"
+bucket_name = "sa7bi-ai-reels"
 
 [secrets]
 required = ["GEMINI_API_KEY"]
