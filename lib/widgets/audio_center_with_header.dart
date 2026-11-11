@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../audio_center_screen.dart';
 import '../audio_player_service.dart';
+import '../services/audio_focus_coordinator.dart';
 import 'app_header.dart';
 
 class AudioCenterWithHeader extends StatelessWidget {
@@ -20,7 +22,10 @@ class AudioCenterWithHeader extends StatelessWidget {
     onProfileTap();
   }
 
-  void _showMessage(BuildContext context, String message) {
+  void _showMessage(
+    BuildContext context,
+    String message,
+  ) {
     if (!context.mounted) return;
 
     ScaffoldMessenger.of(context)
@@ -40,14 +45,55 @@ class AudioCenterWithHeader extends StatelessWidget {
     final handler = AudioController.handler;
 
     if (handler == null || handler.mediaItem.value == null) {
-      _showMessage(context, 'افتح قسمًا واختر مقطعًا صوتيًا أولًا.');
+      _showMessage(
+        context,
+        'افتح قسمًا واختر مقطعًا صوتيًا أولًا.',
+      );
       return;
     }
 
     if (AudioController.isPlayingNotifier.value) {
-      unawaited(handler.pause());
+      unawaited(_pauseAudio(context, handler));
     } else {
-      unawaited(handler.play());
+      unawaited(_resumeAudio(context, handler));
+    }
+  }
+
+  Future<void> _resumeAudio(
+    BuildContext context,
+    Sa7biAudioHandler handler,
+  ) async {
+    try {
+      // إيقاف أي محرك قراءة نصية قبل استئناف
+      // القرآن أو الراديو أو البودكاست.
+      await AudioFocusCoordinator.stopAllSpeech();
+
+      if (!context.mounted) return;
+
+      await handler.play();
+    } catch (_) {
+      if (!context.mounted) return;
+
+      _showMessage(
+        context,
+        'تعذر استئناف الصوت حاليًا.',
+      );
+    }
+  }
+
+  Future<void> _pauseAudio(
+    BuildContext context,
+    Sa7biAudioHandler handler,
+  ) async {
+    try {
+      await handler.pause();
+    } catch (_) {
+      if (!context.mounted) return;
+
+      _showMessage(
+        context,
+        'تعذر إيقاف الصوت مؤقتًا.',
+      );
     }
   }
 
@@ -57,7 +103,9 @@ class AudioCenterWithHeader extends StatelessWidget {
         type: FileType.audio,
       );
 
-      if (!context.mounted || result == null || result.files.isEmpty) {
+      if (!context.mounted ||
+          result == null ||
+          result.files.isEmpty) {
         return;
       }
 
@@ -65,9 +113,17 @@ class AudioCenterWithHeader extends StatelessWidget {
       final path = file.path;
 
       if (path == null || path.trim().isEmpty) {
-        _showMessage(context, 'تعذر الوصول إلى الملف الصوتي.');
+        _showMessage(
+          context,
+          'تعذر الوصول إلى الملف الصوتي.',
+        );
         return;
       }
+
+      // إيقاف أي قراءة TTS قبل بدء الملف المحلي.
+      await AudioFocusCoordinator.stopAllSpeech();
+
+      if (!context.mounted) return;
 
       await AudioController.playLocalFile(
         path: path,
@@ -76,10 +132,18 @@ class AudioCenterWithHeader extends StatelessWidget {
       );
 
       if (!context.mounted) return;
-      _showMessage(context, 'بدأ تشغيل ${file.name}');
+
+      _showMessage(
+        context,
+        'بدأ تشغيل ${file.name}',
+      );
     } catch (_) {
       if (!context.mounted) return;
-      _showMessage(context, 'تعذر فتح الملف الصوتي أو تشغيله.');
+
+      _showMessage(
+        context,
+        'تعذر فتح الملف الصوتي أو تشغيله.',
+      );
     }
   }
 
@@ -109,7 +173,7 @@ class AudioCenterWithHeader extends StatelessWidget {
                       textDirection: TextDirection.rtl,
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -119,14 +183,16 @@ class AudioCenterWithHeader extends StatelessWidget {
                     onPressed: () => _pickLocalAudio(context),
                     icon: const Icon(
                       Icons.folder_open_rounded,
-                      color: Color(0xFFE6C875),
+                      color: Color(0xFF83C8FF),
                     ),
                   ),
                 ],
               ),
             ),
             const Expanded(
-              child: AudioCenterScreen(showAppBar: false),
+              child: AudioCenterScreen(
+                showAppBar: false,
+              ),
             ),
           ],
         ),
