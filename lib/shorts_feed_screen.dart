@@ -1,12 +1,11 @@
+
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
-import 'ai_service.dart';
+import 'services/social_reels_service.dart';
 import 'widgets/app_header.dart';
 
 class ShortsFeedScreen extends StatefulWidget {
@@ -20,653 +19,288 @@ class ShortsFeedScreen extends StatefulWidget {
   });
 
   @override
-  State<ShortsFeedScreen> createState() => _ShortsFeedScreenState();
+  State<ShortsFeedScreen> createState() =>
+      _ShortsFeedScreenState();
 }
 
 class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
-  static const String _cacheKey = 'sa7bi_shorts_feed_cache_v1';
-  bool _loading = true;
-  bool _refreshing = false;
-  String _error = '';
+  final SocialReelsService _service =
+      SocialReelsService.instance;
+
+  final ImagePicker _picker = ImagePicker();
+
+  final PageController _pageController = PageController();
+
+  List<SocialReel> _reels = [];
+
+  VideoPlayerController? _videoController;
+
+  String? _activeReelId;
 
   int _activeIndex = 0;
 
-  List<ShortVideoItem> _items = [];
+  bool _loading = true;
+  bool _refreshing = false;
+  bool _uploading = false;
+  bool _videoLoading = false;
+  bool _videoFailed = false;
+
+  final Set<String> _busyLikes = {};
+  final Set<String> _busyFollows = {};
+
+  String _error = '';
 
   @override
   void initState() {
     super.initState();
-    unawaited(_initializeShorts());
+    unawaited(_loadFeed());
   }
 
-  Future<void> _initializeShorts() async {
-    await _loadCachedShorts();
-    if (!mounted) return;
-    await _loadShorts();
-  }
+  @override
+  void dispose() {
+    _pageController.dispose();
 
-  Future<void> _loadCachedShorts() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedJson = prefs.getString(_cacheKey);
-      if (cachedJson == null || cachedJson.trim().isEmpty) return;
+    final controller = _videoController;
+    _videoController = null;
 
-      final decoded = jsonDecode(cachedJson);
-      if (decoded is! List) return;
-
-      final cachedItems = <ShortVideoItem>[];
-      for (final raw in decoded) {
-        if (raw is! Map) continue;
-
-        final item = ShortVideoItem(
-          id: raw['id']?.toString() ?? '',
-          title: raw['title']?.toString() ?? '',
-          creator: raw['creator']?.toString() ?? '',
-          videoUrl: raw['videoUrl']?.toString() ?? '',
-          thumbnail: raw['thumbnail']?.toString() ?? '',
-          description: raw['description']?.toString() ?? '',
-        );
-
-        if (item.title.trim().isEmpty ||
-            _validHttpUri(item.videoUrl) == null) {
-          continue;
-        }
-
-        cachedItems.add(item);
-      }
-
-      if (!mounted || cachedItems.isEmpty) return;
-
-      setState(() {
-        _items = cachedItems;
-        _activeIndex = 0;
-        _loading = false;
-        _error =
-            'تم عرض قائمة الريلز المحفوظة. تشغيل الفيديو نفسه يحتاج اتصالًا بالإنترنت.';
-      });
-    } catch (_) {
-      // فساد بيانات الكاش لا يمنع محاولة جلب القائمة من الإنترنت.
+    if (controller != null) {
+      unawaited(controller.dispose());
     }
+
+    super.dispose();
   }
 
-  Future<void> _saveCachedShorts(List<ShortVideoItem> items) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final playableItems = items.where((item) {
-        return _validHttpUri(item.videoUrl) != null;
-      }).toList(growable: false);
+  void _message(String text) {
+    if (!mounted || text.trim().isEmpty) return;
 
-      final encoded = jsonEncode(
-        playableItems.map((item) {
-          return <String, String>{
-            'id': item.id,
-            'title': item.title,
-            'creator': item.creator,
-            'videoUrl': item.videoUrl,
-            'thumbnail': item.thumbnail,
-            'description': item.description,
-          };
-        }).toList(growable: false),
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            text,
+            textDirection: TextDirection.rtl,
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
       );
-
-      await prefs.setString(_cacheKey, encoded);
-    } catch (_) {
-      // تعذر حفظ القائمة لا يمنع عرض الفيديوهات الحالية.
-    }
   }
 
-  Future<void> _loadShorts() async {
-    if (_refreshing || !mounted) return;
+  Future<void> _loadFeed({
+    bool silent = false,
+  }) async {
+    if (_refreshing) return;
 
     setState(() {
       _refreshing = true;
-      if (_items.isEmpty) _loading = true;
+      if (_reels.isEmpty) _loading = true;
       _error = '';
     });
 
     try {
-      final result = await AiService.getShorts().timeout(
-        const Duration(seconds: 25),
-      );
+      await _service.initialize();
+
+      final items = await _service
+          .loadFeed(limit: 30)
+          .timeout(const Duration(seconds: 35));
 
       if (!mounted) return;
 
-      if (result.isEmpty) {
-        setState(() {
-          _error = _items.isEmpty
-              ? 'لا توجد فيديوهات قصيرة متاحة حاليًا. اسحب الشاشة للتحديث أو حاول مرة أخرى.'
-              : 'لم تصل فيديوهات جديدة؛ احتفظنا بالفيديوهات السابقة.';
-        });
-        return;
-      }
-
-      // الصورة المصغرة وحدها لا تعني وجود فيديو قابل للتشغيل.
-      final validItems = result.where((item) {
-        return _validHttpUri(item.videoUrl) != null;
-      }).toList(growable: false);
-
-      if (!mounted) return;
-
-      if (validItems.isEmpty) {
-        setState(() {
-          _error = _items.isEmpty
-              ? 'وصلت بيانات فيديوهات، لكن روابطها غير صالحة للعرض.'
-              : 'روابط التحديث الجديد غير صالحة؛ احتفظنا بالفيديوهات السابقة.';
-        });
-        return;
-      }
+      final oldActiveId = _activeReelId;
 
       setState(() {
-        _items = validItems;
-        _activeIndex = 0;
+        _reels = items;
+        _loading = false;
         _error = '';
       });
-      unawaited(_saveCachedShorts(validItems));
+
+      if (items.isEmpty) {
+        await _stopVideo();
+        return;
+      }
+
+      var nextIndex = 0;
+
+      if (oldActiveId != null) {
+        final oldIndex = items.indexWhere(
+          (item) => item.id == oldActiveId,
+        );
+
+        if (oldIndex >= 0) {
+          nextIndex = oldIndex;
+        }
+      }
+
+      _activeIndex = nextIndex;
+
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(nextIndex);
+      }
+
+      await _activateVideo(nextIndex);
+    } on SocialReelsException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _loading = false;
+        _error = error.message;
+      });
     } on TimeoutException {
       if (!mounted) return;
 
       setState(() {
-        _error = _items.isEmpty
-            ? 'تأخر تحميل الفيديوهات بسبب بطء الاتصال. حاول مرة أخرى.'
-            : 'الاتصال بطيء؛ احتفظنا بالفيديوهات السابقة.';
+        _loading = false;
+        _error = 'تأخر تحميل الريلز. تحقق من الإنترنت.';
       });
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _error = _items.isEmpty
-            ? 'تعذر تحميل الفيديوهات حاليًا. تحقق من الإنترنت ثم أعد المحاولة.'
-            : 'تعذر تحديث الفيديوهات؛ ما زالت الفيديوهات السابقة ظاهرة.';
+        _loading = false;
+        _error = 'تعذر تحميل الريلز حاليًا.';
       });
     } finally {
       if (mounted) {
         setState(() {
-          _loading = false;
           _refreshing = false;
         });
       }
     }
   }
 
-  Uri? _validHttpUri(String value) {
-    final text = value.trim();
-    if (text.isEmpty) return null;
+  Future<void> _stopVideo() async {
+    final previous = _videoController;
 
-    final uri = Uri.tryParse(text);
+    _videoController = null;
+    _activeReelId = null;
 
-    if (uri == null ||
-        !uri.hasAuthority ||
-        uri.host.isEmpty ||
-        (uri.scheme != 'https' && uri.scheme != 'http')) {
-      return null;
+    if (mounted) {
+      setState(() {
+        _videoLoading = false;
+        _videoFailed = false;
+      });
     }
 
-    return uri;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF05070D),
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(
-                  10,
-                  4,
-                  10,
-                  2,
-                ),
-                child: AppHeader(
-                  onProfileTap: widget.onProfileTap,
-                  onAudioTap: widget.onAudioTap,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(
-                  14,
-                  0,
-                  8,
-                  3,
-                ),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'ريلز صاحبي',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'تحديث الفيديوهات',
-                      onPressed: _refreshing ? null : _loadShorts,
-                      icon: _refreshing
-                          ? const SizedBox(
-                              width: 19,
-                              height: 19,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Color(0xFF67E8F9),
-                              ),
-                            )
-                          : const Icon(
-                              Icons.refresh_rounded,
-                              color: Color(0xFF67E8F9),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(child: _buildBody()),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_loading && _items.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(
-              color: Color(0xFF67E8F9),
-            ),
-            SizedBox(height: 14),
-            Text(
-              'جاري تحميل الفيديوهات...',
-              style: TextStyle(color: Colors.white70),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_items.isEmpty) {
-      return RefreshIndicator(
-        color: const Color(0xFF67E8F9),
-        onRefresh: _loadShorts,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          children: [
-            const SizedBox(height: 130),
-            const Icon(
-              Icons.video_library_outlined,
-              color: Colors.white30,
-              size: 62,
-            ),
-            const SizedBox(height: 18),
-            Text(
-              _error.isEmpty
-                  ? 'لا توجد فيديوهات قصيرة متاحة حاليًا.'
-                  : _error,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white70,
-                height: 1.7,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Center(
-              child: ElevatedButton.icon(
-                onPressed: _refreshing ? null : _loadShorts,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('إعادة المحاولة'),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Stack(
-      children: [
-        RefreshIndicator(
-          color: const Color(0xFF67E8F9),
-          onRefresh: _loadShorts,
-          child: PageView.builder(
-            scrollDirection: Axis.vertical,
-            itemCount: _items.length,
-            onPageChanged: (index) {
-              setState(() => _activeIndex = index);
-            },
-            itemBuilder: (context, index) {
-              return _ShortItemCard(
-                key: ValueKey<String>(
-                  '$index:${_items[index].videoUrl}',
-                ),
-                item: _items[index],
-                active: index == _activeIndex,
-              );
-            },
-          ),
-        ),
-        if (_error.isNotEmpty)
-          Positioned(
-            top: 8,
-            left: 12,
-            right: 12,
-            child: Material(
-              color: const Color(0xEE182333),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.cloud_off_rounded,
-                      color: Color(0xFF72D7FF),
-                      size: 17,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _error,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      constraints: const BoxConstraints(
-                        minWidth: 30,
-                        minHeight: 30,
-                      ),
-                      onPressed: _refreshing ? null : _loadShorts,
-                      icon: const Icon(
-                        Icons.refresh_rounded,
-                        color: Color(0xFF67E8F9),
-                        size: 18,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        if (_refreshing && _items.isNotEmpty)
-          const Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: LinearProgressIndicator(
-              color: Color(0xFF67E8F9),
-              backgroundColor: Colors.transparent,
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _ShortItemCard extends StatefulWidget {
-  const _ShortItemCard({
-    super.key,
-    required this.item,
-    required this.active,
-  });
-
-  final ShortVideoItem item;
-  final bool active;
-
-  @override
-  State<_ShortItemCard> createState() => _ShortItemCardState();
-}
-
-class _ShortItemCardState extends State<_ShortItemCard> {
-  VideoPlayerController? _controller;
-  VoidCallback? _controllerListener;
-
-  int _generation = 0;
-
-  bool _loadingVideo = false;
-  bool _isPlaying = false;
-
-  String? _playbackError;
-
-  Uri? _validHttpUri(String value) {
-    final text = value.trim();
-    if (text.isEmpty) return null;
-
-    final uri = Uri.tryParse(text);
-
-    if (uri == null ||
-        !uri.hasAuthority ||
-        uri.host.isEmpty ||
-        (uri.scheme != 'https' && uri.scheme != 'http')) {
-      return null;
-    }
-
-    return uri;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-
-    if (widget.active) {
-      unawaited(_startVideo());
+    if (previous != null) {
+      try {
+        await previous.dispose();
+      } catch (_) {}
     }
   }
 
-  @override
-  void didUpdateWidget(covariant _ShortItemCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    final sourceChanged =
-        oldWidget.item.videoUrl != widget.item.videoUrl;
-
-    if (sourceChanged) {
-      if (widget.active) {
-        unawaited(_startVideo());
-      } else {
-        unawaited(_stopVideo());
-      }
+  Future<void> _activateVideo(int index) async {
+    if (!mounted ||
+        index < 0 ||
+        index >= _reels.length) {
       return;
     }
 
-    if (oldWidget.active != widget.active) {
-      if (widget.active) {
-        unawaited(_startVideo());
-      } else {
-        unawaited(_stopVideo());
+    final reel = _reels[index];
+
+    if (reel.videoUrl.trim().isEmpty) {
+      await _stopVideo();
+
+      if (mounted) {
+        setState(() {
+          _videoFailed = true;
+        });
       }
+
+      return;
     }
-  }
 
-  Future<void> _startVideo() async {
-    final generation = ++_generation;
+    if (_activeReelId == reel.id &&
+        _videoController != null) {
+      return;
+    }
 
-    final previous = _controller;
-    final previousListener = _controllerListener;
+    final previous = _videoController;
 
-    _controller = null;
-    _controllerListener = null;
+    _videoController = null;
+    _activeReelId = reel.id;
+
+    if (mounted) {
+      setState(() {
+        _videoLoading = true;
+        _videoFailed = false;
+      });
+    }
 
     if (previous != null) {
-      if (previousListener != null) {
-        previous.removeListener(previousListener);
-      }
-
-      try {
-        await previous.pause();
-      } catch (_) {}
-
       try {
         await previous.dispose();
       } catch (_) {}
     }
 
-    if (!mounted ||
-        !widget.active ||
-        generation != _generation) {
-      return;
-    }
-
-    final uri = _validHttpUri(widget.item.videoUrl);
-
-    if (uri == null) {
-      setState(() {
-        _loadingVideo = false;
-        _isPlaying = false;
-        _playbackError = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _loadingVideo = true;
-      _isPlaying = false;
-      _playbackError = null;
-    });
-
     final controller = VideoPlayerController.networkUrl(
-      uri,
-      videoPlayerOptions: VideoPlayerOptions(
-        mixWithOthers: false,
-      ),
+      Uri.parse(reel.videoUrl),
+      httpHeaders: const {
+        'Accept': '*/*',
+      },
     );
 
-    _controller = controller;
-
-    void listener() {
-      if (!mounted ||
-          generation != _generation ||
-          !identical(_controller, controller)) {
-        return;
-      }
-
-      final value = controller.value;
-
-      if (value.hasError) {
-        setState(() {
-          _loadingVideo = false;
-          _isPlaying = false;
-          _playbackError = 'تعذر تشغيل الفيديو من المصدر الحالي.';
-        });
-        return;
-      }
-
-      if (value.isInitialized) {
-        final nextPlaying = value.isPlaying;
-
-        if (_loadingVideo || _isPlaying != nextPlaying) {
-          setState(() {
-            _loadingVideo = false;
-            _isPlaying = nextPlaying;
-          });
-        }
-      }
-    }
-
-    _controllerListener = listener;
-    controller.addListener(listener);
+    _videoController = controller;
 
     try {
       await controller.initialize().timeout(
-        const Duration(seconds: 20),
+        const Duration(seconds: 25),
       );
 
       if (!mounted ||
-          !widget.active ||
-          generation != _generation ||
-          !identical(_controller, controller)) {
-        controller.removeListener(listener);
+          !identical(_videoController, controller) ||
+          _activeReelId != reel.id) {
         await controller.dispose();
         return;
       }
 
       await controller.setLooping(true);
+      await controller.setVolume(1);
       await controller.play();
 
       if (!mounted ||
-          generation != _generation ||
-          !identical(_controller, controller)) {
+          !identical(_videoController, controller)) {
+        await controller.dispose();
         return;
       }
 
       setState(() {
-        _loadingVideo = false;
-        _isPlaying = true;
-        _playbackError = null;
-      });
-    } on TimeoutException {
-      if (!mounted || generation != _generation) return;
-
-      setState(() {
-        _loadingVideo = false;
-        _isPlaying = false;
-        _playbackError = 'تأخر تشغيل الفيديو بسبب بطء الاتصال.';
+        _videoLoading = false;
+        _videoFailed = false;
       });
     } catch (_) {
-      if (!mounted || generation != _generation) return;
+      if (!mounted ||
+          !identical(_videoController, controller)) {
+        try {
+          await controller.dispose();
+        } catch (_) {}
+        return;
+      }
 
       setState(() {
-        _loadingVideo = false;
-        _isPlaying = false;
-        _playbackError = 'لم يتمكن مشغل الفيديو من فتح هذا الرابط.';
+        _videoLoading = false;
+        _videoFailed = true;
       });
     }
   }
 
-  Future<void> _stopVideo() async {
-    final generation = ++_generation;
-
-    final controller = _controller;
-    final listener = _controllerListener;
-
-    _controller = null;
-    _controllerListener = null;
-
-    if (controller != null) {
-      if (listener != null) {
-        controller.removeListener(listener);
-      }
-
-      try {
-        await controller.pause();
-      } catch (_) {}
-
-      try {
-        await controller.dispose();
-      } catch (_) {}
+  void _onPageChanged(int index) {
+    if (!mounted || index < 0 || index >= _reels.length) {
+      return;
     }
 
-    if (!mounted || generation != _generation) return;
-
     setState(() {
-      _loadingVideo = false;
-      _isPlaying = false;
+      _activeIndex = index;
     });
+
+    unawaited(_activateVideo(index));
   }
 
   Future<void> _togglePlayback() async {
-    if (!widget.active) return;
-
-    final controller = _controller;
+    final controller = _videoController;
 
     if (controller == null ||
         !controller.value.isInitialized) {
-      await _startVideo();
       return;
     }
 
@@ -676,379 +310,1043 @@ class _ShortItemCardState extends State<_ShortItemCard> {
       } else {
         await controller.play();
       }
+
+      if (mounted) setState(() {});
+    } catch (_) {
+      _message('تعذر التحكم في تشغيل الفيديو.');
+    }
+  }
+
+  Future<String?> _askCaption() async {
+    final controller = TextEditingController();
+
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text(
+              'وصف الفيديو',
+              textDirection: TextDirection.rtl,
+            ),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 220,
+              maxLines: 3,
+              textDirection: TextDirection.rtl,
+              decoration: const InputDecoration(
+                hintText: 'اكتب وصفًا قصيرًا للفيديو',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(dialogContext).pop(null),
+                child: const Text('إلغاء'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext)
+                    .pop(controller.text.trim()),
+                child: const Text('متابعة'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _pickAndUploadReel() async {
+    if (_uploading) return;
+
+    try {
+      final file = await _picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(minutes: 2),
+      );
+
+      if (file == null || !mounted) return;
+
+      final length = await file.length();
+
+      if (length <= 0) {
+        _message('الفيديو فارغ.');
+        return;
+      }
+
+      if (length > SocialReelsService.maximumVideoBytes) {
+        _message('حجم الفيديو أكبر من 50 ميجابايت.');
+        return;
+      }
+
+      final caption = await _askCaption();
+
+      if (caption == null || !mounted) return;
+
+      setState(() {
+        _uploading = true;
+      });
+
+      await _stopVideo();
+
+      final uploaded = await _service.uploadReel(
+        file: file,
+        caption: caption,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _uploading = false;
+        _error = '';
+      });
+
+      _message('تم رفع الريل ونشره بنجاح ✅');
+
+      await _loadFeed(silent: true);
+
+      final index = _reels.indexWhere(
+        (item) => item.id == uploaded.id,
+      );
+
+      if (index >= 0 && _pageController.hasClients) {
+        _pageController.jumpToPage(index);
+        _onPageChanged(index);
+      }
+    } on SocialReelsException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _uploading = false;
+      });
+
+      _message(error.message);
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _playbackError = 'تعذر تغيير حالة تشغيل الفيديو.';
+        _uploading = false;
       });
+
+      _message(
+        'تعذر رفع الفيديو. حدّث صفحة الريلز أولًا قبل إعادة المحاولة.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploading = false;
+        });
+      }
     }
   }
 
-  Future<void> _openExternal() async {
-    final uri = _validHttpUri(widget.item.videoUrl);
-    if (uri == null) return;
+  void _replaceReel(
+    String reelId,
+    SocialReel Function(SocialReel) update,
+  ) {
+    if (!mounted) return;
+
+    final index = _reels.indexWhere(
+      (item) => item.id == reelId,
+    );
+
+    if (index < 0) return;
+
+    setState(() {
+      _reels[index] = update(_reels[index]);
+    });
+  }
+
+  Future<void> _toggleLike(SocialReel reel) async {
+    if (_busyLikes.contains(reel.id)) return;
+
+    setState(() {
+      _busyLikes.add(reel.id);
+    });
 
     try {
-      final opened = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      if (reel.likedByMe) {
+        await _service.unlikeReel(reel.id);
 
-      if (!opened && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تعذر فتح رابط الفيديو خارج التطبيق.'),
-          ),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذر فتح رابط الفيديو.'),
-        ),
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    _generation++;
-
-    final controller = _controller;
-    final listener = _controllerListener;
-
-    if (controller != null) {
-      if (listener != null) {
-        controller.removeListener(listener);
-      }
-
-      unawaited(controller.dispose());
-    }
-
-    _controller = null;
-    _controllerListener = null;
-
-    super.dispose();
-  }
-
-  Widget _buildThumbnail() {
-    final uri = _validHttpUri(widget.item.thumbnail);
-
-    if (uri == null) {
-      return Container(
-        color: const Color(0xFF111522),
-        child: const Center(
-          child: Icon(
-            Icons.video_library_rounded,
-            color: Colors.white24,
-            size: 80,
-          ),
-        ),
-      );
-    }
-
-    return Image.network(
-      uri.toString(),
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        return Container(
-          color: const Color(0xFF111522),
-          child: const Center(
-            child: Icon(
-              Icons.video_library_rounded,
-              color: Colors.white24,
-              size: 80,
+        _replaceReel(
+          reel.id,
+          (item) => item.copyWith(
+            likedByMe: false,
+            likesCount: (item.likesCount - 1).clamp(
+              0,
+              1 << 30,
             ),
           ),
         );
-      },
+      } else {
+        await _service.likeReel(reel.id);
+
+        _replaceReel(
+          reel.id,
+          (item) => item.copyWith(
+            likedByMe: true,
+            likesCount: item.likesCount + 1,
+          ),
+        );
+      }
+    } on SocialReelsException catch (error) {
+      _message(error.message);
+    } catch (_) {
+      _message('تعذر تسجيل الإعجاب.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyLikes.remove(reel.id);
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleFollow(SocialReel reel) async {
+    if (reel.isMine ||
+        _busyFollows.contains(reel.ownerId)) {
+      return;
+    }
+
+    setState(() {
+      _busyFollows.add(reel.ownerId);
+    });
+
+    try {
+      if (reel.followedByMe) {
+        await _service.unfollowUser(reel.ownerId);
+      } else {
+        await _service.followUser(reel.ownerId);
+      }
+
+      _replaceReel(
+        reel.id,
+        (item) => item.copyWith(
+          followedByMe: !reel.followedByMe,
+        ),
+      );
+    } on SocialReelsException catch (error) {
+      _message(error.message);
+    } catch (_) {
+      _message('تعذرت متابعة صاحب الفيديو.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyFollows.remove(reel.ownerId);
+        });
+      }
+    }
+  }
+
+  Future<void> _openComments(SocialReel reel) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF121725),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(22),
+        ),
+      ),
+      builder: (_) => _ReelCommentsSheet(
+        reelId: reel.id,
+      ),
+    );
+
+    if (!mounted) return;
+
+    await _loadFeed(silent: true);
+  }
+
+  Widget _buildVideoSurface(SocialReel reel) {
+    final controller = _videoController;
+
+    if (_activeReelId == reel.id &&
+        controller != null &&
+        controller.value.isInitialized) {
+      final size = controller.value.size;
+
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _togglePlayback,
+        child: SizedBox.expand(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: size.width,
+              height: size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_videoLoading && _activeReelId == reel.id) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF63E6FF),
+        ),
+      );
+    }
+
+    if (_videoFailed && _activeReelId == reel.id) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: Colors.white70,
+              size: 42,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'تعذر تشغيل الفيديو',
+              style: TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => _activateVideo(_activeIndex),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('إعادة المحاولة'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const Center(
+      child: Icon(
+        Icons.play_circle_outline_rounded,
+        color: Colors.white38,
+        size: 55,
+      ),
     );
   }
 
-  Widget _buildMedia() {
-    final controller = _controller;
-
-    if (controller == null ||
-        !controller.value.isInitialized) {
-      return _buildThumbnail();
-    }
-
-    final size = controller.value.size;
-
-    if (size.width <= 0 || size.height <= 0) {
-      return _buildThumbnail();
-    }
-
-    return ColoredBox(
-      color: Colors.black,
-      child: FittedBox(
-        fit: BoxFit.cover,
-        clipBehavior: Clip.hardEdge,
-        child: SizedBox(
-          width: size.width,
-          height: size.height,
-          child: VideoPlayer(controller),
+  Widget _actionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color color = Colors.white,
+    bool busy = false,
+  }) {
+    return InkWell(
+      onTap: busy ? null : onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: 9,
+          horizontal: 5,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (busy)
+              const SizedBox(
+                width: 25,
+                height: 25,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            else
+              Icon(
+                icon,
+                color: color,
+                size: 27,
+              ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildInfo() {
-    final creator = widget.item.creator.trim();
-    final title = widget.item.title.trim();
-    final description = widget.item.description.trim();
+  Widget _buildReelPage(
+    SocialReel reel,
+    int index,
+  ) {
+    final playing = _activeReelId == reel.id &&
+        (_videoController?.value.isPlaying ?? false);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (creator.isNotEmpty)
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFF67E8F9),
-                      Color(0xFFB45CFF),
-                    ],
-                  ),
-                ),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: Colors.black,
-                  size: 21,
-                ),
+    return ColoredBox(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _buildVideoSurface(reel),
+
+          Positioned(
+            top: 12,
+            right: 10,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(14),
               ),
-              const SizedBox(width: 9),
-              Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
                 child: Text(
-                  creator,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  '${index + 1} / ${_reels.length}',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.w900,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-            ],
-          ),
-        const SizedBox(height: 9),
-        Text(
-          title.isEmpty ? 'فيديو قصير' : title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-            height: 1.25,
-          ),
-        ),
-        if (description.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            description,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 12,
-              height: 1.4,
             ),
           ),
-        ],
-      ],
-    );
-  }
 
-  Widget _buildActions() {
-    final videoUri = _validHttpUri(widget.item.videoUrl);
-
-    return Column(
-      children: [
-        _ActionButton(
-          icon: _isPlaying
-              ? Icons.pause_rounded
-              : Icons.play_arrow_rounded,
-          label: _isPlaying ? 'إيقاف' : 'تشغيل',
-          onTap: videoUri == null ? null : _togglePlayback,
-        ),
-        const SizedBox(height: 12),
-        _ActionButton(
-          icon: Icons.open_in_new_rounded,
-          label: 'فتح',
-          onTap: videoUri == null ? null : _openExternal,
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = _controller;
-    final canShowProgress =
-        controller != null && controller.value.isInitialized;
-
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _togglePlayback,
-          child: _buildMedia(),
-        ),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0x22000000),
-                Color(0x33000000),
-                Color(0xDD000000),
+          Positioned(
+            right: 10,
+            bottom: 25,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _actionButton(
+                  icon: reel.likedByMe
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  label: reel.likesCount.toString(),
+                  color: reel.likedByMe
+                      ? Colors.pinkAccent
+                      : Colors.white,
+                  busy: _busyLikes.contains(reel.id),
+                  onTap: () => _toggleLike(reel),
+                ),
+                _actionButton(
+                  icon: Icons.mode_comment_outlined,
+                  label: reel.commentsCount.toString(),
+                  onTap: () => _openComments(reel),
+                ),
+                if (!reel.isMine)
+                  _actionButton(
+                    icon: reel.followedByMe
+                        ? Icons.person_remove_alt_1_rounded
+                        : Icons.person_add_alt_1_rounded,
+                    label: reel.followedByMe
+                        ? 'متابَع'
+                        : 'متابعة',
+                    busy: _busyFollows.contains(reel.ownerId),
+                    onTap: () => _toggleFollow(reel),
+                  ),
               ],
-              stops: [0.0, 0.45, 1.0],
             ),
           ),
-        ),
-        Positioned(
-          right: 14,
-          left: 14,
-          bottom: 34,
-          child: _buildInfo(),
-        ),
-        Positioned(
-          left: 12,
-          bottom: 95,
-          child: _buildActions(),
-        ),
-        if (_loadingVideo)
-          const Positioned.fill(
-            child: IgnorePointer(
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF67E8F9),
+
+          Positioned(
+            left: 78,
+            right: 13,
+            bottom: 34,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.8),
+                    Colors.black.withValues(alpha: 0.0),
+                  ],
                 ),
               ),
-            ),
-          ),
-        if (_playbackError != null)
-          Positioned(
-            top: 18,
-            left: 16,
-            right: 16,
-            child: Material(
-              color: const Color(0xDD182333),
-              borderRadius: BorderRadius.circular(12),
               child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(
+                  8,
+                  35,
+                  8,
+                  8,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.info_outline_rounded,
-                      color: Color(0xFF67E8F9),
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 15,
+                          backgroundColor: Color(0xFF202B43),
+                          child: Icon(
+                            Icons.person_rounded,
+                            color: Color(0xFF63E6FF),
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            reel.username,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _playbackError!,
+                    if (reel.caption.trim().isNotEmpty) ...[
+                      const SizedBox(height: 9),
+                      Text(
+                        reel.caption,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                        textDirection: TextDirection.rtl,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 11,
+                          fontSize: 12,
+                          height: 1.5,
                         ),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: 'إعادة التشغيل',
-                      onPressed: widget.active
-                          ? () => unawaited(_startVideo())
-                          : null,
-                      icon: const Icon(
-                        Icons.refresh_rounded,
-                        color: Color(0xFF67E8F9),
-                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.cloud_done_outlined,
+                          color: Color(0xFF63E6FF),
+                          size: 14,
+                        ),
+                        const SizedBox(width: 5),
+                        const Text(
+                          'ريلز المجتمع',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (_activeReelId == reel.id)
+                          Icon(
+                            playing
+                                ? Icons.volume_up_rounded
+                                : Icons.volume_off_rounded,
+                            color: Colors.white70,
+                            size: 16,
+                          ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
           ),
-        if (canShowProgress)
-          Positioned(
-            bottom: 7,
-            left: 14,
-            right: 14,
-            child: VideoProgressIndicator(
-              controller!,
-              allowScrubbing: true,
-              colors: const VideoProgressColors(
-                playedColor: Color(0xFF67E8F9),
-                bufferedColor: Colors.white38,
-                backgroundColor: Colors.white24,
+
+          if (_activeReelId == reel.id &&
+              controllerIsPlaying(reel.id) == false &&
+              !_videoLoading &&
+              !_videoFailed)
+            Center(
+              child: Icon(
+                Icons.play_circle_outline_rounded,
+                color: Colors.white.withValues(alpha: 0.8),
+                size: 64,
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  bool controllerIsPlaying(String reelId) {
+    return _activeReelId == reelId &&
+        (_videoController?.value.isPlaying ?? false);
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.video_library_outlined,
+              color: Color(0xFF63E6FF),
+              size: 62,
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'لسه مفيش ريلز منشورة',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'ارفع أول فيديو ليك وشاركه مع مجتمع صاحبي AI.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white70,
+                height: 1.6,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed:
+                  _uploading ? null : _pickAndUploadReel,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('رفع أول Reel'),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _refreshing ? null : _loadFeed,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('تحديث'),
+            ),
+            if (_error.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading && _reels.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF63E6FF),
+        ),
+      );
+    }
+
+    if (_reels.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return PageView.builder(
+      key: const ValueKey<String>('social-reels-page-view'),
+      controller: _pageController,
+      scrollDirection: Axis.vertical,
+      itemCount: _reels.length,
+      onPageChanged: _onPageChanged,
+      itemBuilder: (context, index) {
+        return _buildReelPage(
+          _reels[index],
+          index,
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Column(
+            children: [
+              AppHeader(
+                onProfileTap: widget.onProfileTap,
+                onAudioTap: widget.onAudioTap,
+              ),
+              Container(
+                height: 46,
+                color: const Color(0xFF0E1421),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'ريلز المجتمع',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'تحديث الريلز',
+                      onPressed:
+                          _refreshing ? null : _loadFeed,
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        color: Color(0xFF63E6FF),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'رفع فيديو',
+                      onPressed:
+                          _uploading ? null : _pickAndUploadReel,
+                      icon: _uploading
+                          ? const SizedBox(
+                              width: 19,
+                              height: 19,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.add_box_rounded,
+                              color: Color(0xFFFF4D8D),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_uploading)
+                const LinearProgressIndicator(
+                  minHeight: 2,
+                  color: Color(0xFFFF4D8D),
+                ),
+              Expanded(
+                child: _buildBody(),
+              ),
+            ],
           ),
-      ],
+        ),
+      ),
     );
   }
 }
 
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.onTap,
+class _ReelCommentsSheet extends StatefulWidget {
+  const _ReelCommentsSheet({
+    required this.reelId,
   });
 
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
+  final String reelId;
+
+  @override
+  State<_ReelCommentsSheet> createState() =>
+      _ReelCommentsSheetState();
+}
+
+class _ReelCommentsSheetState
+    extends State<_ReelCommentsSheet> {
+  final SocialReelsService _service =
+      SocialReelsService.instance;
+
+  final TextEditingController _controller =
+      TextEditingController();
+
+  final ScrollController _scrollController =
+      ScrollController();
+
+  List<SocialReelComment> _comments = [];
+
+  bool _loading = true;
+  bool _sending = false;
+
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadComments());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadComments() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+
+    try {
+      final comments =
+          await _service.loadComments(widget.reelId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _comments = comments;
+        _loading = false;
+      });
+    } on SocialReelsException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _loading = false;
+        _error = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _loading = false;
+        _error = 'تعذر تحميل التعليقات.';
+      });
+    }
+  }
+
+  Future<void> _sendComment() async {
+    if (_sending) return;
+
+    final text = _controller.text.trim();
+
+    if (text.isEmpty) return;
+
+    setState(() {
+      _sending = true;
+    });
+
+    try {
+      final comment = await _service.addComment(
+        reelId: widget.reelId,
+        text: text,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _comments = [..._comments, comment];
+        _controller.clear();
+        _sending = false;
+      });
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    } on SocialReelsException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _sending = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _sending = false;
+      });
+    }
+  }
+
+  Widget _buildComment(SocialReelComment comment) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 9,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CircleAvatar(
+            radius: 17,
+            backgroundColor: Color(0xFF202B43),
+            child: Icon(
+              Icons.person_rounded,
+              color: Color(0xFF63E6FF),
+              size: 19,
+            ),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  comment.username,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  comment.text,
+                  textDirection: TextDirection.rtl,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (comment.isMine)
+            const Icon(
+              Icons.verified_user_outlined,
+              color: Colors.white24,
+              size: 16,
+            ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onTap != null;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Opacity(
-          opacity: enabled ? 1 : 0.4,
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: bottomInset,
+        ),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.72,
           child: Column(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xAA10131C),
-                  border: Border.fromBorderSide(
-                    BorderSide(color: Colors.white24),
-                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  12,
+                  16,
+                  8,
                 ),
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 25,
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'التعليقات',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'تحديث التعليقات',
+                      onPressed: _loading ? null : _loadComments,
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        color: Color(0xFF63E6FF),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w700,
+              const Divider(
+                color: Colors.white12,
+                height: 1,
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(
+                        child: CircularProgressIndicator(),
+                      )
+                    : _comments.isEmpty
+                        ? Center(
+                            child: Text(
+                              _error.isNotEmpty
+                                  ? _error
+                                  : 'لا توجد تعليقات حتى الآن.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white60,
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            itemCount: _comments.length,
+                            itemBuilder: (context, index) {
+                              return _buildComment(
+                                _comments[index],
+                              );
+                            },
+                          ),
+              ),
+              const Divider(
+                color: Colors.white12,
+                height: 1,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  12,
+                  9,
+                  12,
+                  10,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        minLines: 1,
+                        maxLines: 3,
+                        maxLength: 1000,
+                        textDirection: TextDirection.rtl,
+                        decoration: InputDecoration(
+                          counterText: '',
+                          hintText: 'اكتب تعليقك...',
+                          filled: true,
+                          fillColor: const Color(0xFF202638),
+                          contentPadding:
+                              const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      onPressed:
+                          _sending ? null : _sendComment,
+                      icon: _sending
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.send_rounded),
+                    ),
+                  ],
                 ),
               ),
             ],
