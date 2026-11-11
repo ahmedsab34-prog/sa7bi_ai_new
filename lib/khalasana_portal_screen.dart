@@ -3,22 +3,20 @@ import 'package:flutter/material.dart';
 
 import 'chat_screen.dart';
 import 'config/service_keys.dart';
-import 'secure_venting_screen.dart';
 import 'service_config.dart';
-import 'social_community_hub_screen.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
 const double _kKhalasanaRailWidth = 48;
 const double _kKhalasanaTabWidth = 44;
 const double _kKhalasanaTabHeight = 44;
 
-/// خلصانة AI: محادثة عامة وثمانية تخصصات،
-/// مع فصل الفضفضة السرية ومركز التواصل عن التخصصات.
+/// خلصانة AI: محادثة عامة وتخصصات التطبيق.
+/// لا نضع أزرار التواصل أو الفضفضة في أسفل شريط التخصصات.
 class KhalasanaPortalScreen extends StatefulWidget {
   const KhalasanaPortalScreen({super.key});
 
   static const String contextText = '''
-أنت خلصانة AI، المساعد الشامل داخل تطبيق صاحبي AI.
+أنت "خلصانة AI"، المساعد الشامل داخل تطبيق صاحبي AI.
 
 ساعد المستخدم مباشرة في أي موضوع، حتى إذا لم يختر مجالًا من التبويبات.
 
@@ -31,7 +29,7 @@ class KhalasanaPortalScreen extends StatefulWidget {
 - طلب تعديل صورة موجودة عندما تكون أداة التعديل المناسبة متاحة.
 
 إذا أرسل المستخدم صورة، حلل ما يظهر فيها فقط ولا تخمن التفاصيل غير الواضحة.
-إذا طلب إنشاء صورة، استخدم مسار إنشاء الصور الموجود في التطبيق.
+إذا طلب المستخدم إنشاء صورة، استخدم مسار إنشاء الصور الموجود في التطبيق.
 إذا لم تتوفر أداة أو خدمة فعلية، وضح ذلك ولا تدّع تنفيذها.
 
 عندما يختار المستخدم مجالًا من التبويبات، استخدم سياق المجال لتحسين الإجابة،
@@ -59,8 +57,8 @@ class _KhalasanaPortalScreenState
     extends State<KhalasanaPortalScreen> {
   static const Color _background = Color(0xFF070A12);
 
-  // المحادثة العامة + التخصصات الثمانية + الفضفضة المنفصلة.
-  // التواصل ليس تخصصًا داخل خلصانة؛ له مركز مستقل.
+  // المحادثة العامة + الخدمات المتخصصة.
+  // التواصل والفضفضة لهما مداخل أخرى خارج هذا الشريط.
   static final List<_KhalasanaTarget> _targets =
       <_KhalasanaTarget>[
     _KhalasanaTarget(
@@ -71,22 +69,19 @@ class _KhalasanaPortalScreenState
       isGeneral: true,
     ),
     for (final service in sa7biServices)
-      if (service.serviceKey != ServiceKeys.social)
+      if (service.serviceKey != ServiceKeys.social &&
+          service.serviceKey != ServiceKeys.venting)
         _KhalasanaTarget(
           serviceKey: service.serviceKey,
           title: service.title,
           context: service.aiRole,
           service: service,
-          isVenting: service.serviceKey == ServiceKeys.venting,
         ),
   ];
 
   static final List<_KhalasanaTarget> _specialties =
       _targets
-          .where(
-            (target) =>
-                !target.isGeneral && !target.isVenting,
-          )
+          .where((target) => !target.isGeneral)
           .toList(growable: false);
 
   String _selectedServiceKey = ServiceKeys.khalasana;
@@ -95,38 +90,22 @@ class _KhalasanaPortalScreenState
   final Map<String, Widget> _chatScreens =
       <String, Widget>{};
 
-  final GlobalKey<SecureVentingScreenState> _ventingKey =
-      GlobalKey<SecureVentingScreenState>();
-
   _KhalasanaTarget get _activeTarget {
     for (final target in _targets) {
       if (target.serviceKey == _selectedServiceKey) {
         return target;
       }
     }
+
     return _targets.first;
   }
 
   void _selectTarget(_KhalasanaTarget target) {
     if (_selectedServiceKey == target.serviceKey) return;
 
-    // قفل الفضفضة فور الانتقال إلى أي قسم آخر.
-    if (_selectedServiceKey == ServiceKeys.venting &&
-        target.serviceKey != ServiceKeys.venting) {
-      _ventingKey.currentState?.lock();
-    }
-
     setState(() {
       _selectedServiceKey = target.serviceKey;
     });
-  }
-
-  void _openSocialCenter() {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const SocialCommunityHubScreen(),
-      ),
-    );
   }
 
   Widget _createChatScreen(_KhalasanaTarget target) {
@@ -139,7 +118,7 @@ class _KhalasanaPortalScreenState
             'لا تجبر المستخدم على تغيير التبويب، وتظل أدوات النص والصور '
             'والصوت والفيديو متاحة حسب إمكانات التطبيق.';
 
-    final chat = ChatScreen(
+    return ChatScreen(
       key: ValueKey<String>(
         'khalasana-chat-${target.serviceKey}',
       ),
@@ -148,15 +127,6 @@ class _KhalasanaPortalScreenState
       serviceContext: contextText,
       embedded: true,
     );
-
-    if (target.isVenting) {
-      return SecureVentingScreen(
-        key: _ventingKey,
-        child: chat,
-      );
-    }
-
-    return chat;
   }
 
   Widget _buildChatStack() {
@@ -238,33 +208,6 @@ class _KhalasanaPortalScreenState
               },
             ),
           ),
-          const Divider(
-            height: 8,
-            thickness: 0.7,
-            color: Color(0x553F536B),
-          ),
-          _UtilityTab(
-            icon: Icons.lock_outline_rounded,
-            label: 'فضفضة',
-            color: const Color(0xFFD18BFF),
-            selected:
-                _selectedServiceKey == ServiceKeys.venting,
-            onTap: () {
-              final target = _targets.firstWhere(
-                (item) => item.isVenting,
-              );
-              _selectTarget(target);
-            },
-          ),
-          const SizedBox(height: 4),
-          _UtilityTab(
-            icon: Icons.groups_rounded,
-            label: 'تواصل',
-            color: const Color(0xFF72D7FF),
-            selected: false,
-            onTap: _openSocialCenter,
-          ),
-          const SizedBox(height: 3),
         ],
       ),
     );
@@ -308,7 +251,6 @@ class _KhalasanaTarget {
     required this.context,
     required this.service,
     this.isGeneral = false,
-    this.isVenting = false,
   });
 
   final String serviceKey;
@@ -316,7 +258,6 @@ class _KhalasanaTarget {
   final String context;
   final Sa7biService service;
   final bool isGeneral;
-  final bool isVenting;
 }
 
 class _GeneralModeTab extends StatelessWidget {
@@ -473,66 +414,6 @@ class _KhalasanaServiceTab extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _UtilityTab extends StatelessWidget {
-  const _UtilityTab({
-    required this.icon,
-    required this.label,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            width: _kKhalasanaTabWidth,
-            height: 42,
-            decoration: BoxDecoration(
-              color: selected
-                  ? color.withValues(alpha: 0.18)
-                  : const Color(0xCC151D2A),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: selected
-                    ? color.withValues(alpha: 0.85)
-                    : const Color(0x553F536B),
-              ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: color, size: 17),
-                const SizedBox(height: 1),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
             ),
           ),
         ),
