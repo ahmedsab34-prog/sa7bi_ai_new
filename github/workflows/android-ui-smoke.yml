@@ -1,0 +1,57 @@
+
+name: Android UI navigation smoke test
+
+on:
+  push:
+    branches:
+      - fix/build-692-network-client-lifecycle
+  pull_request:
+    branches:
+      - fix/build-692-network-client-lifecycle
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-ui-smoke:
+    name: Test the four main tabs on Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.1'
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Verify integration test dependencies
+        run: |
+          grep -q "integration_test:" pubspec.yaml
+          test -f integration_test/sa7bi_navigation_test.dart
+
+      - name: Run Android emulator navigation test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          script: |
+            flutter test integration_test/sa7bi_navigation_test.dart \
+              -d emulator-5554 \
+              --reporter expanded
