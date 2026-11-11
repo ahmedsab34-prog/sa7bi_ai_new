@@ -1,8 +1,10 @@
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../monetization_config.dart';
 import '../settings_screen.dart';
+import '../social_connections_screen.dart';
 
 class ProfileActions extends StatelessWidget {
   final void Function(String message) onMessage;
@@ -24,9 +26,17 @@ class ProfileActions extends StatelessWidget {
   }
 
   void _openSettings(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const SettingsScreen(),
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const SettingsScreen(),
+      ),
+    );
+  }
+
+  void _openConnections(BuildContext context) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const SocialConnectionsScreen(),
       ),
     );
   }
@@ -44,18 +54,27 @@ class ProfileActions extends StatelessWidget {
         children: [
           Expanded(
             child: _buildActionTile(
-              context: context,
+              icon: Icons.person_search_rounded,
+              title: 'البحث عن أصحاب',
+              color: const Color(0xFF67B7FF),
+              onTap: () => _openConnections(context),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _buildActionTile(
               icon: Icons.share_rounded,
               title: 'مشاركة التطبيق',
+              color: const Color(0xFFE6A1C0),
               onTap: _shareApp,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Expanded(
             child: _buildActionTile(
-              context: context,
               icon: Icons.settings_rounded,
               title: 'الإعدادات',
+              color: const Color(0xFF83C8FF),
               onTap: () => _openSettings(context),
             ),
           ),
@@ -65,68 +84,77 @@ class ProfileActions extends StatelessWidget {
   }
 
   Widget _buildActionTile({
-    required BuildContext context,
     required IconData icon,
     required String title,
+    required Color color,
     required VoidCallback onTap,
   }) {
-    final colors = Theme.of(context).colorScheme;
-
     return Material(
-      color: colors.surfaceContainerHighest
-          .withValues(alpha: 0.45),
+      color: const Color(0xFF101A2B),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: Container(
           constraints: const BoxConstraints(
-            minHeight: 58,
+            minHeight: 64,
           ),
           padding: const EdgeInsets.symmetric(
-            horizontal: 8,
+            horizontal: 4,
             vertical: 7,
           ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: colors.outlineVariant
-                  .withValues(alpha: 0.35),
+              color: color.withValues(alpha: 0.28),
             ),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF192943),
+                Color(0xFF0C1423),
+              ],
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 5,
+                offset: Offset(0, 2),
+              ),
+            ],
           ),
-          child: Row(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
+                width: 29,
+                height: 29,
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFFFFD54F),
-                      Color(0xFFB45CFF),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                  color: color.withValues(alpha: 0.13),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.4),
                   ),
                 ),
                 child: Icon(
                   icon,
-                  color: Colors.black,
-                  size: 18,
+                  color: color,
+                  size: 17,
                 ),
               ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  title,
-                  textDirection: TextDirection.rtl,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                textDirection: TextDirection.rtl,
+                maxLines: 2,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  height: 1.2,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
