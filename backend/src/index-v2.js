@@ -1,6 +1,8 @@
-// Sa7bi AI Worker entry point for social features, verified invite links,
-// and the additive Arabic QuranEnc tafsir-text endpoints.
-// No production deployment or environment changes are performed by this file.
+
+// Sa7bi AI Worker entry point.
+// Preserves existing social, messaging, matchmaking,
+// invite links and tafsir-text routes.
+// Adds authenticated R2-backed social reels.
 
 import worker, {
   Sa7biCredits,
@@ -10,6 +12,7 @@ import worker, {
 import { handleSocialMessaging } from "./social_messaging.js";
 import { handleSocialCommunity } from "./social_community.js";
 import { handleSocialMatchmaking } from "./social_matchmaking.js";
+import { handleSocialMedia } from "./social_media.js";
 
 import {
   handleTafsirText,
@@ -149,6 +152,11 @@ function handleAndroidAssetLinks() {
 
 export class Sa7biSocial extends BaseSa7biSocial {
   async fetch(request) {
+    const mediaResponse =
+      await handleSocialMedia(request, this);
+
+    if (mediaResponse) return mediaResponse;
+
     const matchmakingResponse =
       await handleSocialMatchmaking(request, this);
 
