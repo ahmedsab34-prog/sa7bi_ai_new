@@ -273,7 +273,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       if (_looksLikeImageRequest(text)) {
-        // امسح الطلب من خانة الكتابة قبل بدء إنشاء الصورة.
         _textController.clear();
         await _generateImage(text);
         return;
@@ -302,8 +301,6 @@ class _ChatScreenState extends State<ChatScreen> {
       _scrollToBottom();
       _chatController.setLoading(true);
 
-      // معرّف واحد للعملية كلها، ويعاد استخدامه فقط
-      // عند إعادة المحاولة الآمنة لنفس الطلب.
       final requestId = AiRequestService.createRequestId();
 
       try {
@@ -327,6 +324,7 @@ class _ChatScreenState extends State<ChatScreen> {
             text: error.message,
             isUser: false,
           );
+
           if (_isSafeProviderFailure(error)) {
             _offerSafeTextRetry(
               text,
@@ -354,9 +352,22 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   bool _isSafeProviderFailure(AiRequestException error) {
-    return error.statusCode == 502 &&
-        error.message ==
-            'تعذر تشغيل الذكاء الاصطناعي حاليًا. حاول مرة أخرى.';
+    return _isSafeProviderFailureDetails(
+      error.statusCode,
+      error.message,
+    );
+  }
+
+  bool _isSafeProviderFailureDetails(
+    int? statusCode,
+    String message,
+  ) {
+    final clean = message.trim();
+
+    return statusCode == 502 &&
+        (clean ==
+                'تعذر تشغيل الذكاء الاصطناعي حاليًا. حاول مرة أخرى.' ||
+            clean == 'خدمة الصور لم ترجع نتيجة.');
   }
 
   void _offerSafeTextRetry(
@@ -838,7 +849,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     final video = await _mediaService.pickVideo();
-
     if (video == null) return;
 
     final fileName = video.name.trim().isEmpty ? 'فيديو' : video.name;
@@ -852,27 +862,75 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
+    List<Uint8List> frames;
+
+    try {
+      frames = await VideoAnalysisService.extractFrames(video);
+    } catch (_) {
+      frames = const <Uint8List>[];
+    }
+
+    frames = VideoAnalysisService.prepareForAnalysis(frames);
+
+    if (!VideoAnalysisService.hasUsableFrames(frames)) {
+      _showMessage(
+        'لم نستطع استخراج لقطات صالحة من الفيديو. جرّب فيديو آخر أو أقصر.',
+      );
+      return;
+    }
+
     await _chatController.addVideoMessage(
-      text: 'أرسلت فيديو: $fileName\nجاري تجهيز لقطات منه للتحليل...',
+      text: 'أرسلت فيديو: $fileName\nجاري تحليل لقطاته...',
       isUser: true,
     );
 
     _scrollToBottom();
+
+    await _analyzeVideoFrames(
+      frames,
+      requestId: AiRequestService.createRequestId(),
+    );
+  }
+
+  Future<void> _analyzeVideoFrames(
+    List<Uint8List> frames, {
+    required String requestId,
+  }) async {
+    if (!mounted ||
+        frames.isEmpty ||
+        _chatController.isLoading ||
+        _generatingImage) {
+      return;
+    }
+
+    final canAfford = await _creditsService.canAfford(
+      CreditsConfig.videoAnalysisCost,
+    );
+
+    if (!canAfford) {
+      _showMessage('رصيدك من Credits غير كافٍ لتحليل الفيديو.');
+      return;
+    }
+
+    final savedFrames = frames
+        .where((frame) => frame.isNotEmpty)
+        .map(Uint8List.fromList)
+        .toList(growable: false);
+
+    if (savedFrames.isEmpty) {
+      _showMessage('لقطات الفيديو غير صالحة للتحليل.');
+      return;
+    }
+
     _chatController.setLoading(true);
+    _scrollToBottom();
 
     try {
-      final frames = await VideoAnalysisService.extractFrames(video);
-
-      if (frames.isEmpty) {
-        throw const AiRequestException(
-          'لم نستطع استخراج لقطات من الفيديو. جرّب فيديو آخر أو أقصر.',
-        );
-      }
-
       final reply = await AiRequestService.analyzeVideoFrames(
-        frames,
+        savedFrames,
         serviceTitle: _title,
         serviceContext: widget.serviceContext,
+        requestId: requestId,
       );
 
       if (mounted) {
@@ -887,6 +945,13 @@ class _ChatScreenState extends State<ChatScreen> {
           text: error.message,
           isUser: false,
         );
+
+        if (_isSafeProviderFailure(error)) {
+          _offerSafeVideoRetry(
+            savedFrames,
+            requestId,
+          );
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -899,6 +964,71 @@ class _ChatScreenState extends State<ChatScreen> {
       _chatController.setLoading(false);
       await _creditsService.refresh();
       _scrollToBottom();
+    }
+  }
+
+  void _offerSafeVideoRetry(
+    List<Uint8List> frames,
+    String requestId,
+  ) {
+    if (!mounted || frames.isEmpty) return;
+
+    final savedFrames = frames
+        .where((frame) => frame.isNotEmpty)
+        .map(Uint8List.fromList)
+        .toList(growable: false);
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF202633),
+          duration: const Duration(seconds: 14),
+          content: const Text(
+            'فشل مزوّد تحليل الفيديو بعد تحرير الحجز. يمكنك إعادة المحاولة.',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(color: Colors.white),
+          ),
+          action: SnackBarAction(
+            label: 'إعادة المحاولة',
+            textColor: const Color(0xFFFFD76A),
+            onPressed: () {
+              _retryVideoAnalysis(
+                savedFrames,
+                requestId,
+              );
+            },
+          ),
+        ),
+      );
+  }
+
+  Future<void> _retryVideoAnalysis(
+    List<Uint8List> frames,
+    String requestId,
+  ) async {
+    if (!mounted ||
+        frames.isEmpty ||
+        _sending ||
+        _generatingImage ||
+        _chatController.isLoading) {
+      return;
+    }
+
+    _sending = true;
+
+    try {
+      await _analyzeVideoFrames(
+        frames,
+        requestId: requestId,
+      );
+    } catch (_) {
+      if (mounted) {
+        _showMessage('تعذر بدء إعادة تحليل الفيديو.');
+      }
+    } finally {
+      _sending = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -1030,14 +1160,26 @@ class _ChatScreenState extends State<ChatScreen> {
     String prompt, {
     List<Uint8List> images = const [],
     bool isEditing = false,
+    bool addUserMessage = true,
+    String? requestId,
   }) async {
     if (_chatController.isLoading || _generatingImage) {
       return;
     }
 
-    final cost = CreditsConfig.imageGenerationCost;
+    final cleanPrompt = prompt.trim();
 
-    final canAfford = await _creditsService.canAfford(cost);
+    if (cleanPrompt.isEmpty) {
+      _showMessage('اكتب وصف الصورة الأول.');
+      return;
+    }
+
+    final effectiveRequestId =
+        requestId ?? AiRequestService.createRequestId();
+
+    final canAfford = await _creditsService.canAfford(
+      CreditsConfig.imageGenerationCost,
+    );
 
     if (!canAfford) {
       _showMessage(
@@ -1048,26 +1190,34 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
+    final savedImages = images
+        .where((image) => image.isNotEmpty)
+        .map(Uint8List.fromList)
+        .toList(growable: false);
+
     setState(() {
       _generatingImage = true;
     });
 
-    await _chatController.addTextMessage(
-      text: isEditing
-          ? 'طلب تعديل ${images.length > 1 ? 'الصور' : 'الصورة'}:\n$prompt'
-          : 'طلب إنشاء صورة:\n$prompt',
-      isUser: true,
-    );
+    if (addUserMessage) {
+      await _chatController.addTextMessage(
+        text: isEditing
+            ? 'طلب تعديل ${savedImages.length > 1 ? 'الصور' : 'الصورة'}:\n$cleanPrompt'
+            : 'طلب إنشاء صورة:\n$cleanPrompt',
+        isUser: true,
+      );
+    }
 
     _scrollToBottom();
     _chatController.setLoading(true);
 
     try {
       final result = await _imageService.generate(
-        prompt,
+        cleanPrompt,
         serviceContext: widget.serviceContext,
         serviceTitle: _title,
-        images: images,
+        images: savedImages,
+        requestId: effectiveRequestId,
       );
 
       if (!mounted) return;
@@ -1077,6 +1227,19 @@ class _ChatScreenState extends State<ChatScreen> {
           text: result.error ?? 'تعذر تنفيذ طلب الصورة حاليًا.',
           isUser: false,
         );
+
+        if (_isSafeProviderFailureDetails(
+          result.statusCode,
+          result.error ?? '',
+        )) {
+          _offerSafeImageGenerationRetry(
+            cleanPrompt,
+            savedImages,
+            isEditing,
+            effectiveRequestId,
+          );
+        }
+
         return;
       }
 
@@ -1103,6 +1266,15 @@ class _ChatScreenState extends State<ChatScreen> {
           text: error.message,
           isUser: false,
         );
+
+        if (_isSafeProviderFailure(error)) {
+          _offerSafeImageGenerationRetry(
+            cleanPrompt,
+            savedImages,
+            isEditing,
+            effectiveRequestId,
+          );
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -1122,6 +1294,79 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       _scrollToBottom();
+    }
+  }
+
+  void _offerSafeImageGenerationRetry(
+    String prompt,
+    List<Uint8List> images,
+    bool isEditing,
+    String requestId,
+  ) {
+    if (!mounted) return;
+
+    final savedImages = images
+        .where((image) => image.isNotEmpty)
+        .map(Uint8List.fromList)
+        .toList(growable: false);
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF202633),
+          duration: const Duration(seconds: 14),
+          content: const Text(
+            'فشل مزوّد الصور بعد تحرير حجز الرصيد. يمكنك إعادة المحاولة.',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(color: Colors.white),
+          ),
+          action: SnackBarAction(
+            label: 'إعادة المحاولة',
+            textColor: const Color(0xFFFFD76A),
+            onPressed: () {
+              _retryImageGeneration(
+                prompt,
+                savedImages,
+                isEditing,
+                requestId,
+              );
+            },
+          ),
+        ),
+      );
+  }
+
+  Future<void> _retryImageGeneration(
+    String prompt,
+    List<Uint8List> images,
+    bool isEditing,
+    String requestId,
+  ) async {
+    if (!mounted ||
+        _sending ||
+        _generatingImage ||
+        _chatController.isLoading) {
+      return;
+    }
+
+    _sending = true;
+
+    try {
+      await _generateImage(
+        prompt,
+        images: images,
+        isEditing: isEditing,
+        addUserMessage: false,
+        requestId: requestId,
+      );
+    } catch (_) {
+      if (mounted) {
+        _showMessage('تعذر بدء إعادة إنشاء الصورة.');
+      }
+    } finally {
+      _sending = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -1370,47 +1615,49 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context, _) {
         return Scaffold(
           backgroundColor: const Color(0xFF070A10),
-          appBar: widget.embedded ? null : AppBar(
-            elevation: 0,
-            backgroundColor: const Color(0xFF0C1018),
-            foregroundColor: Colors.white,
-            centerTitle: true,
-            title: Text(
-              _title,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            actions: [
-              if (_voiceService.isSpeaking)
-                IconButton(
-                  tooltip: 'إيقاف الصوت',
-                  onPressed: () async {
-                    await _voiceService.stopSpeaking();
+          appBar: widget.embedded
+              ? null
+              : AppBar(
+                  elevation: 0,
+                  backgroundColor: const Color(0xFF0C1018),
+                  foregroundColor: Colors.white,
+                  centerTitle: true,
+                  title: Text(
+                    _title,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  actions: [
+                    if (_voiceService.isSpeaking)
+                      IconButton(
+                        tooltip: 'إيقاف الصوت',
+                        onPressed: () async {
+                          await _voiceService.stopSpeaking();
 
-                    if (mounted) {
-                      setState(() {});
-                    }
-                  },
-                  icon: const Icon(
-                    Icons.volume_off_rounded,
-                    color: Color(0xFFFFD76A),
+                          if (mounted) {
+                            setState(() {});
+                          }
+                        },
+                        icon: const Icon(
+                          Icons.volume_off_rounded,
+                          color: Color(0xFFFFD76A),
+                        ),
+                      ),
+                  ],
+                  bottom: PreferredSize(
+                    preferredSize: const Size.fromHeight(56),
+                    child: SizedBox(
+                      height: 56,
+                      child: AppHeader(
+                        onProfileTap: _openProfile,
+                        onAudioTap: _openAudioCenter,
+                      ),
+                    ),
                   ),
                 ),
-            ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(56),
-              child: SizedBox(
-                height: 56,
-                child: AppHeader(
-                  onProfileTap: _openProfile,
-                  onAudioTap: _openAudioCenter,
-                ),
-              ),
-            ),
-          ),
           body: ChatScreenBody(
             chatController: _chatController,
             profileService: _profileService,
