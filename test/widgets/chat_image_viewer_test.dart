@@ -1,5 +1,6 @@
 
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +11,7 @@ void main() {
   testWidgets(
     'يفتح عارض الصورة بالحجم الكامل ويغلقه',
     (tester) async {
-      final imageBytes = base64Decode(
+      final Uint8List imageBytes = base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/m/oAAAAASUVORK5CYII=',
       );
 
@@ -21,9 +22,14 @@ void main() {
               builder: (context) {
                 return Center(
                   child: ElevatedButton(
-                    key: const ValueKey<String>('open-chat-image'),
+                    key: const ValueKey<String>(
+                      'open-chat-image',
+                    ),
                     onPressed: () {
-                      showChatImageViewer(context, imageBytes);
+                      showChatImageViewer(
+                        context,
+                        imageBytes,
+                      );
                     },
                     child: const Text('افتح الصورة'),
                   ),
@@ -87,10 +93,12 @@ void main() {
                     onPressed: () {
                       showChatImageViewer(
                         context,
-                        <int>[].toBytes(),
+                        Uint8List(0),
                       );
                     },
-                    child: const Text('اختبار صورة فارغة'),
+                    child: const Text(
+                      'اختبار صورة فارغة',
+                    ),
                   ),
                 );
               },
@@ -113,8 +121,4 @@ void main() {
       );
     },
   );
-}
-
-extension on List<int> {
-  List<int> toBytes() => List<int>.from(this);
 }
