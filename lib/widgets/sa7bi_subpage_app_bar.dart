@@ -7,7 +7,6 @@ import 'app_header.dart';
 import 'audio_center_with_header.dart';
 
 /// هيدر الصفحات الفرعية.
-/// تم تقليل ارتفاعه مع الاحتفاظ بعنوان الصفحة تحت الهيدر الرئيسي.
 class Sa7biSubpageAppBar extends StatelessWidget
     implements PreferredSizeWidget {
   const Sa7biSubpageAppBar({
@@ -17,6 +16,8 @@ class Sa7biSubpageAppBar extends StatelessWidget
     this.actions = const <Widget>[],
     this.bottom,
     this.showBackButton = true,
+    this.showTitleRow = true,
+    this.welcomeMessage = 'أنا معاك',
   });
 
   final String title;
@@ -24,11 +25,14 @@ class Sa7biSubpageAppBar extends StatelessWidget
   final List<Widget> actions;
   final PreferredSizeWidget? bottom;
   final bool showBackButton;
+  final bool showTitleRow;
+  final String welcomeMessage;
 
   static const double _headerHeight = 48;
   static const double _titleRowHeight = 36;
-  static const double _toolbarHeight =
-      _headerHeight + _titleRowHeight;
+
+  double get _toolbarHeight =>
+      _headerHeight + (showTitleRow ? _titleRowHeight : 0);
 
   @override
   Size get preferredSize => Size.fromHeight(
@@ -101,74 +105,76 @@ class Sa7biSubpageAppBar extends StatelessWidget
               child: AppHeader(
                 onProfileTap: () => _openProfile(context),
                 onAudioTap: () => _openAudio(context),
+                welcomeMessage: welcomeMessage,
               ),
             ),
-            SizedBox(
-              height: _titleRowHeight,
-              child: Row(
-                children: [
-                  if (showBackButton)
-                    SizedBox(
-                      width: 36,
-                      child: IconButton(
-                        tooltip: 'رجوع',
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () {
-                          Navigator.of(context).maybePop();
-                        },
-                        icon: const Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 19,
-                        ),
-                      ),
-                    )
-                  else
-                    const SizedBox(width: 36),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsetsDirectional.only(
-                        start: 5,
-                        end: 5,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Sa7biTheme.textPrimary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                            ),
+            if (showTitleRow)
+              SizedBox(
+                height: _titleRowHeight,
+                child: Row(
+                  children: [
+                    if (showBackButton)
+                      SizedBox(
+                        width: 36,
+                        child: IconButton(
+                          tooltip: 'رجوع',
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            Navigator.of(context).maybePop();
+                          },
+                          icon: const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 19,
                           ),
-                          if (subtitle != null &&
-                              subtitle!.trim().isNotEmpty)
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 36),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsetsDirectional.only(
+                          start: 5,
+                          end: 5,
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              subtitle!,
+                              title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                color: Sa7biTheme.textSecondary,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w500,
+                                color: Sa7biTheme.textPrimary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
-                        ],
+                            if (subtitle != null &&
+                                subtitle!.trim().isNotEmpty)
+                              Text(
+                                subtitle!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Sa7biTheme.textSecondary,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  if (actions.isNotEmpty)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: actions,
-                    ),
-                ],
+                    if (actions.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: actions,
+                      ),
+                  ],
+                ),
               ),
-            ),
           ],
         ),
       ),
