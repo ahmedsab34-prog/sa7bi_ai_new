@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -248,8 +249,15 @@ class ChatImageService {
       // الذي يسمح بإعادة المحاولة الآمنة.
       await _refreshCreditsSafely();
 
+      final retryableImageProviderFailure =
+          error.statusCode == 502 &&
+              (error.message.trim() == 'تعذر إنشاء الصورة حاليًا.' ||
+                  error.message.trim() == 'خدمة الصور لم ترجع نتيجة.');
+
       return ChatImageGenerationResult.failure(
-        error.message,
+        retryableImageProviderFailure
+            ? 'خدمة الصور لم ترجع نتيجة.'
+            : error.message,
         remainingCredits: _credits.credits,
         statusCode: error.statusCode,
       );
