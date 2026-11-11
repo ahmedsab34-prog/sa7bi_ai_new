@@ -11,7 +11,6 @@ const double _kKhalasanaTabWidth = 44;
 const double _kKhalasanaTabHeight = 44;
 
 /// خلصانة AI: محادثة عامة وتخصصات التطبيق.
-/// لا نضع أزرار التواصل أو الفضفضة في أسفل شريط التخصصات.
 class KhalasanaPortalScreen extends StatefulWidget {
   const KhalasanaPortalScreen({super.key});
 
@@ -57,8 +56,6 @@ class _KhalasanaPortalScreenState
     extends State<KhalasanaPortalScreen> {
   static const Color _background = Color(0xFF070A12);
 
-  // المحادثة العامة + الخدمات المتخصصة.
-  // التواصل والفضفضة لهما مداخل أخرى خارج هذا الشريط.
   static final List<_KhalasanaTarget> _targets =
       <_KhalasanaTarget>[
     _KhalasanaTarget(
@@ -220,6 +217,8 @@ class _KhalasanaPortalScreenState
       appBar: Sa7biSubpageAppBar(
         title: _activeTarget.title,
         subtitle: _activeTarget.service.description,
+        showTitleRow: false,
+        welcomeMessage: 'أنا معاك — خلصانة',
       ),
       body: SafeArea(
         child: Padding(
