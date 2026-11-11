@@ -1,56 +1,74 @@
+
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:sa7bi_ai/services/image_intent_detector.dart';
 
 void main() {
-  group('ImageIntentDetector.isGenerationRequest', () {
-    test('detects explicit Arabic image generation requests', () {
+  group('ImageIntentDetector', () {
+    test('recognizes common Egyptian Arabic creation requests', () {
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'أنشئ صورة لقطة صغيرة',
+          'عايز صورة لقطة لابسة نظارة',
         ),
         isTrue,
       );
 
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'اعمل صورة لمنظر طبيعي',
+          'عاوز صورة لوجو لتطبيق صاحبي AI',
         ),
         isTrue,
       );
 
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'ارسم صورة لبيت على البحر',
+          'ممكن تعمللي صورة بخلفية زرقاء؟',
         ),
         isTrue,
       );
 
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'صمم شعار لمتجر ملابس',
+          'محتاج تصميم إعلان لمحل ملابس',
+        ),
+        isTrue,
+      );
+
+      expect(
+        ImageIntentDetector.isGenerationRequest(
+          'ارسملي شخصية كرتونية',
         ),
         isTrue,
       );
     });
 
-    test('detects explicit English image generation requests', () {
+    test('recognizes explicit image editing or creation commands', () {
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'Create an image of a cat',
+          'اعمل تصميم جديد للصورة',
         ),
         isTrue,
       );
 
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'Generate a picture of a sunset',
+          'صمملي لوجو بسيط باللون النبيتي',
+        ),
+        isTrue,
+      );
+    });
+
+    test('recognizes English image creation requests', () {
+      expect(
+        ImageIntentDetector.isGenerationRequest(
+          'Create an image of a blue sports car',
         ),
         isTrue,
       );
 
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'Make an image of a blue car',
+          'Generate a logo for my app',
         ),
         isTrue,
       );
@@ -59,43 +77,34 @@ void main() {
     test('does not classify ordinary image questions as generation', () {
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'ما رأيك في هذه الصورة؟',
+          'هل الصورة واضحة؟',
         ),
         isFalse,
       );
 
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'اشرح لي محتوى الصورة',
+          'اشرح الصورة دي',
         ),
         isFalse,
       );
 
       expect(
         ImageIntentDetector.isGenerationRequest(
-          'I need a description of this image',
+          'حلل الصورة واقرأ الكلام المكتوب فيها',
+        ),
+        isFalse,
+      );
+
+      expect(
+        ImageIntentDetector.isGenerationRequest(
+          'What is in this image?',
         ),
         isFalse,
       );
     });
 
-    test('does not classify editing an existing image as generation', () {
-      expect(
-        ImageIntentDetector.isGenerationRequest(
-          'عايز أعدل الصورة الموجودة',
-        ),
-        isFalse,
-      );
-
-      expect(
-        ImageIntentDetector.isGenerationRequest(
-          'How do I edit this image?',
-        ),
-        isFalse,
-      );
-    });
-
-    test('returns false for empty or whitespace-only input', () {
+    test('does not classify an empty message as generation', () {
       expect(
         ImageIntentDetector.isGenerationRequest(''),
         isFalse,
