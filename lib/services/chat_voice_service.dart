@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -5,15 +6,31 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../audio_player_service.dart';
+import 'audio_focus_coordinator.dart';
 
 /// خدمة تحويل الكلام إلى نص وتحويل النص إلى كلام.
-/// قراءة النص تتم بمحرك النظام ولا تستبدل قائمة القرآن/الراديو المركزية.
+///
+/// جميع نسخ الخدمة تشترك في AudioFocusCoordinator
+/// حتى لا يعمل TTS من شاشة مع TTS من شاشة أخرى.
+///
+/// عند بدء القراءة:
+/// - يتم إيقاف أي قراءة سابقة.
+/// - يتم إيقاف مشغل الوسائط المركزي إن كان نشطًا.
+/// - يبدأ محرك TTS واحد فقط.
+///
+/// عند تشغيل وسائط من مركز الصوت، فإن استدعاء
+/// stopSpeaking يوقف كل جلسات TTS المسجلة.
 class ChatVoiceService {
   ChatVoiceService({
     SpeechToText? speechToText,
     FlutterTts? textToSpeech,
   })  : _speech = speechToText ?? SpeechToText(),
-        _tts = textToSpeech ?? FlutterTts();
+        _tts = textToSpeech ?? FlutterTts() {
+    AudioFocusCoordinator.registerSpeechController(
+      this,
+      _stopTtsForAudioFocus,
+    );
+  }
 
   final SpeechToText _speech;
   final FlutterTts _tts;
@@ -24,6 +41,7 @@ class ChatVoiceService {
   bool _isSpeaking = false;
   bool _nativeTtsActive = false;
   bool _microphoneCaptureStarted = false;
+  bool _disposed = false;
 
   String _ttsLanguage = 'ar-EG';
 
@@ -45,20 +63,28 @@ class ChatVoiceService {
         onError: _handleSpeechError,
         debugLogging: false,
       );
+
       _speechInitialized = available;
-      if (!available) _isListening = false;
+
+      if (!available) {
+        _isListening = false;
+      }
+
       return available;
     } catch (error, stackTrace) {
       debugPrint('Speech initialization failed: $error');
       debugPrintStack(stackTrace: stackTrace);
+
       _speechInitialized = false;
       _isListening = false;
+
       return false;
     }
   }
 
   void _handleSpeechStatus(String status) {
     final normalized = status.trim().toLowerCase();
+
     if (normalized == 'listening') {
       _isListening = true;
     } else if (normalized == 'notlistening' ||
@@ -70,7 +96,9 @@ class ChatVoiceService {
 
   void _handleSpeechError(dynamic error) {
     debugPrint('Speech recognition error: $error');
+
     _isListening = false;
+
     unawaited(_finishMicrophoneCapture());
   }
 
@@ -78,24 +106,26 @@ class ChatVoiceService {
     required void Function(String text, bool isFinal) onResult,
     String localeId = 'ar-EG',
   }) async {
+    if (_disposed) return false;
+
     try {
       if (_isListening || _speech.isListening) {
         await stopListening();
       }
 
-      if (_nativeTtsActive) {
-        await _tts.stop();
-        _nativeTtsActive = false;
-        _isSpeaking = false;
-      }
+      // لا نفتح الميكروفون أثناء وجود قراءة TTS.
+      await AudioFocusCoordinator.stopAllSpeech();
 
-      // يوقف/يخفض المشغل مؤقتًا أثناء التقاط الميكروفون ثم يعيده حسب حالته.
       await AudioController.beginMicrophoneCapture();
+
       final handler = AudioController.handler;
+
       _microphoneCaptureStarted =
-          handler != null && handler.isMicrophoneCaptureActive;
+          handler != null &&
+          handler.isMicrophoneCaptureActive;
 
       final initialized = await initializeSpeech();
+
       if (!initialized) {
         await _finishMicrophoneCapture();
         return false;
@@ -106,6 +136,7 @@ class ChatVoiceService {
       }
 
       _isListening = true;
+
       var finalResultHandled = false;
 
       await _speech.listen(
@@ -115,21 +146,34 @@ class ChatVoiceService {
         cancelOnError: true,
         onResult: (result) {
           final recognized = result.recognizedWords.trim();
+
           if (!result.finalResult) {
             onResult(recognized, false);
             return;
           }
+
           if (finalResultHandled) return;
+
           finalResultHandled = true;
-          unawaited(_deliverFinalResult(text: recognized, onResult: onResult));
+
+          unawaited(
+            _deliverFinalResult(
+              text: recognized,
+              onResult: onResult,
+            ),
+          );
         },
       );
+
       return true;
     } catch (error, stackTrace) {
       debugPrint('Starting speech recognition failed: $error');
       debugPrintStack(stackTrace: stackTrace);
+
       _isListening = false;
+
       await _finishMicrophoneCapture();
+
       return false;
     }
   }
@@ -139,12 +183,17 @@ class ChatVoiceService {
     required void Function(String text, bool isFinal) onResult,
   }) async {
     await stopListening();
+
+    if (_disposed) return;
+
     onResult(text, true);
   }
 
   Future<void> stopListening() async {
     try {
-      if (_speech.isListening) await _speech.stop();
+      if (_speech.isListening) {
+        await _speech.stop();
+      }
     } catch (error) {
       debugPrint('Stopping speech recognition failed: $error');
     } finally {
@@ -155,7 +204,9 @@ class ChatVoiceService {
 
   Future<void> cancelListening() async {
     try {
-      if (_speech.isListening) await _speech.cancel();
+      if (_speech.isListening) {
+        await _speech.cancel();
+      }
     } catch (error) {
       debugPrint('Cancelling speech recognition failed: $error');
     } finally {
@@ -166,11 +217,15 @@ class ChatVoiceService {
 
   Future<void> _finishMicrophoneCapture() async {
     if (!_microphoneCaptureStarted) return;
+
     _microphoneCaptureStarted = false;
+
     try {
       await AudioController.endMicrophoneCapture();
     } catch (error) {
-      debugPrint('Resuming audio after microphone capture failed: $error');
+      debugPrint(
+        'Resuming audio after microphone capture failed: $error',
+      );
     }
   }
 
@@ -182,7 +237,11 @@ class ChatVoiceService {
       await stopListening();
       return false;
     }
-    return startListening(onResult: onResult, localeId: localeId);
+
+    return startListening(
+      onResult: onResult,
+      localeId: localeId,
+    );
   }
 
   // ============================================================
@@ -203,35 +262,46 @@ class ChatVoiceService {
         _nativeTtsActive = true;
         _isSpeaking = true;
       });
+
       _tts.setCompletionHandler(() {
         _nativeTtsActive = false;
         _isSpeaking = false;
       });
+
       _tts.setCancelHandler(() {
         _nativeTtsActive = false;
         _isSpeaking = false;
       });
+
       _tts.setErrorHandler((error) {
         debugPrint('Text-to-speech engine error: $error');
+
         _nativeTtsActive = false;
         _isSpeaking = false;
       });
 
       _ttsInitialized = true;
+
       return true;
     } catch (error, stackTrace) {
       debugPrint('TTS initialization failed: $error');
       debugPrintStack(stackTrace: stackTrace);
+
       _ttsInitialized = false;
       _isSpeaking = false;
       _nativeTtsActive = false;
+
       return false;
     }
   }
 
   Future<bool> setLanguage(String language) async {
     final clean = language.trim();
-    if (clean.isEmpty || !await initializeTts()) return false;
+
+    if (clean.isEmpty || !await initializeTts()) {
+      return false;
+    }
+
     try {
       await _tts.setLanguage(clean);
       _ttsLanguage = clean;
@@ -250,66 +320,113 @@ class ChatVoiceService {
     double? volume,
   }) async {
     final cleaned = text.trim();
-    if (cleaned.isEmpty) return false;
+
+    if (cleaned.isEmpty || _disposed) {
+      return false;
+    }
 
     try {
       if (_isListening || _speech.isListening) {
         await stopListening();
       }
-      if (_nativeTtsActive) {
-        try {
-          await _tts.stop();
-        } catch (_) {}
-        _nativeTtsActive = false;
-        _isSpeaking = false;
-      }
 
-      if (!await initializeTts()) return false;
+      if (!await initializeTts()) {
+        return false;
+      }
 
       if (language != null && language.trim().isNotEmpty) {
         final cleanLanguage = language.trim();
+
         try {
           await _tts.setLanguage(cleanLanguage);
           _ttsLanguage = cleanLanguage;
         } catch (error) {
-          debugPrint('Requested TTS language unavailable: $error');
+          debugPrint(
+            'Requested TTS language unavailable: $error',
+          );
         }
       }
-      if (rate != null) await _tts.setSpeechRate(rate.clamp(0.1, 1.0).toDouble());
-      if (pitch != null) await _tts.setPitch(pitch.clamp(0.5, 2.0).toDouble());
-      if (volume != null) await _tts.setVolume(volume.clamp(0.0, 1.0).toDouble());
 
-      // لا نوقف AudioController ولا نستبدل الـQueue الحالي.
-      // محرك النظام يتولى audio focus ويعيد المصدر الآخر حسب دعم الجهاز.
-      _nativeTtsActive = true;
-      _isSpeaking = true;
-      final result = await _tts.speak(cleaned, focus: true);
+      if (rate != null) {
+        await _tts.setSpeechRate(
+          rate.clamp(0.1, 1.0).toDouble(),
+        );
+      }
+
+      if (pitch != null) {
+        await _tts.setPitch(
+          pitch.clamp(0.5, 2.0).toDouble(),
+        );
+      }
+
+      if (volume != null) {
+        await _tts.setVolume(
+          volume.clamp(0.0, 1.0).toDouble(),
+        );
+      }
+
+      final result =
+          await AudioFocusCoordinator.runWithSpeechFocus(
+        stopMediaPlayback: () async {
+          // لا ننشئ مشغلًا جديدًا لمجرد قراءة النص.
+          // نوقف المشغل الموجود فقط إذا كان قد تم تهيئته.
+          final handler = AudioController.handler;
+
+          if (handler != null) {
+            await handler.stop();
+          }
+        },
+        startSpeech: () async {
+          _nativeTtsActive = true;
+          _isSpeaking = true;
+
+          return await _tts.speak(
+            cleaned,
+            focus: true,
+          );
+        },
+      );
+
       if (result is bool && !result) {
         _nativeTtsActive = false;
         _isSpeaking = false;
         return false;
       }
+
       if (result is int && result != 1) {
         _nativeTtsActive = false;
         _isSpeaking = false;
         return false;
       }
+
       return true;
     } catch (error, stackTrace) {
       debugPrint('ChatVoiceService speak failed: $error');
       debugPrintStack(stackTrace: stackTrace);
+
       _isSpeaking = false;
       _nativeTtsActive = false;
+
       return false;
     }
   }
 
+  /// إيقاف كل محركات القراءة النشطة في التطبيق،
+  /// وليس نسخة الخدمة الحالية فقط.
   Future<void> stopSpeaking() async {
-    if (!_nativeTtsActive && !_isSpeaking) return;
+    await AudioFocusCoordinator.stopAllSpeech();
+  }
+
+  Future<void> _stopTtsForAudioFocus() async {
+    if (!_ttsInitialized ||
+        (!_nativeTtsActive && !_isSpeaking)) {
+      return;
+    }
+
     try {
       await _tts.stop();
     } catch (error) {
-      debugPrint('Stopping TTS failed: $error');
+      debugPrint('Stopping TTS for audio focus failed: $error');
     } finally {
       _nativeTtsActive = false;
       _isSpeaking = false;
@@ -327,6 +444,7 @@ class ChatVoiceService {
       await stopSpeaking();
       return false;
     }
+
     return speak(
       text,
       language: language,
@@ -345,11 +463,18 @@ class ChatVoiceService {
     await stopSpeaking();
   }
 
-  /// لا نوقف تشغيل الخلفية لمجرد مغادرة شاشة المحادثة.
+  /// مغادرة الشاشة توقف الميكروفون والقراءة التابعة لهذه الخدمة،
+  /// لكنها لا توقف مشغل الخلفية المركزي.
   Future<void> dispose() async {
+    if (_disposed) return;
+
     await stopListening();
-    // لا نستدعي AudioController.stop() ولا نوقف جلسة الصوت المركزية.
+    await _stopTtsForAudioFocus();
+
+    AudioFocusCoordinator.unregisterSpeechController(this);
+
     _speechInitialized = false;
     _ttsInitialized = false;
+    _disposed = true;
   }
 }
