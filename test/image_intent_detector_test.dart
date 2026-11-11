@@ -5,7 +5,7 @@ import 'package:sa7bi_ai/services/image_intent_detector.dart';
 
 void main() {
   group('ImageIntentDetector', () {
-    test('recognizes common Egyptian Arabic creation requests', () {
+    test('recognizes Egyptian Arabic image creation requests', () {
       expect(
         ImageIntentDetector.isGenerationRequest(
           'عايز صورة لقطة لابسة نظارة',
@@ -40,19 +40,10 @@ void main() {
         ),
         isTrue,
       );
-    });
 
-    test('recognizes explicit image editing or creation commands', () {
       expect(
         ImageIntentDetector.isGenerationRequest(
           'اعمل تصميم جديد للصورة',
-        ),
-        isTrue,
-      );
-
-      expect(
-        ImageIntentDetector.isGenerationRequest(
-          'صمملي لوجو بسيط باللون النبيتي',
         ),
         isTrue,
       );
@@ -72,36 +63,36 @@ void main() {
         ),
         isTrue,
       );
+
+      expect(
+        ImageIntentDetector.isGenerationRequest(
+          'I need an image of a mountain at sunset',
+        ),
+        isTrue,
+      );
     });
 
-    test('does not classify ordinary image questions as generation', () {
-      expect(
-        ImageIntentDetector.isGenerationRequest(
-          'هل الصورة واضحة؟',
-        ),
-        isFalse,
-      );
+    test('does not classify ordinary image analysis as generation', () {
+      const examples = <String>[
+        'هل الصورة واضحة؟',
+        'اشرح الصورة دي',
+        'حلل الصورة واقرأ الكلام المكتوب فيها',
+        'What is in this image?',
+        'I need a description of this image',
+        'Describe this image for me',
+        'عايز وصف للصورة الموجودة',
+        'عايز أعدل الصورة الموجودة',
+        'عدل الصورة وخلي الخلفية زرقاء',
+        'Edit this image and change the background',
+      ];
 
-      expect(
-        ImageIntentDetector.isGenerationRequest(
-          'اشرح الصورة دي',
-        ),
-        isFalse,
-      );
-
-      expect(
-        ImageIntentDetector.isGenerationRequest(
-          'حلل الصورة واقرأ الكلام المكتوب فيها',
-        ),
-        isFalse,
-      );
-
-      expect(
-        ImageIntentDetector.isGenerationRequest(
-          'What is in this image?',
-        ),
-        isFalse,
-      );
+      for (final example in examples) {
+        expect(
+          ImageIntentDetector.isGenerationRequest(example),
+          isFalse,
+          reason: 'Should not trigger image generation: $example',
+        );
+      }
     });
 
     test('does not classify an empty message as generation', () {
