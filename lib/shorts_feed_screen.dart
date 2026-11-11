@@ -26,15 +26,12 @@ class ShortsFeedScreen extends StatefulWidget {
 class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
   final SocialReelsService _service =
       SocialReelsService.instance;
-
   final ImagePicker _picker = ImagePicker();
-
   final PageController _pageController = PageController();
 
   List<SocialReel> _reels = [];
 
   VideoPlayerController? _videoController;
-
   String? _activeReelId;
 
   int _activeIndex = 0;
@@ -45,10 +42,10 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
   bool _videoLoading = false;
   bool _videoFailed = false;
 
+  String _error = '';
+
   final Set<String> _busyLikes = {};
   final Set<String> _busyFollows = {};
-
-  String _error = '';
 
   @override
   void initState() {
@@ -70,15 +67,15 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
     super.dispose();
   }
 
-  void _message(String text) {
-    if (!mounted || text.trim().isEmpty) return;
+  void _message(String message) {
+    if (!mounted || message.trim().isEmpty) return;
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(
-            text,
+            message,
             textDirection: TextDirection.rtl,
           ),
           behavior: SnackBarBehavior.floating,
@@ -87,9 +84,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
       );
   }
 
-  Future<void> _loadFeed({
-    bool silent = false,
-  }) async {
+  Future<void> _loadFeed() async {
     if (_refreshing) return;
 
     setState(() {
@@ -190,9 +185,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
   }
 
   Future<void> _activateVideo(int index) async {
-    if (!mounted ||
-        index < 0 ||
-        index >= _reels.length) {
+    if (!mounted || index < 0 || index >= _reels.length) {
       return;
     }
 
@@ -407,7 +400,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
 
       _message('تم رفع الريل ونشره بنجاح ✅');
 
-      await _loadFeed(silent: true);
+      await _loadFeed();
 
       final index = _reels.indexWhere(
         (item) => item.id == uploaded.id,
@@ -433,7 +426,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
       });
 
       _message(
-        'تعذر رفع الفيديو. حدّث صفحة الريلز أولًا قبل إعادة المحاولة.',
+        'تعذر رفع الفيديو. حدّث صفحة الريلز قبل إعادة المحاولة.',
       );
     } finally {
       if (mounted) {
@@ -476,10 +469,9 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
           reel.id,
           (item) => item.copyWith(
             likedByMe: false,
-            likesCount: (item.likesCount - 1).clamp(
-              0,
-              1 << 30,
-            ),
+            likesCount: item.likesCount > 0
+                ? item.likesCount - 1
+                : 0,
           ),
         );
       } else {
@@ -559,10 +551,10 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
 
     if (!mounted) return;
 
-    await _loadFeed(silent: true);
+    await _loadFeed();
   }
 
-  Widget _buildVideoSurface(SocialReel reel) {
+  Widget _videoSurface(SocialReel reel) {
     final controller = _videoController;
 
     if (_activeReelId == reel.id &&
@@ -689,7 +681,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          _buildVideoSurface(reel),
+          _videoSurface(reel),
 
           Positioned(
             top: 12,
@@ -853,7 +845,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
           ),
 
           if (_activeReelId == reel.id &&
-              controllerIsPlaying(reel.id) == false &&
+              !playing &&
               !_videoLoading &&
               !_videoFailed)
             Center(
@@ -866,11 +858,6 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
         ],
       ),
     );
-  }
-
-  bool controllerIsPlaying(String reelId) {
-    return _activeReelId == reelId &&
-        (_videoController?.value.isPlaying ?? false);
   }
 
   Widget _buildEmptyState() {
@@ -905,8 +892,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed:
-                  _uploading ? null : _pickAndUploadReel,
+              onPressed: _uploading ? null : _pickAndUploadReel,
               icon: const Icon(Icons.add_rounded),
               label: const Text('رفع أول Reel'),
             ),
@@ -1223,7 +1209,8 @@ class _ReelCommentsSheetState
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final bottomInset =
+        MediaQuery.viewInsetsOf(context).bottom;
 
     return SafeArea(
       child: Padding(
@@ -1334,8 +1321,7 @@ class _ReelCommentsSheetState
                     ),
                     const SizedBox(width: 8),
                     IconButton.filled(
-                      onPressed:
-                          _sending ? null : _sendComment,
+                      onPressed: _sending ? null : _sendComment,
                       icon: _sending
                           ? const SizedBox(
                               width: 18,
