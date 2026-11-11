@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/chat_theme_service.dart';
 import 'chat_ai_avatar.dart';
+import 'chat_image_viewer.dart';
 
 /// فقاعة رسائل صغيرة بتصميم مدمج.
 /// لا تتعامل مع الشبكة ولا تغيّر منطق إرسال الرسائل.
@@ -56,7 +57,7 @@ class ChatMessageBubble extends StatelessWidget {
             const SizedBox(width: 6),
           ],
           Flexible(
-            child: _buildBubble(safeText),
+            child: _buildBubble(context, safeText),
           ),
           if (isUser) ...[
             const SizedBox(width: 6),
@@ -71,7 +72,7 @@ class ChatMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildBubble(String safeText) {
+  Widget _buildBubble(BuildContext context, String safeText) {
     final bubbleColor = isUser ? theme.userBubble : theme.aiBubble;
 
     final borderColor = isUser
@@ -113,7 +114,7 @@ class ChatMessageBubble extends StatelessWidget {
           _buildHeader(),
           if (imageBytes != null) ...[
             const SizedBox(height: 6),
-            _buildImage(),
+            _buildImage(context),
           ],
           if (safeText.isNotEmpty) ...[
             if (imageBytes != null) const SizedBox(height: 6),
@@ -177,36 +178,86 @@ class ChatMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildImage() {
+  Widget _buildImage(BuildContext context) {
     final bytes = imageBytes;
 
     if (bytes == null || bytes.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(11),
-      child: Image.memory(
-        bytes,
-        width: double.infinity,
-        height: 180,
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            height: 100,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Icon(
-              Icons.broken_image_outlined,
-              color: Colors.white.withValues(alpha: 0.6),
-              size: 30,
-            ),
-          );
-        },
+    return Semantics(
+      button: true,
+      label: 'فتح الصورة بالحجم الكامل',
+      hint: 'اضغط لعرض الصورة، ثم استخدم إصبعين للتكبير أو اضغط مرتين.',
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(11),
+        child: InkWell(
+          key: const ValueKey<String>('chat-message-image'),
+          borderRadius: BorderRadius.circular(11),
+          onTap: () => showChatImageViewer(context, bytes),
+          child: Stack(
+            alignment: Alignment.bottomLeft,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(11),
+                child: Image.memory(
+                  bytes,
+                  width: double.infinity,
+                  height: 180,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: 100,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        size: 30,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(7),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.62),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.zoom_in_rounded,
+                          color: Colors.white,
+                          size: 13,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'تكبير الصورة',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
