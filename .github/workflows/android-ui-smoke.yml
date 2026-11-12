@@ -96,6 +96,106 @@ jobs:
           echo "KVM access is ready."
           ls -l /dev/kvm
 
+      - name: Prepare Android UI smoke script
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cat > "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh" <<'BASH'
+          #!/usr/bin/env bash
+
+          set -Eeuo pipefail
+
+          SERIAL="${ANDROID_SERIAL:-emulator-5554}"
+
+          mkdir -p emulator-diagnostics
+          : > android-ui-smoke.log
+
+          collect_failure() {
+            local status="$1"
+            trap - ERR
+
+            echo "Collecting emulator diagnostics. Exit code: ${status}"
+
+            adb devices -l \
+              > emulator-diagnostics/adb-devices.txt 2>&1 || true
+
+            adb -s "$SERIAL" logcat -d -v threadtime \
+              > emulator-diagnostics/android-logcat.txt 2>&1 || true
+
+            ps aux \
+              > emulator-diagnostics/processes.txt 2>&1 || true
+
+            grep -E '[e]mulator|[q]emu|[a]db' \
+              emulator-diagnostics/processes.txt \
+              > emulator-diagnostics/emulator-processes.txt || true
+
+            if [[ -d /tmp/android-runner ]]; then
+              find /tmp/android-runner -maxdepth 3 -type f \
+                \( -name '*crash*' -o -name '*.log' \) \
+                -exec cp -f {} emulator-diagnostics/ \; \
+                2>/dev/null || true
+            fi
+
+            echo "$status" \
+              > emulator-diagnostics/exit-code.txt
+
+            exit "$status"
+          }
+
+          trap 'collect_failure "$?"' ERR
+
+          echo "Waiting for Android emulator..."
+          adb wait-for-device
+
+          echo "Checking Android boot completion..."
+
+          boot_status=""
+
+          for attempt in {1..60}; do
+            boot_status="$(
+              adb -s "$SERIAL" shell getprop sys.boot_completed \
+                2>/dev/null | tr -d '\r' || true
+            )"
+
+            if [[ "$boot_status" == "1" ]]; then
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [[ "$boot_status" != "1" ]]; then
+            echo "ERROR: Android emulator did not finish booting."
+            false
+          fi
+
+          echo "Android emulator boot completed."
+
+          echo "Disabling emulator network for offline UI test..."
+          adb -s "$SERIAL" shell svc wifi disable
+          adb -s "$SERIAL" shell svc data disable
+
+          adb devices -l
+
+          echo "Starting Sa7bi AI integration UI test..."
+
+          flutter test \
+            integration_test/sa7bi_app_smoke_test.dart \
+            --no-pub \
+            -d "$SERIAL" \
+            --reporter expanded \
+            2>&1 | tee android-ui-smoke.log
+
+          echo "Android UI smoke test completed successfully."
+          BASH
+
+          chmod +x "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
+
+          bash -n "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
+
+          echo "Emulator script syntax validation passed."
+
       - name: Run UI checks and collect emulator diagnostics
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -108,73 +208,7 @@ jobs:
           disable-linux-hw-accel: false
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            set -eu
-
-            mkdir -p emulator-diagnostics
-
-            collect_failure() {
-              status=$?
-              trap - 0
-
-              if [ "$status" -ne 0 ]; then
-                echo "Collecting emulator failure diagnostics. Exit code: $status"
-
-                adb devices -l \
-                  > emulator-diagnostics/adb-devices.txt 2>&1 || true
-
-                adb logcat -d -v threadtime \
-                  > emulator-diagnostics/android-logcat.txt 2>&1 || true
-
-                ps aux \
-                  > emulator-diagnostics/processes.txt 2>&1 || true
-
-                grep -E '[e]mulator|[q]emu|[a]db' \
-                  emulator-diagnostics/processes.txt \
-                  > emulator-diagnostics/emulator-processes.txt || true
-
-                if [ -d /tmp/android-runner ]; then
-                  find /tmp/android-runner -maxdepth 2 -type f \
-                    \( -name '*crash*' -o -name '*.log' \) \
-                    -exec cp -f {} emulator-diagnostics/ \; 2>/dev/null || true
-                fi
-
-                echo "$status" > emulator-diagnostics/exit-code.txt
-              fi
-
-              exit "$status"
-            }
-
-            trap collect_failure 0
-
-            echo "Waiting for Android device..."
-            adb wait-for-device
-
-            echo "Checking Android boot status..."
-            adb shell getprop sys.boot_completed
-
-            echo "Disabling emulator network for offline UI smoke test..."
-            adb shell svc wifi disable
-            adb shell svc data disable
-
-            adb devices -l
-
-            echo "Starting Sa7bi AI integration UI test..."
-
-            if flutter test \
-              integration_test/sa7bi_app_smoke_test.dart \
-              --no-pub \
-              -d emulator-5554 \
-              --reporter expanded \
-              > android-ui-smoke.log 2>&1
-            then
-              cat android-ui-smoke.log
-              echo "Android UI smoke test completed."
-            else
-              test_status=$?
-              cat android-ui-smoke.log
-              exit "$test_status"
-            fi
+          script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
 
       - name: Upload Android UI smoke and emulator diagnostics
         if: always()
