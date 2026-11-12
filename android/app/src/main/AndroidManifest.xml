@@ -1,60 +1,55 @@
+
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- ===================================================== -->
-    <!-- Internet -->
-    <!-- ===================================================== -->
-
+    <!-- الاتصال بالإنترنت وقراءة حالة الشبكة -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- ===================================================== -->
-    <!-- Background Audio / Wake Lock -->
-    <!-- ===================================================== -->
-
+    <!-- تشغيل الصوت بالخلفية -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-    <!-- ===================================================== -->
-    <!-- Notifications -->
-    <!-- ===================================================== -->
-
+    <!-- الإشعارات -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Exact alarm permission for precise reminder times -->
+    <!-- التذكيرات -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-    <!-- ===================================================== -->
-    <!-- Camera / Microphone -->
-    <!-- ===================================================== -->
-
+    <!-- الكاميرا والميكروفون -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- ===================================================== -->
-    <!-- Application -->
-    <!-- ===================================================== -->
+    <!-- مصادقة البصمة/القياسات الحيوية لقفل الفضفضة -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+
+    <!-- اكتشاف محركات تحويل النص إلى كلام والتعرف على الكلام -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 
     <application
         android:name="${applicationName}"
         android:label="صاحبي AI"
         android:icon="@drawable/app_icon"
+        android:allowBackup="false"
         android:usesCleartextTraffic="false">
 
-        <!-- ================================================= -->
         <!-- Google Mobile Ads / AdMob -->
-        <!-- ================================================= -->
-
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-9077658292229374~9135705635" />
 
-        <!-- ================================================= -->
-        <!-- Main Flutter Activity -->
-        <!-- ================================================= -->
-
+        <!-- شاشة Flutter الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -68,17 +63,60 @@
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
 
+            <!-- تستقبل App Links موثّقة من نطاق Worker نفسه. -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false" />
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="sa7bi-ai-new.ahmedsab34.workers.dev"
+                    android:pathPrefix="/game/invite" />
+            </intent-filter>
+
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="sa7bi-ai-new.ahmedsab34.workers.dev"
+                    android:pathPrefix="/groups/invite" />
+            </intent-filter>
+
+            <!-- توافق مع روابط دعوات المباريات القديمة. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="sa7bi"
+                    android:host="game"
+                    android:path="/invite" />
+            </intent-filter>
+
+            <!-- توافق مع روابط دعوات المجموعات الداخلية. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="sa7bi"
+                    android:host="community"
+                    android:path="/group" />
+            </intent-filter>
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
         </activity>
 
-        <!-- ================================================= -->
-        <!-- Background Audio Service -->
-        <!-- ================================================= -->
-
+        <!-- خدمة تشغيل الوسائط في الخلفية -->
         <service
             android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
@@ -88,13 +126,9 @@
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
-
         </service>
 
-        <!-- ================================================= -->
-        <!-- Media / Headset / Lock-screen Buttons -->
-        <!-- ================================================= -->
-
+        <!-- أزرار السماعة وشاشة القفل -->
         <receiver
             android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true"
@@ -103,13 +137,9 @@
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
-
         </receiver>
 
-        <!-- ================================================= -->
-        <!-- Local Notifications -->
-        <!-- ================================================= -->
-
+        <!-- الإشعارات المحلية المجدولة -->
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
@@ -124,17 +154,12 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
             </intent-filter>
-
         </receiver>
 
-        <!-- ================================================= -->
         <!-- Flutter Embedding -->
-        <!-- ================================================= -->
-
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
     </application>
-
 </manifest>
