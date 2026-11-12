@@ -1,10 +1,10 @@
-
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../audio_center_screen.dart';
+import '../audio_downloads_screen.dart';
 import '../audio_player_service.dart';
 import '../services/audio_focus_coordinator.dart';
 import 'app_header.dart';
@@ -41,6 +41,14 @@ class AudioCenterWithHeader extends StatelessWidget {
       );
   }
 
+  void _openDownloads(BuildContext context) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const AudioDownloadsScreen(),
+      ),
+    );
+  }
+
   void _toggleAudio(BuildContext context) {
     final handler = AudioController.handler;
 
@@ -64,8 +72,6 @@ class AudioCenterWithHeader extends StatelessWidget {
     Sa7biAudioHandler handler,
   ) async {
     try {
-      // إيقاف أي محرك قراءة نصية قبل استئناف
-      // القرآن أو الراديو أو البودكاست.
       await AudioFocusCoordinator.stopAllSpeech();
 
       if (!context.mounted) return;
@@ -120,7 +126,6 @@ class AudioCenterWithHeader extends StatelessWidget {
         return;
       }
 
-      // إيقاف أي قراءة TTS قبل بدء الملف المحلي.
       await AudioFocusCoordinator.stopAllSpeech();
 
       if (!context.mounted) return;
@@ -176,6 +181,14 @@ class AudioCenterWithHeader extends StatelessWidget {
                         fontSize: 15,
                         fontWeight: FontWeight.w900,
                       ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'تنزيلاتي الصوتية',
+                    onPressed: () => _openDownloads(context),
+                    icon: const Icon(
+                      Icons.download_for_offline_rounded,
+                      color: Color(0xFF63E6FF),
                     ),
                   ),
                   IconButton(
