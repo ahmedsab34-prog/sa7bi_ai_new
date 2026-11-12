@@ -7,9 +7,11 @@ import 'package:http/testing.dart';
 import 'package:sa7bi_ai/services/app_diagnostics_quick_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('AppDiagnosticsQuickService', () {
     test(
-      'checks both Workers and confirms matching source identity',
+      'checks both Workers, performance and matching source identity',
       () async {
         final requests = <http.Request>[];
 
@@ -66,13 +68,26 @@ void main() {
               result.name == 'Fallback Worker direct HTTPS',
         );
 
+        final performanceResults =
+            report.results.where(
+          (result) =>
+              result.category == 'PERFORMANCE',
+        );
+
         expect(identity.success, isTrue);
+
         expect(
           identity.status,
           'APP_AND_WORKER_COMMIT_MATCH',
         );
+
         expect(primary.success, isTrue);
         expect(fallback.success, isTrue);
+
+        expect(
+          performanceResults,
+          hasLength(4),
+        );
 
         expect(
           requests.map((request) => request.method).toSet(),
@@ -106,7 +121,8 @@ void main() {
           isTrue,
         );
 
-        expect(report.total, 6);
+        // 6 existing network/build checks + 4 performance checks.
+        expect(report.total, 10);
 
         client.close();
       },
@@ -156,6 +172,7 @@ void main() {
 
         expect(identity.success, isFalse);
         expect(identity.severity, 'FAIL');
+
         expect(
           identity.status,
           'WORKER_SOURCE_MISMATCH',
