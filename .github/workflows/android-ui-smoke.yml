@@ -1,4 +1,3 @@
-
 name: Sa7bi AI - Android UI Smoke Test
 
 on:
@@ -111,7 +110,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
 
           script: |
-            set -euo pipefail
+            set -eu
 
             echo "Waiting for Android system..."
             adb wait-for-device
@@ -128,12 +127,21 @@ jobs:
             echo "Android emulator is ready."
             adb shell getprop sys.boot_completed
 
-            flutter test \
+            # POSIX-compatible: save the test output without pipefail.
+            if flutter test \
               integration_test/sa7bi_app_smoke_test.dart \
               --no-pub \
               -d emulator-5554 \
               --reporter expanded \
-              2>&1 | tee android-ui-smoke.log
+              > android-ui-smoke.log 2>&1; then
+
+              cat android-ui-smoke.log
+
+            else
+              test_status=$?
+              cat android-ui-smoke.log
+              exit "$test_status"
+            fi
 
             {
               echo "## Android UI smoke test passed"
@@ -144,6 +152,7 @@ jobs:
               echo "- Local games hub opened."
               echo "- Diagnostics screen opened."
               echo "- Automatic quick diagnostics was started."
+              echo "- Performance diagnostics were included."
               echo "- Full diagnostics v5 was not triggered."
               echo "- Emulator internet was disabled."
               echo "- No paid AI inference or production writes were requested."
