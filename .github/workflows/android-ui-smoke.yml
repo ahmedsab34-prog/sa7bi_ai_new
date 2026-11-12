@@ -108,57 +108,31 @@ jobs:
           disable-linux-hw-accel: false
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: |
-            bash <<'BASH'
-            set -Eeuo pipefail
-
-            mkdir -p emulator-diagnostics
-
+          script: >-
+            bash -c 'set -Eeuo pipefail;
+            mkdir -p emulator-diagnostics;
             collect_failure() {
-              status=$?
-              trap - ERR
-              echo "Collecting emulator failure diagnostics. Exit code: ${status}"
-
-              adb devices -l \
-                > emulator-diagnostics/adb-devices.txt 2>&1 || true
-
-              adb logcat -d -v threadtime \
-                > emulator-diagnostics/android-logcat.txt 2>&1 || true
-
-              ps aux \
-                > emulator-diagnostics/processes.txt 2>&1 || true
-
-              grep -E '[e]mulator|[q]emu|[a]db' \
-                emulator-diagnostics/processes.txt \
-                > emulator-diagnostics/emulator-processes.txt || true
-
+              status=$?;
+              trap - ERR;
+              echo "Collecting emulator failure diagnostics. Exit code: ${status}";
+              adb devices -l > emulator-diagnostics/adb-devices.txt 2>&1 || true;
+              adb logcat -d -v threadtime > emulator-diagnostics/android-logcat.txt 2>&1 || true;
+              ps aux > emulator-diagnostics/processes.txt 2>&1 || true;
+              grep -E "[e]mulator|[q]emu|[a]db" emulator-diagnostics/processes.txt > emulator-diagnostics/emulator-processes.txt || true;
               if [[ -d /tmp/android-runner ]]; then
-                find /tmp/android-runner -maxdepth 2 -type f \
-                  \( -name '*crash*' -o -name '*.log' \) \
-                  -exec cp -f {} emulator-diagnostics/ \; 2>/dev/null || true
-              fi
-
-              echo "${status}" > emulator-diagnostics/exit-code.txt
-              exit "${status}"
-            }
-
-            trap collect_failure ERR
-
-            adb wait-for-device
-            adb shell getprop sys.boot_completed
-            adb shell svc wifi disable
-            adb shell svc data disable
-            adb devices -l
-
-            flutter test \
-              integration_test/sa7bi_app_smoke_test.dart \
-              --no-pub \
-              -d emulator-5554 \
-              --reporter expanded \
-              2>&1 | tee android-ui-smoke.log
-
-            echo "Android UI smoke test completed."
-            BASH
+                find /tmp/android-runner -maxdepth 2 -type f \( -name "*crash*" -o -name "*.log" \) -exec cp -f {} emulator-diagnostics/ \; 2>/dev/null || true;
+              fi;
+              echo "${status}" > emulator-diagnostics/exit-code.txt;
+              exit "${status}";
+            };
+            trap collect_failure ERR;
+            adb wait-for-device;
+            adb shell getprop sys.boot_completed;
+            adb shell svc wifi disable;
+            adb shell svc data disable;
+            adb devices -l;
+            flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded 2>&1 | tee android-ui-smoke.log;
+            echo "Android UI smoke test completed."'
 
       - name: Upload Android UI smoke and emulator diagnostics
         if: always()
