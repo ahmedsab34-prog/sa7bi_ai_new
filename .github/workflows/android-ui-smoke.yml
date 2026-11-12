@@ -28,7 +28,7 @@ jobs:
   android-ui-smoke:
     name: Run app screens on Android Emulator
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 35
 
     env:
       EXPECTED_BRANCH: "fix/build-692-network-client-lifecycle"
@@ -107,54 +107,79 @@ jobs:
           set -Eeuo pipefail
 
           SERIAL="${ANDROID_SERIAL:-emulator-5554}"
+          LOGCAT_PID=""
 
           mkdir -p emulator-diagnostics
           : > android-ui-smoke.log
+
+          stop_logcat_capture() {
+            if [[ -n "$LOGCAT_PID" ]]; then
+              kill "$LOGCAT_PID" 2>/dev/null || true
+              wait "$LOGCAT_PID" 2>/dev/null || true
+              LOGCAT_PID=""
+            fi
+          }
 
           collect_failure() {
             local status="$1"
             trap - ERR
 
-            echo "Collecting emulator diagnostics. Exit code: ${status}"
+            echo "Collecting bounded emulator and host diagnostics. Exit code: $status"
 
-            adb devices -l \
+            stop_logcat_capture
+
+            timeout 6s adb devices -l \
               > emulator-diagnostics/adb-devices.txt 2>&1 || true
 
-            adb -s "$SERIAL" logcat -d -v threadtime \
-              > emulator-diagnostics/android-logcat.txt 2>&1 || true
+            timeout 8s adb -s "$SERIAL" logcat -d -v threadtime \
+              > emulator-diagnostics/android-logcat-final.txt 2>&1 || true
 
-            ps aux \
-              > emulator-diagnostics/processes.txt 2>&1 || true
+            ps auxww \
+              > emulator-diagnostics/host-processes.txt 2>&1 || true
 
-            grep -E '[e]mulator|[q]emu|[a]db' \
-              emulator-diagnostics/processes.txt \
-              > emulator-diagnostics/emulator-processes.txt || true
+            pgrep -af 'emulator|qemu-system|adb' \
+              > emulator-diagnostics/emulator-processes.txt 2>&1 || true
 
-            if [[ -d /tmp/android-runner ]]; then
-              find /tmp/android-runner -maxdepth 3 -type f \
-                \( -name '*crash*' -o -name '*.log' \) \
-                -exec cp -f {} emulator-diagnostics/ \; \
-                2>/dev/null || true
+            free -h \
+              > emulator-diagnostics/host-memory.txt 2>&1 || true
+
+            df -h "$GITHUB_WORKSPACE" \
+              > emulator-diagnostics/host-disk.txt 2>&1 || true
+
+            uptime \
+              > emulator-diagnostics/host-uptime.txt 2>&1 || true
+
+            timeout 5s sudo dmesg -T 2>&1 | tail -n 200 \
+              > emulator-diagnostics/host-kernel-tail.txt || true
+
+            if [[ -d "$HOME/.android/avd" ]]; then
+              find "$HOME/.android/avd" -maxdepth 5 -type f \
+                \( -iname '*.log' -o -iname '*crash*' \) \
+                > emulator-diagnostics/avd-log-files.txt 2>/dev/null || true
+
+              while IFS= read -r log_path; do
+                [[ -f "$log_path" ]] || continue
+                log_name="$(basename "$log_path")"
+                tail -n 1200 "$log_path" \
+                  > "emulator-diagnostics/${log_name}.tail.txt" 2>/dev/null || true
+              done < emulator-diagnostics/avd-log-files.txt
             fi
 
-            echo "$status" \
-              > emulator-diagnostics/exit-code.txt
-
+            echo "$status" > emulator-diagnostics/exit-code.txt
             exit "$status"
           }
 
           trap 'collect_failure "$?"' ERR
 
           echo "Waiting for Android emulator..."
-          adb wait-for-device
+          timeout 60s adb wait-for-device
 
           echo "Checking Android boot completion..."
-
           boot_status=""
 
           for attempt in {1..60}; do
             boot_status="$(
-              adb -s "$SERIAL" shell getprop sys.boot_completed \
+              timeout 5s adb -s "$SERIAL" shell getprop sys.boot_completed \
                 2>/dev/null | tr -d '\r' || true
             )"
 
@@ -171,21 +196,33 @@ jobs:
           fi
 
           echo "Android emulator boot completed."
+          adb -s "$SERIAL" get-state
+
+          timeout 5s adb -s "$SERIAL" logcat -c 2>/dev/null || true
+
+          adb -s "$SERIAL" logcat -v threadtime \
+            > emulator-diagnostics/android-logcat-live.txt 2>&1 &
+
+          LOGCAT_PID="$!"
+          sleep 2
 
           echo "Disabling emulator network for offline UI test..."
           adb -s "$SERIAL" shell svc wifi disable
           adb -s "$SERIAL" shell svc data disable
 
           adb devices -l
+          adb -s "$SERIAL" get-state
 
           echo "Starting Sa7bi AI integration UI test..."
 
-          flutter test \
+          timeout --signal=TERM --kill-after=15s 10m flutter test \
             integration_test/sa7bi_app_smoke_test.dart \
             --no-pub \
             -d "$SERIAL" \
             --reporter expanded \
             2>&1 | tee android-ui-smoke.log
+
+          stop_logcat_capture
 
           echo "Android UI smoke test completed successfully."
           BASH
