@@ -74,6 +74,14 @@ jobs:
           flutter --version
           flutter pub get
 
+      - name: Pre-build Android debug APK before emulator startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter build apk --debug --no-pub
+          test -f build/app/outputs/flutter-apk/app-debug.apk
+          echo "Debug APK pre-build completed."
+
       - name: Enable KVM permissions for Android Emulator
         shell: bash
         run: |
@@ -100,7 +108,7 @@ jobs:
           disable-linux-hw-accel: false
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: adb wait-for-device && adb shell svc wifi disable && adb shell svc data disable && adb shell getprop sys.boot_completed && flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded
+          script: bash -o pipefail -c 'adb wait-for-device && adb shell getprop sys.boot_completed && adb shell svc wifi disable && adb shell svc data disable && adb devices -l && flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded 2>&1 | tee android-ui-smoke.log'
 
       - name: Upload Android UI smoke report
         if: always()
