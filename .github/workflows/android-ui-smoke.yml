@@ -1,3 +1,4 @@
+
 name: Sa7bi AI - Android UI Smoke Test
 
 on:
@@ -27,7 +28,7 @@ jobs:
   android-ui-smoke:
     name: Run app screens on Android Emulator
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
 
     env:
       EXPECTED_BRANCH: "fix/build-692-network-client-lifecycle"
@@ -78,6 +79,24 @@ jobs:
           flutter --version
           flutter pub get
 
+      - name: Enable KVM permissions for Android Emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -e /dev/kvm ]]; then
+            echo "ERROR: /dev/kvm is not available on this runner."
+            exit 1
+          fi
+
+          sudo chmod 666 /dev/kvm
+
+          test -r /dev/kvm
+          test -w /dev/kvm
+
+          echo "KVM access is ready."
+          ls -l /dev/kvm
+
       - name: Run UI checks on Android Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -85,12 +104,18 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          cores: 2
+          emulator-boot-timeout: 900
+          disable-linux-hw-accel: false
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+
           script: |
             set -euo pipefail
 
-            # Isolate the UI smoke test from live services.
-            # No production writes or paid AI requests are allowed.
+            echo "Waiting for Android system..."
+            adb wait-for-device
+
             adb shell settings put global airplane_mode_on 1 || true
 
             adb shell am broadcast \
@@ -99,6 +124,9 @@ jobs:
 
             adb shell svc wifi disable || true
             adb shell svc data disable || true
+
+            echo "Android emulator is ready."
+            adb shell getprop sys.boot_completed
 
             flutter test \
               integration_test/sa7bi_app_smoke_test.dart \
@@ -110,15 +138,17 @@ jobs:
             {
               echo "## Android UI smoke test passed"
               echo
+              echo "- Repository and branch identity verified."
+              echo "- Android emulator booted with KVM acceleration."
               echo "- Main navigation: Home, Chat, Games and Profile."
-              echo "- Local games hub opened without creating an online match."
+              echo "- Local games hub opened."
               echo "- Diagnostics screen opened."
-              echo "- Automatic quick diagnostics was started and its first result was checked."
-              echo "- Full diagnostics v5 was not triggered by this UI test."
-              echo "- Emulator internet was disabled to prevent production writes."
-              echo "- No paid AI inference, ad impression, social post or online match was requested."
+              echo "- Automatic quick diagnostics was started."
+              echo "- Full diagnostics v5 was not triggered."
+              echo "- Emulator internet was disabled."
+              echo "- No paid AI inference or production writes were requested."
               echo
-              echo "This workflow checks UI startup and navigation. It does not prove all live services work."
+              echo "This test checks UI startup and navigation, not all live services."
             } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload Android UI smoke log
