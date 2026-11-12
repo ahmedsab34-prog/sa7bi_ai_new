@@ -414,7 +414,7 @@ jobs:
 
           # Work around Flutter's stale Android plugin registrant when
           # integration_test is correctly declared as a dev_dependency.
-          flutter build --config-only
+          flutter build apk --config-only
 
           REGISTRANT="android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"
 
