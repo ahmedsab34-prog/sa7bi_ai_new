@@ -21,42 +21,26 @@ class CategoriesScreen extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // ==================================================
-            // SHARED HEADER
-            // ==================================================
-
             AppHeader(
               onAudioTap: onAudio,
             ),
-
             const SizedBox(height: 4),
-
-            // ==================================================
-            // TEN SERVICES
-            // ==================================================
-
             Expanded(
               child: LayoutBuilder(
-                builder: (
-                  context,
-                  constraints,
-                ) {
-                  final availableHeight =
-                      constraints.maxHeight;
+                builder: (context, constraints) {
+                  final availableHeight = constraints.maxHeight;
 
+                  // ثمانية أقسام = أربعة صفوف.
                   final rowHeight =
-                      ((availableHeight - 18) / 5)
-                          .clamp(
-                            82.0,
-                            118.0,
-                          );
+                      ((availableHeight - 18) / 4).clamp(
+                    82.0,
+                    118.0,
+                  );
 
-                  final cardHeight =
-                      rowHeight - 4;
+                  final cardHeight = rowHeight - 4;
 
                   return Padding(
-                    padding:
-                        const EdgeInsets.fromLTRB(
+                    padding: const EdgeInsets.fromLTRB(
                       10,
                       2,
                       10,
@@ -66,46 +50,28 @@ class CategoriesScreen extends StatelessWidget {
                       physics:
                           const NeverScrollableScrollPhysics(),
                       padding: EdgeInsets.zero,
-                      itemCount:
-                          sa7biServices.length,
+                      itemCount: sa7biServices.length,
                       gridDelegate:
                           SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         crossAxisSpacing: 8,
                         mainAxisSpacing: 7,
-                        mainAxisExtent:
-                            cardHeight,
+                        mainAxisExtent: cardHeight,
                       ),
-                      itemBuilder: (
-                        context,
-                        index,
-                      ) {
-                        final service =
-                            sa7biServices[index];
+                      itemBuilder: (context, index) {
+                        final service = sa7biServices[index];
 
                         return _CompactServiceCard(
                           service: service,
                           index: index,
                           onTap: () {
-                            // ==================================================
-                            // DIRECT AI CHAT
-                            // ==================================================
-                            //
-                            // لا توجد صفحة وسيطة.
-                            // الضغط على الخدمة يفتح الشات مباشرة
-                            // مع سياق الخدمة المختارة.
-
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    ChatScreen(
-                                  serviceKey:
-                                      service.serviceKey,
-                                  serviceTitle:
-                                      service.title,
-                                  serviceContext:
-                                      service.aiRole,
+                                builder: (_) => ChatScreen(
+                                  serviceKey: service.serviceKey,
+                                  serviceTitle: service.title,
+                                  serviceContext: service.aiRole,
                                 ),
                               ),
                             );
@@ -124,12 +90,7 @@ class CategoriesScreen extends StatelessWidget {
   }
 }
 
-// ============================================================
-// COMPACT GLASS SERVICE CARD
-// ============================================================
-
-class _CompactServiceCard
-    extends StatefulWidget {
+class _CompactServiceCard extends StatefulWidget {
   final Sa7biService service;
   final int index;
   final VoidCallback onTap;
@@ -145,8 +106,7 @@ class _CompactServiceCard
       _CompactServiceCardState();
 }
 
-class _CompactServiceCardState
-    extends State<_CompactServiceCard>
+class _CompactServiceCardState extends State<_CompactServiceCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController controller;
 
@@ -169,180 +129,110 @@ class _CompactServiceCardState
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     final service = widget.service;
 
     return AnimatedBuilder(
       animation: controller,
-      builder: (
-        context,
-        child,
-      ) {
+      builder: (context, child) {
         final pulse =
-            (math.sin(
-                      controller.value *
-                          math.pi *
-                          2,
-                    ) +
-                    1) /
-                2;
+            (math.sin(controller.value * math.pi * 2) + 1) / 2;
 
         return Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: widget.onTap,
-            borderRadius:
-                BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(19),
             child: Ink(
               decoration: BoxDecoration(
-                borderRadius:
-                    BorderRadius.circular(19),
+                borderRadius: BorderRadius.circular(19),
                 gradient: LinearGradient(
                   begin: Alignment.topRight,
                   end: Alignment.bottomLeft,
                   colors: [
                     service.color.withOpacity(
-                      0.18 +
-                          pulse * 0.045,
+                      0.18 + pulse * 0.045,
                     ),
-                    const Color(
-                      0xFF151923,
-                    ),
-                    const Color(
-                      0xFF0C0F16,
-                    ),
+                    const Color(0xFF151923),
+                    const Color(0xFF0C0F16),
                   ],
                 ),
                 border: Border.all(
-                  color: service.color
-                      .withOpacity(
-                    0.25 +
-                        pulse * 0.08,
+                  color: service.color.withOpacity(
+                    0.25 + pulse * 0.08,
                   ),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: service.color
-                        .withOpacity(
-                      0.045 +
-                          pulse * 0.035,
+                    color: service.color.withOpacity(
+                      0.045 + pulse * 0.035,
                     ),
-                    blurRadius:
-                        16 + pulse * 5,
+                    blurRadius: 16 + pulse * 5,
                     spreadRadius: 1,
                   ),
                 ],
               ),
               child: ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(19),
+                borderRadius: BorderRadius.circular(19),
                 child: Stack(
                   children: [
-                    // ==========================================
-                    // GLASS REFLECTION
-                    // ==========================================
-
                     Positioned(
-                      left:
-                          -35 +
-                              controller.value *
-                                  150,
+                      left: -35 + controller.value * 150,
                       top: -20,
-                      child:
-                          Transform.rotate(
+                      child: Transform.rotate(
                         angle: -0.35,
                         child: Container(
                           width: 42,
                           height: 150,
-                          decoration:
-                              BoxDecoration(
-                            gradient:
-                                LinearGradient(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
                               colors: [
-                                Colors.white
-                                    .withOpacity(
-                                  0,
-                                ),
-                                Colors.white
-                                    .withOpacity(
-                                  0.035,
-                                ),
-                                Colors.white
-                                    .withOpacity(
-                                  0,
-                                ),
+                                Colors.white.withOpacity(0),
+                                Colors.white.withOpacity(0.035),
+                                Colors.white.withOpacity(0),
                               ],
                             ),
                           ),
                         ),
                       ),
                     ),
-
-                    // ==========================================
-                    // SERVICE CONTENT
-                    // ==========================================
-
                     Padding(
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
+                      padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 6,
                       ),
                       child: Row(
-                        textDirection:
-                            TextDirection.rtl,
+                        textDirection: TextDirection.rtl,
                         children: [
                           Expanded(
                             child: Column(
                               mainAxisAlignment:
-                                  MainAxisAlignment
-                                      .center,
+                                  MainAxisAlignment.center,
                               crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .end,
+                                  CrossAxisAlignment.end,
                               children: [
                                 Text(
                                   service.title,
-                                  textDirection:
-                                      TextDirection
-                                          .rtl,
-                                  textAlign:
-                                      TextAlign.right,
+                                  textDirection: TextDirection.rtl,
+                                  textAlign: TextAlign.right,
                                   maxLines: 1,
-                                  overflow:
-                                      TextOverflow
-                                          .ellipsis,
-                                  style:
-                                      const TextStyle(
-                                    color:
-                                        Colors.white,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
                                     fontSize: 13,
-                                    fontWeight:
-                                        FontWeight.w900,
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
-                                const SizedBox(
-                                  height: 3,
-                                ),
+                                const SizedBox(height: 3),
                                 Text(
                                   service.description,
-                                  textDirection:
-                                      TextDirection
-                                          .rtl,
-                                  textAlign:
-                                      TextAlign.right,
+                                  textDirection: TextDirection.rtl,
+                                  textAlign: TextAlign.right,
                                   maxLines: 2,
-                                  overflow:
-                                      TextOverflow
-                                          .ellipsis,
-                                  style:
-                                      const TextStyle(
-                                    color:
-                                        Colors.white54,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white54,
                                     fontSize: 8.5,
                                     height: 1.15,
                                   ),
@@ -350,92 +240,52 @@ class _CompactServiceCardState
                               ],
                             ),
                           ),
-
-                          const SizedBox(
-                            width: 7,
-                          ),
-
-                          // ====================================
-                          // SERVICE ICON
-                          // ====================================
-
+                          const SizedBox(width: 7),
                           Container(
                             width: 51,
                             height: 51,
-                            decoration:
-                                BoxDecoration(
-                              shape:
-                                  BoxShape.circle,
-                              gradient:
-                                  LinearGradient(
-                                begin:
-                                    Alignment
-                                        .topLeft,
-                                end:
-                                    Alignment
-                                        .bottomRight,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                                 colors: [
-                                  service.color
-                                      .withOpacity(
-                                    0.25,
-                                  ),
-                                  service.color
-                                      .withOpacity(
-                                    0.07,
-                                  ),
-                                  const Color(
-                                    0xFF0D1119,
-                                  ),
+                                  service.color.withOpacity(0.25),
+                                  service.color.withOpacity(0.07),
+                                  const Color(0xFF0D1119),
                                 ],
                               ),
-                              border:
-                                  Border.all(
-                                color: service
-                                    .color
-                                    .withOpacity(
-                                  0.35 +
-                                      pulse * 0.08,
+                              border: Border.all(
+                                color: service.color.withOpacity(
+                                  0.35 + pulse * 0.08,
                                 ),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: service
-                                      .color
-                                      .withOpacity(
-                                    0.10 +
-                                        pulse *
-                                            0.05,
+                                  color: service.color.withOpacity(
+                                    0.10 + pulse * 0.05,
                                   ),
                                   blurRadius: 14,
                                 ),
                               ],
                             ),
                             child: Stack(
-                              alignment:
-                                  Alignment.center,
+                              alignment: Alignment.center,
                               children: [
                                 Container(
                                   width: 40,
                                   height: 40,
-                                  decoration:
-                                      BoxDecoration(
-                                    shape:
-                                        BoxShape
-                                            .circle,
-                                    border:
-                                        Border.all(
-                                      color: Colors
-                                          .white
-                                          .withOpacity(
-                                        0.06,
-                                      ),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color:
+                                          Colors.white.withOpacity(0.06),
                                     ),
                                   ),
                                 ),
                                 Icon(
                                   service.icon,
-                                  color:
-                                      service.color,
+                                  color: service.color,
                                   size: 25,
                                 ),
                               ],
@@ -444,62 +294,36 @@ class _CompactServiceCardState
                         ],
                       ),
                     ),
-
-                    // ==========================================
-                    // SERVICE NUMBER
-                    // ==========================================
-
                     Positioned(
                       top: 5,
                       left: 6,
                       child: Container(
                         width: 20,
                         height: 20,
-                        alignment:
-                            Alignment.center,
-                        decoration:
-                            BoxDecoration(
-                          shape:
-                              BoxShape.circle,
-                          color: service
-                              .color
-                              .withOpacity(
-                            0.10,
-                          ),
-                          border:
-                              Border.all(
-                            color: service
-                                .color
-                                .withOpacity(
-                              0.20,
-                            ),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: service.color.withOpacity(0.10),
+                          border: Border.all(
+                            color: service.color.withOpacity(0.20),
                           ),
                         ),
                         child: Text(
                           '${widget.index + 1}',
                           style: TextStyle(
-                            color:
-                                service.color,
+                            color: service.color,
                             fontSize: 8,
-                            fontWeight:
-                                FontWeight.w900,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
                       ),
                     ),
-
-                    // ==========================================
-                    // ARROW
-                    // ==========================================
-
                     const Positioned(
                       bottom: 6,
                       left: 8,
                       child: Icon(
-                        Icons
-                            .arrow_back_ios_rounded,
-                        color:
-                            Colors.white24,
+                        Icons.arrow_back_ios_rounded,
+                        color: Colors.white24,
                         size: 9,
                       ),
                     ),
