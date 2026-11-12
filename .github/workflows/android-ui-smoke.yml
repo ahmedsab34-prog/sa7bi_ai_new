@@ -1,14 +1,26 @@
-
 name: Sa7bi AI - Android UI Smoke Test
 
 on:
+  push:
+    branches:
+      - fix/build-692-network-client-lifecycle
+    paths:
+      - "lib/**"
+      - "test/**"
+      - "integration_test/**"
+      - "android/**"
+      - "assets/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/android-ui-smoke.yml"
+
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: sa7bi-android-ui-smoke
+  group: sa7bi-android-ui-smoke-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -18,14 +30,33 @@ jobs:
     timeout-minutes: 45
 
     env:
+      EXPECTED_BRANCH: "fix/build-692-network-client-lifecycle"
       FLUTTER_VERSION: "3.38.1"
       JAVA_VERSION: "17"
 
     steps:
-      - name: Checkout repository
+      - name: Checkout the intended branch commit
         uses: actions/checkout@v4
         with:
-          ref: fix/build-692-network-client-lifecycle
+          ref: ${{ github.event_name == 'push' && github.sha || 'fix/build-692-network-client-lifecycle' }}
+          fetch-depth: 1
+
+      - name: Verify repository and branch identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${GITHUB_REPOSITORY}" = "ahmedsab34-prog/sa7bi_ai_new"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
+            test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          fi
+
+          echo "Repository: ${GITHUB_REPOSITORY}"
+          echo "Event: ${GITHUB_EVENT_NAME}"
+          echo "Checked out commit: $(git rev-parse HEAD)"
+          echo "Expected branch: ${EXPECTED_BRANCH}"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -47,7 +78,7 @@ jobs:
           flutter --version
           flutter pub get
 
-      - name: Run UI checks on a real Android system image
+      - name: Run UI checks on Android Emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -58,8 +89,10 @@ jobs:
           script: |
             set -euo pipefail
 
-            # Keep the UI test isolated from production services.
+            # Isolate the UI smoke test from live services.
+            # No production writes or paid AI requests are allowed.
             adb shell settings put global airplane_mode_on 1 || true
+
             adb shell am broadcast \
               -a android.intent.action.AIRPLANE_MODE \
               --ez state true || true
@@ -77,14 +110,18 @@ jobs:
             {
               echo "## Android UI smoke test passed"
               echo
-              echo "- Home, Chat, Games and Profile navigation was exercised."
-              echo "- Local games hub was opened."
-              echo "- In-app diagnostics screen was opened."
-              echo "- Internet was disabled to prevent production writes."
-              echo "- This test does not prove paid AI inference or live ad inventory."
+              echo "- Main navigation: Home, Chat, Games and Profile."
+              echo "- Local games hub opened without creating an online match."
+              echo "- Diagnostics screen opened."
+              echo "- Automatic quick diagnostics was started and its first result was checked."
+              echo "- Full diagnostics v5 was not triggered by this UI test."
+              echo "- Emulator internet was disabled to prevent production writes."
+              echo "- No paid AI inference, ad impression, social post or online match was requested."
+              echo
+              echo "This workflow checks UI startup and navigation. It does not prove all live services work."
             } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Upload Android UI test log
+      - name: Upload Android UI smoke log
         if: always()
         uses: actions/upload-artifact@v4
         with:
