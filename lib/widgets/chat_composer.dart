@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 class ChatComposer extends StatefulWidget {
@@ -19,6 +18,9 @@ class ChatComposer extends StatefulWidget {
   final VoidCallback? onSpeechToText;
   final VoidCallback? onImageGeneration;
 
+  final VoidCallback? onCredits;
+  final VoidCallback? onRewardedAd;
+
   const ChatComposer({
     super.key,
     required this.controller,
@@ -34,6 +36,8 @@ class ChatComposer extends StatefulWidget {
     this.onText,
     this.onSpeechToText,
     this.onImageGeneration,
+    this.onCredits,
+    this.onRewardedAd,
   });
 
   @override
@@ -48,7 +52,6 @@ class _ChatComposerState extends State<ChatComposer> {
     super.initState();
 
     widget.controller.addListener(_onTextChanged);
-
     _hasText = widget.controller.text.trim().isNotEmpty;
   }
 
@@ -92,18 +95,20 @@ class _ChatComposerState extends State<ChatComposer> {
     widget.onSend();
   }
 
-  Future<void> _openMediaMenu(BuildContext context) async {
-    final disabled = widget.isLoading ||
-        widget.isGeneratingImage;
-
-    if (disabled) return;
-
-    final hasMediaAction =
-        widget.onCamera != null ||
+  bool get _hasExtraTools {
+    return widget.onCamera != null ||
         widget.onGallery != null ||
-        widget.onVideo != null;
+        widget.onVideo != null ||
+        widget.onImageGeneration != null ||
+        widget.onCredits != null ||
+        widget.onRewardedAd != null;
+  }
 
-    if (!hasMediaAction) return;
+  Future<void> _openToolsMenu(BuildContext context) async {
+    final disabled =
+        widget.isLoading || widget.isGeneratingImage;
+
+    if (disabled || !_hasExtraTools) return;
 
     final action = await showModalBottomSheet<int>(
       context: context,
@@ -129,7 +134,7 @@ class _ChatComposerState extends State<ChatComposer> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    'إرسال صورة أو فيديو',
+                    'المزيد من الأدوات',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -137,6 +142,7 @@ class _ChatComposerState extends State<ChatComposer> {
                     ),
                   ),
                   const SizedBox(height: 12),
+
                   if (widget.onCamera != null)
                     _MediaChoiceTile(
                       icon: Icons.camera_alt_rounded,
@@ -146,6 +152,7 @@ class _ChatComposerState extends State<ChatComposer> {
                         Navigator.pop(sheetContext, 1);
                       },
                     ),
+
                   if (widget.onGallery != null)
                     _MediaChoiceTile(
                       icon: Icons.photo_library_rounded,
@@ -155,6 +162,7 @@ class _ChatComposerState extends State<ChatComposer> {
                         Navigator.pop(sheetContext, 2);
                       },
                     ),
+
                   if (widget.onVideo != null)
                     _MediaChoiceTile(
                       icon: Icons.videocam_rounded,
@@ -162,6 +170,36 @@ class _ChatComposerState extends State<ChatComposer> {
                       subtitle: 'إرسال فيديو لتحليل محتواه',
                       onTap: () {
                         Navigator.pop(sheetContext, 3);
+                      },
+                    ),
+
+                  if (widget.onImageGeneration != null)
+                    _MediaChoiceTile(
+                      icon: Icons.auto_awesome_rounded,
+                      title: 'إنشاء صورة بالذكاء الاصطناعي',
+                      subtitle: 'إنشاء صورة جديدة من وصفك',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 4);
+                      },
+                    ),
+
+                  if (widget.onCredits != null)
+                    _MediaChoiceTile(
+                      icon: Icons.bolt_rounded,
+                      title: 'رصيد صاحبي AI',
+                      subtitle: 'عرض رصيدك الحالي',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 5);
+                      },
+                    ),
+
+                  if (widget.onRewardedAd != null)
+                    _MediaChoiceTile(
+                      icon: Icons.play_circle_fill_rounded,
+                      title: 'إعلان المكافأة',
+                      subtitle: 'مشاهدة إعلان مؤهل للحصول على رصيد',
+                      onTap: () {
+                        Navigator.pop(sheetContext, 6);
                       },
                     ),
                 ],
@@ -183,6 +221,15 @@ class _ChatComposerState extends State<ChatComposer> {
         break;
       case 3:
         widget.onVideo?.call();
+        break;
+      case 4:
+        widget.onImageGeneration?.call();
+        break;
+      case 5:
+        widget.onCredits?.call();
+        break;
+      case 6:
+        widget.onRewardedAd?.call();
         break;
     }
   }
@@ -214,7 +261,7 @@ class _ChatComposerState extends State<ChatComposer> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // خانة الكتابة تأخذ المساحة المتبقية.
+              // خانة الكتابة تأخذ المساحة الأكبر.
               Expanded(
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 160),
@@ -289,15 +336,13 @@ class _ChatComposerState extends State<ChatComposer> {
 
               const SizedBox(width: 3),
 
-              if (widget.onCamera != null ||
-                  widget.onGallery != null ||
-                  widget.onVideo != null)
+              if (_hasExtraTools)
                 _ComposerIconButton(
-                  icon: Icons.add_photo_alternate_rounded,
-                  tooltip: 'صورة أو فيديو',
+                  icon: Icons.add_rounded,
+                  tooltip: 'المزيد من الأدوات',
                   enabled: !disabled,
                   color: const Color(0xFF83C8FF),
-                  onTap: () => _openMediaMenu(context),
+                  onTap: () => _openToolsMenu(context),
                 ),
 
               if (widget.onSpeechToText != null)
@@ -321,20 +366,6 @@ class _ChatComposerState extends State<ChatComposer> {
                   enabled: !disabled,
                   color: const Color(0xFF83C8FF),
                   onTap: widget.onVoice,
-                ),
-
-              if (widget.onImageGeneration != null)
-                _ComposerIconButton(
-                  icon: widget.isGeneratingImage
-                      ? Icons.hourglass_top_rounded
-                      : Icons.auto_awesome_rounded,
-                  tooltip: widget.isGeneratingImage
-                      ? 'جاري إنشاء الصورة'
-                      : 'إنشاء صورة',
-                  enabled: !disabled,
-                  active: widget.isGeneratingImage,
-                  color: const Color(0xFFE6A1C0),
-                  onTap: widget.onImageGeneration,
                 ),
 
               const SizedBox(width: 3),
