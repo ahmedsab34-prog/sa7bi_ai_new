@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'app_diagnostics_service.dart';
+import 'app_performance_diagnostics_service.dart';
 import 'sa7bi_network_client.dart';
 
 class AppDiagnosticsQuickService {
@@ -71,6 +72,22 @@ class AppDiagnosticsQuickService {
         check: _checkNetworkTransport,
       );
 
+      // ------------------------------------------------------
+      // DEVICE AND APP PERFORMANCE
+      // ------------------------------------------------------
+
+      final performanceResults =
+          await AppPerformanceDiagnosticsService()
+              .runQuickChecks(
+        onResult: onResult,
+      );
+
+      results.addAll(performanceResults);
+
+      // ------------------------------------------------------
+      // PRIMARY WORKER
+      // ------------------------------------------------------
+
       final primary = await _probeWorker(
         client: client,
         name: 'Primary Worker direct HTTPS',
@@ -87,6 +104,10 @@ class AppDiagnosticsQuickService {
         check: () async => _checkBuildSourceIdentity(primary),
       );
 
+      // ------------------------------------------------------
+      // FALLBACK WORKER
+      // ------------------------------------------------------
+
       final fallback = await _probeWorker(
         client: client,
         name: 'Fallback Worker direct HTTPS',
@@ -94,6 +115,10 @@ class AppDiagnosticsQuickService {
       );
 
       emit(fallback.result);
+
+      // ------------------------------------------------------
+      // GENERAL HTTPS
+      // ------------------------------------------------------
 
       await _publish(
         results: results,
@@ -522,6 +547,15 @@ class AppDiagnosticsQuickReport {
     );
 
     if (networkFailure) return 'NETWORK_FAILURE';
+
+    final performanceFailure = results.any(
+      (item) =>
+          item.category == 'PERFORMANCE' &&
+          item.severity == 'FAIL' &&
+          !item.blocked,
+    );
+
+    if (performanceFailure) return 'APP_PERFORMANCE';
 
     return 'NO_CONFIRMED_FAILURE';
   }
