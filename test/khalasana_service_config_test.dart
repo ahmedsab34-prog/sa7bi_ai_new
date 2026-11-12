@@ -1,19 +1,22 @@
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sa7bi_ai/config/service_keys.dart';
 import 'package:sa7bi_ai/service_config.dart';
 
 void main() {
   group('Khalasana service configuration', () {
-    test('contains exactly ten integrated service tabs', () {
-      expect(sa7biServices, hasLength(10));
+    test('contains exactly eight integrated service tabs', () {
+      expect(sa7biServices, hasLength(8));
     });
 
     test('every service has a unique stable key', () {
       final keys = sa7biServices.map((service) => service.serviceKey);
 
-      expect(keys.toSet(), hasLength(10));
+      expect(keys.toSet(), hasLength(8));
       expect(keys, isNot(contains(ServiceKeys.khalasana)));
       expect(keys, isNot(contains(ServiceKeys.general)));
+      expect(keys, isNot(contains(ServiceKeys.social)));
+      expect(keys, isNot(contains(ServiceKeys.venting)));
     });
 
     test('every service has a usable title, description, and AI role', () {
@@ -25,7 +28,7 @@ void main() {
       }
     });
 
-    test('the ten service identifiers match the intended portal sections', () {
+    test('the eight service identifiers match the intended portal sections', () {
       expect(
         sa7biServices.map((service) => service.serviceKey).toList(),
         <String>[
@@ -35,8 +38,6 @@ void main() {
           ServiceKeys.tradesperson,
           ServiceKeys.worship,
           ServiceKeys.shopping,
-          ServiceKeys.social,
-          ServiceKeys.venting,
           ServiceKeys.hobbiesSports,
           ServiceKeys.podcasts,
         ],
