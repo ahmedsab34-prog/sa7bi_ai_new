@@ -3,39 +3,37 @@ import 'package:sa7bi_ai/config/service_keys.dart';
 import 'package:sa7bi_ai/service_config.dart';
 
 void main() {
-  group('Khalasana service configuration', () {
-    test('the shared application registry keeps all ten services', () {
-      expect(sa7biServices, hasLength(10));
+  group('Sa7bi AI service configuration', () {
+    test('the visible category registry contains exactly eight services', () {
+      expect(sa7biServices, hasLength(8));
 
       final keys = sa7biServices
           .map((service) => service.serviceKey)
           .toList(growable: false);
 
-      expect(keys.toSet(), hasLength(10));
+      expect(keys.toSet(), hasLength(8));
 
-      expect(keys, contains(ServiceKeys.social));
-      expect(keys, contains(ServiceKeys.venting));
+      expect(keys, isNot(contains(ServiceKeys.social)));
+      expect(keys, isNot(contains(ServiceKeys.venting)));
 
       expect(keys, isNot(contains(ServiceKeys.khalasana)));
       expect(keys, isNot(contains(ServiceKeys.general)));
     });
 
-    test('Khalasana displays exactly eight integrated service tabs', () {
+    test('Khalasana displays exactly the same eight services', () {
       expect(khalasanaVisibleServices, hasLength(8));
 
-      final visibleKeys = khalasanaVisibleServices
-          .map((service) => service.serviceKey)
-          .toList(growable: false);
-
-      expect(visibleKeys, hasLength(8));
-      expect(visibleKeys.toSet(), hasLength(8));
-
-      expect(visibleKeys, isNot(contains(ServiceKeys.social)));
-      expect(visibleKeys, isNot(contains(ServiceKeys.venting)));
+      expect(
+        khalasanaVisibleServices
+            .map((service) => service.serviceKey)
+            .toList(),
+        sa7biServices
+            .map((service) => service.serviceKey)
+            .toList(),
+      );
     });
 
-    test('every shared service has a usable title, description, and AI role',
-        () {
+    test('all eight services have valid content and unique keys', () {
       for (final service in sa7biServices) {
         expect(service.title.trim(), isNotEmpty);
         expect(service.description.trim(), isNotEmpty);
@@ -44,11 +42,9 @@ void main() {
       }
     });
 
-    test('the eight visible service identifiers match the portal sections', () {
+    test('the eight service identifiers match the intended categories', () {
       expect(
-        khalasanaVisibleServices
-            .map((service) => service.serviceKey)
-            .toList(),
+        sa7biServices.map((service) => service.serviceKey).toList(),
         <String>[
           ServiceKeys.kitchen,
           ServiceKeys.merchant,
@@ -60,6 +56,13 @@ void main() {
           ServiceKeys.podcasts,
         ],
       );
+    });
+
+    test('legacy social and venting identifiers remain valid internally', () {
+      // لا تظهر الخدمتان كبطاقات تصنيف،
+      // لكننا لا نكسر مفاتيح المحادثات والسجلات القديمة.
+      expect(ServiceKeys.isValid(ServiceKeys.social), isTrue);
+      expect(ServiceKeys.isValid(ServiceKeys.venting), isTrue);
     });
   });
 }
