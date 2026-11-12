@@ -1,3 +1,4 @@
+
 name: Sa7bi AI - Android UI Smoke Test
 
 on:
@@ -32,7 +33,6 @@ jobs:
     env:
       EXPECTED_BRANCH: "fix/build-692-network-client-lifecycle"
       FLUTTER_VERSION: "3.38.1"
-      JAVA_VERSION: "17"
 
     steps:
       - name: Checkout the intended branch commit
@@ -45,17 +45,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           test "${GITHUB_REPOSITORY}" = "ahmedsab34-prog/sa7bi_ai_new"
-
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
             test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           fi
-
           echo "Repository: ${GITHUB_REPOSITORY}"
-          echo "Event: ${GITHUB_EVENT_NAME}"
-          echo "Checked out commit: $(git rev-parse HEAD)"
+          echo "Commit: $(git rev-parse HEAD)"
           echo "Expected branch: ${EXPECTED_BRANCH}"
 
       - name: Set up Java
@@ -82,17 +78,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           if [[ ! -e /dev/kvm ]]; then
-            echo "ERROR: /dev/kvm is not available on this runner."
+            echo "ERROR: /dev/kvm is not available."
             exit 1
           fi
-
           sudo chmod 666 /dev/kvm
-
           test -r /dev/kvm
           test -w /dev/kvm
-
           echo "KVM access is ready."
           ls -l /dev/kvm
 
@@ -108,59 +100,9 @@ jobs:
           disable-linux-hw-accel: false
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: adb wait-for-device && adb shell svc wifi disable && adb shell svc data disable && adb shell getprop sys.boot_completed && flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded
 
-          script: |
-            set -eu
-
-            echo "Waiting for Android system..."
-            adb wait-for-device
-
-            adb shell settings put global airplane_mode_on 1 || true
-
-            adb shell am broadcast \
-              -a android.intent.action.AIRPLANE_MODE \
-              --ez state true || true
-
-            adb shell svc wifi disable || true
-            adb shell svc data disable || true
-
-            echo "Android emulator is ready."
-            adb shell getprop sys.boot_completed
-
-            # POSIX-compatible: save the test output without pipefail.
-            if flutter test \
-              integration_test/sa7bi_app_smoke_test.dart \
-              --no-pub \
-              -d emulator-5554 \
-              --reporter expanded \
-              > android-ui-smoke.log 2>&1; then
-
-              cat android-ui-smoke.log
-
-            else
-              test_status=$?
-              cat android-ui-smoke.log
-              exit "$test_status"
-            fi
-
-            {
-              echo "## Android UI smoke test passed"
-              echo
-              echo "- Repository and branch identity verified."
-              echo "- Android emulator booted with KVM acceleration."
-              echo "- Main navigation: Home, Chat, Games and Profile."
-              echo "- Local games hub opened."
-              echo "- Diagnostics screen opened."
-              echo "- Automatic quick diagnostics was started."
-              echo "- Performance diagnostics were included."
-              echo "- Full diagnostics v5 was not triggered."
-              echo "- Emulator internet was disabled."
-              echo "- No paid AI inference or production writes were requested."
-              echo
-              echo "This test checks UI startup and navigation, not all live services."
-            } >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Upload Android UI smoke log
+      - name: Upload Android UI smoke report
         if: always()
         uses: actions/upload-artifact@v4
         with:
