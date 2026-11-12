@@ -99,13 +99,11 @@ class ChatScreenBody extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-
                   if (!showReward)
                     const CreditsStatus(
                       compact: false,
                       showRewardButton: false,
                     ),
-
                   if (showReward)
                     const RewardedAdButton(
                       compact: false,
@@ -116,44 +114,6 @@ class ChatScreenBody extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildUtilityRail(BuildContext context) {
-    return SizedBox(
-      width: 42,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-
-          _UtilityIconButton(
-            icon: Icons.bolt_rounded,
-            color: const Color(0xFFFFD76A),
-            tooltip: 'رصيد Credits',
-            onTap: () {
-              _showCreditsPanel(
-                context,
-                showReward: false,
-              );
-            },
-          ),
-
-          const SizedBox(height: 8),
-
-          _UtilityIconButton(
-            icon: Icons.play_circle_fill_rounded,
-            color: const Color(0xFF70E5C7),
-            tooltip: 'إعلان المكافأة',
-            onTap: () {
-              _showCreditsPanel(
-                context,
-                showReward: true,
-              );
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -171,9 +131,8 @@ class ChatScreenBody extends StatelessWidget {
         final userName = profileService.displayName;
         final userPhoto = profileService.photoBytes;
 
-        final aiName = chatController.isKhalasana
-            ? 'خلصانة AI'
-            : 'صاحبي AI';
+        // الاسم الظاهر داخل المحادثة موحد مع هوية التطبيق.
+        final aiName = 'صاحبي AI';
 
         final safeTopic =
             topic?.trim().isNotEmpty == true
@@ -199,51 +158,31 @@ class ChatScreenBody extends StatelessWidget {
                   showTitle: false,
                 ),
 
+                // المحادثة أصبحت تأخذ كامل العرض المتاح.
                 Expanded(
-                  child: Row(
-                    // نستخدم LTR في هذا الصف فقط حتى تكون
-                    // أيقونات الرصيد على يسار منطقة المحادثة.
-                    textDirection: TextDirection.ltr,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildUtilityRail(context),
-
-                      const SizedBox(width: 3),
-
-                      Expanded(
-                        child: messages.isEmpty
-                            ? ChatEmptyState(
-                                theme: theme,
-                                title: aiName,
-                                inlineHeading:
-                                    chatController.isKhalasana
-                                        ? 'خلصانة'
-                                        : null,
-                                inlineTagline:
-                                    chatController.isKhalasana
-                                        ? 'أنا معاك..'
-                                        : null,
-                                showTitle: false,
-                                subtitle:
-                                    chatController.isKhalasana
-                                        ? 'قول لي محتاج إيه، '
-                                            'ونبدأ مع بعض من غير ما تحتاج تختار مجال.'
-                                        : 'اتكلم معايا براحتك، '
-                                            'وأنا هساعدك على قد ما أقدر.',
-                              )
-                            : ChatMessageList(
-                                messages: messages,
-                                theme: theme,
-                                userName: userName,
-                                userPhoto: userPhoto,
-                                aiName: aiName,
-                                isLoading:
-                                    chatController.isLoading,
-                                controller: scrollController,
-                              ),
-                      ),
-                    ],
-                  ),
+                  child: messages.isEmpty
+                      ? ChatEmptyState(
+                          theme: theme,
+                          title: aiName,
+                          inlineHeading: null,
+                          inlineTagline: null,
+                          showTitle: false,
+                          subtitle:
+                              chatController.isKhalasana
+                                  ? 'قول لي محتاج إيه، '
+                                      'ونبدأ مع بعض من غير ما تحتاج تختار مجال.'
+                                  : 'اتكلم معايا براحتك، '
+                                      'وأنا هساعدك على قد ما أقدر.',
+                        )
+                      : ChatMessageList(
+                          messages: messages,
+                          theme: theme,
+                          userName: userName,
+                          userPhoto: userPhoto,
+                          aiName: aiName,
+                          isLoading: chatController.isLoading,
+                          controller: scrollController,
+                        ),
                 ),
 
                 ChatComposer(
@@ -263,56 +202,30 @@ class ChatScreenBody extends StatelessWidget {
                       !enabled ? null : onSpeechToText,
                   onImageGeneration:
                       !enabled ? null : onImageGeneration,
+
+                  // نقل الرصيد والإعلان المكافئ لقائمة (+).
+                  onCredits: !enabled
+                      ? null
+                      : () {
+                          _showCreditsPanel(
+                            context,
+                            showReward: false,
+                          );
+                        },
+                  onRewardedAd: !enabled
+                      ? null
+                      : () {
+                          _showCreditsPanel(
+                            context,
+                            showReward: true,
+                          );
+                        },
                 ),
               ],
             ),
           ),
         );
       },
-    );
-  }
-}
-
-class _UtilityIconButton extends StatelessWidget {
-  const _UtilityIconButton({
-    required this.icon,
-    required this.color,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: color.withValues(alpha: 0.28),
-              ),
-            ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 19,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
