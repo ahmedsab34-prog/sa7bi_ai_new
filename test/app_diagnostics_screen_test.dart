@@ -1,13 +1,14 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:sa7bi_ai/app_diagnostics_screen.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('AppDiagnosticsScreen', () {
     testWidgets(
-      'shows the diagnostics start action and safety explanation',
+      'shows diagnostics action and the correct safety explanation',
       (tester) async {
         await tester.pumpWidget(
           const MaterialApp(
@@ -28,12 +29,16 @@ void main() {
         );
 
         expect(
-          find.text('ابدأ الفحص الشامل'),
+          find.byKey(
+            const ValueKey('automatic-quick-check'),
+          ),
           findsOneWidget,
         );
 
         expect(
-          find.textContaining('الفحص لا يرسل طلب AI مدفوعًا'),
+          find.textContaining(
+            'الفحص السريع والشامل لا يرسلان طلب AI مدفوعًا',
+          ),
           findsOneWidget,
         );
 
@@ -47,7 +52,7 @@ void main() {
     );
 
     testWidgets(
-      'does not start network diagnostics during screen initialization',
+      'shows automatic quick checks without starting full diagnostics',
       (tester) async {
         await tester.pumpWidget(
           const MaterialApp(
@@ -57,15 +62,14 @@ void main() {
 
         await tester.pump();
 
-        // The service is constructed in initState only.
-        // No diagnostic request should run until the user taps Start.
         expect(
-          find.text('ابدأ الفحص الشامل'),
+          find.text('فحص تلقائي سريع'),
           findsOneWidget,
         );
 
+        // لا يتم تشغيل التشخيص الشامل تلقائيًا.
         expect(
-          find.textContaining('تم تنفيذ'),
+          find.text('ملخص التشخيص الشامل v5'),
           findsNothing,
         );
 
