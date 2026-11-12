@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -677,45 +676,98 @@ class Sa7biAudioHandler extends BaseAudioHandler
     final safeIndex =
         initialIndex.clamp(0, items.length - 1).toInt();
 
-    try {
-      await _player.stop();
-    } catch (error) {
-      debugPrint('Audio stop before queue reset: $error');
-    }
+    // احتفظ بالقائمة الحالية ومكان التشغيل قبل استبدال المصدر.
+    // إذا فشل تحميل المصدر الجديد سنحاول إعادة المصدر السابق.
+    final previousItems =
+        List<MediaItem>.unmodifiable(queue.value);
+    final previousIndex = _player.currentIndex ?? 0;
+    final previousPosition = _player.position;
+    final wasPlaying = _player.playing;
 
-    final children = items
-        .map(_audioSourceForItem)
-        .toList();
+    final nextItems =
+        List<MediaItem>.unmodifiable(items);
 
-    final source = ConcatenatingAudioSource(
-      children: children,
-      useLazyPreparation: true,
-    );
-
-    queue.add(List<MediaItem>.unmodifiable(items));
-
-    final selectedDuration = items[safeIndex].duration;
+    final selectedDuration = nextItems[safeIndex].duration;
     final safePosition = selectedDuration != null &&
             initialPosition > selectedDuration
         ? selectedDuration
         : initialPosition;
 
-    await _player.setAudioSource(
-      source,
-      initialIndex: safeIndex,
-      initialPosition: safePosition,
+    // جهّز كائنات المصدر قبل لمس المشغّل أو بيانات القائمة.
+    final nextSource = ConcatenatingAudioSource(
+      children: nextItems
+          .map(_audioSourceForItem)
+          .toList(growable: false),
+      useLazyPreparation: true,
     );
 
-    if (_disposed) {
-      return;
-    }
+    try {
+      // setAudioSource يستبدل قائمة المصدر مباشرة.
+      // لا نستدعي stop() قبله حتى لا نوقف المصدر القديم مبكرًا.
+      await _player.setAudioSource(
+        nextSource,
+        initialIndex: safeIndex,
+        initialPosition: safePosition,
+      );
 
-    mediaItem.add(items[safeIndex]);
-    _broadcastState();
-    _schedulePlaybackSnapshotSave(immediate: true);
+      if (_disposed) {
+        return;
+      }
 
-    if (autoplay) {
-      _startPlayback('Autoplay queue source');
+      // لا نعلن القائمة الجديدة إلا بعد قبول المصدر من المشغّل.
+      queue.add(nextItems);
+      mediaItem.add(nextItems[safeIndex]);
+      _broadcastState();
+      _schedulePlaybackSnapshotSave(immediate: true);
+
+      if (autoplay) {
+        _startPlayback('Autoplay queue source');
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Audio source switch failed: $error');
+
+      // إذا كان هناك مصدر سابق، استعده مع موضعه وحالة تشغيله.
+      // هذا لا يضمن انتقالًا بلا فجوة، لكنه يمنع ترك المشغّل
+      // بلا قائمة عند فشل المصدر الجديد متى نجحت عملية الاستعادة.
+      if (!_disposed && previousItems.isNotEmpty) {
+        try {
+          final safePreviousIndex = previousIndex
+              .clamp(0, previousItems.length - 1)
+              .toInt();
+
+          final previousSource = ConcatenatingAudioSource(
+            children: previousItems
+                .map(_audioSourceForItem)
+                .toList(growable: false),
+            useLazyPreparation: true,
+          );
+
+          await _player.setAudioSource(
+            previousSource,
+            initialIndex: safePreviousIndex,
+            initialPosition: previousPosition,
+          );
+
+          if (!_disposed) {
+            queue.add(previousItems);
+            mediaItem.add(previousItems[safePreviousIndex]);
+            _broadcastState();
+            _schedulePlaybackSnapshotSave(immediate: true);
+
+            if (wasPlaying) {
+              _startPlayback('Resume previous source after switch failure');
+            }
+          }
+        } catch (restoreError, restoreStackTrace) {
+          debugPrint(
+            'Restoring previous audio source failed: $restoreError',
+          );
+          debugPrintStack(stackTrace: restoreStackTrace);
+        }
+      }
+
+      _broadcastState();
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
@@ -1015,18 +1067,11 @@ class Sa7biAudioHandler extends BaseAudioHandler
         await _setQueueSource(
           items: newQueue,
           initialIndex: oldQueue.isEmpty ? 0 : currentIndex,
+          initialPosition: oldQueue.isEmpty
+              ? Duration.zero
+              : currentPosition,
           autoplay: wasPlaying,
         );
-
-        if (oldQueue.isNotEmpty &&
-            currentIndex >= 0 &&
-            currentIndex < oldQueue.length &&
-            currentPosition > Duration.zero) {
-          await _player.seek(
-            currentPosition,
-            index: currentIndex,
-          );
-        }
       } catch (error, stackTrace) {
         debugPrint('Adding audio queue item failed: $error');
         debugPrintStack(stackTrace: stackTrace);
@@ -1063,18 +1108,11 @@ class Sa7biAudioHandler extends BaseAudioHandler
         await _setQueueSource(
           items: newQueue,
           initialIndex: oldQueue.isEmpty ? 0 : currentIndex,
+          initialPosition: oldQueue.isEmpty
+              ? Duration.zero
+              : currentPosition,
           autoplay: wasPlaying,
         );
-
-        if (oldQueue.isNotEmpty &&
-            currentIndex >= 0 &&
-            currentIndex < oldQueue.length &&
-            currentPosition > Duration.zero) {
-          await _player.seek(
-            currentPosition,
-            index: currentIndex,
-          );
-        }
       } catch (error, stackTrace) {
         debugPrint('Adding audio queue items failed: $error');
         debugPrintStack(stackTrace: stackTrace);
@@ -1154,16 +1192,11 @@ class Sa7biAudioHandler extends BaseAudioHandler
         await _setQueueSource(
           items: oldQueue,
           initialIndex: newIndex,
+          initialPosition: index == currentIndex
+              ? Duration.zero
+              : currentPosition,
           autoplay: wasPlaying,
         );
-
-        if (index != currentIndex &&
-            currentPosition > Duration.zero) {
-          await _player.seek(
-            currentPosition,
-            index: newIndex,
-          );
-        }
       } catch (error, stackTrace) {
         debugPrint('Removing audio queue item failed: $error');
         debugPrintStack(stackTrace: stackTrace);
