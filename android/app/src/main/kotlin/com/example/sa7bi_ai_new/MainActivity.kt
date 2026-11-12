@@ -1,5 +1,7 @@
 package com.example.sa7bi_ai_new
 
+import android.app.ActivityManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
@@ -14,10 +16,74 @@ class MainActivity : AudioServiceFragmentActivity() {
 
     private val videoChannel = "sa7bi_ai/video"
 
+    private val performanceChannel =
+        "sa7bi_ai/performance"
+
     override fun configureFlutterEngine(
         flutterEngine: FlutterEngine
     ) {
         super.configureFlutterEngine(flutterEngine)
+
+        // ----------------------------------------------------
+        // DEVICE PERFORMANCE CHANNEL
+        // ----------------------------------------------------
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            performanceChannel
+        ).setMethodCallHandler { call, result ->
+
+            when (call.method) {
+
+                "getDevicePerformanceInfo" -> {
+                    try {
+                        val activityManager =
+                            getSystemService(
+                                Context.ACTIVITY_SERVICE
+                            ) as ActivityManager
+
+                        val memoryInfo =
+                            ActivityManager.MemoryInfo()
+
+                        activityManager.getMemoryInfo(
+                            memoryInfo
+                        )
+
+                        result.success(
+                            mapOf(
+                                "totalMemoryBytes" to
+                                    memoryInfo.totalMem,
+
+                                "availableMemoryBytes" to
+                                    memoryInfo.availMem,
+
+                                "lowMemory" to
+                                    memoryInfo.lowMemory,
+
+                                "logicalProcessors" to
+                                    Runtime.getRuntime()
+                                        .availableProcessors()
+                            )
+                        )
+                    } catch (e: Exception) {
+                        result.error(
+                            "DEVICE_METRICS_ERROR",
+                            e.message
+                                ?: "Unable to read device performance metrics",
+                            null
+                        )
+                    }
+                }
+
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+
+        // ----------------------------------------------------
+        // EXISTING VIDEO CHANNEL
+        // ----------------------------------------------------
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
