@@ -1,7 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'services/app_diagnostics_quick_service.dart';
 import 'services/app_diagnostics_service.dart';
 import 'services/app_diagnostics_v5_service.dart';
 
@@ -16,23 +16,86 @@ class AppDiagnosticsScreen extends StatefulWidget {
 class _AppDiagnosticsScreenState
     extends State<AppDiagnosticsScreen> {
   late final AppDiagnosticsV5Service _service;
+  late final AppDiagnosticsQuickService _quickService;
 
   AppDiagnosticsV5Report? _report;
+  AppDiagnosticsQuickReport? _quickReport;
+
   final List<DiagnosticResult> _liveResults = [];
 
   bool _running = false;
+  bool _quickRunning = false;
+  bool _quickCompleted = false;
 
   @override
   void initState() {
     super.initState();
+
     _service = AppDiagnosticsV5Service();
+    _quickService = AppDiagnosticsQuickService();
+
+    // يبدأ الفحص السريع تلقائيًا بعد أول إطار للشاشة.
+    // الفحص الشامل v5 لا يبدأ تلقائيًا.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _runQuickDiagnostics();
+      }
+    });
+  }
+
+  Future<void> _runQuickDiagnostics() async {
+    if (_running || _quickRunning) return;
+
+    setState(() {
+      _quickRunning = true;
+      _quickCompleted = false;
+      _quickReport = null;
+      _report = null;
+      _liveResults.clear();
+    });
+
+    try {
+      final quickReport =
+          await _quickService.runQuickDiagnostics(
+        onResult: (result) {
+          if (!mounted) return;
+
+          setState(() {
+            _liveResults.add(result);
+          });
+        },
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _quickReport = quickReport;
+        _quickRunning = false;
+        _quickCompleted = true;
+      });
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _quickRunning = false;
+        _quickCompleted = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تعذر إكمال الفحص السريع: $error'),
+        ),
+      );
+    }
   }
 
   Future<void> _runDiagnostics() async {
-    if (_running) return;
+    if (_running || _quickRunning) return;
 
     setState(() {
       _running = true;
+      _quickReport = null;
+      _quickCompleted = false;
       _report = null;
       _liveResults.clear();
     });
@@ -63,7 +126,7 @@ class _AppDiagnosticsScreenState
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('تعذر إكمال التشخيص: $error'),
+          content: Text('تعذر إكمال التشخيص الشامل: $error'),
         ),
       );
     }
@@ -187,6 +250,84 @@ class _AppDiagnosticsScreenState
     );
   }
 
+  Widget _quickSummaryCard() {
+    final report = _quickReport;
+    if (report == null) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'ملخص الفحص السريع التلقائي',
+              textDirection: TextDirection.rtl,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _SummaryValue(
+                    title: 'ناجح',
+                    value: report.passed,
+                    color: Colors.green,
+                    icon: Icons.check_circle,
+                  ),
+                ),
+                Expanded(
+                  child: _SummaryValue(
+                    title: 'تحذير',
+                    value: report.warnings,
+                    color: Colors.orange,
+                    icon: Icons.warning_amber_rounded,
+                  ),
+                ),
+                Expanded(
+                  child: _SummaryValue(
+                    title: 'فشل',
+                    value: report.failed,
+                    color: Colors.red,
+                    icon: Icons.error,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'الإجمالي: ${report.total}',
+              textDirection: TextDirection.rtl,
+            ),
+            Text(
+              'المدة: ${report.duration.inSeconds} ثانية',
+              textDirection: TextDirection.rtl,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Root cause: ${report.rootCauseCode}',
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.blueGrey,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'هذا فحص أولي للاتصال وهوية النسخة. '
+              'للتقرير الكامل شغّل الفحص الشامل v5.',
+              textDirection: TextDirection.rtl,
+              style: TextStyle(fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _summaryCard() {
     final report = _report;
     if (report == null) return const SizedBox.shrink();
@@ -198,7 +339,7 @@ class _AppDiagnosticsScreenState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'ملخص التشخيص v5',
+              'ملخص التشخيص الشامل v5',
               textDirection: TextDirection.rtl,
               style: TextStyle(
                 fontSize: 19,
@@ -356,10 +497,8 @@ class _AppDiagnosticsScreenState
             ),
             SizedBox(height: 8),
             Text(
-              'الفحص v5 يراجع الاتصال والخوادم وصحة البيانات '
-              'والقرآن والحديث والتفسير والراديو والأخبار '
-              'والبودكاست والفيديوهات، ويفحص حالة الصوت '
-              'والأذونات على الجهاز.',
+              'عند فتح هذه الشاشة يبدأ الفحص السريع تلقائيًا. '
+              'بعده يمكنك تشغيل الفحص الشامل v5 يدويًا.',
               textAlign: TextAlign.center,
             ),
           ],
@@ -382,8 +521,9 @@ class _AppDiagnosticsScreenState
             const SizedBox(width: 9),
             Expanded(
               child: Text(
-                'الفحص لا يرسل طلب AI مدفوعًا، ولا ينشر محتوى، '
-                'ولا ينشئ مباريات، ولا يشغّل صوتًا مسموعًا. '
+                'الفحص السريع والشامل لا يرسلان طلب AI مدفوعًا، '
+                'ولا ينشران محتوى، ولا ينشئان مباريات، '
+                'ولا يشغّلان صوتًا مسموعًا. '
                 'الاختبارات التي تحتاج تفاعلًا أو رصيدًا تظهر '
                 'بوضوح تحت حالة «لم يُختبر».',
                 textDirection: TextDirection.rtl,
@@ -407,23 +547,39 @@ class _AppDiagnosticsScreenState
     final visibleResults =
         report?.results ?? _liveResults;
 
+    final isAnyCheckRunning = _running || _quickRunning;
+
+    final resultsTitle = _running
+        ? 'نتائج الفحص الشامل المباشرة'
+        : _quickRunning
+            ? 'نتائج الفحص السريع المباشرة'
+            : report != null
+                ? 'نتائج الفحص الشامل'
+                : 'نتائج الفحص السريع التلقائي';
+
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('تشخيص صاحبي AI'),
           actions: [
-            if (report != null)
+            if (_quickReport != null || report != null)
               IconButton(
-                tooltip: 'إعادة الفحص',
-                onPressed: _running ? null : _runDiagnostics,
+                tooltip: report != null
+                    ? 'إعادة الفحص الشامل'
+                    : 'إعادة الفحص السريع',
+                onPressed: isAnyCheckRunning
+                    ? null
+                    : report != null
+                        ? _runDiagnostics
+                        : _runQuickDiagnostics,
                 icon: const Icon(Icons.refresh_rounded),
               ),
           ],
         ),
         body: SafeArea(
           child: RefreshIndicator(
-            onRefresh: _runDiagnostics,
+            onRefresh: _runQuickDiagnostics,
             child: ListView(
               padding: const EdgeInsets.all(12),
               children: [
@@ -442,9 +598,10 @@ class _AppDiagnosticsScreenState
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'الفحص يعرض النتائج أثناء تنفيذها، '
-                          'ويفرّق بين نجاح الخادم وصحة البيانات '
-                          'وحالة المكونات على الهاتف.',
+                          'عند فتح الشاشة يبدأ فحص سريع تلقائي '
+                          'للاتصال وهوية النسخة والخادمين. '
+                          'الفحص الشامل v5 يبدأ فقط عند الضغط على الزر.',
+                          textDirection: TextDirection.rtl,
                         ),
                         const SizedBox(height: 12),
                         SelectableText(
@@ -453,13 +610,45 @@ class _AppDiagnosticsScreenState
                           textDirection: TextDirection.ltr,
                           style: const TextStyle(fontSize: 11),
                         ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'فحص تلقائي سريع',
+                          key: ValueKey('automatic-quick-check'),
+                          textDirection: TextDirection.rtl,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        if (_quickRunning) ...[
+                          const LinearProgressIndicator(),
+                          const SizedBox(height: 5),
+                          Text(
+                            'تم تنفيذ ${_liveResults.length} اختبار سريع حتى الآن',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ] else if (_quickCompleted) ...[
+                          const Text(
+                            'اكتمل الفحص السريع التلقائي.',
+                            textDirection: TextDirection.rtl,
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ] else ...[
+                          const Text(
+                            'سيبدأ الفحص تلقائيًا عند فتح الشاشة.',
+                            textDirection: TextDirection.rtl,
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         SizedBox(
                           height: 48,
                           child: ElevatedButton.icon(
-                            onPressed:
-                                _running ? null : _runDiagnostics,
-                            icon: _running
+                            onPressed: isAnyCheckRunning
+                                ? null
+                                : _runDiagnostics,
+                            icon: isAnyCheckRunning
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
@@ -470,17 +659,16 @@ class _AppDiagnosticsScreenState
                                 : const Icon(Icons.play_arrow_rounded),
                             label: Text(
                               _running
-                                  ? 'جاري الفحص...'
-                                  : 'ابدأ الفحص الشامل',
+                                  ? 'جاري الفحص الشامل...'
+                                  : _quickRunning
+                                      ? 'جاري الفحص السريع...'
+                                      : 'ابدأ الفحص الشامل',
                             ),
                           ),
                         ),
                         if (_running) ...[
                           const SizedBox(height: 12),
-                          LinearProgressIndicator(
-                            value: null,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+                          const LinearProgressIndicator(),
                           const SizedBox(height: 5),
                           Text(
                             'تم تنفيذ ${_liveResults.length} اختبار حتى الآن',
@@ -493,6 +681,9 @@ class _AppDiagnosticsScreenState
                   ),
                 ),
                 _safetyNote(),
+                if (_quickReport != null && report == null) ...[
+                  _quickSummaryCard(),
+                ],
                 if (report != null) ...[
                   _summaryCard(),
                   const SizedBox(height: 10),
@@ -518,9 +709,7 @@ class _AppDiagnosticsScreenState
                 ],
                 const SizedBox(height: 14),
                 Text(
-                  _running
-                      ? 'نتائج الفحص المباشرة'
-                      : 'نتائج الفحص',
+                  resultsTitle,
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.bold,
