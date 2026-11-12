@@ -5,9 +5,7 @@ import 'config/service_keys.dart';
 /// بيانات خدمة واحدة داخل صاحبي AI.
 ///
 /// serviceKey هو المعرف الداخلي الثابت للخدمة.
-/// الاسم العربي والتصميم ممكن يتغيروا مستقبلًا،
-/// لكن serviceKey يفضل ثابتًا حتى لا تتغير محادثة المستخدم
-/// أو يحصل تعارض بين سجلات الخدمات.
+/// لا نغيره حتى لا تتأثر سجلات المحادثات القديمة.
 class Sa7biService {
   final String serviceKey;
   final String title;
@@ -26,16 +24,16 @@ class Sa7biService {
   });
 }
 
-/// الخدمات الأساسية العشرة في صاحبي AI.
+/// الخدمات الثمانية الظاهرة في شاشة التصنيفات.
 ///
-/// لا نحذف التواصل أو الفضفضة من هذا السجل العام؛
-/// لأن أجزاء أخرى من التطبيق تعتمد عليهما.
+/// التواصل والفضفضة ليسا من بطاقات التصنيفات.
+/// الرسائل الاجتماعية والفضفضة السرية لهما شاشات منفصلة
+/// داخل تبويب الشات، لذلك لا نحذف مفاتيحهما القديمة.
 const List<Sa7biService> sa7biServices = [
   Sa7biService(
     serviceKey: ServiceKeys.kitchen,
     title: 'المطبخ',
-    description:
-        'الأكل والوصفات والمكونات وتحليل صور الطعام',
+    description: 'الأكل والوصفات والمكونات وتحليل صور الطعام',
     icon: Icons.restaurant_menu,
     color: Color(0xFFFF8A00),
     aiRole:
@@ -52,8 +50,7 @@ const List<Sa7biService> sa7biServices = [
   Sa7biService(
     serviceKey: ServiceKeys.merchant,
     title: 'التجارة',
-    description:
-        'المنتجات والمتاجر والأسعار والتسويق',
+    description: 'المنتجات والمتاجر والأسعار والتسويق',
     icon: Icons.storefront,
     color: Color(0xFF00C853),
     aiRole:
@@ -67,8 +64,7 @@ const List<Sa7biService> sa7biServices = [
   Sa7biService(
     serviceKey: ServiceKeys.pharmacy,
     title: 'الصيدلية والأعشاب',
-    description:
-        'معلومات عامة عن الأدوية والأعشاب والصور',
+    description: 'معلومات عامة عن الأدوية والأعشاب والصور',
     icon: Icons.local_pharmacy,
     color: Color(0xFF00B8D4),
     aiRole:
@@ -84,8 +80,7 @@ const List<Sa7biService> sa7biServices = [
   Sa7biService(
     serviceKey: ServiceKeys.tradesperson,
     title: 'الحرفيين',
-    description:
-        'صيانة المنزل والكهرباء والسباكة والأعمال اليدوية',
+    description: 'صيانة المنزل والكهرباء والسباكة والأعمال اليدوية',
     icon: Icons.handyman,
     color: Color(0xFFFFC107),
     aiRole:
@@ -100,8 +95,7 @@ const List<Sa7biService> sa7biServices = [
   Sa7biService(
     serviceKey: ServiceKeys.worship,
     title: 'العبادة',
-    description:
-        'القرآن والأذكار والمعلومات الإسلامية',
+    description: 'القرآن والأذكار والمعلومات الإسلامية',
     icon: Icons.mosque,
     color: Color(0xFF26A69A),
     aiRole:
@@ -116,8 +110,7 @@ const List<Sa7biService> sa7biServices = [
   Sa7biService(
     serviceKey: ServiceKeys.shopping,
     title: 'التسوق',
-    description:
-        'مقارنة المنتجات وفهم المواصفات والشراء الذكي',
+    description: 'مقارنة المنتجات وفهم المواصفات والشراء الذكي',
     icon: Icons.shopping_cart,
     color: Color(0xFFE91E63),
     aiRole:
@@ -130,42 +123,9 @@ const List<Sa7biService> sa7biServices = [
         'التفاصيل الظاهرة وشرحها بحذر.',
   ),
   Sa7biService(
-    serviceKey: ServiceKeys.social,
-    title: 'التواصل',
-    description:
-        'رسائل ومحادثات وأفكار للتواصل الاجتماعي',
-    icon: Icons.people_alt,
-    color: Color(0xFF7C4DFF),
-    aiRole:
-        'أنت مساعد التواصل في صَحبي AI. '
-        'ساعد المستخدم في كتابة الرسائل والردود، '
-        'تحسين أسلوب الكلام، أفكار المحتوى الاجتماعي، '
-        'وترتيب المحادثات. '
-        'احترم خصوصية الآخرين ولا تدّعي أنك تواصلت مع شخص '
-        'أو أرسلت رسالة بنفسك. '
-        'إذا طلب المستخدم صياغة رسالة، اجعلها طبيعية '
-        'ومناسبة للعلاقة والموقف.',
-  ),
-  Sa7biService(
-    serviceKey: ServiceKeys.venting,
-    title: 'فضفضة',
-    description:
-        'مساحة خاصة للكلام وترتيب الأفكار',
-    icon: Icons.lock_outline,
-    color: Color(0xFF9C27B0),
-    aiRole:
-        'أنت مساعد فضفضة خاص في صَحبي AI. '
-        'استمع للمستخدم بتعاطف واحترام وبدون أحكام. '
-        'ساعده على ترتيب أفكاره وفهم مشاعره واختيار خطوات عملية. '
-        'لا تدّعي السرية المطلقة، ولا تدّعي أنك طبيب أو معالج. '
-        'إذا ظهرت مؤشرات على خطر مباشر أو أذى للنفس أو الآخرين، '
-        'شجع المستخدم على طلب مساعدة بشرية عاجلة ومناسبة.',
-  ),
-  Sa7biService(
     serviceKey: ServiceKeys.hobbiesSports,
     title: 'الهوايات والرياضة',
-    description:
-        'رياضة وألعاب وأفلام وهوايات',
+    description: 'رياضة وألعاب وأفلام وهوايات',
     icon: Icons.sports_soccer,
     color: Color(0xFF2196F3),
     aiRole:
@@ -178,8 +138,7 @@ const List<Sa7biService> sa7biServices = [
   Sa7biService(
     serviceKey: ServiceKeys.podcasts,
     title: 'البودكاست',
-    description:
-        'أفكار الحلقات والمحتوى الصوتي والمرئي',
+    description: 'أفكار الحلقات والمحتوى الصوتي والمرئي',
     icon: Icons.podcasts,
     color: Color(0xFFFF4081),
     aiRole:
@@ -193,16 +152,10 @@ const List<Sa7biService> sa7biServices = [
   ),
 ];
 
-/// الخدمات التي تظهر داخل شريط تخصصات خلصانة فقط.
-///
-/// هذه القائمة لا تحذف التواصل أو الفضفضة من السجل العام.
-/// تبقى الخدمتان متاحتين للأجزاء الأخرى من التطبيق.
+/// التخصصات التي تظهر في شريط خلصانة.
+/// القائمة محمية من التعديل وتحتوي على الخدمات الثماني فقط.
 List<Sa7biService> get khalasanaVisibleServices {
   return List<Sa7biService>.unmodifiable(
-    sa7biServices.where(
-      (service) =>
-          service.serviceKey != ServiceKeys.social &&
-          service.serviceKey != ServiceKeys.venting,
-    ),
+    sa7biServices,
   );
 }
