@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../services/chat_controller.dart';
@@ -11,10 +12,7 @@ import 'credits_status.dart';
 import 'rewarded_ad_button.dart';
 
 /// جسم شاشة المحادثة.
-///
-/// مسؤول عن تركيب واجهة المحادثة فقط.
-/// منطق الذكاء الاصطناعي والوسائط والحفظ موجود
-/// في ChatScreen والخدمات الخاصة به.
+/// منطق الذكاء والوسائط والحفظ موجود في ChatScreen والخدمات.
 class ChatScreenBody extends StatelessWidget {
   final ChatController chatController;
   final ProfileService profileService;
@@ -26,9 +24,7 @@ class ChatScreenBody extends StatelessWidget {
   final String title;
   final String? topic;
 
-  /// هل الشاشة تسمح بالتفاعل؟
   final bool enabled;
-
   final bool isListening;
   final bool isGeneratingImage;
 
@@ -67,6 +63,61 @@ class ChatScreenBody extends StatelessWidget {
     required this.onClear,
   });
 
+  Future<void> _showCreditsPanel(
+    BuildContext context, {
+    required bool showReward,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF101725),
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(22),
+        ),
+      ),
+      builder: (sheetContext) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                14,
+                4,
+                14,
+                20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'رصيد صاحبي AI',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (!showReward)
+                    const CreditsStatus(
+                      compact: false,
+                      showRewardButton: false,
+                    ),
+                  if (showReward)
+                    const RewardedAdButton(
+                      compact: false,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -81,9 +132,9 @@ class ChatScreenBody extends StatelessWidget {
         final userName = profileService.displayName;
         final userPhoto = profileService.photoBytes;
 
-        final aiName = chatController.isKhalasana
-            ? 'خلصانة AI'
-            : 'صاحبي AI';
+        // الاسم الظاهر داخل المحادثة موحد.
+        // serviceKey و serviceTitle يظلان محفوظين داخليًا للذكاء الاصطناعي.
+        const aiName = 'صاحبي AI';
 
         final safeTopic =
             topic?.trim().isNotEmpty == true
@@ -96,68 +147,91 @@ class ChatScreenBody extends StatelessWidget {
           child: SafeArea(
             child: Column(
               children: [
-                // ==================================================
-                // HEADER
-                // ==================================================
-
-                ChatStatusHeader(
-                  theme: theme,
-                  title: title,
-                  topic: safeTopic,
-                  isLoading: chatController.isLoading,
-                  canClear:
-                      messages.isNotEmpty &&
-                      !chatController.isLoading,
-                  onClear:
-                      chatController.isLoading
-                          ? null
-                          : onClear,
-                ),
-
-                // ==================================================
-                // CREDITS
-                // ==================================================
-
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    10,
-                    3,
-                    10,
-                    5,
-                  ),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: CreditsStatus(
-                          compact: true,
-                          showRewardButton: false,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: ChatStatusHeader(
+                        theme: theme,
+                        title: title,
+                        topic: safeTopic,
+                        isLoading: chatController.isLoading,
+                        canClear: messages.isNotEmpty &&
+                            !chatController.isLoading,
+                        onClear: chatController.isLoading
+                            ? null
+                            : onClear,
+                        showTitle: false,
+                      ),
+                    ),
+                    PopupMenuButton<int>(
+                      tooltip: 'الرصيد والمكافآت',
+                      icon: const Icon(
+                        Icons.more_horiz_rounded,
+                        color: Color(0xFF9FCBFF),
+                        size: 23,
+                      ),
+                      color: const Color(0xFF17243B),
+                      onSelected: (value) {
+                        _showCreditsPanel(
+                          context,
+                          showReward: value == 2,
+                        );
+                      },
+                      itemBuilder: (menuContext) => const [
+                        PopupMenuItem<int>(
+                          value: 1,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.bolt_rounded,
+                                color: Color(0xFFFFD76A),
+                              ),
+                              SizedBox(width: 9),
+                              Text(
+                                'رصيد النقاط',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      RewardedAdButton(
-                        compact: true,
-                        onRewarded: () {
-                          // CreditsStatus يعيد قراءة الرصيد
-                          // عند إعادة بناء الواجهة.
-                        },
-                      ),
-                    ],
-                  ),
+                        PopupMenuItem<int>(
+                          value: 2,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.play_circle_fill_rounded,
+                                color: Color(0xFF70E5C7),
+                              ),
+                              SizedBox(width: 9),
+                              Text(
+                                'إعلان المكافأة',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 3),
+                  ],
                 ),
 
-                // ==================================================
-                // MESSAGES
-                // ==================================================
-
+                // مساحة المحادثة أصبحت كاملة، من غير عمود أدوات جانبي.
                 Expanded(
                   child: messages.isEmpty
                       ? ChatEmptyState(
                           theme: theme,
                           title: aiName,
+                          inlineTagline:
+                              chatController.isKhalasana
+                                  ? 'أنا معاك..'
+                                  : null,
+                          showTitle: false,
                           subtitle:
                               chatController.isKhalasana
-                                  ? 'اتكلم مع خلصانة براحتك، '
-                                      'والمحادثة تتغير حسب الموضوع.'
+                                  ? 'قول لي محتاج إيه، '
+                                      'ونبدأ مع بعض من غير ما تحتاج تختار مجال.'
                                   : 'اتكلم معايا براحتك، '
                                       'وأنا هساعدك على قد ما أقدر.',
                         )
@@ -167,69 +241,28 @@ class ChatScreenBody extends StatelessWidget {
                           userName: userName,
                           userPhoto: userPhoto,
                           aiName: aiName,
-                          isLoading:
-                              chatController.isLoading,
+                          isLoading: chatController.isLoading,
                           controller: scrollController,
                         ),
                 ),
 
-                // ==================================================
-                // CHAT COMPOSER
-                // ==================================================
-
                 ChatComposer(
                   controller: textController,
                   focusNode: focusNode,
-                  isLoading:
-                      !enabled ||
+                  isLoading: !enabled ||
                       chatController.isLoading,
                   isListening: isListening,
                   isGeneratingImage: isGeneratingImage,
-
-                  // إرسال النص
                   onSend: onSend,
-
-                  // الكاميرا
-                  onCamera:
-                      !enabled
-                          ? null
-                          : onCamera,
-
-                  // الصور والمعرض
-                  onGallery:
-                      !enabled
-                          ? null
-                          : onGallery,
-
-                  // الفيديو
-                  onVideo:
-                      !enabled
-                          ? null
-                          : onVideo,
-
-                  // قراءة آخر رد AI بالصوت
-                  onVoice:
-                      !enabled
-                          ? null
-                          : onVoice,
-
-                  // فتح لوحة الكتابة
-                  onText:
-                      !enabled
-                          ? null
-                          : onText,
-
-                  // تحويل الكلام إلى نص
+                  onCamera: !enabled ? null : onCamera,
+                  onGallery: !enabled ? null : onGallery,
+                  onVideo: !enabled ? null : onVideo,
+                  onVoice: !enabled ? null : onVoice,
+                  onText: !enabled ? null : onText,
                   onSpeechToText:
-                      !enabled
-                          ? null
-                          : onSpeechToText,
-
-                  // توليد صورة بالذكاء الاصطناعي
+                      !enabled ? null : onSpeechToText,
                   onImageGeneration:
-                      !enabled
-                          ? null
-                          : onImageGeneration,
+                      !enabled ? null : onImageGeneration,
                 ),
               ],
             ),
