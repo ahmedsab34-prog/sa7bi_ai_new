@@ -1,10 +1,49 @@
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:sa7bi_ai/app_diagnostics_screen.dart';
 
+const MethodChannel _performanceChannel =
+    MethodChannel('sa7bi_ai/performance');
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    // بيانات جهاز تجريبية حتى لا ينتظر الاختبار
+    // MethodChannel حقيقيًا أو مؤقت انتهاء المهلة.
+    TestDefaultBinaryMessengerBinding
+        .instance
+        .defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      _performanceChannel,
+      (call) async {
+        if (call.method != 'getDevicePerformanceInfo') {
+          return null;
+        }
+
+        return <String, Object?>{
+          'totalMemoryBytes': 6 * 1024 * 1024 * 1024,
+          'availableMemoryBytes': 3 * 1024 * 1024 * 1024,
+          'lowMemory': false,
+          'logicalProcessors': 4,
+        };
+      },
+    );
+  });
+
+  tearDown(() {
+    // إزالة المحاكاة بعد كل اختبار.
+    TestDefaultBinaryMessengerBinding
+        .instance
+        .defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      _performanceChannel,
+      null,
+    );
+  });
 
   group('AppDiagnosticsScreen', () {
     testWidgets(
@@ -67,7 +106,7 @@ void main() {
           findsOneWidget,
         );
 
-        // لا يتم تشغيل التشخيص الشامل تلقائيًا.
+        // التشخيص السريع تلقائي، لكن الشامل لا يبدأ تلقائيًا.
         expect(
           find.text('ملخص التشخيص الشامل v5'),
           findsNothing,
