@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import 'chat_screen.dart';
@@ -65,15 +64,13 @@ class _KhalasanaPortalScreenState
       service: KhalasanaPortalScreen.khalasanaService,
       isGeneral: true,
     ),
-    for (final service in sa7biServices)
-      if (service.serviceKey != ServiceKeys.social &&
-          service.serviceKey != ServiceKeys.venting)
-        _KhalasanaTarget(
-          serviceKey: service.serviceKey,
-          title: service.title,
-          context: service.aiRole,
-          service: service,
-        ),
+    for (final service in khalasanaVisibleServices)
+      _KhalasanaTarget(
+        serviceKey: service.serviceKey,
+        title: service.title,
+        context: service.aiRole,
+        service: service,
+      ),
   ];
 
   static final List<_KhalasanaTarget> _specialties =
@@ -218,7 +215,7 @@ class _KhalasanaPortalScreenState
         title: _activeTarget.title,
         subtitle: _activeTarget.service.description,
         showTitleRow: false,
-        welcomeMessage: 'أنا معاك — خلصانة',
+        welcomeMessage: 'أنا معاك',
       ),
       body: SafeArea(
         child: Padding(
