@@ -27,6 +27,9 @@ class Sa7biService {
 }
 
 /// الخدمات الأساسية العشرة في صاحبي AI.
+///
+/// لا نحذف التواصل أو الفضفضة من هذا السجل العام؛
+/// لأن أجزاء أخرى من التطبيق تعتمد عليهما.
 const List<Sa7biService> sa7biServices = [
   Sa7biService(
     serviceKey: ServiceKeys.kitchen,
@@ -46,7 +49,6 @@ const List<Sa7biService> sa7biServices = [
         'إذا سأل عن شيء متعلق بالحساسية أو سلامة الطعام، '
         'كن حذرًا واذكر متى يحتاج إلى مختص.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.merchant,
     title: 'التجارة',
@@ -62,7 +64,6 @@ const List<Sa7biService> sa7biServices = [
         'إذا أرسل المستخدم صورة منتج، حلل ما يظهر فيها فقط. '
         'لا تدّعي سعرًا أو توفرًا لحظيًا ما لم تكن لديك بيانات مؤكدة.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.pharmacy,
     title: 'الصيدلية والأعشاب',
@@ -80,7 +81,6 @@ const List<Sa7biService> sa7biServices = [
         'عند وجود أعراض خطيرة أو تداخلات دوائية محتملة، '
         'وجّه المستخدم إلى مختص.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.tradesperson,
     title: 'الحرفيين',
@@ -97,7 +97,6 @@ const List<Sa7biService> sa7biServices = [
         'نبّه بوضوح عند وجود خطر كهرباء أو غاز أو أعمال '
         'تحتاج متخصصًا ولا تعطِ تعليمات خطرة بثقة زائفة.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.worship,
     title: 'العبادة',
@@ -114,7 +113,6 @@ const List<Sa7biService> sa7biServices = [
         'لا تنسب نصًا دينيًا إلى مصدر دون ثقة. '
         'لا تدخل في إساءة أو جدال ديني غير محترم.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.shopping,
     title: 'التسوق',
@@ -131,7 +129,6 @@ const List<Sa7biService> sa7biServices = [
         'إذا أرسل المستخدم صورة منتج، ساعده في التعرف على '
         'التفاصيل الظاهرة وشرحها بحذر.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.social,
     title: 'التواصل',
@@ -149,7 +146,6 @@ const List<Sa7biService> sa7biServices = [
         'إذا طلب المستخدم صياغة رسالة، اجعلها طبيعية '
         'ومناسبة للعلاقة والموقف.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.venting,
     title: 'فضفضة',
@@ -165,7 +161,6 @@ const List<Sa7biService> sa7biServices = [
         'إذا ظهرت مؤشرات على خطر مباشر أو أذى للنفس أو الآخرين، '
         'شجع المستخدم على طلب مساعدة بشرية عاجلة ومناسبة.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.hobbiesSports,
     title: 'الهوايات والرياضة',
@@ -180,7 +175,6 @@ const List<Sa7biService> sa7biServices = [
         'إذا كانت المعلومة مرتبطة بنتيجة أو موعد أو خبر حديث '
         'ولا توجد لديك بيانات حديثة مؤكدة، وضح ذلك بدل التخمين.',
   ),
-
   Sa7biService(
     serviceKey: ServiceKeys.podcasts,
     title: 'البودكاست',
@@ -198,3 +192,17 @@ const List<Sa7biService> sa7biServices = [
         'استخرج المعلومات الظاهرة فقط ولا تخترع مصادر.',
   ),
 ];
+
+/// الخدمات التي تظهر داخل شريط تخصصات خلصانة فقط.
+///
+/// هذه القائمة لا تحذف التواصل أو الفضفضة من السجل العام.
+/// تبقى الخدمتان متاحتين للأجزاء الأخرى من التطبيق.
+List<Sa7biService> get khalasanaVisibleServices {
+  return List<Sa7biService>.unmodifiable(
+    sa7biServices.where(
+      (service) =>
+          service.serviceKey != ServiceKeys.social &&
+          service.serviceKey != ServiceKeys.venting,
+    ),
+  );
+}
