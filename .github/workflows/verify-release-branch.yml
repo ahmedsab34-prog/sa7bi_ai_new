@@ -1,4 +1,3 @@
-
 name: Sa7bi AI - Single Source Verified Release
 
 run-name: Sa7bi AI Release - trigger ${{ github.sha }}
@@ -10,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: "For a manual run, approve deployment of both Workers and publication of the verified APK. Push runs publish automatically after all checks pass."
+        description: "Push runs build and verification only. Set true only in a manual run when you explicitly approve deploying both Workers and publishing the verified APK."
         required: true
         type: boolean
         default: false
@@ -408,6 +407,30 @@ jobs:
           set -euo pipefail
           flutter test --no-pub --reporter expanded 2>&1 | tee flutter-test-report.txt
 
+      - name: Regenerate Android release configuration and verify the plugin registrant
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Work around Flutter's stale Android plugin registrant when
+          # integration_test is correctly declared as a dev_dependency.
+          flutter build --config-only
+
+          REGISTRANT="android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"
+
+          if [ ! -s "${REGISTRANT}" ]; then
+            echo "::error::Flutter did not generate the Android plugin registrant."
+            exit 1
+          fi
+
+          if grep -Fq 'dev.flutter.plugins.integration_test.IntegrationTestPlugin' "${REGISTRANT}"; then
+            echo "::error::The Release plugin registrant still contains the dev-only integration_test plugin."
+            echo "The APK build is stopped before Gradle compilation."
+            exit 1
+          fi
+
+          echo "PASS: Android release plugin registrant excludes integration_test."
+
       - name: Build the signed release APK from the resolved commit
         shell: bash
         run: |
@@ -566,7 +589,7 @@ jobs:
     needs:
       - refresh-dependencies
       - build-test-verify
-    if: ${{ (github.event_name == 'push' || inputs.publish_release == true) && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -825,7 +848,7 @@ jobs:
       - refresh-dependencies
       - build-test-verify
       - deploy-workers
-    if: ${{ (github.event_name == 'push' || inputs.publish_release == true) && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' && needs.deploy-workers.result == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' && needs.deploy-workers.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -1036,11 +1059,11 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
   manual-build-only:
-    name: Manual verification artifact only (no deployment)
+    name: Build-only verification artifact (no deployment or publication)
     needs:
       - refresh-dependencies
       - build-test-verify
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release != true && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release != true)) && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1050,7 +1073,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Manual build verified - no deployment requested"
+            echo "## Build-only verification completed - no deployment requested"
             echo
             echo "- Trigger commit: ${GITHUB_SHA}"
             echo "- Resolved source commit: ${{ needs.refresh-dependencies.outputs.source_sha }}"
@@ -1067,7 +1090,8 @@ jobs:
       - deploy-workers
     if: >-
       ${{ always() &&
-          (github.event_name == 'push' || inputs.publish_release == true) &&
+          github.event_name == 'workflow_dispatch' &&
+          inputs.publish_release == true &&
           (needs.refresh-dependencies.result != 'success' ||
            needs.build-test-verify.result != 'success' ||
            needs.deploy-workers.result != 'success') }}
