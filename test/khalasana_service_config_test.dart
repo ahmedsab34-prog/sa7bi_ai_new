@@ -4,14 +4,14 @@ import 'package:sa7bi_ai/service_config.dart';
 
 void main() {
   group('Sa7bi AI service configuration', () {
-    test('the visible category registry contains exactly eight services', () {
-      expect(sa7biServices, hasLength(8));
+    test('the visible category registry contains exactly ten services', () {
+      expect(sa7biServices, hasLength(10));
 
       final keys = sa7biServices
           .map((service) => service.serviceKey)
           .toList(growable: false);
 
-      expect(keys.toSet(), hasLength(8));
+      expect(keys.toSet(), hasLength(10));
 
       expect(keys, isNot(contains(ServiceKeys.social)));
       expect(keys, isNot(contains(ServiceKeys.venting)));
@@ -20,8 +20,8 @@ void main() {
       expect(keys, isNot(contains(ServiceKeys.general)));
     });
 
-    test('Khalasana displays exactly the same eight services', () {
-      expect(khalasanaVisibleServices, hasLength(8));
+    test('Khalasana displays exactly the same ten services', () {
+      expect(khalasanaVisibleServices, hasLength(10));
 
       expect(
         khalasanaVisibleServices
@@ -33,7 +33,7 @@ void main() {
       );
     });
 
-    test('all eight services have valid content and unique keys', () {
+    test('all ten services have valid content and unique keys', () {
       for (final service in sa7biServices) {
         expect(service.title.trim(), isNotEmpty);
         expect(service.description.trim(), isNotEmpty);
@@ -42,7 +42,7 @@ void main() {
       }
     });
 
-    test('the eight service identifiers match the intended categories', () {
+    test('the ten service identifiers match the intended categories', () {
       expect(
         sa7biServices.map((service) => service.serviceKey).toList(),
         <String>[
@@ -54,6 +54,8 @@ void main() {
           ServiceKeys.shopping,
           ServiceKeys.hobbiesSports,
           ServiceKeys.podcasts,
+          ServiceKeys.education,
+          ServiceKeys.career,
         ],
       );
     });
