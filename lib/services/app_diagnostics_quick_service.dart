@@ -85,7 +85,7 @@ class AppDiagnosticsQuickService {
       results.addAll(performanceResults);
 
       // ------------------------------------------------------
-      // PRIMARY WORKER
+      // PRIMARY AND FALLBACK WORKERS
       // ------------------------------------------------------
 
       final primary = await _probeWorker(
@@ -96,18 +96,6 @@ class AppDiagnosticsQuickService {
 
       emit(primary.result);
 
-      await _publish(
-        results: results,
-        onResult: onResult,
-        name: 'Build/source identity',
-        category: 'BUILD',
-        check: () async => _checkBuildSourceIdentity(primary),
-      );
-
-      // ------------------------------------------------------
-      // FALLBACK WORKER
-      // ------------------------------------------------------
-
       final fallback = await _probeWorker(
         client: client,
         name: 'Fallback Worker direct HTTPS',
@@ -115,6 +103,18 @@ class AppDiagnosticsQuickService {
       );
 
       emit(fallback.result);
+
+      // لا نعتبر تطابق المصدر صحيحًا إلا إذا تطابق الخادمان مع APK.
+      await _publish(
+        results: results,
+        onResult: onResult,
+        name: 'Build/source identity',
+        category: 'BUILD',
+        check: () async => _checkBuildSourceIdentity(
+          primary,
+          fallback,
+        ),
+      );
 
       // ------------------------------------------------------
       // GENERAL HTTPS
@@ -324,6 +324,7 @@ class AppDiagnosticsQuickService {
 
   DiagnosticResult _checkBuildSourceIdentity(
     _WorkerHealthProbe primary,
+    _WorkerHealthProbe fallback,
   ) {
     if (!_isInjected(_commitSha)) {
       return const DiagnosticResult(
@@ -333,14 +334,19 @@ class AppDiagnosticsQuickService {
         severity: 'WARN',
         status: 'APP_COMMIT_NOT_INJECTED',
         details:
-            'لا يمكن مقارنة APK مع Worker لأن Commit التطبيق '
+            'لا يمكن مقارنة APK مع الخادمين لأن Commit التطبيق '
             'لم يتم حقنه داخل نسخة البناء.',
         durationMs: 0,
         blocked: true,
       );
     }
 
-    if (!primary.reachable) {
+    final unavailableWorkers = <String>[
+      if (!primary.reachable) 'Primary Worker',
+      if (!fallback.reachable) 'Fallback Worker',
+    ];
+
+    if (unavailableWorkers.isNotEmpty) {
       return DiagnosticResult(
         name: 'Build/source identity',
         category: 'BUILD',
@@ -349,17 +355,24 @@ class AppDiagnosticsQuickService {
         status: 'WORKER_IDENTITY_UNVERIFIED',
         details:
             'APK commit=$_commitSha; '
-            'تعذر فحص sourceCommit لأن الخادم الأساسي '
-            'لم يستجب لاختبار HTTPS.',
+            'تعذر التحقق من sourceCommit للخادم: '
+            '${unavailableWorkers.join(" و")}. '
+            'Primary sourceCommit=${primary.sourceCommit}; '
+            'Fallback sourceCommit=${fallback.sourceCommit}.',
         durationMs: 0,
         blocked: true,
       );
     }
 
-    final workerCommit = primary.sourceCommit.trim();
+    final primaryCommit = primary.sourceCommit.trim();
+    final fallbackCommit = fallback.sourceCommit.trim();
 
-    if (workerCommit.isEmpty ||
-        workerCommit.toLowerCase() == 'unknown') {
+    final primaryMissing = primaryCommit.isEmpty ||
+        primaryCommit.toLowerCase() == 'unknown';
+    final fallbackMissing = fallbackCommit.isEmpty ||
+        fallbackCommit.toLowerCase() == 'unknown';
+
+    if (primaryMissing || fallbackMissing) {
       return DiagnosticResult(
         name: 'Build/source identity',
         category: 'BUILD',
@@ -367,15 +380,20 @@ class AppDiagnosticsQuickService {
         severity: 'FAIL',
         status: 'WORKER_SOURCE_COMMIT_MISSING',
         details:
-            'الخادم الأساسي استجاب، لكنه لم يعرض sourceCommit صالحًا. '
+            'Worker health استجاب، لكن sourceCommit غير صالح. '
             'APK commit=$_commitSha; '
-            'يجب أن تكون هوية Worker محددة قبل اعتماد النسخة.',
+            'Primary sourceCommit=$primaryCommit; '
+            'Fallback sourceCommit=$fallbackCommit.',
         durationMs: 0,
       );
     }
 
-    final matches =
-        workerCommit.toLowerCase() == _commitSha.toLowerCase();
+    final sourceSha = _commitSha.toLowerCase();
+    final primaryMatches =
+        primaryCommit.toLowerCase() == sourceSha;
+    final fallbackMatches =
+        fallbackCommit.toLowerCase() == sourceSha;
+    final matches = primaryMatches && fallbackMatches;
 
     return DiagnosticResult(
       name: 'Build/source identity',
@@ -387,7 +405,10 @@ class AppDiagnosticsQuickService {
           : 'WORKER_SOURCE_MISMATCH',
       details:
           'APK commit=$_commitSha; '
-          'Worker sourceCommit=$workerCommit; '
+          'Primary sourceCommit=$primaryCommit; '
+          'Fallback sourceCommit=$fallbackCommit; '
+          'primaryMatch=$primaryMatches; '
+          'fallbackMatch=$fallbackMatches; '
           'exactMatch=$matches.',
       durationMs: 0,
     );
