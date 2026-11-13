@@ -1,11 +1,12 @@
+
 import 'package:flutter/material.dart';
 
 import 'ai_service.dart';
+import 'owner_profile_screen.dart';
 import 'reminder_settings_screen.dart';
 import 'services/profile_service.dart';
 
 /// صفحة إعدادات صاحبي AI.
-/// تم ربط قسم الإشعارات مباشرة بخدمة التذكيرات الموجودة بالفعل.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -82,6 +83,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _openOwnerProfile() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const OwnerProfileScreen(),
+      ),
+    );
+  }
+
   void _showPrivacyInformation() {
     showDialog<void>(
       context: context,
@@ -125,22 +134,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  void _showAboutDialog() {
-    showAboutDialog(
-      context: context,
-      applicationName: 'صاحبي AI',
-      applicationVersion: '1.0.1',
-      applicationLegalese: 'مساعدك العربي الذكي',
-      children: const [
-        SizedBox(height: 10),
-        Text(
-          'تطبيق عربي للمحادثة والذكاء الاصطناعي والمحتوى الصوتي والألعاب والتواصل.',
-          textDirection: TextDirection.rtl,
-        ),
-      ],
     );
   }
 
@@ -196,10 +189,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: _showPrivacyInformation,
             ),
             _settingTile(
-              icon: Icons.info_outline_rounded,
-              title: 'عن صاحبي AI',
-              subtitle: 'معلومات عن التطبيق والإصدار',
-              onTap: _showAboutDialog,
+              icon: Icons.workspace_premium_rounded,
+              title: 'المؤسس والمطوّر',
+              subtitle: 'تعرف على صاحب مشروع صاحبي AI وحقوق المشروع',
+              onTap: _openOwnerProfile,
             ),
           ],
         ),
