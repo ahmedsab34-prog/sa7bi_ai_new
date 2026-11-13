@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -129,26 +130,64 @@ void _openGlobalKhalasana() {
 
 class _Sa7biRouteSnapshot {
   const _Sa7biRouteSnapshot({required this.depth, required this.activeRoute});
+
   final int depth;
   final Route<dynamic>? activeRoute;
+
   String? get routeName => activeRoute?.settings.name;
+
   bool get isPopup => activeRoute is PopupRoute<dynamic>;
 }
 
 class _Sa7biNavigationObserver extends NavigatorObserver {
   int _depth = 0;
+
+  Route<dynamic>? _activeRoute;
+
+  _Sa7biRouteSnapshot? _pendingSnapshot;
+
+  bool _publishScheduled = false;
+
   final ValueNotifier<_Sa7biRouteSnapshot> snapshot =
       ValueNotifier<_Sa7biRouteSnapshot>(
     const _Sa7biRouteSnapshot(depth: 0, activeRoute: null),
   );
 
+  /// يؤجل تحديث ValueNotifier إلى ما بعد انتهاء بناء الإطار الحالي.
+  ///
+  /// قد يستدعي NavigatorObserver هذه الدالة أثناء بناء Widgets.
+  /// تحديث ValueNotifier مباشرة في هذه اللحظة قد يؤدي إلى:
+  /// setState() or markNeedsBuild() called during build.
+  ///
+  /// عند وصول عدة تغييرات قبل نهاية الإطار، نحتفظ بآخر حالة فقط.
   void _publish(Route<dynamic>? route) {
-    snapshot.value = _Sa7biRouteSnapshot(depth: _depth, activeRoute: route);
+    _activeRoute = route;
+
+    _pendingSnapshot = _Sa7biRouteSnapshot(
+      depth: _depth,
+      activeRoute: route,
+    );
+
+    if (_publishScheduled) return;
+
+    _publishScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _publishScheduled = false;
+
+      final nextSnapshot = _pendingSnapshot;
+      _pendingSnapshot = null;
+
+      if (nextSnapshot != null) {
+        snapshot.value = nextSnapshot;
+      }
+    });
   }
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPush(route, previousRoute);
+
     _depth++;
     _publish(route);
   }
@@ -156,22 +195,42 @@ class _Sa7biNavigationObserver extends NavigatorObserver {
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didPop(route, previousRoute);
-    if (_depth > 1) _depth--;
+
+    if (_depth > 1) {
+      _depth--;
+    }
+
     _publish(previousRoute);
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
     super.didRemove(route, previousRoute);
-    if (_depth > 1) _depth--;
-    final activeRoute = snapshot.value.activeRoute;
-    _publish(activeRoute == route ? previousRoute : activeRoute);
+
+    if (_depth > 1) {
+      _depth--;
+    }
+
+    final activeRoute = _activeRoute;
+
+    _publish(
+      activeRoute == route ? previousRoute : activeRoute,
+    );
   }
 
   @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
-    if (oldRoute == snapshot.value.activeRoute) _publish(newRoute);
+  void didReplace({
+    Route<dynamic>? newRoute,
+    Route<dynamic>? oldRoute,
+  }) {
+    super.didReplace(
+      newRoute: newRoute,
+      oldRoute: oldRoute,
+    );
+
+    if (oldRoute == _activeRoute) {
+      _publish(newRoute);
+    }
   }
 }
 
@@ -185,12 +244,18 @@ class MainContainerScreen extends StatefulWidget {
 class _MainContainerScreenState extends State<MainContainerScreen> {
   // 0 الرئيسية، 1 الشات، 2 الألعاب، 3 حسابي.
   int index = 0;
-  late final PageController _pageController = PageController(initialPage: index);
-  final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
+
+  late final PageController _pageController =
+      PageController(initialPage: index);
+
+  final GlobalKey<HomeScreenState> _homeKey =
+      GlobalKey<HomeScreenState>();
 
   void _goToPage(int value) {
     if (!mounted || value < 0 || value > 3 || value == index) return;
+
     setState(() => index = value);
+
     if (_pageController.hasClients) {
       unawaited(
         _pageController.animateToPage(
@@ -204,10 +269,14 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
   void _onDestinationSelected(int value) {
     if (!mounted) return;
+
     if (value == index) {
-      if (value == 0) unawaited(_homeKey.currentState?.refreshNews());
+      if (value == 0) {
+        unawaited(_homeKey.currentState?.refreshNews());
+      }
       return;
     }
+
     _goToPage(value);
   }
 
@@ -215,22 +284,29 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
   void openAudioCenter() {
     if (!mounted) return;
+
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => AudioCenterWithHeader(onProfileTap: openProfile),
+        builder: (_) => AudioCenterWithHeader(
+          onProfileTap: openProfile,
+        ),
       ),
     );
   }
 
   void openDiagnostics() {
     if (!mounted) return;
+
     Navigator.of(context).pushNamed('/diagnostics');
   }
 
   void openSocialConnections() {
     if (!mounted) return;
+
     Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(builder: (_) => const SocialCommunityHubScreen()),
+      MaterialPageRoute<void>(
+        builder: (_) => const SocialCommunityHubScreen(),
+      ),
     );
   }
 
@@ -247,6 +323,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
     required String label,
   }) {
     final selected = index == value;
+
     return Expanded(
       child: Semantics(
         button: true,
@@ -328,10 +405,12 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
               controller: _pageController,
               onPageChanged: (value) {
                 if (!mounted || index == value) return;
+
                 setState(() => index = value);
               },
               children: [
-                for (final page in pages) _KeepAliveMainPage(child: page),
+                for (final page in pages)
+                  _KeepAliveMainPage(child: page),
               ],
             ),
             if (!isChatTab)
@@ -339,7 +418,9 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                 left: 10,
                 right: 10,
                 bottom: 8,
-                child: MiniAudioPlayer(onProfileTap: openProfile),
+                child: MiniAudioPlayer(
+                  onProfileTap: openProfile,
+                ),
               ),
             if (!isChatTab)
               Positioned(
@@ -420,7 +501,9 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
       bottomNavigationBar: DecoratedBox(
         decoration: BoxDecoration(
           color: Sa7biTheme.surface,
-          border: Border(top: BorderSide(color: Sa7biTheme.border)),
+          border: Border(
+            top: BorderSide(color: Sa7biTheme.border),
+          ),
         ),
         child: SafeArea(
           top: false,
@@ -463,6 +546,7 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
 class _KeepAliveMainPage extends StatefulWidget {
   const _KeepAliveMainPage({required this.child});
+
   final Widget child;
 
   @override
@@ -482,7 +566,11 @@ class _KeepAliveMainPageState extends State<_KeepAliveMainPage>
 }
 
 class MiniAudioPlayer extends StatelessWidget {
-  const MiniAudioPlayer({super.key, required this.onProfileTap});
+  const MiniAudioPlayer({
+    super.key,
+    required this.onProfileTap,
+  });
+
   final VoidCallback onProfileTap;
 
   @override
@@ -491,9 +579,16 @@ class MiniAudioPlayer extends StatelessWidget {
       stream: AudioController.handler?.mediaItem,
       builder: (context, mediaSnapshot) {
         final item = mediaSnapshot.data;
-        if (item == null) return const SizedBox.shrink();
+
+        if (item == null) {
+          return const SizedBox.shrink();
+        }
+
         final handler = AudioController.handler;
-        if (handler == null) return const SizedBox.shrink();
+
+        if (handler == null) {
+          return const SizedBox.shrink();
+        }
 
         return Material(
           color: Colors.transparent,
@@ -517,7 +612,9 @@ class MiniAudioPlayer extends StatelessWidget {
                 GestureDetector(
                   onTap: () => Navigator.of(context).push<void>(
                     MaterialPageRoute<void>(
-                      builder: (_) => AudioCenterWithHeader(onProfileTap: onProfileTap),
+                      builder: (_) => AudioCenterWithHeader(
+                        onProfileTap: onProfileTap,
+                      ),
                     ),
                   ),
                   child: Container(
@@ -539,7 +636,9 @@ class MiniAudioPlayer extends StatelessWidget {
                   child: GestureDetector(
                     onTap: () => Navigator.of(context).push<void>(
                       MaterialPageRoute<void>(
-                        builder: (_) => AudioCenterWithHeader(onProfileTap: onProfileTap),
+                        builder: (_) => AudioCenterWithHeader(
+                          onProfileTap: onProfileTap,
+                        ),
                       ),
                     ),
                     child: Column(
@@ -575,9 +674,13 @@ class MiniAudioPlayer extends StatelessWidget {
                   stream: handler.playbackState,
                   builder: (context, snapshot) {
                     final playing = snapshot.data?.playing ?? false;
+
                     return IconButton(
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+                      constraints: const BoxConstraints(
+                        minWidth: 38,
+                        minHeight: 38,
+                      ),
                       onPressed: () {
                         if (playing) {
                           handler.pause();
@@ -586,7 +689,9 @@ class MiniAudioPlayer extends StatelessWidget {
                         }
                       },
                       icon: Icon(
-                        playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
                         color: Sa7biTheme.cyan,
                         size: 25,
                       ),
@@ -595,7 +700,10 @@ class MiniAudioPlayer extends StatelessWidget {
                 ),
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 30, minHeight: 38),
+                  constraints: const BoxConstraints(
+                    minWidth: 30,
+                    minHeight: 38,
+                  ),
                   onPressed: () => handler.stop(),
                   icon: const Icon(
                     Icons.close_rounded,
