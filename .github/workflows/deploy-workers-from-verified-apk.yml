@@ -1,0 +1,400 @@
+name: Sa7bi AI - Deploy Workers from Verified APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_deploy:
+        description: "Set true only when you explicitly approve deploying both production Workers from the exact verified APK commit. This does not publish or replace the stable APK."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: sa7bi-workers-from-verified-apk
+  cancel-in-progress: false
+
+env:
+  EXPECTED_BRANCH: fix/build-692-network-client-lifecycle
+  EXPECTED_APPLICATION_ID: com.example.sa7bi_ai_new
+  EXPECTED_APP_VERSION: "1.0.1"
+  EXPECTED_RELEASE_CERT_SHA256: "8861f29093a09f80132873c09d3fd7f2252785ad7b8e6cf2241a60605cd254d9"
+  RELEASE_APK_NAME: sa7bi-ai.apk
+  PRIMARY_URL: https://sa7bi-ai-new.ahmedsab34.workers.dev
+  FALLBACK_URL: https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev
+
+jobs:
+  deploy-and-verify:
+    name: Deploy both Workers from the exact verified APK source
+    if: ${{ inputs.confirm_deploy == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout the selected release branch commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Verify repository, branch, source commit, and Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${GITHUB_REPOSITORY}" = "ahmedsab34-prog/sa7bi_ai_new"
+          test "${GITHUB_REF_TYPE}" = "branch"
+          test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+
+          REMOTE_SHA="$(git ls-remote origin "refs/heads/${EXPECTED_BRANCH}" | awk 'NR == 1 { print $1 }')"
+          if [ "${REMOTE_SHA}" != "${SOURCE_SHA}" ]; then
+            echo "::error::The branch advanced. No Worker will be deployed."
+            exit 1
+          fi
+
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::Required Cloudflare credentials are missing."
+            exit 1
+          fi
+
+          echo "Exact requested source commit: ${SOURCE_SHA}"
+
+      - name: Find a successful push build and its exact APK artifact
+        id: verified_artifact
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          EXPECTED_BRANCH: ${{ env.EXPECTED_BRANCH }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const expectedSha = process.env.SOURCE_SHA;
+            const branchName = process.env.EXPECTED_BRANCH;
+
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: "verify-release-branch.yml",
+              branch: branchName,
+              per_page: 100
+            });
+
+            const matchingRuns = data.workflow_runs
+              .filter(run =>
+                run.head_sha === expectedSha &&
+                run.head_branch === branchName &&
+                run.event === "push" &&
+                run.status === "completed" &&
+                run.conclusion === "success"
+              )
+              .sort((a, b) => b.run_number - a.run_number);
+
+            const shortSha = expectedSha.slice(0, 12);
+            let selected = null;
+
+            for (const run of matchingRuns) {
+              const { data: artifactData } =
+                await github.rest.actions.listWorkflowRunArtifacts({
+                  owner,
+                  repo,
+                  run_id: run.id,
+                  per_page: 100
+                });
+
+              const expectedName =
+                `sa7bi-ai-release-${run.run_number}-${shortSha}`;
+
+              const artifact = artifactData.artifacts.find(item =>
+                item.name === expectedName && item.expired === false
+              );
+
+              if (artifact) {
+                selected = { run, artifact, expectedName };
+                break;
+              }
+            }
+
+            if (!selected) {
+              core.setFailed(
+                "No successful, unexpired APK artifact was found for this exact branch commit. Wait for the push build of this same commit to finish successfully; no deployment was attempted."
+              );
+              return;
+            }
+
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch: branchName
+            });
+
+            if (branch.commit.sha !== expectedSha) {
+              core.setFailed(
+                "The branch no longer points to the requested APK source commit."
+              );
+              return;
+            }
+
+            core.setOutput("run_id", String(selected.run.id));
+            core.setOutput("run_number", String(selected.run.run_number));
+            core.setOutput("artifact_name", selected.expectedName);
+            core.info(`Verified build run: ${selected.run.id}`);
+            core.info(`Verified artifact: ${selected.expectedName}`);
+
+      - name: Download the APK artifact from the verified build run
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.verified_artifact.outputs.artifact_name }}
+          path: release-artifact
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.verified_artifact.outputs.run_id }}
+
+      - name: Verify APK provenance, checksum, package identity, and signing identity
+        shell: bash
+        env:
+          VERIFIED_RUN_ID: ${{ steps.verified_artifact.outputs.run_id }}
+          VERIFIED_RUN_NUMBER: ${{ steps.verified_artifact.outputs.run_number }}
+        run: |
+          set -euo pipefail
+          cd release-artifact
+
+          test -s "${RELEASE_APK_NAME}"
+          test -s "${RELEASE_APK_NAME}.sha256"
+          test -s build-provenance.txt
+
+          grep -Fx "Repository=${GITHUB_REPOSITORY}" build-provenance.txt
+          grep -Fx "Branch=${EXPECTED_BRANCH}" build-provenance.txt
+          grep -Fx "TriggerCommit=${SOURCE_SHA}" build-provenance.txt
+          grep -Fx "Commit=${SOURCE_SHA}" build-provenance.txt
+          grep -Fx "SourceCommit=${SOURCE_SHA}" build-provenance.txt
+          grep -Fx "RunID=${VERIFIED_RUN_ID}" build-provenance.txt
+          grep -Fx "RunNumber=${VERIFIED_RUN_NUMBER}" build-provenance.txt
+          grep -Fx "AppVersion=${EXPECTED_APP_VERSION}" build-provenance.txt
+          grep -Fx "ApplicationID=${EXPECTED_APPLICATION_ID}" build-provenance.txt
+          grep -Fx "SigningCertificateSHA256=${EXPECTED_RELEASE_CERT_SHA256}" build-provenance.txt
+          grep -Fx "CanonicalFilename=${RELEASE_APK_NAME}" build-provenance.txt
+
+          BUILD_NUMBER="$(sed -n 's/^VersionCode=//p' build-provenance.txt)"
+          APK_SIZE="$(stat -c%s "${RELEASE_APK_NAME}")"
+          PROVENANCE_SHA="$(sed -n 's/^APK_SHA256=//p' build-provenance.txt)"
+          CHECKSUM_SHA="$(awk 'NR == 1 {print $1}' "${RELEASE_APK_NAME}.sha256")"
+
+          if ! [[ "${BUILD_NUMBER}" =~ ^[0-9]+$ ]] || [ "${BUILD_NUMBER}" -lt 200000 ]; then
+            echo "::error::APK version code in provenance is invalid."
+            exit 1
+          fi
+
+          if ! [[ "${PROVENANCE_SHA}" =~ ^[0-9a-f]{64}$ ]] || [ "${PROVENANCE_SHA}" != "${CHECKSUM_SHA}" ]; then
+            echo "::error::APK SHA-256 provenance and checksum file do not match."
+            exit 1
+          fi
+
+          test "${APK_SIZE}" -gt 1000000
+          sha256sum --check "${RELEASE_APK_NAME}.sha256"
+          unzip -tq "${RELEASE_APK_NAME}"
+
+          echo "Verified APK source commit: ${SOURCE_SHA}"
+          echo "Verified APK build number: ${BUILD_NUMBER}"
+          echo "Verified APK bytes: ${APK_SIZE}"
+          echo "Verified APK SHA-256: ${PROVENANCE_SHA}"
+
+      - name: Set up Node.js for backend validation and Wrangler
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Re-run backend tests and AdMob configuration checks
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock --no-audit --no-fund
+          npm run check
+          node verify-admob-config.mjs
+
+      - name: Verify the exact approved Worker targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fx 'name = "sa7bi-ai-new"' backend/wrangler.toml
+          grep -Fx 'main = "src/index-v2.js"' backend/wrangler.toml
+          grep -Fx 'name = "sa7bi-ai-new-fallback"' backend/wrangler-fallback.toml
+          grep -Fx 'main = "src/fallback.js"' backend/wrangler-fallback.toml
+          grep -Fx 'service = "sa7bi-ai-new"' backend/wrangler-fallback.toml
+
+      - name: Dry-run Primary Worker from the exact APK source commit
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config wrangler.toml --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+
+      - name: Dry-run Fallback Worker from the exact APK source commit
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --config wrangler-fallback.toml --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+
+      - name: Confirm the branch is still on the exact verified APK commit
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          EXPECTED_BRANCH: ${{ env.EXPECTED_BRANCH }}
+        with:
+          script: |
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: process.env.EXPECTED_BRANCH
+            });
+
+            if (branch.commit.sha !== process.env.SOURCE_SHA) {
+              core.setFailed(
+                "The branch advanced before deployment. Both Workers remain unchanged."
+              );
+            }
+
+      - name: Deploy Primary Worker from the exact APK source commit
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config wrangler.toml --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+
+      - name: Deploy Fallback Worker from the exact APK source commit
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --config wrangler-fallback.toml --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+
+      - name: Verify live Primary and Fallback health and exact commit identity
+        shell: bash
+        env:
+          EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
+          PRIMARY_HEALTH_URL: ${{ env.PRIMARY_URL }}
+          FALLBACK_HEALTH_URL: ${{ env.FALLBACK_URL }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.request
+
+          expected = os.environ["EXPECTED_SOURCE_COMMIT"].strip().lower()
+          primary_url = os.environ["PRIMARY_HEALTH_URL"].rstrip("/")
+          fallback_url = os.environ["FALLBACK_HEALTH_URL"].rstrip("/")
+
+          def fetch(url):
+              request = urllib.request.Request(
+                  url + "/health",
+                  headers={
+                      "Accept": "application/json",
+                      "Cache-Control": "no-cache, no-store, max-age=0",
+                      "Pragma": "no-cache",
+                      "User-Agent": "Sa7bi-AI-Verified-Worker-Deploy/1.0",
+                  },
+              )
+              with urllib.request.urlopen(request, timeout=25) as response:
+                  if response.status != 200:
+                      raise RuntimeError(f"Health check returned HTTP {response.status}")
+                  data = json.loads(response.read().decode("utf-8"))
+                  return data, response.headers
+
+          primary_data, _ = fetch(primary_url)
+          primary_commit = str(primary_data.get("sourceCommit", "")).strip().lower()
+
+          if primary_data.get("ok") is not True or primary_commit != expected:
+              raise RuntimeError(
+                  f"Primary Worker identity mismatch: expected {expected}, received {primary_commit or 'empty'}"
+              )
+
+          last_error = "No successful Fallback health response."
+          for attempt in range(1, 19):
+              try:
+                  fallback_data, fallback_headers = fetch(fallback_url)
+                  fallback_route = str(
+                      fallback_headers.get("X-Sa7bi-Network-Fallback", "")
+                  ).strip()
+                  fallback_commit = str(
+                      fallback_headers.get("X-Sa7bi-Fallback-Source-Commit", "")
+                  ).strip().lower()
+                  forwarded_primary_commit = str(
+                      fallback_data.get("sourceCommit", "")
+                  ).strip().lower()
+
+                  if fallback_data.get("ok") is not True:
+                      raise RuntimeError("Fallback health body is not healthy.")
+                  if fallback_route != "1":
+                      raise RuntimeError("Fallback response did not confirm fallback routing.")
+                  if fallback_commit != expected:
+                      raise RuntimeError(
+                          f"Fallback Worker identity mismatch: expected {expected}, received {fallback_commit or 'empty'}"
+                      )
+                  if forwarded_primary_commit != expected:
+                      raise RuntimeError(
+                          "Fallback is forwarding a Primary Worker with a different source commit."
+                      )
+
+                  print("PASS: APK, Primary Worker, and Fallback Worker share the exact source commit.")
+                  print("Source commit:", expected)
+                  break
+              except Exception as error:
+                  last_error = str(error)
+                  if attempt < 18:
+                      print(f"Fallback verification attempt {attempt}/18 failed: {last_error}", flush=True)
+                      time.sleep(5)
+          else:
+              raise RuntimeError(
+                  f"Fallback Worker identity could not be verified against {expected}: {last_error}"
+              )
+          PY
+
+      - name: Confirm branch still matches the deployed APK and Worker commit
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          EXPECTED_BRANCH: ${{ env.EXPECTED_BRANCH }}
+        with:
+          script: |
+            const { data: branch } = await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: process.env.EXPECTED_BRANCH
+            });
+
+            if (branch.commit.sha !== process.env.SOURCE_SHA) {
+              core.setFailed(
+                "The branch advanced during deployment. The deployed Workers still match the verified APK commit, but the branch no longer points to that commit."
+              );
+            }
+
+      - name: Record deployment result without publishing an APK release
+        shell: bash
+        run: |
+          {
+            echo "## Primary and Fallback Workers deployed and verified"
+            echo
+            echo "- Exact APK and Worker source commit: ${SOURCE_SHA}"
+            echo "- APK artifact was downloaded from a successful push build."
+            echo "- Primary health identity: verified"
+            echo "- Fallback health identity: verified"
+            echo "- Stable GitHub Release: not changed"
+            echo "- apk-latest tag: not changed"
+          } >> "${GITHUB_STEP_SUMMARY}"
