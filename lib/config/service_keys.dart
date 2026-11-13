@@ -44,6 +44,10 @@ class ServiceKeys {
 
   static const String podcasts = 'podcasts';
 
+  static const String education = 'education';
+
+  static const String career = 'career';
+
   // ============================================================
   // أدوات مستقبلية
   // ============================================================
@@ -74,6 +78,8 @@ class ServiceKeys {
       case venting:
       case hobbiesSports:
       case podcasts:
+      case education:
+      case career:
       case imageGeneration:
       case news:
       case shorts:
@@ -102,5 +108,7 @@ class ServiceKeys {
     venting,
     hobbiesSports,
     podcasts,
+    education,
+    career,
   ];
 }
