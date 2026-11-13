@@ -164,6 +164,10 @@ class _KhalasanaPortalScreenState
         return 'هوايات';
       case ServiceKeys.podcasts:
         return 'بودكاست';
+      case ServiceKeys.education:
+        return 'تعليم';
+      case ServiceKeys.career:
+        return 'وظائف';
       default:
         return 'خدمة';
     }
