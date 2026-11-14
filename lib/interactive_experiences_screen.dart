@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'achievements_screen.dart';
 import 'local_games_hub_screen.dart';
+import 'local_board_games_screen.dart';
 import 'services/social_guest_session_service.dart';
 import 'social_ai_games_screen.dart';
 import 'social_games_hub_screen.dart';
@@ -48,7 +49,9 @@ class _InteractiveExperiencesScreenState
       await SocialGuestSessionService.instance.ensureSession().timeout(
         const Duration(seconds: 18),
       );
+
       if (!mounted) return;
+
       setState(() {
         _onlineReady = true;
         _checkingOnline = false;
@@ -56,16 +59,19 @@ class _InteractiveExperiencesScreenState
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _onlineReady = false;
         _checkingOnline = false;
-        _onlineError = 'الألعاب الجماعية تحتاج اتصالًا بالإنترنت. الألعاب المحلية تعمل بدون اتصال.';
+        _onlineError =
+            'الألعاب الجماعية تحتاج اتصالًا بالإنترنت. الألعاب المحلية تعمل بدون اتصال.';
       });
     }
   }
 
   Future<void> _open(Widget screen) async {
     if (!mounted) return;
+
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(builder: (_) => screen),
     );
@@ -75,6 +81,7 @@ class _InteractiveExperiencesScreenState
     final message = _checkingOnline
         ? 'جاري تجهيز اتصال الألعاب.'
         : (_onlineError ?? 'اتصال الألعاب غير متاح حاليًا.');
+
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -109,15 +116,26 @@ class _InteractiveExperiencesScreenState
             _ExperienceCard(
               icon: Icons.sports_esports_rounded,
               title: 'ألعاب بدون إنترنت',
-              description: 'الذاكرة و2048 وخمن الرقم واختبر معلوماتك.',
+              description:
+                  'الذاكرة و2048 وخمن الرقم واختبر معلوماتك.',
               color: Sa7biTheme.cyan,
               tag: '4 ألعاب محلية',
               onTap: () => _open(const LocalGamesHubScreen()),
             ),
             _ExperienceCard(
+              icon: Icons.grid_4x4_rounded,
+              title: 'الشطرنج وXO وحجر ورقة مقص',
+              description:
+                  'العب ضد الكمبيوتر أو لاعب بجانبك. المباريات تحفظ على الجهاز وتقدر تكملها بعدين.',
+              color: Sa7biTheme.blue,
+              tag: '3 ألعاب محلية',
+              onTap: () => _open(const LocalBoardGamesScreen()),
+            ),
+            _ExperienceCard(
               icon: Icons.emoji_events_rounded,
               title: 'إنجازاتي',
-              description: 'تابع الألعاب التي بدأتَها والأسئلة الصحيحة والإنجازات التي فتحتها.',
+              description:
+                  'تابع الألعاب التي بدأتَها والأسئلة الصحيحة والإنجازات التي فتحتها.',
               color: Sa7biTheme.violet,
               tag: 'حفظ محلي',
               onTap: () => _open(const AchievementsScreen()),
@@ -146,11 +164,16 @@ class _InteractiveExperiencesScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     else
-                      const Icon(Icons.cloud_off_rounded, color: Sa7biTheme.textSecondary),
+                      const Icon(
+                        Icons.cloud_off_rounded,
+                        color: Sa7biTheme.textSecondary,
+                      ),
                     const SizedBox(width: 9),
                     Expanded(
                       child: Text(
-                        _checkingOnline ? 'جاري تجهيز حساب اللعب...' : (_onlineError ?? 'الاتصال غير متاح.'),
+                        _checkingOnline
+                            ? 'جاري تجهيز حساب اللعب...'
+                            : (_onlineError ?? 'الاتصال غير متاح.'),
                         style: const TextStyle(
                           color: Sa7biTheme.textSecondary,
                           fontSize: 10,
@@ -161,8 +184,13 @@ class _InteractiveExperiencesScreenState
                     IconButton(
                       tooltip: 'إعادة المحاولة',
                       visualDensity: VisualDensity.compact,
-                      onPressed: _checkingOnline ? null : _initializeOnlineSession,
-                      icon: const Icon(Icons.refresh_rounded, color: Sa7biTheme.cyan),
+                      onPressed: _checkingOnline
+                          ? null
+                          : _initializeOnlineSession,
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        color: Sa7biTheme.cyan,
+                      ),
                     ),
                   ],
                 ),
@@ -170,28 +198,39 @@ class _InteractiveExperiencesScreenState
             _ExperienceCard(
               icon: Icons.smart_toy_rounded,
               title: 'العب ضد صاحبي AI',
-              description: 'إكس أو وحجر ورقة مقص والشطرنج مع مبارياتك المحفوظة.',
+              description:
+                  'إكس أو وحجر ورقة مقص والشطرنج مع مبارياتك المحفوظة.',
               color: Sa7biTheme.blue,
               tag: 'ذكاء اصطناعي',
-              onTap: _onlineReady ? () => _open(const SocialAiGamesScreen()) : _showOnlineUnavailable,
+              onTap: _onlineReady
+                  ? () => _open(const SocialAiGamesScreen())
+                  : _showOnlineUnavailable,
             ),
             _ExperienceCard(
               icon: Icons.people_alt_rounded,
               title: 'العب مع أصحابك',
-              description: 'أنشئ مباراة وشارك رمز الدعوة أو انضم إلى مباراة قائمة.',
+              description:
+                  'أنشئ مباراة وشارك رمز الدعوة أو انضم إلى مباراة قائمة.',
               color: Sa7biTheme.violet,
               tag: 'تحديات مباشرة',
               onTap: _onlineReady
-                  ? () => _open(SocialGamesHubScreen(onShareInvite: widget.onShareResult))
+                  ? () => _open(
+                        SocialGamesHubScreen(
+                          onShareInvite: widget.onShareResult,
+                        ),
+                      )
                   : _showOnlineUnavailable,
             ),
             _ExperienceCard(
               icon: Icons.groups_rounded,
               title: 'المجموعات العامة',
-              description: 'اكتشف المجموعات وانضم للنقاشات وشارك اهتماماتك.',
+              description:
+                  'اكتشف المجموعات وانضم للنقاشات وشارك اهتماماتك.',
               color: Sa7biTheme.success,
               tag: 'مجتمع صاحبي',
-              onTap: _onlineReady ? () => _open(const SocialGroupsScreen()) : _showOnlineUnavailable,
+              onTap: _onlineReady
+                  ? () => _open(const SocialGroupsScreen())
+                  : _showOnlineUnavailable,
             ),
             const SizedBox(height: 12),
             Container(
@@ -204,7 +243,11 @@ class _InteractiveExperiencesScreenState
               child: const Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.save_outlined, color: Sa7biTheme.cyan, size: 20),
+                  Icon(
+                    Icons.save_outlined,
+                    color: Sa7biTheme.cyan,
+                    size: 20,
+                  ),
                   SizedBox(width: 9),
                   Expanded(
                     child: Text(
@@ -231,7 +274,9 @@ class _InteractiveExperiencesScreenState
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(21),
         gradient: Sa7biTheme.premiumGradient,
-        border: Border.all(color: Sa7biTheme.cyan.withValues(alpha: 0.20)),
+        border: Border.all(
+          color: Sa7biTheme.cyan.withValues(alpha: 0.20),
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x22000000),
@@ -267,7 +312,11 @@ class _InteractiveExperiencesScreenState
             ),
           ),
           SizedBox(width: 10),
-          Icon(Icons.extension_rounded, color: Sa7biTheme.cyan, size: 48),
+          Icon(
+            Icons.extension_rounded,
+            color: Sa7biTheme.cyan,
+            size: 48,
+          ),
         ],
       ),
     );
@@ -275,7 +324,11 @@ class _InteractiveExperiencesScreenState
 }
 
 class _SectionHeading extends StatelessWidget {
-  const _SectionHeading({required this.title, required this.subtitle});
+  const _SectionHeading({
+    required this.title,
+    required this.subtitle,
+  });
+
   final String title;
   final String subtitle;
 
@@ -345,7 +398,9 @@ class _ExperienceCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.13),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: color.withValues(alpha: 0.25)),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: Icon(icon, color: color, size: 25),
               ),
@@ -384,7 +439,11 @@ class _ExperienceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_left_rounded, color: color, size: 22),
+              Icon(
+                Icons.chevron_left_rounded,
+                color: color,
+                size: 22,
+              ),
             ],
           ),
         ),
