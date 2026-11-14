@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -566,8 +567,6 @@ class AudioDownloadsService {
     var partialFile = File(partial.filePath);
     var offset = await partialFile.length();
 
-    // لا نستكمل ملفًا قديمًا من غير مُعرّف نسخة موثوق.
-    // نبدأ من الصفر بدل دمج أجزاء ربما تخص ملفين مختلفين.
     if (offset > 0 &&
         (partial.validator.isEmpty ||
             partial.totalBytes <= 0 ||
@@ -645,7 +644,6 @@ class AudioDownloadsService {
     late int totalBytes;
 
     if (response.statusCode == 200) {
-      // الخادم تجاهل Range أو طلب نسخة كاملة؛ نكتب من البداية.
       writeOffset = 0;
 
       final length = response.contentLength;
