@@ -280,4 +280,10 @@ void main() {
     expect(restored!.state['turn'], 'b');
     expect(restored.state['plyCount'], 1);
   });
+
+  test('deleting from an empty local games list is safe', () async {
+    await service.deleteGame('missing_local_game');
+
+    expect(await service.getGames(), isEmpty);
+  });
 }
