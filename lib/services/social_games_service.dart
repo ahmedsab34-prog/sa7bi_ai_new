@@ -466,7 +466,24 @@ class SocialGamesService {
       );
     }
 
-    final response = await http.Response.fromStream(streamed);
+    final http.Response response;
+
+    try {
+      // The send() timeout only covers response headers. Bound body reading too,
+      // so a weak connection cannot leave the game screen waiting forever.
+      response = await http.Response.fromStream(streamed)
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw const SocialGamesException(
+        'NETWORK_TIMEOUT',
+        'انتهت مهلة استقبال رد خدمة الألعاب. تحقق من الاتصال وحاول مرة أخرى.',
+      );
+    } on http.ClientException {
+      throw const SocialGamesException(
+        'NETWORK_ERROR',
+        'انقطع الاتصال أثناء استقبال بيانات المباراة. حدّث المباراة وحاول مرة أخرى.',
+      );
+    }
 
     Map<String, dynamic> decoded;
 
