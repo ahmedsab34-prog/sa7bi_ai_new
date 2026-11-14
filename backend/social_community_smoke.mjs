@@ -116,55 +116,11 @@ const actor = {
       };
     }
   },
-
-  async roomPayload(roomId, userId) {
-    const room = sql.exec(
-      'SELECT * FROM game_rooms WHERE id = ?',
-      roomId,
-    ).toArray()[0];
-
-    if (!room) return null;
-
-    const state = JSON.parse(room.state_json);
-    const ai = state.aiOpponent === true;
-
-    const host = sql.exec(
-      'SELECT id, username FROM users WHERE id = ?',
-      room.host_id,
-    ).toArray()[0];
-
-    return {
-      id: room.id,
-      inviteCode: room.code,
-      game: room.game,
-      status: room.status,
-      myRole: room.host_id === userId ? 'host' : null,
-      state,
-      host: host
-        ? {
-            id: host.id,
-            username: host.username,
-            mark: 'X',
-          }
-        : null,
-      guest: ai
-        ? {
-            id: 'sa7bi-ai',
-            username: 'صاحبي AI',
-            mark:
-              room.game === 'chess'
-                ? 'black'
-                : room.game === 'rock_paper_scissors'
-                    ? 'player_2'
-                    : 'O',
-          }
-        : null,
-    };
-  },
 };
 
-// Use the real Durable Object prototype so this test exercises the
-// same fetch() dispatcher that receives production requests.
+// Inherit the real roomPayload() and fetch() methods from Sa7biSocial.
+// This ensures the tests exercise the production dispatcher and response
+// filtering rather than a test-only implementation.
 Object.setPrototypeOf(actor, Sa7biSocial.prototype);
 
 async function call(
@@ -342,6 +298,213 @@ assert.equal(
   groupMessages.data.messages[0].isMine,
   false,
 );
+
+// ------------------------------------------------------------
+// Quick matchmaking must be routed by the actual Durable Object
+// dispatcher, not only by its standalone helper test.
+// ------------------------------------------------------------
+
+const quickQueue = await call('/v1/games/matchmaking', {
+  method: 'POST',
+  token: 'owner-token',
+  body: { game: 'chess' },
+});
+
+assert.equal(quickQueue.status, 200);
+assert.equal(quickQueue.data.matched, false);
+assert.equal(quickQueue.data.room.status, 'waiting');
+assert.equal(quickQueue.data.room.state.matchmakingStatus, 'searching');
+
+const quickMatched = await call('/v1/games/matchmaking', {
+  method: 'POST',
+  token: 'member-token',
+  body: { game: 'chess' },
+});
+
+assert.equal(quickMatched.status, 200);
+assert.equal(quickMatched.data.matched, true);
+assert.equal(quickMatched.data.aiFallback, false);
+assert.equal(quickMatched.data.room.status, 'playing');
+assert.equal(quickMatched.data.room.myRole, 'guest');
+assert.equal(quickMatched.data.room.host.username, 'Owner');
+assert.equal(quickMatched.data.room.guest.username, 'Member');
+
+// ------------------------------------------------------------
+// Human multiplayer chess: the server enforces both player roles
+// and rejects a second white move before black has replied.
+// ------------------------------------------------------------
+
+const humanChessRoom = await call('/v1/games/rooms', {
+  method: 'POST',
+  token: 'owner-token',
+  body: { game: 'chess' },
+});
+
+assert.equal(humanChessRoom.status, 201);
+
+const humanChessJoined = await call('/v1/games/rooms/join', {
+  method: 'POST',
+  token: 'member-token',
+  body: { code: humanChessRoom.data.room.inviteCode },
+});
+
+assert.equal(humanChessJoined.status, 200);
+
+const whiteMove = await call(
+  `/v1/games/rooms/${humanChessRoom.data.room.id}/move`,
+  {
+    method: 'POST',
+    token: 'owner-token',
+    body: {
+      from: 'e2',
+      to: 'e4',
+    },
+  },
+);
+
+assert.equal(whiteMove.status, 200);
+assert.equal(whiteMove.data.room.state.turn, 'b');
+
+const rejectedOutOfTurnMove = await call(
+  `/v1/games/rooms/${humanChessRoom.data.room.id}/move`,
+  {
+    method: 'POST',
+    token: 'owner-token',
+    body: {
+      from: 'd2',
+      to: 'd4',
+    },
+  },
+);
+
+assert.equal(rejectedOutOfTurnMove.status, 409);
+assert.equal(rejectedOutOfTurnMove.data.error, 'NOT_YOUR_TURN');
+
+const blackMove = await call(
+  `/v1/games/rooms/${humanChessRoom.data.room.id}/move`,
+  {
+    method: 'POST',
+    token: 'member-token',
+    body: {
+      from: 'e7',
+      to: 'e5',
+    },
+  },
+);
+
+assert.equal(blackMove.status, 200);
+assert.equal(blackMove.data.room.state.turn, 'w');
+
+// ------------------------------------------------------------
+// Human RPS: a pending choice must never be sent to the opponent.
+// The round reveals both choices only after both players submit.
+// ------------------------------------------------------------
+
+const humanRpsRoom = await call('/v1/games/rooms', {
+  method: 'POST',
+  token: 'owner-token',
+  body: { game: 'rock_paper_scissors' },
+});
+
+assert.equal(humanRpsRoom.status, 201);
+
+const humanRpsJoined = await call('/v1/games/rooms/join', {
+  method: 'POST',
+  token: 'member-token',
+  body: { code: humanRpsRoom.data.room.inviteCode },
+});
+
+assert.equal(humanRpsJoined.status, 200);
+
+const hostRpsChoice = await call(
+  `/v1/games/rooms/${humanRpsRoom.data.room.id}/move`,
+  {
+    method: 'POST',
+    token: 'owner-token',
+    body: { choice: 'rock' },
+  },
+);
+
+assert.equal(hostRpsChoice.status, 200);
+assert.equal(hostRpsChoice.data.room.state.choices.host, 'rock');
+assert.equal(
+  Object.prototype.hasOwnProperty.call(
+    hostRpsChoice.data.room.state.choices,
+    'guest',
+  ),
+  false,
+);
+
+const guestBeforeChoosing = await call(
+  `/v1/games/rooms/${humanRpsRoom.data.room.id}`,
+  {
+    token: 'member-token',
+  },
+);
+
+assert.equal(guestBeforeChoosing.status, 200);
+assert.deepEqual(guestBeforeChoosing.data.room.state.choices, {});
+
+const guestRpsChoice = await call(
+  `/v1/games/rooms/${humanRpsRoom.data.room.id}/move`,
+  {
+    method: 'POST',
+    token: 'member-token',
+    body: { choice: 'scissors' },
+  },
+);
+
+assert.equal(guestRpsChoice.status, 200);
+assert.equal(
+  Object.keys(guestRpsChoice.data.room.state.choices).length,
+  0,
+);
+assert.equal(guestRpsChoice.data.room.state.history.length, 1);
+assert.equal(
+  guestRpsChoice.data.room.state.history[0].hostChoice,
+  'rock',
+);
+assert.equal(
+  guestRpsChoice.data.room.state.history[0].guestChoice,
+  'scissors',
+);
+
+// ------------------------------------------------------------
+// AI matchmaking fallback: expire the server-side deadline and
+// verify the regular room read resolves to an actual AI opponent.
+// ------------------------------------------------------------
+
+const waitingAi = await call('/v1/games/matchmaking', {
+  method: 'POST',
+  token: 'outsider-token',
+  body: { game: 'tic_tac_toe' },
+});
+
+assert.equal(waitingAi.status, 200);
+assert.equal(waitingAi.data.matched, false);
+
+const waitingAiId = waitingAi.data.room.id;
+const waitingAiRow = db.prepare(
+  'SELECT state_json FROM game_rooms WHERE id = ?',
+).get(waitingAiId);
+
+assert.ok(waitingAiRow, 'The AI fallback queue room must be persisted.');
+
+const waitingAiState = JSON.parse(waitingAiRow.state_json);
+waitingAiState.matchmakingExpiresAt = Date.now() - 1000;
+
+db.prepare(
+  'UPDATE game_rooms SET state_json = ? WHERE id = ?',
+).run(JSON.stringify(waitingAiState), waitingAiId);
+
+const resolvedAi = await call(`/v1/games/rooms/${waitingAiId}`, {
+  token: 'outsider-token',
+});
+
+assert.equal(resolvedAi.status, 200);
+assert.equal(resolvedAi.data.room.status, 'playing');
+assert.equal(resolvedAi.data.room.state.aiOpponent, true);
+assert.equal(resolvedAi.data.room.guest.username, 'صاحبي AI');
 
 // ------------------------------------------------------------
 // AI tic-tac-toe: bot responds in the same server transaction
