@@ -4,6 +4,7 @@
 // Every move is validated on the server before it is saved.
 
 import { Chess } from "chess.js";
+import { handleSocialMatchmaking } from "./social_matchmaking.js";
 import { handleSocialCommunity } from "./social_community.js";
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -295,6 +296,11 @@ export class Sa7biSocial {
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     try {
+      // Resolve matchmaking before the regular room routes. The handler returns
+      // null for paths that belong to the existing community/game handlers.
+      const matchmakingResponse = await handleSocialMatchmaking(request, this);
+      if (matchmakingResponse) return matchmakingResponse;
+
       // Route public groups and AI-opponent game actions through the same
       // Durable Object instance so they share users, sessions and room data.
       const communityResponse = await handleSocialCommunity(request, this);
@@ -1124,20 +1130,44 @@ export class Sa7biSocial {
       .exec("SELECT id, username, created_at FROM users WHERE id = ?", room.host_id)
       .toArray()[0];
 
+    const state = parseJson(room.state_json) || {};
+    const myRole = roleForUser(room, currentUserId);
+
+    // AI rooms intentionally have no guest user row. Return a safe display-only
+    // opponent so clients do not mistake the room for an incomplete human match.
     const guest = room.guest_id
       ? this.ctx.storage.sql
           .exec("SELECT id, username, created_at FROM users WHERE id = ?", room.guest_id)
           .toArray()[0]
-      : null;
+      : state.aiOpponent === true
+          ? { id: "sa7bi-ai", username: "صاحبي AI", created_at: room.created_at }
+          : null;
 
-    const state = parseJson(room.state_json) || {};
+    // In human multiplayer RPS, never expose the other player's pending choice.
+    // Each player may see their own submitted choice; the full choices are only
+    // revealed in history after both players have submitted.
+    if (
+      room.game === "rock_paper_scissors" &&
+      state.choices &&
+      typeof state.choices === "object" &&
+      !Array.isArray(state.choices)
+    ) {
+      const visibleChoices = {};
+      if (
+        (myRole === "host" || myRole === "guest") &&
+        Object.prototype.hasOwnProperty.call(state.choices, myRole)
+      ) {
+        visibleChoices[myRole] = state.choices[myRole];
+      }
+      state.choices = visibleChoices;
+    }
 
     return {
       id: room.id,
       inviteCode: room.code,
       game: room.game,
       status: room.status,
-      myRole: roleForUser(room, currentUserId),
+      myRole,
       state,
       host: publicPlayer(host, "host", room.game),
       guest: publicPlayer(guest, "guest", room.game),
