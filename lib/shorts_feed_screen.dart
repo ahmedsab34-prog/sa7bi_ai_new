@@ -29,7 +29,14 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
   final ImagePicker _picker = ImagePicker();
   final PageController _pageController = PageController();
 
+  static const int _pageSize = 30;
+
   List<SocialReel> _reels = [];
+
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  bool _loadMoreFailed = false;
+  int? _nextBefore;
 
   VideoPlayerController? _videoController;
   String? _activeReelId;
@@ -85,7 +92,7 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
   }
 
   Future<void> _loadFeed() async {
-    if (_refreshing) return;
+    if (_refreshing || _loadingMore) return;
 
     setState(() {
       _refreshing = true;
@@ -97,17 +104,23 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
       await _service.initialize();
 
       final items = await _service
-          .loadFeed(limit: 30)
+          .loadFeed(limit: _pageSize)
           .timeout(const Duration(seconds: 35));
 
       if (!mounted) return;
 
       final oldActiveId = _activeReelId;
+      final nextBefore = _oldestCreatedAt(items);
 
       setState(() {
         _reels = items;
         _loading = false;
         _error = '';
+        _nextBefore = nextBefore;
+        _hasMore = items.length >= _pageSize &&
+            nextBefore != null &&
+            nextBefore > 0;
+        _loadMoreFailed = false;
       });
 
       if (items.isEmpty) {
@@ -159,6 +172,116 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
       if (mounted) {
         setState(() {
           _refreshing = false;
+        });
+      }
+    }
+  }
+
+  int? _oldestCreatedAt(List<SocialReel> items) {
+    int? oldest;
+
+    for (final item in items) {
+      if (item.createdAt <= 0) continue;
+
+      if (oldest == null || item.createdAt < oldest) {
+        oldest = item.createdAt;
+      }
+    }
+
+    return oldest;
+  }
+
+  Future<void> _loadMoreFeed() async {
+    if (!mounted ||
+        _refreshing ||
+        _loadingMore ||
+        !_hasMore ||
+        _reels.isEmpty) {
+      return;
+    }
+
+    final cursor = _nextBefore ?? _oldestCreatedAt(_reels);
+
+    if (cursor == null || cursor <= 0) {
+      setState(() {
+        _hasMore = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _loadingMore = true;
+      _loadMoreFailed = false;
+    });
+
+    try {
+      final items = await _service
+          .loadFeed(
+            limit: _pageSize,
+            before: cursor,
+          )
+          .timeout(const Duration(seconds: 35));
+
+      if (!mounted) return;
+
+      final knownIds = _reels
+          .map((item) => item.id)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final additions = <SocialReel>[];
+      for (final item in items) {
+        if (item.id.isNotEmpty && knownIds.add(item.id)) {
+          additions.add(item);
+        }
+      }
+
+      final nextBefore = _oldestCreatedAt(items);
+      final cursorAdvanced =
+          nextBefore != null && nextBefore < cursor;
+
+      setState(() {
+        if (additions.isNotEmpty) {
+          _reels = <SocialReel>[
+            ..._reels,
+            ...additions,
+          ];
+        }
+
+        _nextBefore = nextBefore;
+        _hasMore = items.length >= _pageSize &&
+            cursorAdvanced &&
+            additions.isNotEmpty;
+        _loadMoreFailed = false;
+      });
+    } on SocialReelsException catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _loadMoreFailed = true;
+      });
+
+      _message(error.message);
+    } on TimeoutException {
+      if (!mounted) return;
+
+      setState(() {
+        _loadMoreFailed = true;
+      });
+
+      _message('تأخر تحميل المزيد من الريلز. حاول مرة أخرى.');
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _loadMoreFailed = true;
+      });
+
+      _message('تعذر تحميل المزيد من الريلز حاليًا.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingMore = false;
         });
       }
     }
@@ -287,6 +410,11 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
     });
 
     unawaited(_activateVideo(index));
+
+    // اطلب الصفحة التالية قبل الوصول إلى آخر فيديوهات الخلاصة.
+    if (index >= _reels.length - 5) {
+      unawaited(_loadMoreFeed());
+    }
   }
 
   Future<void> _togglePlayback() async {
@@ -932,18 +1060,58 @@ class _ShortsFeedScreenState extends State<ShortsFeedScreen> {
       return _buildEmptyState();
     }
 
-    return PageView.builder(
-      key: const ValueKey<String>('social-reels-page-view'),
-      controller: _pageController,
-      scrollDirection: Axis.vertical,
-      itemCount: _reels.length,
-      onPageChanged: _onPageChanged,
-      itemBuilder: (context, index) {
-        return _buildReelPage(
-          _reels[index],
-          index,
-        );
-      },
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          key: const ValueKey<String>('social-reels-page-view'),
+          controller: _pageController,
+          scrollDirection: Axis.vertical,
+          itemCount: _reels.length,
+          onPageChanged: _onPageChanged,
+          itemBuilder: (context, index) {
+            return _buildReelPage(
+              _reels[index],
+              index,
+            );
+          },
+        ),
+        if (_loadingMore)
+          Positioned(
+            top: 12,
+            left: 12,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.62),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(9),
+                child: SizedBox(
+                  width: 19,
+                  height: 19,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFF63E6FF),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        if (_loadMoreFailed)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 18,
+            child: Center(
+              child: FilledButton.tonalIcon(
+                onPressed: _loadingMore ? null : _loadMoreFeed,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('إعادة تحميل المزيد'),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
