@@ -2,7 +2,7 @@
 // Sa7bi AI Worker entry point.
 // Preserves existing social, messaging, matchmaking,
 // invite links and tafsir-text routes.
-// Adds authenticated R2-backed social reels.
+// Adds authenticated R2-backed social reels and private-chat realtime events.
 
 import worker, {
   Sa7biCredits,
@@ -13,6 +13,13 @@ import { handleSocialMessaging } from "./social_messaging.js";
 import { handleSocialCommunity } from "./social_community.js";
 import { handleSocialMatchmaking } from "./social_matchmaking.js";
 import { handleSocialMedia } from "./social_media.js";
+import {
+  handlePrivateRealtimeRequest,
+  handlePrivateRealtimeMessage,
+  handlePrivateRealtimeClose,
+  handlePrivateRealtimeError,
+  broadcastConversationEvent,
+} from "./social_realtime.js";
 
 import {
   handleTafsirText,
@@ -152,6 +159,11 @@ function handleAndroidAssetLinks() {
 
 export class Sa7biSocial extends BaseSa7biSocial {
   async fetch(request) {
+    const realtimeResponse =
+      await handlePrivateRealtimeRequest(request, this);
+
+    if (realtimeResponse) return realtimeResponse;
+
     const mediaResponse =
       await handleSocialMedia(request, this);
 
@@ -167,12 +179,100 @@ export class Sa7biSocial extends BaseSa7biSocial {
 
     if (communityResponse) return communityResponse;
 
+    let readConversationId = null;
+    let readUserId = null;
+    const requestUrl = new URL(request.url);
+    const requestPath = requestUrl.pathname.replace(/\/+$/, "") || "/";
+
+    if (request.method.toUpperCase() === "POST" &&
+        requestPath === "/v1/social/messages/read") {
+      try {
+        const readInput = await request.clone().json();
+        readConversationId = typeof readInput?.conversationId === "string"
+          ? readInput.conversationId
+          : null;
+      } catch (_) {}
+
+      try {
+        const reader = await this.requireUser(request.clone());
+        readUserId = reader instanceof Response ? null : reader.id;
+      } catch (_) {}
+    }
+
     const messagingResponse =
       await handleSocialMessaging(request, this);
 
-    if (messagingResponse) return messagingResponse;
+    if (messagingResponse) {
+      await this.broadcastMessagingResponse(
+        request,
+        messagingResponse,
+        readConversationId,
+        readUserId,
+      );
+      return messagingResponse;
+    }
 
     return super.fetch(request);
+  }
+
+  async broadcastMessagingResponse(
+    request,
+    response,
+    readConversationId = null,
+    readUserId = null,
+  ) {
+    if (response.status < 200 || response.status >= 300) return;
+
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, "") || "/";
+    const method = request.method.toUpperCase();
+
+    try {
+      if (method === "POST" && path === "/v1/social/messages") {
+        const payload = await response.clone().json();
+        const message = payload?.message;
+
+        if (payload?.ok === true &&
+            message &&
+            typeof message.conversationId === "string") {
+          await broadcastConversationEvent(this, message.conversationId, {
+            type: "message.created",
+            message,
+          });
+        }
+      }
+
+      if (method === "POST" && path === "/v1/social/messages/read") {
+        const payload = await response.clone().json();
+        const conversationId = readConversationId;
+
+        if (payload?.ok === true && typeof conversationId === "string") {
+          await broadcastConversationEvent(this, conversationId, {
+            type: "message.read",
+            conversationId,
+            userId: readUserId,
+            readAt: payload.readAt ?? Date.now(),
+          });
+        }
+      }
+    } catch (_) {
+      // Realtime delivery must never turn a successful REST write into a failure.
+    }
+  }
+
+  async webSocketMessage(socket, message) {
+    await handlePrivateRealtimeMessage(this, socket, message);
+  }
+
+  async webSocketClose(socket, code, reason, wasClean) {
+    await handlePrivateRealtimeClose(this, socket);
+    try {
+      socket.close(code, reason);
+    } catch (_) {}
+  }
+
+  async webSocketError(socket, error) {
+    await handlePrivateRealtimeError(this, socket);
   }
 
   async roomPayload(roomId, currentUserId) {
