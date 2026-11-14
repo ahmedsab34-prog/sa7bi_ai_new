@@ -1,10 +1,10 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import 'services/social_games_service.dart';
 import 'services/social_messaging_service.dart';
+import 'services/social_realtime_service.dart';
 import 'social_games_hub_screen.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
@@ -775,33 +775,164 @@ class SocialPrivateChatScreen extends StatefulWidget {
 
 class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
   final SocialMessagingService _service = SocialMessagingService.instance;
+  final SocialRealtimeService _realtime = SocialRealtimeService.instance;
   final TextEditingController _composer = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   Timer? _refreshTimer;
+  Timer? _typingStopTimer;
+  StreamSubscription<SocialRealtimeEvent>? _realtimeSubscription;
+
   List<SocialPrivateMessage> _messages = [];
   bool _loading = true;
   bool _refreshing = false;
   bool _sending = false;
+  bool _realtimeConnected = false;
+  bool _peerOnline = false;
+  bool _peerTyping = false;
+  bool _typingSent = false;
+  DateTime _lastSuccessfulSync =
+      DateTime.fromMillisecondsSinceEpoch(0);
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadMessages();
 
+    // Subscribe before connecting so the first server event is not missed.
+    _realtimeSubscription = _realtime.events.listen(_onRealtimeEvent);
+
+    _loadMessages();
+    unawaited(_connectRealtime());
+
+    // REST remains the fallback when WebSocket is unavailable. While the
+    // socket is healthy, perform a slower reconciliation every ~32 seconds.
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 8),
-      (_) => _loadMessages(silent: true),
+      (_) {
+        final shouldPoll = !_realtimeConnected ||
+            DateTime.now().difference(_lastSuccessfulSync) >=
+                const Duration(seconds: 30);
+        if (shouldPoll) _loadMessages(silent: true);
+      },
     );
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _typingStopTimer?.cancel();
+    _realtimeSubscription?.cancel();
+
+    if (_typingSent) {
+      _realtime.setTyping(false);
+      _typingSent = false;
+    }
+
+    // This screen owns the singleton's active private-chat socket.
+    unawaited(_realtime.disconnect());
+
     _composer.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _connectRealtime() async {
+    try {
+      await _realtime.connect(widget.conversationId);
+    } catch (_) {
+      // The chat remains usable through REST polling if the socket cannot open.
+      if (mounted) {
+        setState(() => _realtimeConnected = false);
+      }
+    }
+  }
+
+  void _onRealtimeEvent(SocialRealtimeEvent event) {
+    final eventConversationId = event.conversationId;
+    final nestedMessage = event.data['message'];
+    final nestedConversationId = nestedMessage is Map
+        ? nestedMessage['conversationId']
+        : null;
+    final relevantConversationId =
+        eventConversationId ??
+        (nestedConversationId is String ? nestedConversationId : null);
+
+    if (relevantConversationId != null &&
+        relevantConversationId != widget.conversationId) {
+      return;
+    }
+
+    switch (event.type) {
+      case 'connection.ready':
+      case 'transport.connected':
+        if (mounted) {
+          setState(() => _realtimeConnected = true);
+        }
+        // Reconcile anything that may have arrived while disconnected.
+        unawaited(_loadMessages(silent: true));
+        break;
+
+      case 'transport.disconnected':
+      case 'transport.connection_error':
+      case 'transport.send_error':
+        if (mounted) {
+          setState(() {
+            _realtimeConnected = false;
+            _peerTyping = false;
+          });
+        }
+        break;
+
+      case 'presence.changed':
+        if (mounted) {
+          setState(() {
+            _peerOnline = event.isOnline ?? false;
+          });
+        }
+        break;
+
+      case 'typing.changed':
+        if (mounted) {
+          setState(() {
+            _peerTyping = event.isTyping ?? false;
+          });
+        }
+        break;
+
+      case 'message.created':
+      case 'message.read':
+        unawaited(_loadMessages(silent: true));
+        break;
+    }
+  }
+
+  void _onComposerChanged(String value) {
+    _typingStopTimer?.cancel();
+
+    if (value.trim().isEmpty) {
+      _stopTyping();
+      return;
+    }
+
+    if (!_typingSent) {
+      _typingSent = true;
+      _realtime.setTyping(true);
+    }
+
+    _typingStopTimer = Timer(
+      const Duration(seconds: 2),
+      _stopTyping,
+    );
+  }
+
+  void _stopTyping() {
+    _typingStopTimer?.cancel();
+    _typingStopTimer = null;
+
+    if (!_typingSent) return;
+    _typingSent = false;
+    _realtime.setTyping(false);
   }
 
   Future<void> _loadMessages({bool silent = false}) async {
@@ -811,6 +942,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
     try {
       final messages = await _service.getMessages(widget.conversationId);
       await _service.markConversationRead(widget.conversationId);
+      _lastSuccessfulSync = DateTime.now();
 
       if (!mounted) return;
 
@@ -843,6 +975,8 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
 
     final text = _composer.text.trim();
     if (text.isEmpty) return;
+
+    _stopTyping();
 
     setState(() {
       _sending = true;
@@ -908,6 +1042,41 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
               child: _NoticeBox(
                 text:
                     'هذه محادثة خاصة بين الحسابين المشاركين. الرسائل محفوظة على الخادم وليست مشفرة من طرف إلى طرف في هذه النسخة.',
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 2, 14, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _peerTyping
+                        ? Icons.more_horiz_rounded
+                        : _peerOnline
+                            ? Icons.circle
+                            : Icons.sync_rounded,
+                    size: 11,
+                    color: _peerTyping || _peerOnline
+                        ? const Color(0xFF57D99A)
+                        : _realtimeConnected
+                            ? const Color(0xFF7FB4FF)
+                            : Colors.white38,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _peerTyping
+                        ? 'يكتب الآن...'
+                        : _peerOnline
+                            ? 'متصل الآن'
+                            : _realtimeConnected
+                                ? 'الاتصال اللحظي نشط'
+                                : 'المزامنة الاحتياطية نشطة',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ),
             ),
             if (_error != null)
@@ -1016,6 +1185,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
                 Expanded(
                   child: TextField(
                     controller: _composer,
+                    onChanged: _onComposerChanged,
                     minLines: 1,
                     maxLines: 4,
                     textInputAction: TextInputAction.newline,
