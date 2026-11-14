@@ -1,11 +1,11 @@
-
 import 'package:flutter/material.dart';
 
 import 'services/social_games_service.dart';
+import 'services/social_guest_session_service.dart';
 import 'social_games_hub_screen.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
-/// شاشة استقبال دعوة لعبة، وتسجيل الدخول عند الحاجة ثم الانضمام.
+/// شاشة استقبال دعوة لعبة، تستعيد جلسة المستخدم أو تنشئ حساب ضيف تلقائيًا.
 class SocialGameInviteScreen extends StatefulWidget {
   const SocialGameInviteScreen({
     super.key,
@@ -47,53 +47,37 @@ class _SocialGameInviteScreenState
 
   Future<void> _prepareInvite() async {
     try {
+      // Reuse the signed-in account when valid. Otherwise restore or create
+      // a secure guest account so accepting an invite does not require signup.
+      await SocialGuestSessionService.instance.ensureSession();
       await _service.initialize();
+      await _service.getCurrentUser();
 
-      if (!_service.isSignedIn) {
-        if (!mounted) return;
-        setState(() => _loading = false);
-        return;
-      }
+      if (!mounted) return;
 
-      try {
-        await _service.getCurrentUser();
+      setState(() {
+        _authenticated = true;
+        _loading = false;
+        _error = null;
+      });
 
-        if (!mounted) return;
+      await _joinRoom();
+    } on SocialGamesException catch (error) {
+      if (!mounted) return;
 
-        setState(() {
-          _authenticated = true;
-          _loading = false;
-        });
-
-        await _joinRoom();
-      } on SocialGamesException catch (e) {
-        if (e.code == 'AUTH_REQUIRED' ||
-            e.code == 'SESSION_EXPIRED') {
-          await _service.logout();
-
-          if (!mounted) return;
-
-          setState(() {
-            _authenticated = false;
-            _loading = false;
-            _error = 'انتهت جلسة الألعاب. سجّل الدخول لقبول الدعوة.';
-          });
-        } else {
-          if (!mounted) return;
-
-          setState(() {
-            _authenticated = true;
-            _loading = false;
-            _error = e.message;
-          });
-        }
-      }
+      setState(() {
+        _authenticated = _service.isSignedIn;
+        _loading = false;
+        _error = error.message;
+      });
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
+        _authenticated = _service.isSignedIn;
         _loading = false;
-        _error = 'تعذر تجهيز الدعوة. تحقق من الاتصال وحاول مرة أخرى.';
+        _error =
+            'تعذر تجهيز حساب الضيف أو قبول الدعوة. تحقق من الاتصال وحاول مرة أخرى.';
       });
     }
   }
@@ -136,7 +120,8 @@ class _SocialGameInviteScreenState
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'تعذر تسجيل الدخول. تحقق من الإنترنت وحاول مرة أخرى.';
+          _error =
+              'تعذر تسجيل الدخول. تحقق من الإنترنت وحاول مرة أخرى.';
         });
       }
     } finally {
@@ -181,7 +166,8 @@ class _SocialGameInviteScreenState
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'تعذر الانضمام للمباراة. تحقق من الاتصال وحاول مرة أخرى.';
+          _error =
+              'تعذر الانضمام للمباراة. تحقق من الاتصال وحاول مرة أخرى.';
         });
       }
     } finally {
@@ -233,7 +219,7 @@ class _SocialGameInviteScreenState
                           ),
                           SizedBox(height: 5),
                           Text(
-                            'سجّل الدخول أو أنشئ حساب ألعاب، وسننقلك للمباراة مباشرة.',
+                            'هنجهز حساب ضيف آمن تلقائيًا ونفتح المباراة مباشرة. يمكنك استخدام حسابك الحالي أو تسجيل حساب يدويًا عند الحاجة.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.white70,
