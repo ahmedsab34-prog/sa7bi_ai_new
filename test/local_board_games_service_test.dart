@@ -57,6 +57,23 @@ void main() {
       );
     });
 
+    test('rejects an invalid promotion choice', () async {
+      final game = await service.createGame(
+        game: 'chess',
+        mode: 'two_players',
+      );
+
+      await expectLater(
+        service.playChessMove(
+          sessionId: game.id,
+          from: 'e2',
+          to: 'e4',
+          promotion: 'x',
+        ),
+        throwsA(isA<LocalBoardGamesException>()),
+      );
+    });
+
     test('local chess AI replies after the white move', () async {
       final game = await service.createGame(
         game: 'chess',
@@ -72,6 +89,34 @@ void main() {
       expect(updated.state['turn'], 'w');
       expect(updated.state['plyCount'], 2);
       expect(updated.state['fen'], isA<String>());
+    });
+
+    test('detects checkmate in a two-player local game', () async {
+      final game = await service.createGame(
+        game: 'chess',
+        mode: 'two_players',
+      );
+
+      const moves = [
+        {'from': 'f2', 'to': 'f3'},
+        {'from': 'e7', 'to': 'e5'},
+        {'from': 'g2', 'to': 'g4'},
+        {'from': 'd8', 'to': 'h4'},
+      ];
+
+      var updated = game;
+
+      for (final move in moves) {
+        updated = await service.playChessMove(
+          sessionId: game.id,
+          from: move['from']!,
+          to: move['to']!,
+        );
+      }
+
+      expect(updated.state['status'], 'finished');
+      expect(updated.state['winner'], 'black');
+      expect(updated.state['inCheck'], true);
     });
   });
 
@@ -113,6 +158,28 @@ void main() {
         throwsA(isA<LocalBoardGamesException>()),
       );
     });
+
+    test('detects a full-board draw in two-player mode', () async {
+      final game = await service.createGame(
+        game: 'tic_tac_toe',
+        mode: 'two_players',
+      );
+
+      const moves = [0, 4, 8, 2, 6, 3, 1, 7, 5];
+
+      var updated = game;
+
+      for (final index in moves) {
+        updated = await service.playTicTacToeMove(
+          sessionId: game.id,
+          index: index,
+        );
+      }
+
+      expect(updated.state['status'], 'finished');
+      expect(updated.state['winner'], 'Draw');
+      expect(updated.state['moves'], 9);
+    });
   });
 
   group('Local rock paper scissors', () {
@@ -147,9 +214,55 @@ void main() {
       expect(scores['player1'], 1);
       expect(scores['player2'], 0);
     });
+
+    test('AI completes an RPS round and updates the score', () async {
+      final game = await service.createGame(
+        game: 'rock_paper_scissors',
+        mode: 'ai',
+      );
+
+      final updated = await service.playRockPaperScissors(
+        sessionId: game.id,
+        choice: 'paper',
+      );
+
+      final choices =
+          Map<String, dynamic>.from(updated.state['lastChoices'] as Map);
+      final scores =
+          Map<String, dynamic>.from(updated.state['scores'] as Map);
+
+      expect(updated.state['rounds'], 1);
+      expect(choices['player1'], 'paper');
+      expect(
+        ['rock', 'paper', 'scissors'],
+        contains(choices['player2']),
+      );
+      expect(updated.state['lastResult'], isA<String>());
+      expect(
+        (scores['player1'] as int) +
+            (scores['player2'] as int) +
+            (scores['draws'] as int),
+        1,
+      );
+    });
+
+    test('rejects an unsupported RPS choice', () async {
+      final game = await service.createGame(
+        game: 'rock_paper_scissors',
+        mode: 'ai',
+      );
+
+      await expectLater(
+        service.playRockPaperScissors(
+          sessionId: game.id,
+          choice: 'lizard',
+        ),
+        throwsA(isA<LocalBoardGamesException>()),
+      );
+    });
   });
 
-  test('saves and restores a local game', () async {
+  test('saves and restores a local chess game', () async {
     final game = await service.createGame(
       game: 'chess',
       mode: 'two_players',
