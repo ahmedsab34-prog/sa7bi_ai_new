@@ -99,7 +99,6 @@ class LocalBoardGameSession {
 }
 
 /// خدمة الألعاب المحلية.
-///
 /// لا تحتاج إلى حساب أو اتصال بالخادم.
 /// تحفظ المباراة على الجهاز وتسمح باستكمالها بعد إغلاق التطبيق.
 class LocalBoardGamesService {
@@ -299,7 +298,7 @@ class LocalBoardGamesService {
 
     final engine = _restoreChessEngine(state);
 
-    if (session.mode == 'ai' && engine.turn != chess.WHITE) {
+    if (session.mode == 'ai' && engine.turn != chess.Color.WHITE) {
       throw const LocalBoardGamesException(
         'NOT_YOUR_TURN',
         'استنى نقلة الكمبيوتر.',
@@ -321,7 +320,7 @@ class LocalBoardGamesService {
 
     if (session.mode == 'ai' &&
         !engine.game_over &&
-        engine.turn == chess.BLACK) {
+        engine.turn == chess.Color.BLACK) {
       _playLocalChessAiMove(engine);
     }
 
@@ -412,7 +411,7 @@ class LocalBoardGamesService {
 
     if (engine.in_checkmate) {
       status = 'finished';
-      winner = engine.turn == chess.WHITE ? 'black' : 'white';
+      winner = engine.turn == chess.Color.WHITE ? 'black' : 'white';
     } else if (engine.in_draw || engine.in_stalemate) {
       status = 'finished';
       winner = 'draw';
@@ -420,7 +419,7 @@ class LocalBoardGamesService {
 
     state['fen'] = engine.fen;
     state['pgn'] = engine.pgn();
-    state['turn'] = engine.turn == chess.WHITE ? 'w' : 'b';
+    state['turn'] = engine.turn == chess.Color.WHITE ? 'w' : 'b';
     state['inCheck'] = engine.in_check;
     state['plyCount'] = engine.history.length;
     state['status'] = status;
