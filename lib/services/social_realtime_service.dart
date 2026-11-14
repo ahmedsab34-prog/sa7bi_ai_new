@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -9,9 +8,9 @@ import 'social_session_storage.dart';
 
 /// Optional realtime event channel for Sa7bi Connect private conversations.
 ///
-/// REST remains the source of truth for loading/sending messages. This socket
-/// only carries live updates and typing state, so the chat can safely keep its
-/// existing polling fallback when WebSocket is unavailable on a weak network.
+/// REST remains the source of truth for loading and sending messages. The
+/// socket carries live notifications and typing state only. The chat screen
+/// keeps REST polling as a fallback for weak or unavailable networks.
 class SocialRealtimeService {
   SocialRealtimeService._();
 
@@ -20,16 +19,21 @@ class SocialRealtimeService {
   static const Duration _connectTimeout = Duration(seconds: 12);
   static const Duration _pingInterval = Duration(seconds: 25);
 
+  static final RegExp _conversationIdPattern =
+      RegExp(r'^[a-f0-9-]{36}$', caseSensitive: false);
+
   final StreamController<SocialRealtimeEvent> _events =
       StreamController<SocialRealtimeEvent>.broadcast(sync: true);
+
+  final Set<int> _connectingGenerations = <int>{};
 
   WebSocket? _socket;
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
-  Future<void>? _connecting;
 
   String? _conversationId;
   bool _shouldReconnect = false;
+  int _generation = 0;
   int _reconnectAttempt = 0;
 
   Stream<SocialRealtimeEvent> get events => _events.stream;
@@ -39,24 +43,46 @@ class SocialRealtimeService {
   String? get activeConversationId => _conversationId;
 
   /// Opens a live connection for one private conversation.
-  /// Reconnects automatically with a capped exponential delay.
+  ///
+  /// A generation number makes a late connection attempt harmless when the
+  /// user leaves a conversation or opens another one before the handshake
+  /// finishes.
   Future<void> connect(String conversationId) async {
     final cleaned = conversationId.trim();
-    if (cleaned.isEmpty) return;
 
-    if (_conversationId == cleaned && isConnected) return;
+    if (!_conversationIdPattern.hasMatch(cleaned)) {
+      throw ArgumentError.value(
+        conversationId,
+        'conversationId',
+        'A valid conversation UUID is required.',
+      );
+    }
+
+    if (_conversationId == cleaned &&
+        _shouldReconnect &&
+        (isConnected || _connectingGenerations.contains(_generation))) {
+      return;
+    }
 
     await disconnect();
+
     _conversationId = cleaned;
     _shouldReconnect = true;
     _reconnectAttempt = 0;
-    await _connectCurrent();
+    final generation = ++_generation;
+
+    await _connectCurrent(generation);
   }
 
-  /// Stops the socket and disables automatic reconnection.
+  /// Stops the socket and invalidates every in-flight connection attempt.
   Future<void> disconnect() async {
+    final previousConversationId = _conversationId;
+
+    _generation++;
     _shouldReconnect = false;
     _conversationId = null;
+    _reconnectAttempt = 0;
+
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
 
@@ -65,29 +91,42 @@ class SocialRealtimeService {
 
     final subscription = _subscription;
     _subscription = null;
+
     if (subscription != null) {
       try {
         await subscription.cancel();
-      } catch (_) {}
+      } catch (_) {
+        // A socket may already have ended while cancellation was requested.
+      }
     }
 
     if (socket != null) {
       try {
-        await socket.close(WebSocketStatus.normalClosure, 'Chat closed');
-      } catch (_) {}
+        await socket.close(
+          WebSocketStatus.normalClosure,
+          'Chat closed',
+        );
+      } catch (_) {
+        // The transport may already be closed.
+      }
     }
 
-    _emit('transport.disconnected');
+    _emit(
+      'transport.disconnected',
+      conversationId: previousConversationId,
+    );
   }
 
-  /// Sends an ephemeral typing signal. It never sends message text.
+  /// Sends an ephemeral typing signal. Message text is never sent here.
   void setTyping(bool isTyping) {
-    _sendEvent({'type': isTyping ? 'typing.start' : 'typing.stop'});
+    _sendEvent(<String, dynamic>{
+      'type': isTyping ? 'typing.start' : 'typing.stop',
+    });
   }
 
-  /// Sends a lightweight application-level ping when needed by the UI.
+  /// Sends a lightweight application-level ping.
   void ping() {
-    _sendEvent({'type': 'ping'});
+    _sendEvent(const <String, dynamic>{'type': 'ping'});
   }
 
   void _sendEvent(Map<String, dynamic> event) {
@@ -97,60 +136,115 @@ class SocialRealtimeService {
     try {
       socket.add(jsonEncode(event));
     } catch (_) {
-      _emit('transport.send_error');
+      _emit(
+        'transport.send_error',
+        conversationId: _conversationId,
+      );
     }
   }
 
-  Future<void> _connectCurrent() async {
-    if (!_shouldReconnect || _conversationId == null || isConnected) return;
+  Future<void> _connectCurrent(int generation) async {
+    final conversationId = _conversationId;
 
-    final pending = _connecting;
-    if (pending != null) {
-      await pending;
+    if (conversationId == null ||
+        !_isCurrent(generation, conversationId) ||
+        isConnected ||
+        !_connectingGenerations.add(generation)) {
       return;
     }
 
-    final conversationId = _conversationId!;
-    final task = _openSocket(conversationId);
-    _connecting = task;
-
     try {
-      await task;
+      await _openSocket(conversationId, generation);
     } finally {
-      if (identical(_connecting, task)) {
-        _connecting = null;
-      }
+      _connectingGenerations.remove(generation);
     }
   }
 
-  Future<void> _openSocket(String conversationId) async {
+  Future<WebSocket> _connectSocket(
+    Uri socketUri,
+    String token,
+  ) async {
+    final completer = Completer<WebSocket>();
+
+    final timeoutTimer = Timer(_connectTimeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException(
+            'WebSocket connection timed out.',
+            _connectTimeout,
+          ),
+        );
+      }
+    });
+
+    // Future.timeout alone does not cancel WebSocket.connect. Close a socket
+    // that finishes after the timeout so it cannot become an orphaned socket.
+    WebSocket.connect(
+      socketUri.toString(),
+      headers: <String, String>{
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    ).then(
+      (socket) {
+        if (completer.isCompleted) {
+          unawaited(
+            socket.close(
+              WebSocketStatus.goingAway,
+              'Connection timed out',
+            ),
+          );
+        } else {
+          completer.complete(socket);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      },
+    );
+
+    try {
+      return await completer.future;
+    } finally {
+      timeoutTimer.cancel();
+    }
+  }
+
+  Future<void> _openSocket(
+    String conversationId,
+    int generation,
+  ) async {
     WebSocket? candidate;
 
     try {
       await SocialGuestSessionService.instance.ensureSession();
-      final token = await SocialSessionStorage.instance.readToken();
 
+      if (!_isCurrent(generation, conversationId)) return;
+
+      final token = await SocialSessionStorage.instance.readToken();
       if (token == null || token.isEmpty) {
         throw const SocketException('Social session token is missing.');
       }
 
+      if (!_isCurrent(generation, conversationId)) return;
+
       final httpsUri = Uri.parse(
         AppConfig.buildBackendUrl('/v1/social/realtime'),
       );
+
       final socketUri = httpsUri.replace(
         scheme: httpsUri.scheme == 'https' ? 'wss' : 'ws',
-        queryParameters: {'conversationId': conversationId},
+        queryParameters: <String, String>{
+          'conversationId': conversationId,
+        },
       );
 
-      candidate = await WebSocket.connect(
-        socketUri.toString(),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      ).timeout(_connectTimeout);
+      candidate = await _connectSocket(socketUri, token);
 
-      if (!_shouldReconnect || _conversationId != conversationId) {
+      // The user may have left this chat while the handshake was pending.
+      if (!_isCurrent(generation, conversationId)) {
         await candidate.close(
           WebSocketStatus.normalClosure,
           'Conversation changed',
@@ -161,15 +255,25 @@ class SocialRealtimeService {
       candidate.pingInterval = _pingInterval;
       _socket = candidate;
       _reconnectAttempt = 0;
-      _emit('transport.connected');
+
+      _emit(
+        'transport.connected',
+        conversationId: conversationId,
+      );
 
       final activeSocket = candidate;
       _subscription = activeSocket.listen(
         _handleSocketData,
         onError: (Object error, StackTrace stackTrace) {
-          _handleSocketEnd(activeSocket, error: error);
+          _handleSocketEnd(
+            activeSocket,
+            generation,
+            error: error,
+          );
         },
-        onDone: () => _handleSocketEnd(activeSocket),
+        onDone: () {
+          _handleSocketEnd(activeSocket, generation);
+        },
         cancelOnError: true,
       );
     } catch (error) {
@@ -179,11 +283,19 @@ class SocialRealtimeService {
             WebSocketStatus.goingAway,
             'Connection setup failed',
           );
-        } catch (_) {}
+        } catch (_) {
+          // Ignore cleanup errors after a failed handshake.
+        }
       }
 
-      _emit('transport.connection_error', details: _safeError(error));
-      _scheduleReconnect();
+      if (!_isCurrent(generation, conversationId)) return;
+
+      _emit(
+        'transport.connection_error',
+        conversationId: conversationId,
+        details: _safeError(error),
+      );
+      _scheduleReconnect(generation, conversationId);
     }
   }
 
@@ -216,20 +328,36 @@ class SocialRealtimeService {
     }
   }
 
-  void _handleSocketEnd(WebSocket socket, {Object? error}) {
+  void _handleSocketEnd(
+    WebSocket socket,
+    int generation, {
+    Object? error,
+  }) {
+    // Ignore callbacks from an older socket after a chat switch/reconnect.
     if (!identical(_socket, socket)) return;
 
     _socket = null;
     _subscription = null;
+
+    final conversationId = _conversationId;
     _emit(
-      error == null ? 'transport.disconnected' : 'transport.connection_error',
+      error == null
+          ? 'transport.disconnected'
+          : 'transport.connection_error',
+      conversationId: conversationId,
       details: error == null ? null : _safeError(error),
     );
-    _scheduleReconnect();
+
+    if (conversationId != null) {
+      _scheduleReconnect(generation, conversationId);
+    }
   }
 
-  void _scheduleReconnect() {
-    if (!_shouldReconnect || _conversationId == null) return;
+  void _scheduleReconnect(
+    int generation,
+    String conversationId,
+  ) {
+    if (!_isCurrent(generation, conversationId)) return;
     if (_reconnectTimer?.isActive == true) return;
 
     _reconnectAttempt++;
@@ -244,17 +372,31 @@ class SocialRealtimeService {
 
     _reconnectTimer = Timer(Duration(seconds: seconds), () {
       _reconnectTimer = null;
-      unawaited(_connectCurrent());
+      if (_isCurrent(generation, conversationId)) {
+        unawaited(_connectCurrent(generation));
+      }
     });
   }
 
-  void _emit(String type, {String? details}) {
+  bool _isCurrent(int generation, String conversationId) {
+    return _shouldReconnect &&
+        _generation == generation &&
+        _conversationId == conversationId;
+  }
+
+  void _emit(
+    String type, {
+    String? conversationId,
+    String? details,
+  }) {
     if (_events.isClosed) return;
+
     _events.add(
       SocialRealtimeEvent(
         type: type,
         data: <String, dynamic>{
           'type': type,
+          if (conversationId != null) 'conversationId': conversationId,
           if (details != null) 'details': details,
         },
       ),
@@ -262,12 +404,12 @@ class SocialRealtimeService {
   }
 
   String _safeError(Object error) {
-    final value = error.toString();
-    if (value.length <= 180) return value;
-    return value.substring(0, 180);
+    // Do not expose request URLs, headers, or session material in UI/logs.
+    return error.runtimeType.toString();
   }
 }
 
+/// A decoded event from the private-conversation WebSocket.
 class SocialRealtimeEvent {
   const SocialRealtimeEvent({
     required this.type,
@@ -277,15 +419,27 @@ class SocialRealtimeEvent {
   final String type;
   final Map<String, dynamic> data;
 
-  String? get conversationId =>
-      data['conversationId'] is String
-          ? data['conversationId'] as String
-          : null;
+  String? get conversationId {
+    final value = data['conversationId'];
+    return value is String ? value : null;
+  }
+
+  bool? get isTyping {
+    final value = data['isTyping'];
+    return value is bool ? value : null;
+  }
+
+  bool? get isOnline {
+    final value = data['online'];
+    return value is bool ? value : null;
+  }
 
   factory SocialRealtimeEvent.fromJson(Map<String, dynamic> json) {
     return SocialRealtimeEvent(
-      type: json['type'] is String ? json['type'] as String : 'unknown',
-      data: json,
+      type: json['type'] is String
+          ? json['type'] as String
+          : 'unknown',
+      data: Map<String, dynamic>.from(json),
     );
   }
 }
