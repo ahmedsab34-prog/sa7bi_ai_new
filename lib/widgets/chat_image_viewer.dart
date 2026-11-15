@@ -1,4 +1,3 @@
-
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -52,7 +51,7 @@ class _ChatImageViewerDialogState
         _transformationController.value = Matrix4.identity();
       } else {
         _transformationController.value = Matrix4.identity()
-          ..scaleByDouble(2.0, 2.0, 1.0);
+          ..scaleByDouble(2.0, 2.0, 1.0, 1.0);
       }
 
       _zoomedByDoubleTap = !_zoomedByDoubleTap;
