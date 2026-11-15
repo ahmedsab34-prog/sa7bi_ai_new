@@ -141,9 +141,11 @@ class ChatVoiceService {
 
       await _speech.listen(
         localeId: localeId,
-        listenMode: ListenMode.dictation,
-        partialResults: true,
-        cancelOnError: true,
+        listenOptions: const SpeechListenOptions(
+          listenMode: ListenMode.dictation,
+          partialResults: true,
+          cancelOnError: true,
+        ),
         onResult: (result) {
           final recognized = result.recognizedWords.trim();
 
