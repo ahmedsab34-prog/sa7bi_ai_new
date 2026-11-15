@@ -11,6 +11,8 @@ import 'news_webview_screen.dart';
 import 'services/ads_service.dart';
 import 'services/ai_news_service.dart' as network_news;
 import 'shorts_feed_screen.dart';
+import 'tiktok_style_feed_screen.dart';
+import 'widgets/short_video_entry_carousel.dart';
 import 'widgets/affiliate_carousel.dart';
 import 'widgets/app_header.dart';
 
@@ -333,9 +335,20 @@ class HomeScreenState extends State<HomeScreen>
   }
 
   void _openReels() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
         builder: (_) => ShortsFeedScreen(
+          onProfileTap: widget.onProfile,
+          onAudioTap: widget.onAudio,
+        ),
+      ),
+    );
+  }
+
+  void _openTikTokStyleShorts() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TikTokStyleFeedScreen(
           onProfileTap: widget.onProfile,
           onAudioTap: widget.onAudio,
         ),
@@ -744,62 +757,9 @@ class HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildCompactReelsCard() {
-    return Material(
-      color: const Color(0xFF171C2B),
-      borderRadius: BorderRadius.circular(15),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: _openReels,
-        child: Padding(
-          padding: const EdgeInsets.all(11),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: const Color(0x3372D7FF),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.play_circle_fill_rounded,
-                  color: Color(0xFF72D7FF),
-                  size: 25,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'استراحة ريلز',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'افتح مقاطع الفيديو القصيرة',
-                      style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: Colors.white60,
-                size: 14,
-              ),
-            ],
-          ),
-        ),
-      ),
+    return ShortVideoEntryCarousel(
+      onReelsTap: _openReels,
+      onShortsTap: _openTikTokStyleShorts,
     );
   }
 }
