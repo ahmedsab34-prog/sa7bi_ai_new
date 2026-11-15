@@ -22,9 +22,6 @@ import 'widgets/profile_header.dart';
 import 'widgets/rewarded_ad_button.dart';
 
 /// لوحة الحساب الرئيسية.
-///
-/// الصفحة الأساسية ثابتة بدون تمرير رأسي؛ تحرير الصورة والاسم والنبذة
-/// والحالة يتم داخل نافذة منفصلة قابلة للتمرير حتى لا تزاحم شبكة الاختصارات.
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onProfileTap;
   final VoidCallback? onAudio;
@@ -72,10 +69,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _initialize() async {
     try {
-      await Future.wait<void>([
-        _profileService.initialize(),
-        _reminderService.initialize(),
-      ]);
+      // نحمّل بيانات الحساب فقط.
+      // لا نهيّئ التذكيرات هنا حتى لا تظهر طلبات أذونات أندرويد
+      // عند مجرد فتح الصفحة الشخصية.
+      await _profileService.initialize();
 
       if (!mounted) return;
 
@@ -156,9 +153,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
+      // تحديث الحساب لا يحتاج إلى تهيئة نظام التذكيرات.
       await _profileService.refresh();
-      await _reminderService.initialize();
-      await _reminderService.rescheduleAll();
 
       if (!mounted) return;
 
@@ -574,6 +570,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openReminders() {
+    // الأذونات والتهيئة تحصل هنا فقط بعد اختيار المستخدم للتذكيرات.
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => const ReminderSettingsScreen(),
@@ -800,36 +797,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: CircularProgressIndicator(),
                     )
                   : Padding(
-                          padding: const EdgeInsets.fromLTRB(9, 4, 9, 7),
-                          child: Column(
-                            children: [
-                              _buildIdentityCard(),
-                              const SizedBox(height: 7),
-                              _buildAiStatusBar(),
-                              const SizedBox(height: 7),
-                              _buildCreditsSection(),
-                              const SizedBox(height: 9),
-                              Expanded(
-                                child: GridView.builder(
-                                  padding: EdgeInsets.zero,
-                                  physics:
-                                      const NeverScrollableScrollPhysics(),
-                                  itemCount: actions.length,
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
-                                    crossAxisSpacing: 8,
-                                    mainAxisSpacing: 8,
-                                    childAspectRatio: 2.0,
-                                  ),
-                                  itemBuilder: (context, index) {
-                                    return _buildActionTile(actions[index]);
-                                  },
-                                ),
+                      padding: const EdgeInsets.fromLTRB(9, 4, 9, 7),
+                      child: Column(
+                        children: [
+                          _buildIdentityCard(),
+                          const SizedBox(height: 7),
+                          _buildAiStatusBar(),
+                          const SizedBox(height: 7),
+                          _buildCreditsSection(),
+                          const SizedBox(height: 9),
+                          Expanded(
+                            child: GridView.builder(
+                              padding: EdgeInsets.zero,
+                              physics:
+                                  const NeverScrollableScrollPhysics(),
+                              itemCount: actions.length,
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                                childAspectRatio: 2.0,
                               ),
-                            ],
+                              itemBuilder: (context, index) {
+                                return _buildActionTile(actions[index]);
+                              },
+                            ),
                           ),
-                        ),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),
