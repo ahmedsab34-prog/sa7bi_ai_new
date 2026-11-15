@@ -1,4 +1,3 @@
-
  // ============================================================
 // FILE: lib/audio_center_screen.dart
 // ============================================================
@@ -563,7 +562,7 @@ class _AudioCenterScreenState
     required ValueChanged<T?> onChanged,
   }) {
     return DropdownButtonFormField<T>(
-      value: items.contains(value) ? value : null,
+      initialValue: items.contains(value) ? value : null,
       isExpanded: true,
       dropdownColor: _card,
       style: const TextStyle(
