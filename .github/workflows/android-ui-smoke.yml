@@ -1,3 +1,4 @@
+
 name: Sa7bi AI - Android UI Smoke Test
 
 on:
@@ -45,7 +46,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           test "${GITHUB_REPOSITORY}" = "ahmedsab34-prog/sa7bi_ai_new"
           test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
@@ -101,23 +101,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           flutter build apk --debug --no-pub
-
           test -f build/app/outputs/flutter-apk/app-debug.apk
-
           echo "Debug APK built successfully."
 
       - name: Run Sa7bi sticker tests explicitly
         shell: bash
         run: |
           set -euo pipefail
-
           test -f test/social_sticker_test.dart
           flutter test test/social_sticker_test.dart \
             --no-pub \
             --reporter expanded
-
           echo "Sa7bi sticker tests passed explicitly."
 
       - name: Enable KVM permissions
@@ -133,7 +128,6 @@ jobs:
           sudo chmod 666 /dev/kvm
           test -r /dev/kvm
           test -w /dev/kvm
-
           ls -l /dev/kvm
 
       - name: Prepare Android UI smoke script
@@ -143,7 +137,6 @@ jobs:
 
           cat > "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh" <<'BASH'
           #!/usr/bin/env bash
-
           set -Eeuo pipefail
 
           SERIAL="${ANDROID_SERIAL:-emulator-5554}"
@@ -172,7 +165,6 @@ jobs:
 
           collect_diagnostics() {
             local status="${1:-1}"
-
             echo "Collecting Android emulator diagnostics for attempt ${ATTEMPT}."
             echo "Exit code: ${status}"
 
@@ -330,7 +322,6 @@ jobs:
 
           chmod +x "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
           bash -n "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
-
           echo "Android UI script syntax validation passed."
 
       - name: Run Android UI smoke test - first clean emulator
@@ -353,11 +344,11 @@ jobs:
           avd-name: sa7bi-ui-smoke-first
           emulator-options: >-
             -no-window
-            -gpu swiftshader_indirect
+            -gpu swiftshader
             -no-snapshot
             -noaudio
             -no-boot-anim
-            -memory 3072
+            -memory 2048
           script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
 
       - name: Run Android UI smoke test - fresh emulator retry
@@ -383,11 +374,11 @@ jobs:
           avd-name: sa7bi-ui-smoke-retry
           emulator-options: >-
             -no-window
-            -gpu swiftshader_indirect
+            -gpu swiftshader
             -no-snapshot
             -noaudio
             -no-boot-anim
-            -memory 3072
+            -memory 2048
           script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
 
       - name: Require at least one successful Android UI run
