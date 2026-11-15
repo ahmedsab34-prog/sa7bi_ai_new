@@ -52,7 +52,7 @@ class _ChatImageViewerDialogState
         _transformationController.value = Matrix4.identity();
       } else {
         _transformationController.value = Matrix4.identity()
-          ..scale(2.0);
+          ..scaleByDouble(2.0, 2.0, 1.0);
       }
 
       _zoomedByDoubleTap = !_zoomedByDoubleTap;
@@ -91,8 +91,7 @@ class _ChatImageViewerDialogState
                     maxScale: 5,
                     panEnabled: true,
                     scaleEnabled: true,
-                    boundaryMargin:
-                        const EdgeInsets.all(60),
+                    boundaryMargin: const EdgeInsets.all(60),
                     clipBehavior: Clip.none,
                     child: SizedBox.expand(
                       child: Center(
@@ -117,7 +116,6 @@ class _ChatImageViewerDialogState
                   ),
                 ),
               ),
-
               Positioned(
                 top: 8,
                 right: 8,
@@ -135,7 +133,6 @@ class _ChatImageViewerDialogState
                   ),
                 ),
               ),
-
               Positioned(
                 top: 8,
                 left: 8,
@@ -153,7 +150,6 @@ class _ChatImageViewerDialogState
                   ),
                 ),
               ),
-
               Positioned(
                 bottom: 12,
                 left: 12,
