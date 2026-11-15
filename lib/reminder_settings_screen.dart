@@ -593,7 +593,7 @@ class _ReminderEditorDialogState extends State<_ReminderEditorDialog> {
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _category,
+                initialValue: _category,
                 decoration: const InputDecoration(labelText: 'التصنيف'),
                 items: [
                   for (final category in _categories)
