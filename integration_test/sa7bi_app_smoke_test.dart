@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -20,11 +21,15 @@ void main() {
       await tester.pumpWidget(const sa7bi.Sa7biAiApp());
       await tester.pump(const Duration(seconds: 2));
 
-      // Chat tab: it contains private messages, friend search and secure venting.
-      // The general AI conversation belongs to Khalasana, not this tab.
+      // Chat tab.
       await _tapMainTab(tester, 'الشات');
 
-      expect(find.byType(ChatTabScreen), findsOneWidget);
+      await _pumpUntilFound(
+        tester,
+        find.byType(ChatTabScreen),
+        description: 'Chat tab',
+      );
+
       expect(find.text('الرسائل'), findsOneWidget);
       expect(find.text('بحث الأصدقاء'), findsOneWidget);
       expect(find.text('فضفضة سرية'), findsOneWidget);
@@ -33,10 +38,12 @@ void main() {
       // Games tab.
       await _tapMainTab(tester, 'الألعاب');
 
-      expect(
+      await _pumpUntilFound(
+        tester,
         find.byType(InteractiveExperiencesScreen),
-        findsOneWidget,
+        description: 'Games tab',
       );
+
       expect(find.text('ألعاب بدون إنترنت'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
@@ -44,42 +51,63 @@ void main() {
       final localGames = find.text('ألعاب بدون إنترنت');
 
       await tester.tap(localGames);
-      await tester.pump(
-        const Duration(milliseconds: 500),
+      await _pumpUntilFound(
+        tester,
+        find.byType(LocalGamesHubScreen),
+        description: 'Local games hub',
       );
 
-      expect(find.byType(LocalGamesHubScreen), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       await tester.pageBack();
-      await tester.pump(
-        const Duration(milliseconds: 400),
-      );
+      await tester.pump(const Duration(milliseconds: 400));
 
-      // Profile tab.
+      // Profile tab. Profile data is loaded asynchronously.
       await _tapMainTab(tester, 'حسابي');
 
-      expect(find.byType(ProfileScreen), findsOneWidget);
-      expect(tester.takeException(), isNull);
+      await _pumpUntilFound(
+        tester,
+        find.byType(ProfileScreen),
+        description: 'Profile screen',
+      );
 
-      // Open Settings and verify the existing founder page and asset.
-      final settingsTile = find.text('الإعدادات').first;
+      final settingsTile = find.text('الإعدادات');
+
+      await _pumpUntilFound(
+        tester,
+        settingsTile,
+        description: 'Profile settings tile',
+      );
+
       await tester.ensureVisible(settingsTile);
       await tester.tap(settingsTile);
-      await tester.pump(
-        const Duration(milliseconds: 500),
+      await _pumpUntilFound(
+        tester,
+        find.byType(SettingsScreen),
+        description: 'Settings screen',
       );
 
-      expect(find.byType(SettingsScreen), findsOneWidget);
-      expect(find.text('المؤسس والمطوّر'), findsOneWidget);
+      final founderTile = find.text('المؤسس والمطوّر');
 
-      await tester.tap(find.text('المؤسس والمطوّر'));
-      await tester.pump(
-        const Duration(milliseconds: 500),
+      await _pumpUntilFound(
+        tester,
+        founderTile,
+        description: 'Founder settings tile',
       );
 
-      expect(find.byType(OwnerProfileScreen), findsOneWidget);
-      expect(find.text(OwnerProfileScreen.founderArabicName), findsOneWidget);
+      await tester.ensureVisible(founderTile);
+      await tester.tap(founderTile);
+
+      await _pumpUntilFound(
+        tester,
+        find.byType(OwnerProfileScreen),
+        description: 'Founder profile screen',
+      );
+
+      expect(
+        find.text(OwnerProfileScreen.founderArabicName),
+        findsOneWidget,
+      );
 
       final founderImage = find.byWidgetPredicate(
         (widget) =>
@@ -93,29 +121,29 @@ void main() {
       expect(founderImage, findsOneWidget);
       expect(tester.takeException(), isNull);
 
+      // Return to the main screen.
       await tester.pageBack();
-      await tester.pump(
-        const Duration(milliseconds: 350),
-      );
+      await tester.pump(const Duration(milliseconds: 400));
+
       await tester.pageBack();
-      await tester.pump(
-        const Duration(milliseconds: 350),
-      );
+      await tester.pump(const Duration(milliseconds: 400));
 
       // Open the in-app diagnostics screen.
       final diagnosticsButton =
           find.byTooltip('تشخيص التطبيق');
 
-      expect(diagnosticsButton, findsWidgets);
-
-      await tester.tap(diagnosticsButton.first);
-      await tester.pump(
-        const Duration(milliseconds: 500),
+      await _pumpUntilFound(
+        tester,
+        diagnosticsButton,
+        description: 'Diagnostics button',
       );
 
-      expect(
+      await tester.tap(diagnosticsButton.first);
+
+      await _pumpUntilFound(
+        tester,
         find.byType(AppDiagnosticsScreen),
-        findsOneWidget,
+        description: 'Diagnostics screen',
       );
 
       expect(
@@ -128,28 +156,46 @@ void main() {
         findsOneWidget,
       );
 
-      // Local build metadata should be visible without paid AI requests.
-      await tester.pump(
-        const Duration(seconds: 1),
-      );
-
-      expect(
+      // Build metadata is local and does not require paid AI requests.
+      await _pumpUntilFound(
+        tester,
         find.text('Build/source metadata'),
-        findsOneWidget,
+        description: 'Build/source metadata',
       );
 
       expect(tester.takeException(), isNull);
 
-      // Do not start the full diagnostics run here; it may contact services.
+      // Do not start full diagnostics in this UI smoke test.
       await tester.pageBack();
-      await tester.pump(
-        const Duration(milliseconds: 400),
-      );
+      await tester.pump(const Duration(milliseconds: 400));
 
       await _tapMainTab(tester, 'الرئيسية');
 
       expect(tester.takeException(), isNull);
     },
+  );
+}
+
+/// Waits for asynchronous screen content without pumpAndSettle.
+///
+/// The app has continuous decorative animations, so pumpAndSettle is not
+/// appropriate for these integration tests.
+Future<void> _pumpUntilFound(
+  WidgetTester tester,
+  Finder finder, {
+  required String description,
+  int maxPumps = 40,
+}) async {
+  for (var attempt = 0;
+      attempt < maxPumps && finder.evaluate().isEmpty;
+      attempt++) {
+    await tester.pump(const Duration(milliseconds: 200));
+  }
+
+  expect(
+    finder,
+    findsWidgets,
+    reason: '$description did not appear after waiting for async UI updates.',
   );
 }
 
@@ -170,9 +216,7 @@ Future<void> _tapMainTab(
   expect(button, findsOneWidget);
 
   await tester.tap(button);
-  await tester.pump(
-    const Duration(milliseconds: 450),
-  );
+  await tester.pump(const Duration(milliseconds: 450));
 
   expect(
     tester.takeException(),
