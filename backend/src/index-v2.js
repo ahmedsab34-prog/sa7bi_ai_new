@@ -1,4 +1,3 @@
-
 // Sa7bi AI Worker entry point.
 // Preserves existing social, messaging, matchmaking,
 // invite links and tafsir-text routes.
@@ -11,6 +10,7 @@ import worker, {
 
 import { handleSocialMessaging } from "./social_messaging.js";
 import { handleSocialCommunity } from "./social_community.js";
+import { handleSocialGroupManagement } from "./social_group_management.js";
 import { handleSocialMatchmaking } from "./social_matchmaking.js";
 import { handleSocialMedia } from "./social_media.js";
 import {
@@ -173,6 +173,11 @@ export class Sa7biSocial extends BaseSa7biSocial {
       await handleSocialMatchmaking(request, this);
 
     if (matchmakingResponse) return matchmakingResponse;
+
+    const groupManagementResponse =
+      await handleSocialGroupManagement(request, this);
+
+    if (groupManagementResponse) return groupManagementResponse;
 
     const communityResponse =
       await handleSocialCommunity(request, this);
