@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -122,25 +123,47 @@ class _NewsWebViewScreenState
     }
   }
 
-  Future<bool> _handleBack() async {
+  /// يرجع إلى الصفحة السابقة داخل الخبر.
+  ///
+  /// يرجع true إذا تم الرجوع داخل WebView،
+  /// وfalse إذا لم توجد صفحة سابقة أو حدث خطأ.
+  Future<bool> _goBackInsidePage() async {
     try {
       final canBack = await _controller.canGoBack();
 
-      if (canBack) {
-        await _controller.goBack();
+      if (!canBack) {
+        if (mounted && _canGoBack) {
+          setState(() {
+            _canGoBack = false;
+          });
+        }
+
         return false;
       }
-    } catch (_) {
-      // عند تعذر الرجوع داخل الصفحة نسمح بإغلاق الشاشة.
-    }
 
-    return true;
+      await _controller.goBack();
+      await _refreshNavigationState();
+
+      return true;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _canGoBack = false;
+        });
+      }
+
+      return false;
+    }
   }
 
+  /// زر الرجوع الظاهر في شريط التطبيق.
+  ///
+  /// يحاول الرجوع داخل الخبر أولًا، ثم يغلق الشاشة.
   Future<void> _onBackPressed() async {
-    final shouldClose = await _handleBack();
+    final navigatedInsidePage =
+        await _goBackInsidePage();
 
-    if (shouldClose && mounted) {
+    if (!navigatedInsidePage && mounted) {
       Navigator.of(context).pop();
     }
   }
@@ -166,27 +189,20 @@ class _NewsWebViewScreenState
     }
   }
 
-  Future<void> _goBackInsidePage() async {
-    try {
-      if (!await _controller.canGoBack()) {
-        return;
-      }
-
-      await _controller.goBack();
-      await _refreshNavigationState();
-    } catch (_) {
-      if (!mounted) return;
-
-      setState(() {
-        _canGoBack = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _handleBack,
+    return PopScope<Object?>(
+      // نسمح بإغلاق الشاشة مباشرة عندما لا توجد
+      // صفحة سابقة داخل WebView.
+      canPop: !_canGoBack,
+      onPopInvokedWithResult: (didPop, result) {
+        // لو الشاشة أُغلقت بالفعل فلا ننفذ أي إجراء إضافي.
+        if (didPop) return;
+
+        // لو الرجوع ممنوع بسبب وجود صفحة سابقة،
+        // نرجع داخل الخبر بدل إغلاق الشاشة.
+        _onBackPressed();
+      },
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Scaffold(
