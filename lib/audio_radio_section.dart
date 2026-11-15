@@ -68,7 +68,7 @@ extension _AudioRadioSection on _AudioCenterScreenState {
         orElse: () => countries.first,
       );
 
-      final selectedCountry = selected ?? countries.first;
+      final selectedCountry = selected;
 
       setState(() {
         _countries = countries;
@@ -274,7 +274,7 @@ extension _AudioRadioSection on _AudioCenterScreenState {
       }
     }
 
-    if (!mounted || resolved == null) return;
+    if (!mounted) return;
 
     final streamUrl = resolved.url.trim();
 
@@ -599,7 +599,7 @@ class _RadioDirectoryViewState
     }
 
     return DropdownButtonFormField<RadioCountry>(
-      value: widget.countries.contains(widget.selectedCountry)
+      initialValue: widget.countries.contains(widget.selectedCountry)
           ? widget.selectedCountry
           : null,
       isExpanded: true,
