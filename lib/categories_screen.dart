@@ -1,3 +1,4 @@
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -150,23 +151,23 @@ class _CompactServiceCardState extends State<_CompactServiceCard>
                   begin: Alignment.topRight,
                   end: Alignment.bottomLeft,
                   colors: [
-                    service.color.withOpacity(
-                      0.18 + pulse * 0.045,
+                    service.color.withValues(
+                      alpha: 0.18 + pulse * 0.045,
                     ),
                     const Color(0xFF151923),
                     const Color(0xFF0C0F16),
                   ],
                 ),
                 border: Border.all(
-                  color: service.color.withOpacity(
-                    0.25 + pulse * 0.08,
+                  color: service.color.withValues(
+                    alpha: 0.25 + pulse * 0.08,
                   ),
                   width: 1,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: service.color.withOpacity(
-                      0.045 + pulse * 0.035,
+                    color: service.color.withValues(
+                      alpha: 0.045 + pulse * 0.035,
                     ),
                     blurRadius: 16 + pulse * 5,
                     spreadRadius: 1,
@@ -188,9 +189,9 @@ class _CompactServiceCardState extends State<_CompactServiceCard>
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                Colors.white.withOpacity(0),
-                                Colors.white.withOpacity(0.035),
-                                Colors.white.withOpacity(0),
+                                Colors.white.withValues(alpha: 0),
+                                Colors.white.withValues(alpha: 0.035),
+                                Colors.white.withValues(alpha: 0),
                               ],
                             ),
                           ),
@@ -250,20 +251,20 @@ class _CompactServiceCardState extends State<_CompactServiceCard>
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                                 colors: [
-                                  service.color.withOpacity(0.25),
-                                  service.color.withOpacity(0.07),
+                                  service.color.withValues(alpha: 0.25),
+                                  service.color.withValues(alpha: 0.07),
                                   const Color(0xFF0D1119),
                                 ],
                               ),
                               border: Border.all(
-                                color: service.color.withOpacity(
-                                  0.35 + pulse * 0.08,
+                                color: service.color.withValues(
+                                  alpha: 0.35 + pulse * 0.08,
                                 ),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: service.color.withOpacity(
-                                    0.10 + pulse * 0.05,
+                                  color: service.color.withValues(
+                                    alpha: 0.10 + pulse * 0.05,
                                   ),
                                   blurRadius: 14,
                                 ),
@@ -278,8 +279,9 @@ class _CompactServiceCardState extends State<_CompactServiceCard>
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color:
-                                          Colors.white.withOpacity(0.06),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.06,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -303,9 +305,9 @@ class _CompactServiceCardState extends State<_CompactServiceCard>
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: service.color.withOpacity(0.10),
+                          color: service.color.withValues(alpha: 0.10),
                           border: Border.all(
-                            color: service.color.withOpacity(0.20),
+                            color: service.color.withValues(alpha: 0.20),
                           ),
                         ),
                         child: Text(
