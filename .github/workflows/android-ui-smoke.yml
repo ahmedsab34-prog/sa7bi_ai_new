@@ -27,7 +27,7 @@ jobs:
   android-ui-smoke:
     name: Run app screens on Android Emulator
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
 
     env:
       EXPECTED_BRANCH: "fix/build-692-network-client-lifecycle"
@@ -108,6 +108,18 @@ jobs:
 
           echo "Debug APK built successfully."
 
+      - name: Run Sa7bi sticker tests explicitly
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f test/social_sticker_test.dart
+          flutter test test/social_sticker_test.dart \
+            --no-pub \
+            --reporter expanded
+
+          echo "Sa7bi sticker tests passed explicitly."
+
       - name: Enable KVM permissions
         shell: bash
         run: |
@@ -135,10 +147,20 @@ jobs:
           set -Eeuo pipefail
 
           SERIAL="${ANDROID_SERIAL:-emulator-5554}"
+          ATTEMPT="${SMOKE_ATTEMPT:-1}"
           LOGCAT_PID=""
+          TEST_LOG="android-ui-smoke-attempt-${ATTEMPT}.log"
+          DIAG_DIR="emulator-diagnostics/attempt-${ATTEMPT}"
 
-          mkdir -p emulator-diagnostics
-          : > android-ui-smoke.log
+          mkdir -p "$DIAG_DIR"
+          : > "$TEST_LOG"
+
+          write_failure_reason() {
+            local reason="$1"
+            if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+              echo "failure_reason=${reason}" >> "$GITHUB_OUTPUT"
+            fi
+          }
 
           stop_logcat_capture() {
             if [[ -n "$LOGCAT_PID" ]]; then
@@ -151,44 +173,57 @@ jobs:
           collect_diagnostics() {
             local status="${1:-1}"
 
-            echo "Collecting Android emulator diagnostics."
+            echo "Collecting Android emulator diagnostics for attempt ${ATTEMPT}."
             echo "Exit code: ${status}"
 
             stop_logcat_capture
 
             timeout 8s adb devices -l \
-              > emulator-diagnostics/adb-devices.txt 2>&1 || true
+              > "${DIAG_DIR}/adb-devices.txt" 2>&1 || true
 
             timeout 10s adb -s "$SERIAL" get-state \
-              > emulator-diagnostics/adb-device-state.txt 2>&1 || true
+              > "${DIAG_DIR}/adb-device-state.txt" 2>&1 || true
 
             timeout 12s adb -s "$SERIAL" logcat -d -v threadtime \
-              > emulator-diagnostics/android-logcat-final.txt 2>&1 || true
+              > "${DIAG_DIR}/android-logcat-final.txt" 2>&1 || true
 
             ps auxww \
-              > emulator-diagnostics/host-processes.txt 2>&1 || true
+              > "${DIAG_DIR}/host-processes.txt" 2>&1 || true
 
             pgrep -af 'emulator|qemu-system|adb' \
-              > emulator-diagnostics/emulator-processes.txt 2>&1 || true
+              > "${DIAG_DIR}/emulator-processes.txt" 2>&1 || true
 
             free -h \
-              > emulator-diagnostics/host-memory.txt 2>&1 || true
+              > "${DIAG_DIR}/host-memory.txt" 2>&1 || true
 
             df -h "$GITHUB_WORKSPACE" \
-              > emulator-diagnostics/host-disk.txt 2>&1 || true
+              > "${DIAG_DIR}/host-disk.txt" 2>&1 || true
 
             uptime \
-              > emulator-diagnostics/host-uptime.txt 2>&1 || true
+              > "${DIAG_DIR}/host-uptime.txt" 2>&1 || true
 
             timeout 6s sudo dmesg -T 2>&1 | tail -n 200 \
-              > emulator-diagnostics/host-kernel-tail.txt || true
+              > "${DIAG_DIR}/host-kernel-tail.txt" || true
 
-            echo "$status" > emulator-diagnostics/exit-code.txt
+            echo "$status" > "${DIAG_DIR}/exit-code.txt"
           }
 
           on_error() {
             local status="$?"
+            local device_state=""
+
             trap - ERR
+
+            device_state="$(
+              timeout 8s adb -s "$SERIAL" get-state 2>/dev/null || true
+            )"
+
+            if [[ "$device_state" == "device" ]]; then
+              write_failure_reason "script"
+            else
+              write_failure_reason "transport"
+            fi
+
             collect_diagnostics "$status"
             exit "$status"
           }
@@ -205,15 +240,13 @@ jobs:
               adb start-server >/dev/null 2>&1 || true
 
               state="$(
-                timeout 8s adb -s "$SERIAL" get-state \
-                  2>/dev/null || true
+                timeout 8s adb -s "$SERIAL" get-state 2>/dev/null || true
               )"
 
               if [[ "$state" == "device" ]]; then
                 boot_status="$(
                   timeout 8s adb -s "$SERIAL" shell \
-                    getprop sys.boot_completed \
-                    2>/dev/null | tr -d '\r' || true
+                    getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true
                 )"
 
                 if [[ "$boot_status" == "1" ]]; then
@@ -230,103 +263,14 @@ jobs:
             return 1
           }
 
-          recover_existing_emulator() {
-            echo "Attempting safe ADB recovery on the existing emulator."
-
-            # Do not kill the emulator process.
-            # Do not launch another QEMU process.
-            adb reconnect offline >/dev/null 2>&1 || true
-            adb start-server >/dev/null 2>&1 || true
-
-            wait_for_online_device 45
-          }
-
-          run_integration_test() {
-            local attempt=1
-            local max_attempts=2
-            local test_status=0
-            local device_state=""
-            local transport_failure="false"
-            local -a pipeline_status=()
-
-            while (( attempt <= max_attempts )); do
-              echo "Starting integration test ${attempt}/${max_attempts}."
-
-              set +e
-
-              timeout --signal=TERM --kill-after=20s 10m \
-                flutter test \
-                  integration_test/sa7bi_app_smoke_test.dart \
-                  --no-pub \
-                  -d "$SERIAL" \
-                  --reporter expanded \
-                  2>&1 | tee -a android-ui-smoke.log
-
-              pipeline_status=("${PIPESTATUS[@]}")
-              test_status="${pipeline_status[0]:-1}"
-
-              set -e
-
-              if [[ "$test_status" -eq 0 ]]; then
-                device_state="$(
-                  timeout 8s adb -s "$SERIAL" get-state \
-                    2>/dev/null || true
-                )"
-
-                if [[ "$device_state" == "device" ]]; then
-                  echo "Flutter integration test passed."
-                  return 0
-                fi
-
-                echo "Test finished but the emulator connection was lost."
-                test_status=1
-              fi
-
-              device_state="$(
-                timeout 8s adb -s "$SERIAL" get-state \
-                  2>/dev/null || true
-              )"
-
-              transport_failure="false"
-
-              if [[ "$device_state" != "device" ]] ||
-                 grep -Eqi \
-                   'device offline|device .* offline|lost connection to device|no devices/emulators found|adb.*offline' \
-                   android-ui-smoke.log; then
-                transport_failure="true"
-              fi
-
-              if [[ "$transport_failure" != "true" ]]; then
-                echo "::error::Flutter test failed without an ADB transport failure."
-                return "$test_status"
-              fi
-
-              if (( attempt >= max_attempts )); then
-                echo "::error::ADB recovery retry limit reached."
-                return "$test_status"
-              fi
-
-              echo "ADB transport failure detected."
-
-              if ! recover_existing_emulator; then
-                echo "::error::Existing emulator could not be recovered."
-                return "$test_status"
-              fi
-
-              attempt=$((attempt + 1))
-            done
-
-            return "$test_status"
-          }
-
-          echo "Waiting for Android emulator..."
+          echo "Waiting for Android emulator (attempt ${ATTEMPT})..."
           wait_for_online_device 180
 
           timeout 8s adb -s "$SERIAL" shell svc power stayon true || true
           timeout 8s adb -s "$SERIAL" logcat -c || true
 
           adb -s "$SERIAL" logcat -v threadtime \
-            > emulator-diagnostics/android-logcat-live.txt 2>&1 &
+            > "${DIAG_DIR}/android-logcat-live.txt" 2>&1 &
           LOGCAT_PID="$!"
 
           sleep 2
@@ -336,16 +280,52 @@ jobs:
           adb -s "$SERIAL" shell getprop ro.build.version.release
           adb -s "$SERIAL" shell getprop ro.product.model
 
-          echo "Starting Sa7bi AI UI smoke test."
+          echo "Starting Sa7bi AI UI smoke test (attempt ${ATTEMPT})."
 
-          if run_integration_test; then
-            stop_logcat_capture
-            echo "Android UI smoke test completed successfully."
-          else
-            test_status="$?"
-            collect_diagnostics "$test_status"
-            exit "$test_status"
+          set +e
+          timeout --signal=TERM --kill-after=20s 10m \
+            flutter test \
+              integration_test/sa7bi_app_smoke_test.dart \
+              --no-pub \
+              -d "$SERIAL" \
+              --reporter expanded \
+              2>&1 | tee "$TEST_LOG"
+          PIPELINE_STATUS=("${PIPESTATUS[@]}")
+          set -e
+
+          TEST_STATUS="${PIPELINE_STATUS[0]:-1}"
+
+          if [[ "$TEST_STATUS" -ne 0 ]]; then
+            DEVICE_STATE="$(
+              timeout 8s adb -s "$SERIAL" get-state 2>/dev/null || true
+            )"
+
+            if [[ "$DEVICE_STATE" == "device" ]]; then
+              write_failure_reason "test"
+              echo "::error::Flutter integration test failed while ADB remained online."
+            else
+              write_failure_reason "transport"
+              echo "::warning::The Android emulator/ADB transport disappeared during the UI test."
+            fi
+
+            collect_diagnostics "$TEST_STATUS"
+            exit "$TEST_STATUS"
           fi
+
+          DEVICE_STATE="$(
+            timeout 8s adb -s "$SERIAL" get-state 2>/dev/null || true
+          )"
+
+          if [[ "$DEVICE_STATE" != "device" ]]; then
+            write_failure_reason "transport"
+            echo "::warning::The UI test returned success but the emulator connection was lost."
+            collect_diagnostics 79
+            exit 79
+          fi
+
+          stop_logcat_capture
+          write_failure_reason "none"
+          echo "Flutter integration test passed on attempt ${ATTEMPT}."
           BASH
 
           chmod +x "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
@@ -353,8 +333,12 @@ jobs:
 
           echo "Android UI script syntax validation passed."
 
-      - name: Run UI checks on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
+      - name: Run Android UI smoke test - first clean emulator
+        id: android_ui_attempt_1
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2.35.0
+        env:
+          SMOKE_ATTEMPT: "1"
         with:
           api-level: 34
           target: default
@@ -362,16 +346,68 @@ jobs:
           profile: pixel_2
           cores: 2
           emulator-boot-timeout: 900
+          emulator-port: 5554
           disable-linux-hw-accel: false
           disable-animations: true
+          force-avd-creation: true
+          avd-name: sa7bi-ui-smoke-first
           emulator-options: >-
             -no-window
-            -gpu software
+            -gpu swiftshader_indirect
             -no-snapshot
             -noaudio
             -no-boot-anim
             -memory 3072
           script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
+
+      - name: Run Android UI smoke test - fresh emulator retry
+        id: android_ui_attempt_2
+        if: >-
+          steps.android_ui_attempt_1.outcome == 'failure' &&
+          steps.android_ui_attempt_1.outputs.failure_reason != 'test'
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2.35.0
+        env:
+          SMOKE_ATTEMPT: "2"
+        with:
+          api-level: 34
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          cores: 2
+          emulator-boot-timeout: 900
+          emulator-port: 5554
+          disable-linux-hw-accel: false
+          disable-animations: true
+          force-avd-creation: true
+          avd-name: sa7bi-ui-smoke-retry
+          emulator-options: >-
+            -no-window
+            -gpu swiftshader_indirect
+            -no-snapshot
+            -noaudio
+            -no-boot-anim
+            -memory 3072
+          script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
+
+      - name: Require at least one successful Android UI run
+        if: always()
+        shell: bash
+        env:
+          FIRST_ATTEMPT: ${{ steps.android_ui_attempt_1.outcome }}
+          SECOND_ATTEMPT: ${{ steps.android_ui_attempt_2.outcome }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${FIRST_ATTEMPT}" == "success" || "${SECOND_ATTEMPT}" == "success" ]]; then
+            echo "At least one Android UI smoke attempt passed."
+            exit 0
+          fi
+
+          echo "::error::Android UI smoke test did not pass on either emulator attempt."
+          echo "First attempt: ${FIRST_ATTEMPT:-unknown}"
+          echo "Second attempt: ${SECOND_ATTEMPT:-skipped}"
+          exit 1
 
       - name: Upload Android UI diagnostics
         if: always()
@@ -379,7 +415,7 @@ jobs:
         with:
           name: sa7bi-android-ui-smoke-diagnostics
           path: |
-            android-ui-smoke.log
+            android-ui-smoke-attempt-*.log
             emulator-diagnostics/
           if-no-files-found: warn
           retention-days: 14
