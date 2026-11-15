@@ -232,8 +232,8 @@ class AppDiagnosticsService {
           );
         }
 
-        final primaryResult = primary!;
-        final fallbackResult = fallback!;
+        final primaryResult = primary;
+        final fallbackResult = fallback;
 
         if (primaryResult.success &&
             fallbackResult.success) {
@@ -906,19 +906,4 @@ class AppDiagnosticsService {
     return '${cleaned.substring(0, 1000)}…';
   }
 
-  String _formatBytes(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    }
-
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-
-    if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
-  }
 }
