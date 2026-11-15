@@ -115,9 +115,8 @@ class Sa7biStickerCatalog {
       title: 'يا نهار أبيض',
       caption: 'إيه اللي أنا سمعته ده؟',
       startColor: 0xFFFFD43B,
-      endColor: 0FFF8C00,
+      endColor: 0xFFF08C00,
     ),
-
     Sa7biSticker(
       id: 'love',
       packId: 'feelings',
@@ -168,7 +167,6 @@ class Sa7biStickerCatalog {
       startColor: 0xFFFFD8A8,
       endColor: 0xFFFF922B,
     ),
-
     Sa7biSticker(
       id: 'ok',
       packId: 'reactions',
@@ -219,7 +217,6 @@ class Sa7biStickerCatalog {
       startColor: 0xFFA5D8FF,
       endColor: 0xFF4DABF7,
     ),
-
     Sa7biSticker(
       id: 'champ',
       packId: 'support',
@@ -260,7 +257,6 @@ class Sa7biStickerCatalog {
       startColor: 0xFF74C0FC,
       endColor: 0xFF4263EB,
     ),
-
     Sa7biSticker(
       id: 'hello',
       packId: 'greetings',
