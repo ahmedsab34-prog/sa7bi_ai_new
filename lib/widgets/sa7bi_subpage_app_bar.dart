@@ -6,7 +6,7 @@ import '../theme/sa7bi_theme.dart';
 import 'app_header.dart';
 import 'audio_center_with_header.dart';
 
-/// هيدر الصفحات الفرعية.
+/// الهيدر الموحد للصفحات الفرعية.
 class Sa7biSubpageAppBar extends StatelessWidget
     implements PreferredSizeWidget {
   const Sa7biSubpageAppBar({
@@ -29,7 +29,7 @@ class Sa7biSubpageAppBar extends StatelessWidget
   final String welcomeMessage;
 
   static const double _headerHeight = 48;
-  static const double _titleRowHeight = 36;
+  static const double _titleRowHeight = 48;
 
   double get _toolbarHeight =>
       _headerHeight + (showTitleRow ? _titleRowHeight : 0);
@@ -115,7 +115,7 @@ class Sa7biSubpageAppBar extends StatelessWidget
                   children: [
                     if (showBackButton)
                       SizedBox(
-                        width: 36,
+                        width: 40,
                         child: IconButton(
                           tooltip: 'رجوع',
                           padding: EdgeInsets.zero,
@@ -130,7 +130,7 @@ class Sa7biSubpageAppBar extends StatelessWidget
                         ),
                       )
                     else
-                      const SizedBox(width: 36),
+                      const SizedBox(width: 40),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsetsDirectional.only(
