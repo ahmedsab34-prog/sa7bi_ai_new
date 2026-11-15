@@ -1,4 +1,6 @@
 
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -45,11 +47,15 @@ void main() {
         );
         await tester.pump();
 
-        final node = tester.getSemantics(finder);
+        final selectedState = tester
+            .getSemantics(finder)
+            .getSemanticsData()
+            .flagsCollection
+            .isSelected;
 
         expect(
-          node.hasFlag(SemanticsFlag.isSelected),
-          isTrue,
+          selectedState,
+          Tristate.isTrue,
           reason: 'يجب أن تصبح صفحة "$label" هي المحددة بعد الضغط.',
         );
       }
@@ -63,11 +69,15 @@ void main() {
         const Duration(milliseconds: 300),
       );
 
+      final homeSelectedState = tester
+          .getSemantics(homeFinder)
+          .getSemanticsData()
+          .flagsCollection
+          .isSelected;
+
       expect(
-        tester
-            .getSemantics(homeFinder)
-            .hasFlag(SemanticsFlag.isSelected),
-        isTrue,
+        homeSelectedState,
+        Tristate.isTrue,
       );
     },
   );
