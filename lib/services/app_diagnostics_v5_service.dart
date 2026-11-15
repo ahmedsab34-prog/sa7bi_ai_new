@@ -1,4 +1,4 @@
-```dart
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -409,7 +409,7 @@ class AppDiagnosticsV5Service {
         httpStatus: status,
         details: success
             ? passedDetails(body)
-            : validationProblem,
+            : (validationProblem ?? 'Payload validation failed.'),
         durationMs: stopwatch.elapsedMilliseconds,
         repairable: false,
       );
