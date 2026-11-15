@@ -332,10 +332,12 @@ jobs:
           SMOKE_ATTEMPT: "1"
         with:
           api-level: 34
-          target: default
+          target: google_apis
           arch: x86_64
           profile: pixel_2
           cores: 2
+          ram-size: 3072M
+          heap-size: 512M
           emulator-boot-timeout: 900
           emulator-port: 5554
           disable-linux-hw-accel: false
@@ -348,7 +350,6 @@ jobs:
             -no-snapshot
             -noaudio
             -no-boot-anim
-            -memory 2048
           script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
 
       - name: Run Android UI smoke test - fresh emulator retry
@@ -362,10 +363,12 @@ jobs:
           SMOKE_ATTEMPT: "2"
         with:
           api-level: 34
-          target: default
+          target: google_apis
           arch: x86_64
           profile: pixel_2
           cores: 2
+          ram-size: 4096M
+          heap-size: 512M
           emulator-boot-timeout: 900
           emulator-port: 5554
           disable-linux-hw-accel: false
@@ -378,7 +381,6 @@ jobs:
             -no-snapshot
             -noaudio
             -no-boot-anim
-            -memory 2048
           script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
 
       - name: Require at least one successful Android UI run
