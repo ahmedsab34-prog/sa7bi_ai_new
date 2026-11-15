@@ -8,7 +8,7 @@ import 'secure_venting_screen.dart';
 import 'service_config.dart';
 import 'services/social_games_service.dart';
 import 'services/social_guest_session_service.dart';
-import 'social_connections_screen.dart';
+import 'social_connect_hub_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/app_header.dart';
 import 'widgets/audio_center_with_header.dart';
@@ -92,7 +92,7 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
     await _showWelcomeOnce(
       preferenceKey: _connectWelcomeKey,
       message:
-          'أهلًا بيك في صاحبي Connect. هنا تقدر تتواصل مع أصحابك وتبدأ محادثات خاصة وتتابع دعوات الألعاب.',
+          'أهلًا بيك في صاحبي Connect. تواصل مع أصحابك في محادثات خاصة أو ادخل المجموعات العامة وشاركهم الكلام واللعب.',
     );
 
     try {
@@ -103,7 +103,7 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
 
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
-          builder: (_) => const SocialConnectionsScreen(),
+          builder: (_) => const SocialConnectHubScreen(),
         ),
       );
     } on SocialGamesException catch (error) {
@@ -269,7 +269,8 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
                   title: 'صاحبي Connect',
                   subtitle: 'للتواصل مع الأشخاص الحقيقيين',
                   description:
-                      'رسائل خاصة، بحث عن الأصدقاء، ومتابعة دعوات الألعاب.',
+                      'رسائل خاصة، البحث عن الأصدقاء، المجموعات العامة، '
+                      'ومتابعة دعوات الألعاب من مكان واحد.',
                   icon: Icons.people_alt_rounded,
                   color: Sa7biTheme.cyan,
                   buttonText: 'افتح صاحبي Connect',
@@ -281,7 +282,8 @@ class _ChatTabScreenState extends State<ChatTabScreen> {
                   title: 'فضفضة مع صاحبي',
                   subtitle: 'محادثتك الشخصية مع الذكاء الاصطناعي',
                   description:
-                      'فضفض واسأل واطلب نصيحة أو العب مع صاحبك الذكي. المحادثة محمية بقفل الفضفضة على جهازك.',
+                      'فضفض واسأل واطلب نصيحة أو العب مع صاحبك الذكي. '
+                      'المحادثة محمية بقفل الفضفضة على جهازك.',
                   icon: Icons.favorite_rounded,
                   color: Sa7biTheme.violet,
                   buttonText: 'ابدأ الفضفضة',
