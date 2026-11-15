@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -16,7 +15,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'Sa7bi AI tabs, games, founder page and diagnostics open without UI exceptions',
+    'Sa7bi AI tabs, conversation services, games, profile and diagnostics open without UI exceptions',
     (tester) async {
       await tester.pumpWidget(const sa7bi.Sa7biAiApp());
       await tester.pump(const Duration(seconds: 2));
@@ -30,9 +29,12 @@ void main() {
         description: 'Chat tab',
       );
 
-      expect(find.text('الرسائل'), findsOneWidget);
-      expect(find.text('بحث الأصدقاء'), findsOneWidget);
-      expect(find.text('فضفضة سرية'), findsOneWidget);
+      // The chat entry now contains two clear services.
+      expect(find.text('المحادثات'), findsOneWidget);
+      expect(find.text('صاحبي Connect'), findsOneWidget);
+      expect(find.text('فضفضة مع صاحبي'), findsOneWidget);
+      expect(find.text('للتواصل مع الأشخاص الحقيقيين'), findsOneWidget);
+      expect(find.text('محادثتك الشخصية مع الذكاء الاصطناعي'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       // Games tab.
@@ -62,7 +64,7 @@ void main() {
       await tester.pageBack();
       await tester.pump(const Duration(milliseconds: 400));
 
-      // Profile tab. Profile data is loaded asynchronously.
+      // Profile tab. Profile data loads without initializing reminders.
       await _tapMainTab(tester, 'حسابي');
 
       await _pumpUntilFound(
@@ -81,6 +83,7 @@ void main() {
 
       await tester.ensureVisible(settingsTile);
       await tester.tap(settingsTile);
+
       await _pumpUntilFound(
         tester,
         find.byType(SettingsScreen),
