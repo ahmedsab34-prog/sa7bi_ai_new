@@ -1,3 +1,4 @@
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -37,7 +38,10 @@ class _Sa7biStickerPickerSheetState
   @override
   Widget build(BuildContext context) {
     final stickers = Sa7biStickerCatalog.forPack(_selectedPack);
-    final packs = <String>['الكل', ...Sa7biStickerCatalog.packTitles];
+    final packs = <String>[
+      'الكل',
+      ...Sa7biStickerCatalog.packTitles,
+    ];
 
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.78,
@@ -62,14 +66,27 @@ class _Sa7biStickerPickerSheetState
                   size: 25,
                 ),
                 const SizedBox(width: 9),
-                const Expanded(
-                  child: Text(
-                    'استيكرات صاحبي',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 19,
-                      fontWeight: FontWeight.w900,
-                    ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'استيكرات صاحبي',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      Text(
+                        '${Sa7biStickerCatalog.all.length} استيكر مميز',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 IconButton(
@@ -172,99 +189,178 @@ class Sa7biStickerArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final start = Color(sticker.startColor);
+    final end = Color(sticker.endColor);
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [
-            Color(sticker.startColor),
-            Color(sticker.endColor),
-          ],
+          colors: [start, end],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.35),
-          width: 1.2,
+          color: Colors.white.withValues(alpha: 0.55),
+          width: 1.4,
         ),
         boxShadow: [
           BoxShadow(
-            color: Color(sticker.endColor).withValues(alpha: 0.22),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
+            color: end.withValues(alpha: 0.30),
+            blurRadius: 15,
+            spreadRadius: 1,
+            offset: const Offset(0, 7),
+          ),
+          const BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 9,
+            offset: Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (showBrand)
-            Align(
-              alignment: Alignment.topRight,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(19),
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned(
+              top: -35,
+              right: -30,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 9,
-                  vertical: 4,
-                ),
+                width: 115,
+                height: 115,
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'صاحبي',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.30),
+                      Colors.white.withValues(alpha: 0.01),
+                    ],
                   ),
                 ),
               ),
             ),
-          Expanded(
-            child: Center(
-              child: FittedBox(
-                fit: BoxFit.contain,
-                child: Text(
-                  sticker.emoji,
-                  style: const TextStyle(fontSize: 76),
+            Positioned(
+              bottom: -42,
+              left: -34,
+              child: Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.black.withValues(alpha: 0.20),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Text(
-            sticker.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              shadows: [
-                Shadow(
-                  color: Colors.black38,
-                  blurRadius: 5,
-                  offset: Offset(0, 1),
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (showBrand)
+                    Align(
+                      alignment: Alignment.topRight,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.20),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.22),
+                          ),
+                        ),
+                        child: const Text(
+                          'صاحبي AI',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: Text(
+                          sticker.emoji,
+                          style: const TextStyle(
+                            fontSize: 76,
+                            shadows: [
+                              Shadow(
+                                color: Color(0x99000000),
+                                blurRadius: 2,
+                                offset: Offset(0, 5),
+                              ),
+                              Shadow(
+                                color: Color(0x55000000),
+                                blurRadius: 10,
+                                offset: Offset(0, 11),
+                              ),
+                              Shadow(
+                                color: Color(0x88FFFFFF),
+                                blurRadius: 2,
+                                offset: Offset(-2, -3),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    sticker.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black54,
+                          blurRadius: 6,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    sticker.caption,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                      shadows: [
+                        Shadow(
+                          color: Colors.black38,
+                          blurRadius: 3,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            sticker.caption,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              height: 1.2,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -315,9 +411,7 @@ class Sa7biStickerMessageView extends StatelessWidget {
   }
 }
 
-/// Creates a real PNG file from the sticker design and opens Android's share
-/// sheet. This shares it as an image; it does not install a native WhatsApp
-/// or Telegram sticker pack.
+/// يحوّل تصميم الاستيكر إلى PNG ويتيح مشاركته من أندرويد.
 Future<void> shareSa7biSticker(
   BuildContext context,
   Sa7biSticker sticker,
@@ -327,10 +421,23 @@ Future<void> shareSa7biSticker(
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     final bounds = const Rect.fromLTWH(0, 0, size, size);
+
     final rounded = RRect.fromRectAndRadius(
       bounds.deflate(8),
       const Radius.circular(58),
     );
+
+    final stickerPath = Path()..addRRect(rounded);
+
+    canvas.drawShadow(
+      stickerPath,
+      const Color(0xAA000000),
+      22,
+      true,
+    );
+
+    canvas.save();
+    canvas.clipRRect(rounded);
 
     final backgroundPaint = Paint()
       ..shader = LinearGradient(
@@ -343,12 +450,52 @@ Future<void> shareSa7biSticker(
       ).createShader(bounds);
 
     canvas.drawRRect(rounded, backgroundPaint);
+
+    final shinePaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.40),
+          Colors.white.withValues(alpha: 0.01),
+        ],
+      ).createShader(
+        const Rect.fromLTWH(15, 15, 330, 260),
+      );
+
+    canvas.drawOval(
+      const Rect.fromLTWH(15, 15, 330, 260),
+      shinePaint,
+    );
+
+    final darkGlow = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          Colors.black.withValues(alpha: 0.22),
+          Colors.transparent,
+        ],
+      ).createShader(
+        const Rect.fromLTWH(180, 250, 360, 300),
+      );
+
+    canvas.drawCircle(
+      const Offset(430, 440),
+      180,
+      darkGlow,
+    );
+
+    canvas.restore();
+
     canvas.drawRRect(
       rounded,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 9
-        ..color = Colors.white.withValues(alpha: 0.75),
+        ..shader = const LinearGradient(
+          colors: [
+            Color(0xFFFFFFFF),
+            Color(0x99FFFFFF),
+            Color(0xFFFFD76A),
+          ],
+        ).createShader(bounds),
     );
 
     final brandPainter = TextPainter(
@@ -358,6 +505,13 @@ Future<void> shareSa7biSticker(
           color: Colors.white,
           fontSize: 27,
           fontWeight: FontWeight.w900,
+          shadows: [
+            Shadow(
+              color: Colors.black54,
+              blurRadius: 5,
+              offset: Offset(0, 2),
+            ),
+          ],
         ),
       ),
       textDirection: TextDirection.rtl,
@@ -372,7 +526,26 @@ Future<void> shareSa7biSticker(
     final emojiPainter = TextPainter(
       text: TextSpan(
         text: sticker.emoji,
-        style: const TextStyle(fontSize: 176),
+        style: const TextStyle(
+          fontSize: 176,
+          shadows: [
+            Shadow(
+              color: Color(0xAA000000),
+              blurRadius: 3,
+              offset: Offset(0, 9),
+            ),
+            Shadow(
+              color: Color(0x66000000),
+              blurRadius: 14,
+              offset: Offset(0, 17),
+            ),
+            Shadow(
+              color: Color(0x88FFFFFF),
+              blurRadius: 2,
+              offset: Offset(-3, -4),
+            ),
+          ],
+        ),
       ),
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
@@ -390,6 +563,13 @@ Future<void> shareSa7biSticker(
           color: Colors.white,
           fontSize: 43,
           fontWeight: FontWeight.w900,
+          shadows: [
+            Shadow(
+              color: Colors.black54,
+              blurRadius: 7,
+              offset: Offset(0, 3),
+            ),
+          ],
         ),
       ),
       textDirection: TextDirection.rtl,
@@ -409,6 +589,13 @@ Future<void> shareSa7biSticker(
           color: Colors.white,
           fontSize: 26,
           fontWeight: FontWeight.w700,
+          shadows: [
+            Shadow(
+              color: Colors.black45,
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
         ),
       ),
       textDirection: TextDirection.rtl,
