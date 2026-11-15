@@ -165,6 +165,7 @@ jobs:
 
           collect_diagnostics() {
             local status="${1:-1}"
+
             echo "Collecting Android emulator diagnostics for attempt ${ATTEMPT}."
             echo "Exit code: ${status}"
 
@@ -194,7 +195,7 @@ jobs:
             uptime \
               > "${DIAG_DIR}/host-uptime.txt" 2>&1 || true
 
-            timeout 6s sudo dmesg -T 2>&1 | tail -n 200 \
+            timeout 6s sudo dmesg -T 2>&1 | tail -n 250 \
               > "${DIAG_DIR}/host-kernel-tail.txt" || true
 
             echo "$status" > "${DIAG_DIR}/exit-code.txt"
@@ -324,7 +325,7 @@ jobs:
           bash -n "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
           echo "Android UI script syntax validation passed."
 
-      - name: Run Android UI smoke test - first clean emulator
+      - name: Run Android UI smoke test - Mesa software renderer
         id: android_ui_attempt_1
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2.35.0
@@ -343,16 +344,17 @@ jobs:
           disable-linux-hw-accel: false
           disable-animations: true
           force-avd-creation: true
-          avd-name: sa7bi-ui-smoke-first
+          avd-name: sa7bi-ui-smoke-lavapipe
           emulator-options: >-
             -no-window
-            -gpu swiftshader
+            -gpu lavapipe
+            -feature -Vulkan
             -no-snapshot
             -noaudio
             -no-boot-anim
           script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
 
-      - name: Run Android UI smoke test - fresh emulator retry
+      - name: Run Android UI smoke test - software fallback renderer
         id: android_ui_attempt_2
         if: >-
           steps.android_ui_attempt_1.outcome == 'failure' &&
@@ -374,10 +376,11 @@ jobs:
           disable-linux-hw-accel: false
           disable-animations: true
           force-avd-creation: true
-          avd-name: sa7bi-ui-smoke-retry
+          avd-name: sa7bi-ui-smoke-software
           emulator-options: >-
             -no-window
-            -gpu swiftshader
+            -gpu software
+            -feature -Vulkan
             -no-snapshot
             -noaudio
             -no-boot-anim
