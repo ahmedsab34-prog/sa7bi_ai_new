@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -74,11 +75,19 @@ void main() {
   });
 
   group('Sa7biStickerCatalog', () {
-    test('contains 24 stickers', () {
-      expect(Sa7biStickerCatalog.all.length, 24);
+    test('contains exactly 100 stickers', () {
+      expect(Sa7biStickerCatalog.all, hasLength(100));
     });
 
-    test('contains all expected sticker packs', () {
+    test('all sticker IDs are unique', () {
+      final ids = Sa7biStickerCatalog.all
+          .map((sticker) => sticker.id)
+          .toSet();
+
+      expect(ids, hasLength(100));
+    });
+
+    test('contains all five expected sticker packs', () {
       expect(
         Sa7biStickerCatalog.packTitles,
         containsAll(<String>[
@@ -88,6 +97,52 @@ void main() {
           'تشجيع ودعم',
           'تحيات',
         ]),
+      );
+
+      expect(Sa7biStickerCatalog.packTitles, hasLength(5));
+    });
+
+    test('each sticker pack contains 20 stickers', () {
+      for (final pack in Sa7biStickerCatalog.packTitles) {
+        expect(
+          Sa7biStickerCatalog.forPack(pack),
+          hasLength(20),
+          reason: 'Pack "$pack" should contain 20 stickers.',
+        );
+      }
+    });
+
+    test('keeps the original sticker IDs compatible', () {
+      const originalIds = <String>{
+        'laugh',
+        'lol',
+        'silly',
+        'oops',
+        'prank',
+        'facepalm',
+        'love',
+        'heart',
+        'miss',
+        'sad',
+        'hug',
+        'ok',
+        'yes',
+        'no',
+        'wow',
+        'thinking',
+        'champ',
+        'strong',
+        'star',
+        'rocket',
+        'hello',
+        'morning',
+        'night',
+        'thanks',
+      };
+
+      expect(
+        Sa7biStickerCatalog.byId.keys,
+        containsAll(originalIds),
       );
     });
 
@@ -102,7 +157,7 @@ void main() {
       final stickers =
           Sa7biStickerCatalog.forPack('ضحك وهزار');
 
-      expect(stickers, isNotEmpty);
+      expect(stickers, hasLength(20));
       expect(
         stickers.every(
           (sticker) => sticker.packTitle == 'ضحك وهزار',
