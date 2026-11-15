@@ -6,11 +6,7 @@ import 'theme/sa7bi_theme.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// الصفحة الرئيسية لصاحبي Connect.
-///
-/// تجمع بين:
-/// - المحادثات الخاصة والبحث عن الأصدقاء.
-—
-/// - المجموعات العامة ومحادثاتها.
+/// تجمع المحادثات الخاصة والمجموعات العامة.
 class SocialConnectHubScreen extends StatelessWidget {
   const SocialConnectHubScreen({super.key});
 
@@ -65,7 +61,6 @@ class SocialConnectHubScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 22),
-
               _ConnectDestinationCard(
                 title: 'المحادثات والأصدقاء',
                 subtitle: 'تواصل مباشر مع الأشخاص',
@@ -77,9 +72,7 @@ class SocialConnectHubScreen extends StatelessWidget {
                 buttonText: 'افتح المحادثات',
                 onPressed: () => _openPrivateChats(context),
               ),
-
               const SizedBox(height: 14),
-
               _ConnectDestinationCard(
                 title: 'المجموعات العامة',
                 subtitle: 'شارك وتواصل مع أعضاء المجموعات',
@@ -91,9 +84,7 @@ class SocialConnectHubScreen extends StatelessWidget {
                 buttonText: 'استكشف المجموعات',
                 onPressed: () => _openPublicGroups(context),
               ),
-
               const SizedBox(height: 18),
-
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
