@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -140,8 +139,8 @@ class ChatVoiceService {
       var finalResultHandled = false;
 
       await _speech.listen(
-        localeId: localeId,
-        listenOptions: const SpeechListenOptions(
+        listenOptions: SpeechListenOptions(
+          localeId: localeId,
           listenMode: ListenMode.dictation,
           partialResults: true,
           cancelOnError: true,
