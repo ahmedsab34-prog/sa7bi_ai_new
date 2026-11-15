@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'models/social_sticker.dart';
 import 'services/social_games_service.dart';
 import 'services/social_messaging_service.dart';
 import 'services/social_realtime_service.dart';
 import 'social_games_hub_screen.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
+import 'widgets/social_sticker_kit.dart';
 
-/// مركز الدعوات والرسائل الخاصة لحساب الألعاب.
-/// الحساب والجلسة نفسهما المستخدمان في SocialGamesService.
 class SocialConnectionsScreen extends StatefulWidget {
   const SocialConnectionsScreen({super.key});
 
@@ -21,15 +21,17 @@ class SocialConnectionsScreen extends StatefulWidget {
 class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
   final SocialGamesService _games = SocialGamesService.instance;
   final SocialMessagingService _messaging = SocialMessagingService.instance;
-
   final TextEditingController _searchController = TextEditingController();
+
   Timer? _searchDebounce;
 
   bool _loading = true;
   bool _busy = false;
   bool _searching = false;
+
   String? _error;
   String? _searchError;
+
   String _game = 'tic_tac_toe';
   int _searchSequence = 0;
 
@@ -52,7 +54,12 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
   }
 
   Future<void> _initialize() async {
-    if (mounted) setState(() => _loading = true);
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       await _games.initialize();
@@ -74,7 +81,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'تعذر تحميل الدعوات والرسائل. تحقق من الاتصال.';
+          _error = 'تعذر تحميل صاحبي كونكت. تحقق من الاتصال.';
         });
       }
     } finally {
@@ -158,6 +165,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
       () async {
         try {
           final results = await _games.searchUsers(query);
+
           if (!mounted || sequence != _searchSequence) return;
 
           setState(() {
@@ -194,12 +202,13 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
       );
 
       await _refreshAll();
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'تم إرسال دعوة ${invitation.gameTitle} إلى ${player.username} داخل التطبيق.',
+            'تم إرسال دعوة ${invitation.gameTitle} إلى ${player.username}.',
           ),
         ),
       );
@@ -240,7 +249,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
 
       if (accept && roomId != null && mounted) {
         await _openRoom(roomId);
-      } else if (mounted) {
+      } else if (mounted && !accept) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم رفض الدعوة.')),
         );
@@ -250,6 +259,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
 
   Future<void> _openRoom(String roomId) async {
     final room = await _games.getRoom(roomId);
+
     if (!mounted) return;
 
     await Navigator.of(context).push<void>(
@@ -276,47 +286,6 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
     await _refreshAll();
   }
 
-  Widget _buildInvitationTab({required bool inbox}) {
-    final invitations = inbox ? _incoming : _outgoing;
-
-    return RefreshIndicator(
-      onRefresh: _refreshAll,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-        children: [
-          if (inbox) ...[
-            _buildPlayerFinder(),
-            const SizedBox(height: 14),
-          ],
-          if (_error != null) ...[
-            _ErrorBox(message: _error!),
-            const SizedBox(height: 10),
-          ],
-          if (invitations.isEmpty)
-            const _EmptyBox(
-              icon: Icons.mail_outline_rounded,
-              text: 'لا توجد دعوات هنا حتى الآن.',
-            )
-          else
-            for (final invitation in invitations)
-              _InvitationCard(
-                invitation: invitation,
-                inbox: inbox,
-                busy: _busy,
-                onAccept: () => _respond(invitation, accept: true),
-                onDecline: () => _respond(invitation, accept: false),
-                onOpenRoom: invitation.roomId.isEmpty
-                    ? null
-                    : () => _run(
-                          () => _openRoom(invitation.roomId),
-                        ),
-              ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPlayerFinder() {
     final query = _searchController.text.trim();
 
@@ -339,7 +308,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'ابحث عن لاعب وابعث دعوة داخل التطبيق',
+                  'ابحث عن صاحبك',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -351,7 +320,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
           ),
           const SizedBox(height: 7),
           const Text(
-            'الدعوة ستصل إلى صندوق الدعوات في حساب اللاعب، ولن تحتاج إلى واتساب أو مشاركة خارجية.',
+            'ابحث عن لاعب لبدء محادثة خاصة أو إرسال دعوة للعب.',
             style: TextStyle(
               color: Colors.white60,
               fontSize: 12,
@@ -433,7 +402,7 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
               ),
             )
           else if (_searchError != null)
-            _ErrorBox(message: _searchError!)
+            _ConnectErrorBox(message: _searchError!)
           else if (query.length < 2)
             const Text(
               'اكتب حرفين على الأقل لبدء البحث.',
@@ -497,12 +466,54 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
                       ),
                     ),
                     FilledButton.tonal(
-                      onPressed:
-                          _busy ? null : () => _invitePlayer(player),
+                      onPressed: _busy
+                          ? null
+                          : () => _invitePlayer(player),
                       child: const Text('دعوة'),
                     ),
                   ],
                 ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInvitationTab({required bool inbox}) {
+    final invitations = inbox ? _incoming : _outgoing;
+
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+        children: [
+          if (inbox) ...[
+            _buildPlayerFinder(),
+            const SizedBox(height: 14),
+          ],
+          if (_error != null) ...[
+            _ConnectErrorBox(message: _error!),
+            const SizedBox(height: 10),
+          ],
+          if (invitations.isEmpty)
+            const _ConnectEmptyBox(
+              icon: Icons.mail_outline_rounded,
+              text: 'لا توجد دعوات هنا حتى الآن.',
+            )
+          else
+            for (final invitation in invitations)
+              _InvitationCard(
+                invitation: invitation,
+                inbox: inbox,
+                busy: _busy,
+                onAccept: () => _respond(invitation, accept: true),
+                onDecline: () => _respond(invitation, accept: false),
+                onOpenRoom: invitation.roomId.isEmpty
+                    ? null
+                    : () => _run(
+                          () => _openRoom(invitation.roomId),
+                        ),
               ),
         ],
       ),
@@ -516,64 +527,22 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(14),
         children: [
-          const _NoticeBox(
+          const _ConnectNoticeBox(
             text:
                 'المحادثات متاحة للحسابين المشاركين فقط. الرسائل محفوظة على الخادم، ولا تدعم هذه النسخة التشفير من طرف إلى طرف.',
           ),
           const SizedBox(height: 12),
-          if (_error != null) _ErrorBox(message: _error!),
+          if (_error != null) _ConnectErrorBox(message: _error!),
           if (_conversations.isEmpty)
-            const _EmptyBox(
+            const _ConnectEmptyBox(
               icon: Icons.forum_outlined,
               text: 'لا توجد محادثات بعد. ابحث عن لاعب وابدأ مراسلته.',
             )
           else
             for (final conversation in _conversations)
-              Card(
-                color: const Color(0xFF111827),
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  onTap: () => _openConversation(conversation),
-                  leading: const CircleAvatar(
-                    backgroundColor: Color(0x222F9BFF),
-                    child: Icon(
-                      Icons.person_rounded,
-                      color: Color(0xFF7FB4FF),
-                    ),
-                  ),
-                  title: Text(
-                    conversation.otherUser.username,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  subtitle: Text(
-                    conversation.lastMessage?.text ?? 'ابدأ المحادثة الآن',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white60),
-                  ),
-                  trailing: conversation.unreadCount > 0
-                      ? CircleAvatar(
-                          radius: 12,
-                          backgroundColor: const Color(0xFFFFD76A),
-                          child: Text(
-                            conversation.unreadCount > 99
-                                ? '99+'
-                                : '${conversation.unreadCount}',
-                            style: const TextStyle(
-                              color: Color(0xFF111827),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        )
-                      : const Icon(
-                          Icons.chevron_left_rounded,
-                          color: Colors.white54,
-                        ),
-                ),
+              _ConversationCard(
+                conversation: conversation,
+                onTap: () => _openConversation(conversation),
               ),
         ],
       ),
@@ -589,13 +558,19 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
         child: Scaffold(
           backgroundColor: const Color(0xFF080B13),
           appBar: Sa7biSubpageAppBar(
-            title: 'الدعوات والرسائل',
+            title: 'صاحبي كونكت',
             actions: [
               IconButton(
                 tooltip: 'تحديث',
-                onPressed:
-                    _busy || _loading ? null : () => _run(_refreshAll),
+                onPressed: _busy || _loading
+                    ? null
+                    : () => _run(_refreshAll),
                 icon: const Icon(Icons.refresh_rounded),
+              ),
+              IconButton(
+                tooltip: 'الحساب',
+                onPressed: _openAccountLogin,
+                icon: const Icon(Icons.person_outline_rounded),
               ),
             ],
             bottom: const TabBar(
@@ -607,45 +582,24 @@ class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
                 ),
                 Tab(
                   icon: Icon(Icons.send_outlined),
-                  text: 'مرسلة',
+                  text: 'صادرة',
                 ),
                 Tab(
-                  icon: Icon(Icons.chat_bubble_outline_rounded),
-                  text: 'الرسائل',
+                  icon: Icon(Icons.forum_outlined),
+                  text: 'المحادثات',
                 ),
               ],
             ),
           ),
           body: _loading
               ? const Center(child: CircularProgressIndicator())
-              : !_games.isSignedIn
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const _NoticeBox(
-                              text:
-                                  'سجّل الدخول أو أنشئ حساب ألعاب أولًا حتى تستطيع إرسال الدعوات واستقبال الرسائل الخاصة.',
-                            ),
-                            const SizedBox(height: 14),
-                            FilledButton.icon(
-                              onPressed: _openAccountLogin,
-                              icon: const Icon(Icons.login_rounded),
-                              label: const Text('فتح تسجيل الدخول'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : TabBarView(
-                      children: [
-                        _buildInvitationTab(inbox: true),
-                        _buildInvitationTab(inbox: false),
-                        _buildConversationsTab(),
-                      ],
-                    ),
+              : TabBarView(
+                  children: [
+                    _buildInvitationTab(inbox: true),
+                    _buildInvitationTab(inbox: false),
+                    _buildConversationsTab(),
+                  ],
+                ),
         ),
       ),
     );
@@ -758,6 +712,74 @@ class _InvitationCard extends StatelessWidget {
   }
 }
 
+class _ConversationCard extends StatelessWidget {
+  const _ConversationCard({
+    required this.conversation,
+    required this.onTap,
+  });
+
+  final SocialConversationSummary conversation;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final lastText = conversation.lastMessage?.text ?? '';
+    final lastSticker = Sa7biSticker.tryParse(lastText);
+    final preview = lastSticker != null
+        ? 'استيكر من صاحبي'
+        : lastText.isEmpty
+            ? 'ابدأ المحادثة الآن'
+            : lastText;
+
+    return Card(
+      color: const Color(0xFF111827),
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        onTap: onTap,
+        leading: const CircleAvatar(
+          backgroundColor: Color(0x222F9BFF),
+          child: Icon(
+            Icons.person_rounded,
+            color: Color(0xFF7FB4FF),
+          ),
+        ),
+        title: Text(
+          conversation.otherUser.username,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Text(
+          preview,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white60),
+        ),
+        trailing: conversation.unreadCount > 0
+            ? CircleAvatar(
+                radius: 12,
+                backgroundColor: const Color(0xFFFFD76A),
+                child: Text(
+                  conversation.unreadCount > 99
+                      ? '99+'
+                      : '${conversation.unreadCount}',
+                  style: const TextStyle(
+                    color: Color(0xFF111827),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              )
+            : const Icon(
+                Icons.chevron_left_rounded,
+                color: Colors.white54,
+              ),
+      ),
+    );
+  }
+}
+
 class SocialPrivateChatScreen extends StatefulWidget {
   const SocialPrivateChatScreen({
     super.key,
@@ -777,13 +799,13 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
   final SocialMessagingService _service = SocialMessagingService.instance;
   final SocialRealtimeService _realtime = SocialRealtimeService.instance;
   final TextEditingController _composer = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
 
   Timer? _refreshTimer;
   Timer? _typingStopTimer;
   StreamSubscription<SocialRealtimeEvent>? _realtimeSubscription;
 
   List<SocialPrivateMessage> _messages = [];
+
   bool _loading = true;
   bool _refreshing = false;
   bool _sending = false;
@@ -791,29 +813,31 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
   bool _peerOnline = false;
   bool _peerTyping = false;
   bool _typingSent = false;
+
+  String? _error;
+
   DateTime _lastSuccessfulSync =
       DateTime.fromMillisecondsSinceEpoch(0);
-  String? _error;
 
   @override
   void initState() {
     super.initState();
 
-    // Subscribe before connecting so the first server event is not missed.
     _realtimeSubscription = _realtime.events.listen(_onRealtimeEvent);
 
     _loadMessages();
     unawaited(_connectRealtime());
 
-    // REST remains the fallback when WebSocket is unavailable. While the
-    // socket is healthy, perform a slower reconciliation every ~32 seconds.
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 8),
       (_) {
         final shouldPoll = !_realtimeConnected ||
             DateTime.now().difference(_lastSuccessfulSync) >=
                 const Duration(seconds: 30);
-        if (shouldPoll) _loadMessages(silent: true);
+
+        if (shouldPoll) {
+          _loadMessages(silent: true);
+        }
       },
     );
   }
@@ -829,11 +853,9 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
       _typingSent = false;
     }
 
-    // This screen owns the singleton's active private-chat socket.
     unawaited(_realtime.disconnect());
 
     _composer.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
@@ -841,7 +863,6 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
     try {
       await _realtime.connect(widget.conversationId);
     } catch (_) {
-      // The chat remains usable through REST polling if the socket cannot open.
       if (mounted) {
         setState(() => _realtimeConnected = false);
       }
@@ -854,8 +875,8 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
     final nestedConversationId = nestedMessage is Map
         ? nestedMessage['conversationId']
         : null;
-    final relevantConversationId =
-        eventConversationId ??
+
+    final relevantConversationId = eventConversationId ??
         (nestedConversationId is String ? nestedConversationId : null);
 
     if (relevantConversationId != null &&
@@ -869,7 +890,6 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
         if (mounted) {
           setState(() => _realtimeConnected = true);
         }
-        // Reconcile anything that may have arrived while disconnected.
         unawaited(_loadMessages(silent: true));
         break;
 
@@ -931,17 +951,20 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
     _typingStopTimer = null;
 
     if (!_typingSent) return;
+
     _typingSent = false;
     _realtime.setTyping(false);
   }
 
   Future<void> _loadMessages({bool silent = false}) async {
     if (_refreshing) return;
+
     _refreshing = true;
 
     try {
       final messages = await _service.getMessages(widget.conversationId);
       await _service.markConversationRead(widget.conversationId);
+
       _lastSuccessfulSync = DateTime.now();
 
       if (!mounted) return;
@@ -1009,6 +1032,50 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
     }
   }
 
+  Future<void> _openStickerPicker() async {
+    _stopTyping();
+
+    final sticker = await Sa7biStickerPicker.show(context);
+
+    if (!mounted || sticker == null) return;
+
+    await _sendSticker(sticker);
+  }
+
+  Future<void> _sendSticker(Sa7biSticker sticker) async {
+    if (_sending) return;
+
+    _stopTyping();
+
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+
+    try {
+      final message = await _service.sendMessage(
+        conversationId: widget.conversationId,
+        text: sticker.toMessageText(),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _messages = [..._messages, message];
+      });
+
+      await _service.markConversationRead(widget.conversationId);
+    } on SocialMessagingException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'تعذر إرسال الاستيكر. حاول مرة أخرى.');
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   String _timeLabel(int milliseconds) {
     final date =
         DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
@@ -1017,6 +1084,72 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
     final minute = date.minute.toString().padLeft(2, '0');
 
     return '$hour:$minute';
+  }
+
+  Widget _buildMessage(SocialPrivateMessage message) {
+    final sticker = Sa7biSticker.tryParse(message.text);
+
+    return Align(
+      alignment:
+          message.isMine ? Alignment.centerLeft : Alignment.centerRight,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+        ),
+        margin: const EdgeInsets.only(bottom: 9),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 11,
+          vertical: 9,
+        ),
+        decoration: BoxDecoration(
+          color: message.isMine
+              ? const Color(0xFF203B5C)
+              : const Color(0xFF172033),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (sticker != null)
+              Sa7biStickerMessageView(sticker: sticker)
+            else
+              SelectableText(
+                message.text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  height: 1.45,
+                ),
+              ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _timeLabel(message.createdAt),
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 10,
+                  ),
+                ),
+                if (message.isMine) ...[
+                  const SizedBox(width: 5),
+                  Icon(
+                    message.readAt == null
+                        ? Icons.check_rounded
+                        : Icons.done_all_rounded,
+                    size: 13,
+                    color: message.readAt == null
+                        ? Colors.white38
+                        : const Color(0xFF7FB4FF),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1039,7 +1172,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
           children: [
             const Padding(
               padding: EdgeInsets.fromLTRB(12, 9, 12, 5),
-              child: _NoticeBox(
+              child: _ConnectNoticeBox(
                 text:
                     'هذه محادثة خاصة بين الحسابين المشاركين. الرسائل محفوظة على الخادم وليست مشفرة من طرف إلى طرف في هذه النسخة.',
               ),
@@ -1082,7 +1215,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-                child: _ErrorBox(message: _error!),
+                child: _ConnectErrorBox(message: _error!),
               ),
             Expanded(
               child: _loading
@@ -1090,12 +1223,12 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
                   : _messages.isEmpty
                       ? const Center(
                           child: Text(
-                            'ابدأ المحادثة برسالة لطيفة.',
+                            'ابدأ المحادثة برسالة لطيفة أو استيكر من صاحبي.',
+                            textAlign: TextAlign.center,
                             style: TextStyle(color: Colors.white54),
                           ),
                         )
                       : ListView.builder(
-                          controller: _scrollController,
                           reverse: true,
                           padding: const EdgeInsets.fromLTRB(
                             12,
@@ -1108,68 +1241,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
                             final message =
                                 _messages[_messages.length - 1 - index];
 
-                            return Align(
-                              alignment: message.isMine
-                                  ? Alignment.centerLeft
-                                  : Alignment.centerRight,
-                              child: Container(
-                                constraints: BoxConstraints(
-                                  maxWidth:
-                                      MediaQuery.sizeOf(context).width *
-                                          0.78,
-                                ),
-                                margin: const EdgeInsets.only(bottom: 9),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 13,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: message.isMine
-                                      ? const Color(0xFF203B5C)
-                                      : const Color(0xFF172033),
-                                  borderRadius: BorderRadius.circular(15),
-                                  border: Border.all(color: Colors.white10),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    SelectableText(
-                                      message.text,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        height: 1.45,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 5),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          _timeLabel(message.createdAt),
-                                          style: const TextStyle(
-                                            color: Colors.white38,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                        if (message.isMine) ...[
-                                          const SizedBox(width: 5),
-                                          Icon(
-                                            message.readAt == null
-                                                ? Icons.check_rounded
-                                                : Icons.done_all_rounded,
-                                            size: 13,
-                                            color: message.readAt == null
-                                                ? Colors.white38
-                                                : const Color(0xFF7FB4FF),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
+                            return _buildMessage(message);
                           },
                         ),
             ),
@@ -1178,10 +1250,19 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
         bottomNavigationBar: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
+            padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                IconButton(
+                  tooltip: 'استيكرات صاحبي',
+                  onPressed: _sending ? null : _openStickerPicker,
+                  icon: const Icon(
+                    Icons.emoji_emotions_rounded,
+                    color: Color(0xFFFFD76A),
+                    size: 27,
+                  ),
+                ),
                 Expanded(
                   child: TextField(
                     controller: _composer,
@@ -1198,7 +1279,7 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
                     style: const TextStyle(color: Colors.white),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 7),
                 IconButton.filled(
                   onPressed: _sending ? null : _send,
                   icon: _sending
@@ -1220,14 +1301,15 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
   }
 }
 
-class _ErrorBox extends StatelessWidget {
-  const _ErrorBox({required this.message});
+class _ConnectErrorBox extends StatelessWidget {
+  const _ConnectErrorBox({required this.message});
 
   final String message;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
         color: const Color(0xFF51252C),
@@ -1244,14 +1326,15 @@ class _ErrorBox extends StatelessWidget {
   }
 }
 
-class _NoticeBox extends StatelessWidget {
-  const _NoticeBox({required this.text});
+class _ConnectNoticeBox extends StatelessWidget {
+  const _ConnectNoticeBox({required this.text});
 
   final String text;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF151D2C),
@@ -1271,8 +1354,8 @@ class _NoticeBox extends StatelessWidget {
   }
 }
 
-class _EmptyBox extends StatelessWidget {
-  const _EmptyBox({
+class _ConnectEmptyBox extends StatelessWidget {
+  const _ConnectEmptyBox({
     required this.icon,
     required this.text,
   });
