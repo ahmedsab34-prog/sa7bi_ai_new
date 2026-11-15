@@ -1,10 +1,10 @@
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:cryptography_flutter/cryptography_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,11 +22,7 @@ import 'storage_service.dart';
 /// This protects conversation history at rest on this device. It is not
 /// end-to-end encryption for network requests sent to the AI backend.
 class VentingSecurityService {
-  VentingSecurityService._() {
-    // Uses native AES-GCM where the platform plugin provides it. Argon2id
-    // remains available through cryptography's supported implementation.
-    FlutterCryptography.enable();
-  }
+  VentingSecurityService._();
 
   static final VentingSecurityService instance = VentingSecurityService._();
 
@@ -397,7 +393,6 @@ class VentingSecurityService {
           'سجل الفضفضة القديم ليس بالتنسيق المتوقع. لم نحذفه حفاظًا على رسائلك.',
         );
       }
-
       for (final item in decoded) {
         if (item is! Map) {
           throw const VentingSecurityException(
