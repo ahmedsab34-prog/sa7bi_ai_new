@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'social_connections_screen.dart';
-import 'social_groups_screen.dart';
+import 'social_groups_workspace_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// الصفحة الرئيسية لصاحبي Connect.
-/// تجمع المحادثات الخاصة والمجموعات العامة.
+/// تجمع الشات الخاص والمجموعات العامة والخاصة في مدخل واحد.
 class SocialConnectHubScreen extends StatelessWidget {
   const SocialConnectHubScreen({super.key});
 
@@ -18,10 +18,10 @@ class SocialConnectHubScreen extends StatelessWidget {
     );
   }
 
-  void _openPublicGroups(BuildContext context) {
+  void _openGroups(BuildContext context) {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => const SocialGroupsScreen(),
+        builder: (_) => const SocialGroupsWorkspaceScreen(),
       ),
     );
   }
@@ -52,7 +52,7 @@ class SocialConnectHubScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'اختار المحادثات الخاصة أو ادخل المجموعات العامة.',
+                'اختار محادثة خاصة أو استكشف المجتمعات العامة ومجموعاتك الخاصة.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Sa7biTheme.textSecondary,
@@ -74,15 +74,15 @@ class SocialConnectHubScreen extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _ConnectDestinationCard(
-                title: 'المجموعات العامة',
-                subtitle: 'شارك وتواصل مع أعضاء المجموعات',
+                title: 'المجموعات والمجتمعات',
+                subtitle: 'عامة وخاصة بالدعوة',
                 description:
-                    'اكتشف المجموعات العامة، أنشئ مجموعة جديدة، انضم إلى '
-                    'مجموعة، وتبادل الرسائل مع أعضائها وشارك رابط الدعوة.',
+                    'اكتشف المجموعات العامة، أنشئ مجموعة خاصة، انضم برمز دعوة، '
+                    'وأدر أعضاء مجموعاتك وصلاحيات المشرفين.',
                 icon: Icons.groups_rounded,
                 color: Sa7biTheme.success,
-                buttonText: 'استكشف المجموعات',
-                onPressed: () => _openPublicGroups(context),
+                buttonText: 'افتح المجموعات',
+                onPressed: () => _openGroups(context),
               ),
               const SizedBox(height: 18),
               Container(
@@ -103,9 +103,9 @@ class SocialConnectHubScreen extends StatelessWidget {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'المحادثات الخاصة متاحة للحسابين المشاركين. '
-                        'المجموعات هنا عامة ويمكن للمستخدمين اكتشافها والانضمام إليها. '
-                        'الرسائل في النسخة الحالية ليست مشفرة من طرف إلى طرف.',
+                        'المحادثات والمجموعات محمية بصلاحيات الحساب والعضوية. '
+                        'الرسائل في النسخة الحالية ليست مشفرة من طرف إلى طرف، '
+                        'ولا تشمل مكالمات صوت أو فيديو أو إرسال ملفات اجتماعية.',
                         style: TextStyle(
                           color: Sa7biTheme.textSecondary,
                           fontSize: 10,
@@ -181,11 +181,7 @@ class _ConnectDestinationCard extends StatelessWidget {
                       color: color.withValues(alpha: 0.35),
                     ),
                   ),
-                  child: Icon(
-                    icon,
-                    color: color,
-                    size: 27,
-                  ),
+                  child: Icon(icon, color: color, size: 27),
                 ),
                 const SizedBox(width: 11),
                 Expanded(
@@ -196,7 +192,7 @@ class _ConnectDestinationCard extends StatelessWidget {
                         title,
                         style: const TextStyle(
                           color: Sa7biTheme.textPrimary,
-                          fontSize: 15,
+                          fontSize: 14,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
@@ -212,44 +208,26 @@ class _ConnectDestinationCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.chevron_left_rounded,
-                  color: color,
-                  size: 25,
-                ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 13),
             Text(
               description,
               style: const TextStyle(
                 color: Sa7biTheme.textSecondary,
-                fontSize: 10.5,
-                height: 1.65,
+                height: 1.6,
+                fontSize: 11,
               ),
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              height: 43,
-              child: FilledButton.icon(
-                onPressed: onPressed,
-                style: FilledButton.styleFrom(
-                  backgroundColor: color,
-                  foregroundColor: Sa7biTheme.background,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                ),
-                icon: const Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 17,
-                ),
-                label: Text(
-                  buttonText,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                  ),
+            FilledButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.arrow_back_rounded, size: 17),
+              label: Text(
+                buttonText,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
             ),
