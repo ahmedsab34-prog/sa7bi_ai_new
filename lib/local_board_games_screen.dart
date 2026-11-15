@@ -389,8 +389,6 @@ class _LocalBoardGamesScreenState
   }
 
   Widget _buildActiveGame(LocalBoardGameSession session) {
-    final state = session.state;
-
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
