@@ -29,12 +29,15 @@ void main() {
         description: 'Chat tab',
       );
 
-      // The chat entry now contains two clear services.
+      // The chat entry contains two clear services.
       expect(find.text('المحادثات'), findsOneWidget);
       expect(find.text('صاحبي Connect'), findsOneWidget);
       expect(find.text('فضفضة مع صاحبي'), findsOneWidget);
       expect(find.text('للتواصل مع الأشخاص الحقيقيين'), findsOneWidget);
-      expect(find.text('محادثتك الشخصية مع الذكاء الاصطناعي'), findsOneWidget);
+      expect(
+        find.text('محادثتك الشخصية مع الذكاء الاصطناعي'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
 
       // Games tab.
@@ -149,13 +152,24 @@ void main() {
         description: 'Diagnostics screen',
       );
 
-      expect(
+      await _pumpUntilFound(
+        tester,
         find.text('فحص تلقائي سريع'),
-        findsOneWidget,
+        description: 'Automatic quick diagnostics section',
       );
 
+      // This stable key remains available while the quick check is running.
+      await _pumpUntilFound(
+        tester,
+        find.byKey(
+          const ValueKey<String>('automatic-quick-check'),
+        ),
+        description: 'Automatic quick diagnostics heading',
+      );
+
+      // Verify the page title, not the changing text of the running button.
       expect(
-        find.text('ابدأ الفحص الشامل'),
+        find.textContaining('فحص صاحبي AI الشامل v5'),
         findsOneWidget,
       );
 
