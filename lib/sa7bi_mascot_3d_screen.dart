@@ -64,7 +64,7 @@ class Sa7biMascot3DScreen extends StatelessWidget {
                     SizedBox(height: 9),
                     _ControlHint(
                       icon: Icons.pan_tool_alt_rounded,
-                      text: 'اسحب بإصبعك علشان تلف الشخصية.',
+                      text: 'اسحب بإصبعك علشان تلف المجسم.',
                     ),
                     SizedBox(height: 7),
                     _ControlHint(
@@ -74,7 +74,8 @@ class Sa7biMascot3DScreen extends StatelessWidget {
                     SizedBox(height: 7),
                     _ControlHint(
                       icon: Icons.autorenew_rounded,
-                      text: 'الشخصية بتلف تلقائيًا، وتقدر توقف اللمس أو تحركها وقت ما تحب.',
+                      text:
+                          'الكاميرا بتلف حوالين المجسم تلقائيًا؛ ده دوران للكاميرا مش حركة جسم حقيقية.',
                     ),
                   ],
                 ),
