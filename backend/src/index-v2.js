@@ -1,7 +1,7 @@
 // Sa7bi AI Worker entry point.
 // Preserves existing social, messaging, matchmaking,
 // invite links and tafsir-text routes.
-// Adds authenticated R2-backed social reels and private-chat realtime events.
+// Adds authenticated R2-backed social reels, private attachments and realtime events.
 
 import worker, {
   Sa7biCredits,
@@ -13,6 +13,7 @@ import { handleSocialCommunity } from "./social_community.js";
 import { handleSocialGroupManagement } from "./social_group_management.js";
 import { handleSocialMatchmaking } from "./social_matchmaking.js";
 import { handleSocialMedia } from "./social_media.js";
+import { handleSocialAttachments } from "./social_attachments.js";
 import {
   handlePrivateRealtimeRequest,
   handlePrivateRealtimeMessage,
@@ -163,6 +164,13 @@ export class Sa7biSocial extends BaseSa7biSocial {
       await handlePrivateRealtimeRequest(request, this);
 
     if (realtimeResponse) return realtimeResponse;
+
+    // Keep private attachment routes ahead of the public reels handler.
+    // The module validates the session and scope membership on every request.
+    const attachmentResponse =
+      await handleSocialAttachments(request, this);
+
+    if (attachmentResponse) return attachmentResponse;
 
     const mediaResponse =
       await handleSocialMedia(request, this);
