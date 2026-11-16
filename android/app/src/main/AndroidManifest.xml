@@ -42,7 +42,8 @@
         android:label="صاحبي AI"
         android:icon="@drawable/app_icon"
         android:allowBackup="false"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <!-- Google Mobile Ads / AdMob -->
         <meta-data
