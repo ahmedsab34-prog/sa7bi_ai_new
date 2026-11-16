@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'sa7bi_mascot_3d_screen.dart';
 import 'social_connections_screen.dart';
 import 'social_groups_workspace_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
-/// الصفحة الرئيسية لصاحبي Connect.
-/// تجمع الشات الخاص والمجموعات العامة والخاصة في مدخل واحد.
+/// The main Sa7bi Connect landing page.
+/// Keeps private chats and public/private groups in one entry point.
 class SocialConnectHubScreen extends StatelessWidget {
   const SocialConnectHubScreen({super.key});
 
@@ -22,6 +23,14 @@ class SocialConnectHubScreen extends StatelessWidget {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => const SocialGroupsWorkspaceScreen(),
+      ),
+    );
+  }
+
+  void _openMascot(BuildContext context) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Sa7biMascot3DScreen(),
       ),
     );
   }
@@ -60,7 +69,9 @@ class SocialConnectHubScreen extends StatelessWidget {
                   height: 1.5,
                 ),
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 14),
+              _MascotPreviewCard(onPressed: () => _openMascot(context)),
+              const SizedBox(height: 14),
               _ConnectDestinationCard(
                 title: 'المحادثات والأصدقاء',
                 subtitle: 'تواصل مباشر مع الأشخاص',
@@ -74,14 +85,14 @@ class SocialConnectHubScreen extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _ConnectDestinationCard(
-                title: 'المجموعات والمجتمعات',
-                subtitle: 'عامة وخاصة بالدعوة',
+                title: 'المجموعات العامة',
+                subtitle: 'مجتمعات عامة ومجموعات خاصة بالدعوة',
                 description:
-                    'اكتشف المجموعات العامة، أنشئ مجموعة خاصة، انضم برمز دعوة، '
+                    'استكشف المجموعات العامة، أنشئ مجموعة خاصة، انضم برمز دعوة، '
                     'وأدر أعضاء مجموعاتك وصلاحيات المشرفين.',
                 icon: Icons.groups_rounded,
                 color: Sa7biTheme.success,
-                buttonText: 'افتح المجموعات',
+                buttonText: 'استكشف المجموعات',
                 onPressed: () => _openGroups(context),
               ),
               const SizedBox(height: 18),
@@ -103,9 +114,10 @@ class SocialConnectHubScreen extends StatelessWidget {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'المحادثات والمجموعات محمية بصلاحيات الحساب والعضوية. '
-                        'الرسائل في النسخة الحالية ليست مشفرة من طرف إلى طرف، '
-                        'ولا تشمل مكالمات صوت أو فيديو أو إرسال ملفات اجتماعية.',
+                        'المجموعات هنا عامة للاكتشاف والانضمام، أما مجموعاتك الخاصة '
+                        'فتظل بالدعوة فقط. الرسائل محمية بصلاحيات الحساب والعضوية، '
+                        'لكنها ليست مشفرة من طرف إلى طرف في هذه النسخة، ولا تشمل '
+                        'مكالمات صوت أو فيديو أو إرسال ملفات اجتماعية حتى الآن.',
                         style: TextStyle(
                           color: Sa7biTheme.textSecondary,
                           fontSize: 10,
@@ -115,6 +127,84 @@ class SocialConnectHubScreen extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MascotPreviewCard extends StatelessWidget {
+  const _MascotPreviewCard({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Sa7biTheme.surface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: Sa7biTheme.cyan.withValues(alpha: 0.35),
+            ),
+            gradient: const LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [Color(0xFF172D55), Color(0xFF101827)],
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Sa7biTheme.cyan.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.smart_toy_rounded,
+                  color: Sa7biTheme.cyan,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 11),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'شخصية صاحبي ثلاثية الأبعاد',
+                      style: TextStyle(
+                        color: Sa7biTheme.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'شوف المجسم ودوّره بإيدك',
+                      style: TextStyle(
+                        color: Sa7biTheme.textSecondary,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Sa7biTheme.cyan,
+                size: 17,
               ),
             ],
           ),
