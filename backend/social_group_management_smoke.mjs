@@ -1,3 +1,4 @@
+
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { handleSocialGroupManagement } from './src/social_group_management.js';
@@ -31,6 +32,7 @@ const users = [
   { id: '11111111-1111-4111-8111-111111111111', username: 'Owner' },
   { id: '22222222-2222-4222-8222-222222222222', username: 'Member' },
   { id: '33333333-3333-4333-8333-333333333333', username: 'Outsider' },
+  { id: '44444444-4444-4444-8444-444444444444', username: 'RateLimitTester' },
 ];
 
 for (const user of users) {
@@ -42,6 +44,7 @@ const tokens = new Map([
   ['owner-token', users[0]],
   ['member-token', users[1]],
   ['outsider-token', users[2]],
+  ['rate-limit-token', users[3]],
 ]);
 
 const actor = {
@@ -241,10 +244,12 @@ const afterDelete = await call(
 
 assert.equal(afterDelete.status, 404);
 
+// Use a fresh account so earlier successful invite joins do not consume
+// the attempts reserved for this isolated rate-limit test.
 for (let attempt = 0; attempt < 10; attempt++) {
   const invalidInvite = await call('/v1/social/groups/join-invite', {
     method: 'POST',
-    token: 'outsider-token',
+    token: 'rate-limit-token',
     body: { code: 'AAAAAAAAAA' },
   });
 
@@ -253,7 +258,7 @@ for (let attempt = 0; attempt < 10; attempt++) {
 
 const rateLimited = await call('/v1/social/groups/join-invite', {
   method: 'POST',
-  token: 'outsider-token',
+  token: 'rate-limit-token',
   body: { code: 'AAAAAAAAAA' },
 });
 
