@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Keep cleartext HTTP disabled by default for the entire application. -->
+    <base-config cleartextTrafficPermitted="false" />
+
+    <!-- model_viewer_plus uses a local loopback HTTP server to render bundled GLB assets. -->
+    <!-- Only localhost loopback traffic is allowed; remote cleartext HTTP remains blocked. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
