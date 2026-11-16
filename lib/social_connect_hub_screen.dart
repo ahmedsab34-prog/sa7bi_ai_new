@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'sa7bi_hero_3d_screen.dart';
 import 'sa7bi_mascot_3d_screen.dart';
 import 'social_connections_screen.dart';
 import 'social_groups_workspace_screen.dart';
@@ -7,7 +8,7 @@ import 'theme/sa7bi_theme.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// The main Sa7bi Connect landing page.
-/// Keeps private chats and public/private groups in one entry point.
+/// Keeps private chats, groups, and both companion characters in one entry point.
 class SocialConnectHubScreen extends StatelessWidget {
   const SocialConnectHubScreen({super.key});
 
@@ -35,6 +36,14 @@ class SocialConnectHubScreen extends StatelessWidget {
     );
   }
 
+  void _openHero(BuildContext context) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const Sa7biHero3DScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -43,7 +52,7 @@ class SocialConnectHubScreen extends StatelessWidget {
         backgroundColor: Sa7biTheme.background,
         appBar: const Sa7biSubpageAppBar(
           title: 'صاحبي Connect',
-          subtitle: 'تواصل مع أصحابك وشاركهم المجموعات',
+          subtitle: 'تواصل مع أصحابك واختار شخصية صاحبي',
         ),
         body: SafeArea(
           top: false,
@@ -71,6 +80,8 @@ class SocialConnectHubScreen extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _MascotPreviewCard(onPressed: () => _openMascot(context)),
+              const SizedBox(height: 10),
+              _HeroPreviewCard(onPressed: () => _openHero(context)),
               const SizedBox(height: 14),
               _ConnectDestinationCard(
                 title: 'المحادثات والأصدقاء',
@@ -143,6 +154,50 @@ class _MascotPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _CharacterPreviewCard(
+      title: 'صاحبي الرفيق',
+      subtitle: 'الشخصية الودودة للمساعدة والمحادثة',
+      icon: Icons.smart_toy_rounded,
+      color: Sa7biTheme.cyan,
+      onPressed: onPressed,
+    );
+  }
+}
+
+class _HeroPreviewCard extends StatelessWidget {
+  const _HeroPreviewCard({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CharacterPreviewCard(
+      title: 'صاحبي HERO',
+      subtitle: 'البطل الخارق بشعار التطبيق الأصلي المضيء',
+      icon: Icons.shield_rounded,
+      color: const Color(0xFFFFB84D),
+      onPressed: onPressed,
+    );
+  }
+}
+
+class _CharacterPreviewCard extends StatelessWidget {
+  const _CharacterPreviewCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
     return Material(
       color: Sa7biTheme.surface,
       borderRadius: BorderRadius.circular(18),
@@ -153,13 +208,14 @@ class _MascotPreviewCard extends StatelessWidget {
           padding: const EdgeInsets.all(13),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: Sa7biTheme.cyan.withValues(alpha: 0.35),
-            ),
-            gradient: const LinearGradient(
+            border: Border.all(color: color.withValues(alpha: 0.38)),
+            gradient: LinearGradient(
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
-              colors: [Color(0xFF172D55), Color(0xFF101827)],
+              colors: [
+                color.withValues(alpha: 0.14),
+                const Color(0xFF101827),
+              ],
             ),
           ),
           child: Row(
@@ -168,32 +224,28 @@ class _MascotPreviewCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: Sa7biTheme.cyan.withValues(alpha: 0.14),
+                  color: color.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(15),
                 ),
-                child: const Icon(
-                  Icons.smart_toy_rounded,
-                  color: Sa7biTheme.cyan,
-                  size: 27,
-                ),
+                child: Icon(icon, color: color, size: 27),
               ),
               const SizedBox(width: 11),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'شخصية صاحبي ثلاثية الأبعاد',
-                      style: TextStyle(
+                      title,
+                      style: const TextStyle(
                         color: Sa7biTheme.textPrimary,
                         fontSize: 12,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
-                      'شوف المجسم ودوّره بإيدك',
-                      style: TextStyle(
+                      subtitle,
+                      style: const TextStyle(
                         color: Sa7biTheme.textSecondary,
                         fontSize: 10,
                       ),
@@ -201,9 +253,9 @@ class _MascotPreviewCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.arrow_back_ios_new_rounded,
-                color: Sa7biTheme.cyan,
+                color: color,
                 size: 17,
               ),
             ],
