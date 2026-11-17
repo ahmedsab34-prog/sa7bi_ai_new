@@ -6,6 +6,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../audio_player_service.dart';
 import 'audio_focus_coordinator.dart';
+import 'hero_face_runtime.dart';
 
 /// خدمة تحويل الكلام إلى نص وتحويل النص إلى كلام.
 ///
@@ -262,16 +263,32 @@ class ChatVoiceService {
       _tts.setStartHandler(() {
         _nativeTtsActive = true;
         _isSpeaking = true;
+        HeroFaceRuntime.instance.onSpeechStarted();
+      });
+
+      // flutter_tts reports word boundaries. The HERO runtime maps each
+      // spoken word to a matching approximate Arabic viseme animation.
+      _tts.setProgressHandler((
+        String text,
+        int startOffset,
+        int endOffset,
+        String word,
+      ) {
+        if (_nativeTtsActive) {
+          HeroFaceRuntime.instance.onSpeechWord(word);
+        }
       });
 
       _tts.setCompletionHandler(() {
         _nativeTtsActive = false;
         _isSpeaking = false;
+        HeroFaceRuntime.instance.onSpeechFinished();
       });
 
       _tts.setCancelHandler(() {
         _nativeTtsActive = false;
         _isSpeaking = false;
+        HeroFaceRuntime.instance.onSpeechFinished();
       });
 
       _tts.setErrorHandler((error) {
@@ -279,6 +296,7 @@ class ChatVoiceService {
 
         _nativeTtsActive = false;
         _isSpeaking = false;
+        HeroFaceRuntime.instance.onSpeechFinished();
       });
 
       _ttsInitialized = true;
@@ -291,6 +309,7 @@ class ChatVoiceService {
       _ttsInitialized = false;
       _isSpeaking = false;
       _nativeTtsActive = false;
+      HeroFaceRuntime.instance.onSpeechFinished();
 
       return false;
     }
@@ -391,12 +410,14 @@ class ChatVoiceService {
       if (result is bool && !result) {
         _nativeTtsActive = false;
         _isSpeaking = false;
+        HeroFaceRuntime.instance.onSpeechFinished();
         return false;
       }
 
       if (result is int && result != 1) {
         _nativeTtsActive = false;
         _isSpeaking = false;
+        HeroFaceRuntime.instance.onSpeechFinished();
         return false;
       }
 
@@ -407,6 +428,7 @@ class ChatVoiceService {
 
       _isSpeaking = false;
       _nativeTtsActive = false;
+      HeroFaceRuntime.instance.onSpeechFinished();
 
       return false;
     }
@@ -431,6 +453,7 @@ class ChatVoiceService {
     } finally {
       _nativeTtsActive = false;
       _isSpeaking = false;
+      HeroFaceRuntime.instance.onSpeechFinished();
     }
   }
 
