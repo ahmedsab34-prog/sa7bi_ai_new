@@ -5,15 +5,18 @@ import 'package:sa7bi_ai/social_connect_hub_screen.dart';
 
 void main() {
   testWidgets(
-    'Connect hub shows both companion characters and destinations',
+    'Connect hub shows HERO as the only 3D character and keeps destinations',
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(home: SocialConnectHubScreen()),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('صاحبي الرفيق'), findsOneWidget);
       expect(find.text('صاحبي HERO'), findsOneWidget);
+      expect(find.textContaining('البطل الخارق الوحيد'), findsOneWidget);
+      expect(find.text('صاحبي الرفيق'), findsNothing);
+      expect(find.textContaining('شخصية صاحبي 3D'), findsNothing);
+
       expect(find.text('المحادثات والأصدقاء'), findsOneWidget);
       expect(find.text('المجموعات العامة'), findsOneWidget);
       expect(find.text('افتح المحادثات'), findsOneWidget);
