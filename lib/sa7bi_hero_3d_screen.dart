@@ -5,7 +5,7 @@ import 'theme/sa7bi_theme.dart';
 import 'widgets/sa7bi_hero_3d.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
-/// Sa7bi HERO viewer with the existing body animations and face controls.
+/// عارض الشخصية الوحيدة HERO مع حركات الجسم وتعبيرات الوجه المتاحة فعليًا.
 class Sa7biHero3DScreen extends StatefulWidget {
   const Sa7biHero3DScreen({super.key});
 
@@ -36,7 +36,7 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
         backgroundColor: Sa7biTheme.background,
         appBar: const Sa7biSubpageAppBar(
           title: 'صاحبي HERO',
-          subtitle: 'بطل صاحبي بشعار التطبيق الأصلي',
+          subtitle: 'شخصية صاحبي الأصلية — بطل واحد',
         ),
         body: SafeArea(
           top: false,
@@ -77,7 +77,7 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'اختار حركة البطل',
+                      'حركات الجسم الأساسية',
                       style: TextStyle(
                         color: Sa7biTheme.textPrimary,
                         fontSize: 14,
@@ -118,13 +118,7 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                     const _HintRow(
                       icon: Icons.auto_awesome_rounded,
                       text:
-                          'الشعار الموجود على الصدر هو صورة أيقونة صاحبي الأصلية كاملة، وليس حرفًا بديلًا.',
-                    ),
-                    const SizedBox(height: 7),
-                    const _HintRow(
-                      icon: Icons.bolt_rounded,
-                      text:
-                          'حركة الصدر تكبّر وتصغّر شعار الطاقة بنبض خفيف؛ ألوان الشعار نفسها محفوظة كما في الأيقونة.',
+                          'حافظ على شعار صاحبي AI الأصلي على الصدر وعلى الدرع الأزرق والذهبي والعباءة الحمراء.',
                     ),
                   ],
                 ),
@@ -140,9 +134,8 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                   border: Border.all(color: Sa7biTheme.border),
                 ),
                 child: const Text(
-                  'النموذج يحتوي على ثلاث حركات فعلية داخل ملف GLB: الاستعداد، '
-                  'والتحية، ووضع القوة. شعار التطبيق الأصلي مضمّن كخامة على الصدر. '
-                  'تعبيرات الوجه ومزامنة الفم تتطلب وجود حركات الوجه داخل ملف GLB نفسه.',
+                  'تعبيرات الوجه وحركات الفم لا تعمل إلا بعد تضمينها فعليًا داخل ملف GLB. '
+                  'أزرار الوجه تتفعّل لكل حركة عندما يعلن العارض عن اسمها داخل المجسم.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Sa7biTheme.textSecondary,
@@ -211,7 +204,7 @@ class _FaceExpressionPanel extends StatelessWidget {
           ),
           _FaceExpressionOption(
             expression: HeroExpression.surprise,
-            label: 'تعجب',
+            label: 'دهشة',
             icon: Icons.sentiment_very_satisfied_rounded,
           ),
           _FaceExpressionOption(
@@ -220,11 +213,19 @@ class _FaceExpressionPanel extends StatelessWidget {
             icon: Icons.mood_bad_rounded,
           ),
           _FaceExpressionOption(
+            expression: HeroExpression.wink,
+            label: 'غمزة',
+            icon: Icons.visibility_off_rounded,
+          ),
+          _FaceExpressionOption(
             expression: HeroExpression.blink,
             label: 'رمش',
             icon: Icons.visibility_rounded,
           ),
         ];
+
+        final missingCount = runtime.missingRequiredAnimations.length;
+        final allReady = runtime.isFaceRigAvailable;
 
         return Container(
           padding: const EdgeInsets.all(14),
@@ -237,7 +238,7 @@ class _FaceExpressionPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'تعبيرات وجه HERO',
+                'تعبيرات وجه HERO المطابقة للمرجع',
                 style: TextStyle(
                   color: Sa7biTheme.textPrimary,
                   fontSize: 14,
@@ -250,7 +251,9 @@ class _FaceExpressionPanel extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: runtime.resetFace,
+                    onPressed: () => runtime.playExpression(
+                      HeroExpression.neutral,
+                    ),
                     icon: const Icon(
                       Icons.face_retouching_natural,
                       size: 17,
@@ -273,11 +276,9 @@ class _FaceExpressionPanel extends StatelessWidget {
               ),
               const SizedBox(height: 9),
               Text(
-                HeroFaceRuntime.requiredFaceAnimationNames.every(
-                  animations.contains,
-                )
-                    ? 'تم اكتشاف جميع حركات الوجه والفم في المجسم.'
-                    : 'أزرار الوجه ستتفعّل تلقائيًا بعد إضافة حركات الوجه والـVisemes إلى ملف GLB نفسه.',
+                allReady
+                    ? 'تم اكتشاف حركات الوجه الست والـVisemes الخمسة عشر داخل GLB.'
+                    : 'Rig الوجه غير مكتمل داخل GLB بعد. الحركات المطلوبة غير المكتشفة: $missingCount من ${HeroFaceRuntime.requiredFaceAnimationNames.length}.',
                 style: const TextStyle(
                   color: Sa7biTheme.textSecondary,
                   fontSize: 10,
