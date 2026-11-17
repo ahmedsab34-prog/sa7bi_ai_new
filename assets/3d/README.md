@@ -1,18 +1,25 @@
-# Sa7bi AI 3D companion asset
+# Sa7bi AI HERO 3D asset
 
-Place `sa7bi_mascot.glb` in this folder exactly as named. The app registers it as a Flutter asset in `pubspec.yaml` and loads it from `lib/widgets/sa7bi_mascot_3d.dart`.
+The application uses one 3D Sa7bi character only: `sa7bi_hero.glb`.
 
-## Model details
+## Model path
 
-- Format: binary glTF 2.0 (`.glb`)
-- Meshes: 56
-- Geometry: stylized, friendly human-like companion with a navy/cyan outfit
-- Coordinate system: Y-up; the face points toward positive Z
-- Delivery size: approximately 0.9 MB
-- Rendering: `model_viewer_plus` with local bundled asset loading
+`assets/3d/sa7bi_hero.glb`
 
-This is a static 3D mesh. It supports camera rotation and zoom in the app, but it does not include a skeleton, facial rig, or built-in character animation. Auto-rotation is a viewer camera effect, not a body animation.
+## Existing body animations
 
-## Required Android setting
+- `Hero_Idle`
+- `Hero_Welcome`
+- `Hero_Power`
 
-`AndroidManifest.xml` already references `@xml/network_security_config`. The matching XML file allows cleartext traffic only for the local loopback hosts used by the model viewer; cleartext connections to remote hosts remain disabled.
+The model is rendered locally with `model_viewer_plus`. The app icon artwork is embedded in the GLB as a PNG texture and is intended to remain visible as the chest emblem/energy core. Keep the current original app logo and its colors; do not replace it with a letter, generic shield, or a different mark.
+
+## Face-rig status
+
+The existing asset diagnostic test parses the GLB and checks for its embedded PNG texture and body animations. Its latest recorded diagnostic found no facial morph targets, no facial bones in the skin joint list, and no facial animation clips. Face likeness to the founder and live lip-sync are therefore not implemented by the current GLB yet.
+
+The next model revision must update this same HERO asset, not add another character. Preserve the current superhero body, chest logo, and the three body animation names. Add a face modeled from the founder reference image and a proper facial rig/morph targets for blinking, brows, smile, jaw movement, and mouth visemes.
+
+## Platform note
+
+Keep the existing Android local model-viewer networking configuration. Do not enable unrestricted remote cleartext traffic to load this bundled local asset.
