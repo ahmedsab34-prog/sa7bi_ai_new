@@ -2,13 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-/// التعبيرات التي يستطيع التطبيق طلبها من مجسم HERO.
+/// تعبيرات الوجه المطلوبة لشخصية HERO الواحدة.
+/// neutral هو وضع الراحة ولا يحتاج إلى Animation Clip منفصل.
 enum HeroExpression {
   neutral,
   smile,
   sad,
   surprise,
   angry,
+  wink,
   blink,
 }
 
@@ -27,29 +29,34 @@ class HeroFaceCommand {
     this.loop = false,
   });
 
+  /// رقم متزايد لتمييز الأمر الأحدث عن أي أمر قديم متأخر.
   final int revision;
   final HeroFaceCommandType type;
   final String? animationName;
   final bool loop;
 }
 
-/// جسر موحد بين الصوت وواجهة مجسم HERO.
+/// الجسر الموحد بين أحداث الصوت وحركات الوجه المضمّنة داخل ملف HERO GLB.
 ///
-/// لا يحرك هذا الملف صورة أو وجهًا بديلًا. يرسل أسماء حركات إلى عارض GLB
-/// فقط عندما تكون الحركات موجودة فعلًا داخل الملف.
+/// هذا الملف لا يرسم وجهًا بديلًا ولا يغيّر صورة الشخصية. هو يرسل أسماء
+/// Animation Clips إلى Model Viewer فقط؛ لذلك لا تظهر حركة حقيقية إلا بعد
+/// تضمين الـClips المطلوبة داخل assets/3d/sa7bi_hero.glb.
 class HeroFaceRuntime {
   HeroFaceRuntime._();
 
   static final HeroFaceRuntime instance = HeroFaceRuntime._();
 
+  /// أسماء ثابتة يجب أن تطابق أسماء الـAnimations داخل ملف GLB حرفيًا.
   static const Map<HeroExpression, String> expressionAnimationNames = {
     HeroExpression.smile: 'HERO_FACE_SMILE',
     HeroExpression.sad: 'HERO_FACE_SAD',
     HeroExpression.surprise: 'HERO_FACE_SURPRISE',
     HeroExpression.angry: 'HERO_FACE_ANGRY',
+    HeroExpression.wink: 'HERO_FACE_WINK',
     HeroExpression.blink: 'HERO_FACE_BLINK',
   };
 
+  /// Visemes الخمسة عشر المتفق عليها بين Blender وFlutter.
   static const Set<String> requiredVisemeAnimationNames = {
     'HERO_VISEME_sil',
     'HERO_VISEME_PP',
@@ -68,16 +75,19 @@ class HeroFaceRuntime {
     'HERO_VISEME_U',
   };
 
-  static Set<String> get requiredFaceAnimationNames => {
+  /// ست حركات وجه فعلية: ابتسامة، حزن، دهشة، غضب، غمزة، ورمشة.
+  /// الوضع الطبيعي Neutral هو وضع الأوزان صفر ويُنفّذ بأمر reset.
+  static Set<String> get requiredFaceAnimationNames =>
+      Set<String>.unmodifiable({
         ...expressionAnimationNames.values,
         ...requiredVisemeAnimationNames,
-      };
+      });
 
   final StreamController<HeroFaceCommand> _commands =
       StreamController<HeroFaceCommand>.broadcast(sync: true);
 
   final ValueNotifier<Set<String>> _availableAnimations =
-      ValueNotifier<Set<String>>(<String>{});
+      ValueNotifier<Set<String>>(const <String>{});
 
   int _revision = 0;
   HeroFaceCommand? _lastCommand;
@@ -92,8 +102,12 @@ class HeroFaceRuntime {
   bool get isFaceRigAvailable =>
       requiredFaceAnimationNames.every(_availableAnimations.value.contains);
 
-  bool hasAnimation(String name) =>
-      _availableAnimations.value.contains(name);
+  bool hasAnimation(String name) => _availableAnimations.value.contains(name);
+
+  Set<String> get missingRequiredAnimations =>
+      Set<String>.unmodifiable(
+        requiredFaceAnimationNames.difference(_availableAnimations.value),
+      );
 
   void reportAvailableAnimations(Iterable<String> names) {
     _availableAnimations.value = Set<String>.unmodifiable(
@@ -101,20 +115,21 @@ class HeroFaceRuntime {
     );
   }
 
+  /// بداية الكلام تعيد الوجه إلى وضع الراحة قبل أول حركة فم.
   void onSpeechStarted() {
     resetFace();
   }
 
-  /// flutter_tts يرسل حدود الكلمات، لا حدود الفونيمات الدقيقة.
-  /// نختار شكل فم تقريبيًا لكل كلمة إلى أن يتوفر مصدر توقيت للفونيمات.
+  /// Flutter TTS يرسل حدود الكلمات، وليس توقيت كل فونيم على حدة.
+  /// لذلك هذا اختيار Viseme تقريبي للكلمة، وليس Lip Sync فونيميًا دقيقًا.
   void onSpeechWord(String word) {
-    final clean = word.trim();
-    if (clean.isEmpty) return;
+    final viseme = visemeForWord(word);
+    final animationName = 'HERO_VISEME_$viseme';
+    if (!requiredVisemeAnimationNames.contains(animationName)) return;
 
-    final viseme = visemeForWord(clean);
     _emit(
       type: HeroFaceCommandType.viseme,
-      animationName: 'HERO_VISEME_$viseme',
+      animationName: animationName,
     );
   }
 
@@ -134,7 +149,10 @@ class HeroFaceRuntime {
     _emit(
       type: HeroFaceCommandType.expression,
       animationName: animationName,
-      loop: expression != HeroExpression.blink,
+      // الابتسامة والحزن والدهشة والغضب حالات مستمرة حتى اختيار غيرها.
+      // الغمزة والرمشة حركتان قصيرتان لمرة واحدة.
+      loop: expression != HeroExpression.wink &&
+          expression != HeroExpression.blink,
     );
   }
 
@@ -155,98 +173,120 @@ class HeroFaceRuntime {
     );
 
     _lastCommand = command;
-
-    if (!_commands.isClosed) {
-      _commands.add(command);
-    }
+    if (!_commands.isClosed) _commands.add(command);
   }
 
-  /// تحويل تقريبي للحرف الأول من الكلمة إلى Viseme.
-  /// القيم متوافقة مع أسماء أهداف الوجه المحددة في مواصفات HERO.
+  /// يحذف التشكيل والتطويل قبل تحليل أول حرف عربي.
+  static String _normalizeWord(String word) {
+    final withoutMarks = word.runes.where((rune) {
+      final isArabicMark =
+          (rune >= 0x064B && rune <= 0x065F) || rune == 0x0670;
+      return !isArabicMark && rune != 0x0640;
+    });
+    return String.fromCharCodes(withoutMarks).trim();
+  }
+
+  /// تحويل تقريبي لصوت بداية الكلمة إلى Viseme متوافق مع مواصفات HERO.
+  /// لا يحل محل مصدر phoneme timing حقيقي عند توفره.
   static String visemeForWord(String word) {
-    final clean = word.trim();
+    final clean = _normalizeWord(word);
     if (clean.isEmpty) return 'sil';
 
-    final first = clean.runes.first;
+    final lower = clean.toLowerCase();
 
+    // التركيبات الإنجليزية المركبة تُفحص قبل الحرف الأول.
+    if (lower.startsWith('th')) return 'TH';
+    if (lower.startsWith('ch') || lower.startsWith('sh')) return 'CH';
+    if (lower.startsWith('ph')) return 'FF';
+
+    final first = clean.runes.first;
     switch (first) {
-      // إغلاق الشفتين: ب، م
-      case 0x0628:
-      case 0x0645:
+      // إغلاق الشفتين.
+      case 0x0628: // ب
+      case 0x0645: // م
+      case 0x067E: // پ
         return 'PP';
 
-      // الشفة مع الأسنان: ف
-      case 0x0641:
+      // الشفة السفلى مع الأسنان.
+      case 0x0641: // ف
+      case 0x06A4: // ڤ
         return 'FF';
 
-      // اللسان بين الأسنان: ث، ذ، ظ
-      case 0x062B:
-      case 0x0630:
-      case 0x0638:
+      // اللسان بين الأسنان.
+      case 0x062B: // ث
+      case 0x0630: // ذ
+      case 0x0638: // ظ
         return 'TH';
 
-      // مخارج د/ت/ط
-      case 0x062F:
-      case 0x062A:
-      case 0x0637:
+      // طرف اللسان عند الأسنان/اللثة.
+      case 0x062A: // ت
+      case 0x062F: // د
+      case 0x0637: // ط
+      case 0x0636: // ض
         return 'DD';
 
-      // مؤخرة اللسان: ك، ق، خ
-      case 0x0643:
-      case 0x0642:
-      case 0x062E:
+      // مؤخرة اللسان.
+      case 0x0643: // ك
+      case 0x0642: // ق
+      case 0x062E: // خ
+      case 0x063A: // غ
         return 'kk';
 
-      // أصوات الشين والجيم
-      case 0x0634:
-      case 0x062C:
+      // أصوات الشين والجيم.
+      case 0x0634: // ش
+      case 0x062C: // ج
+      case 0x0686: // چ
         return 'CH';
 
-      // الصفير: س، ص، ز
-      case 0x0633:
-      case 0x0635:
-      case 0x0632:
+      // أصوات الصفير.
+      case 0x0633: // س
+      case 0x0635: // ص
+      case 0x0632: // ز
         return 'SS';
 
-      case 0x0646:
+      case 0x0646: // ن
         return 'nn';
 
-      case 0x0631:
-      case 0x0644:
+      case 0x0631: // ر
+      case 0x0644: // ل
         return 'RR';
 
-      // الفتح
-      case 0x0627:
-      case 0x0623:
-      case 0x0625:
-      case 0x0622:
+      // فتح الفم.
+      case 0x0627: // ا
+      case 0x0623: // أ
+      case 0x0625: // إ
+      case 0x0622: // آ
+      case 0x0639: // ع
+      case 0x062D: // ح
+      case 0x0647: // ه
+      case 0x0629: // ة
         return 'aa';
 
-      case 0x064A:
-      case 0x0649:
+      case 0x064A: // ي
+      case 0x0649: // ى
+      case 0x0626: // ئ
         return 'I';
 
-      case 0x0648:
+      case 0x0648: // و
+      case 0x0624: // ؤ
         return 'U';
     }
 
-    // دعم الكلمات الإنجليزية عند استخدام صوت غير عربي.
-    final lower = clean.toLowerCase();
+    // دعم الإنجليزية عند استخدام TTS بلغة غير العربية.
     final latin = lower.codeUnitAt(0);
-
-    if (latin == 0x70 || latin == 0x62 || latin == 0x6D) return 'PP';
-    if (latin == 0x66 || latin == 0x76) return 'FF';
-    if (latin == 0x74 || latin == 0x64) return 'DD';
-    if (latin == 0x6B || latin == 0x67 || latin == 0x71) return 'kk';
-    if (latin == 0x63 || latin == 0x6A) return 'CH';
-    if (latin == 0x73 || latin == 0x7A) return 'SS';
-    if (latin == 0x6E) return 'nn';
-    if (latin == 0x72 || latin == 0x6C) return 'RR';
-    if (latin == 0x61) return 'aa';
-    if (latin == 0x65) return 'E';
-    if (latin == 0x69 || latin == 0x79) return 'I';
-    if (latin == 0x6F) return 'O';
-    if (latin == 0x75 || latin == 0x77) return 'U';
+    if (latin == 0x70 || latin == 0x62 || latin == 0x6D) return 'PP'; // p b m
+    if (latin == 0x66 || latin == 0x76) return 'FF'; // f v
+    if (latin == 0x74 || latin == 0x64) return 'DD'; // t d
+    if (latin == 0x6B || latin == 0x67 || latin == 0x71) return 'kk'; // k g q
+    if (latin == 0x63 || latin == 0x6A) return 'CH'; // c j
+    if (latin == 0x73 || latin == 0x7A) return 'SS'; // s z
+    if (latin == 0x6E) return 'nn'; // n
+    if (latin == 0x72 || latin == 0x6C) return 'RR'; // r l
+    if (latin == 0x61) return 'aa'; // a
+    if (latin == 0x65) return 'E'; // e
+    if (latin == 0x69 || latin == 0x79) return 'I'; // i y
+    if (latin == 0x6F) return 'O'; // o
+    if (latin == 0x75 || latin == 0x77) return 'U'; // u w
 
     return 'sil';
   }
