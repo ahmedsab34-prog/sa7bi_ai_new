@@ -6,6 +6,8 @@ import 'package:share_plus/share_plus.dart';
 import 'services/social_community_service.dart';
 import 'services/social_group_management_service.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
+import 'widgets/social_connect_attachment_controls.dart';
+import 'widgets/social_connect_attachment_message.dart';
 
 class SocialPrivateGroupsScreen extends StatefulWidget {
   const SocialPrivateGroupsScreen({super.key});
@@ -615,12 +617,8 @@ class _SocialPrivateGroupChatScreenState
                                           fontWeight: FontWeight.w800,
                                         ),
                                       ),
-                                    Text(
-                                      message.text,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        height: 1.4,
-                                      ),
+                                    SocialConnectAttachmentMessageView(
+                                      messageText: message.text,
                                     ),
                                     Align(
                                       alignment: Alignment.bottomLeft,
@@ -645,6 +643,12 @@ class _SocialPrivateGroupChatScreenState
                 padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
                 child: Row(
                   children: [
+                    SocialConnectAttachmentControls(
+                      scopeType: 'group',
+                      scopeId: widget.group.id,
+                      onMessageSent: () =>
+                          unawaited(_loadMessages(silent: true)),
+                    ),
                     Expanded(
                       child: TextField(
                         controller: _composer,
