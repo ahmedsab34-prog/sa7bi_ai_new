@@ -9,13 +9,14 @@ import 'services/social_realtime_service.dart';
 import 'social_games_hub_screen.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 import 'widgets/social_sticker_kit.dart';
+import 'widgets/social_connect_attachment_controls.dart';
+import 'widgets/social_connect_attachment_message.dart';
 
 class SocialConnectionsScreen extends StatefulWidget {
   const SocialConnectionsScreen({super.key});
 
   @override
-  State<SocialConnectionsScreen> createState() =>
-      _SocialConnectionsScreenState();
+  State<SocialConnectionsScreen> createState() => _SocialConnectionsScreenState();
 }
 
 class _SocialConnectionsScreenState extends State<SocialConnectionsScreen> {
@@ -1114,12 +1115,8 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
             if (sticker != null)
               Sa7biStickerMessageView(sticker: sticker)
             else
-              SelectableText(
-                message.text,
-                style: const TextStyle(
-                  color: Colors.white,
-                  height: 1.45,
-                ),
+              SocialConnectAttachmentMessageView(
+                messageText: message.text,
               ),
             const SizedBox(height: 4),
             Row(
@@ -1254,6 +1251,12 @@ class _SocialPrivateChatScreenState extends State<SocialPrivateChatScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                SocialConnectAttachmentControls(
+                  scopeType: 'conversation',
+                  scopeId: widget.conversationId,
+                  onMessageSent: () =>
+                      unawaited(_loadMessages(silent: true)),
+                ),
                 IconButton(
                   tooltip: 'استيكرات صاحبي',
                   onPressed: _sending ? null : _openStickerPicker,
