@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -347,8 +346,6 @@ class AppDiagnosticsV5Service {
       );
 
       if (status < 200 || status >= 300) {
-        stopwatch.stop();
-
         final isClientValidation =
             status == 400 ||
             status == 401 ||
@@ -409,7 +406,7 @@ class AppDiagnosticsV5Service {
         httpStatus: status,
         details: success
             ? passedDetails(body)
-            : (validationProblem ?? 'Payload validation failed.'),
+            : validationProblem,
         durationMs: stopwatch.elapsedMilliseconds,
         repairable: false,
       );
