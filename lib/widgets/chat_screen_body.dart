@@ -9,6 +9,7 @@ import 'chat_message_list.dart';
 import 'chat_status_header.dart';
 import 'credits_status.dart';
 import 'rewarded_ad_button.dart';
+import 'sa7bi_hero_3d.dart';
 
 /// جسم شاشة المحادثة.
 /// منطق الذكاء والوسائط والحفظ موجود في ChatScreen والخدمات.
@@ -158,7 +159,22 @@ class ChatScreenBody extends StatelessWidget {
                   showTitle: false,
                 ),
 
-                // المحادثة أصبحت تأخذ كامل العرض المتاح.
+                // شخصية HERO الواحدة تظهر مع المحادثة وتتلقى إشارات الصوت.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                  child: SizedBox(
+                    height: 152,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: const Sa7biHero3D(
+                        cameraControls: false,
+                        compact: true,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // المحادثة تأخذ المساحة المتبقية.
                 Expanded(
                   child: messages.isEmpty
                       ? ChatEmptyState(
