@@ -8,6 +8,8 @@ import 'services/social_games_service.dart';
 import 'services/social_invite_link_service.dart';
 import 'social_games_hub_screen.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
+import 'widgets/social_connect_attachment_controls.dart';
+import 'widgets/social_connect_attachment_message.dart';
 
 class SocialGroupsScreen extends StatefulWidget {
   const SocialGroupsScreen({super.key});
@@ -398,6 +400,7 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
 
   Timer? _poll;
   List<SocialGroupMessage> _messages = const [];
+
   bool _loading = true;
   bool _sending = false;
   String? _error;
@@ -612,12 +615,8 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
                                           fontWeight: FontWeight.w800,
                                         ),
                                       ),
-                                    Text(
-                                      message.text,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        height: 1.4,
-                                      ),
+                                    SocialConnectAttachmentMessageView(
+                                      messageText: message.text,
                                     ),
                                     Align(
                                       alignment: Alignment.bottomLeft,
@@ -642,6 +641,12 @@ class _SocialGroupChatScreenState extends State<SocialGroupChatScreen> {
                 padding: const EdgeInsets.fromLTRB(10, 7, 10, 8),
                 child: Row(
                   children: [
+                    SocialConnectAttachmentControls(
+                      scopeType: 'group',
+                      scopeId: widget.group.id,
+                      onMessageSent: () =>
+                          unawaited(_loadMessages(silent: true)),
+                    ),
                     Expanded(
                       child: TextField(
                         controller: _composer,
