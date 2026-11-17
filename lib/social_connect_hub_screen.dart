@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'sa7bi_hero_3d_screen.dart';
-import 'sa7bi_mascot_3d_screen.dart';
 import 'social_connections_screen.dart';
 import 'social_groups_workspace_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
-/// The main Sa7bi Connect landing page.
-/// Keeps private chats, groups, and both companion characters in one entry point.
+/// The Sa7bi Connect landing page.
+/// HERO is the only 3D Sa7bi character shown in the app.
 class SocialConnectHubScreen extends StatelessWidget {
   const SocialConnectHubScreen({super.key});
 
@@ -24,14 +23,6 @@ class SocialConnectHubScreen extends StatelessWidget {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => const SocialGroupsWorkspaceScreen(),
-      ),
-    );
-  }
-
-  void _openMascot(BuildContext context) {
-    Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const Sa7biMascot3DScreen(),
       ),
     );
   }
@@ -52,7 +43,7 @@ class SocialConnectHubScreen extends StatelessWidget {
         backgroundColor: Sa7biTheme.background,
         appBar: const Sa7biSubpageAppBar(
           title: 'صاحبي Connect',
-          subtitle: 'تواصل مع أصحابك واختار شخصية صاحبي',
+          subtitle: 'تواصل مع أصحابك ومع شخصية HERO الوحيدة لصاحبي',
         ),
         body: SafeArea(
           top: false,
@@ -79,8 +70,6 @@ class SocialConnectHubScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              _MascotPreviewCard(onPressed: () => _openMascot(context)),
-              const SizedBox(height: 10),
               _HeroPreviewCard(onPressed: () => _openHero(context)),
               const SizedBox(height: 14),
               _ConnectDestinationCard(
@@ -147,23 +136,6 @@ class SocialConnectHubScreen extends StatelessWidget {
   }
 }
 
-class _MascotPreviewCard extends StatelessWidget {
-  const _MascotPreviewCard({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return _CharacterPreviewCard(
-      title: 'صاحبي الرفيق',
-      subtitle: 'الشخصية الودودة للمساعدة والمحادثة',
-      icon: Icons.smart_toy_rounded,
-      color: Sa7biTheme.cyan,
-      onPressed: onPressed,
-    );
-  }
-}
-
 class _HeroPreviewCard extends StatelessWidget {
   const _HeroPreviewCard({required this.onPressed});
 
@@ -173,7 +145,7 @@ class _HeroPreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _CharacterPreviewCard(
       title: 'صاحبي HERO',
-      subtitle: 'البطل الخارق بشعار التطبيق الأصلي المضيء',
+      subtitle: 'البطل الخارق الوحيد بشعار التطبيق الأصلي المضيء على الصدر',
       icon: Icons.shield_rounded,
       color: const Color(0xFFFFB84D),
       onPressed: onPressed,
