@@ -7,18 +7,23 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../services/hero_face_runtime.dart';
 
-/// يعرض ملف HERO المحلي، ويستقبل حركات الوجه عبر واجهة Model Viewer الرسمية.
+/// يعرض مجسم HERO المحلي وحركات الجسم الموجودة داخل ملف GLB.
+///
+/// enableFaceAnimations متاح للتوافق مع أي شاشة قديمة، لكن وضع 3D Lite
+/// يعطّله حتى لا نحاول تشغيل Face Clips غير موجودة داخل المجسم الحالي.
 class Sa7biHero3D extends StatefulWidget {
   const Sa7biHero3D({
     super.key,
     this.animationName = 'Hero_Idle',
     this.cameraControls = true,
     this.compact = false,
+    this.enableFaceAnimations = true,
   });
 
   final String animationName;
   final bool cameraControls;
   final bool compact;
+  final bool enableFaceAnimations;
 
   @override
   State<Sa7biHero3D> createState() => _Sa7biHero3DState();
@@ -162,8 +167,25 @@ class _Sa7biHero3DState extends State<Sa7biHero3D> {
   @override
   void initState() {
     super.initState();
-    _faceSubscription =
-        HeroFaceRuntime.instance.commands.listen(_handleFaceCommand);
+    _syncFaceSubscription();
+  }
+
+  void _syncFaceSubscription() {
+    if (widget.enableFaceAnimations) {
+      _faceSubscription ??=
+          HeroFaceRuntime.instance.commands.listen(_handleFaceCommand);
+      return;
+    }
+
+    final subscription = _faceSubscription;
+    _faceSubscription = null;
+    if (subscription != null) {
+      unawaited(subscription.cancel());
+    }
+
+    if (_bridgeReady) {
+      _runJavaScript('window.sa7biHeroBridge?.apply({type: "reset"});');
+    }
   }
 
   @override
@@ -172,6 +194,14 @@ class _Sa7biHero3DState extends State<Sa7biHero3D> {
 
     if (oldWidget.animationName != widget.animationName) {
       _setBodyAnimation(widget.animationName);
+    }
+
+    if (oldWidget.enableFaceAnimations != widget.enableFaceAnimations) {
+      _syncFaceSubscription();
+      if (widget.enableFaceAnimations && _bridgeReady) {
+        final lastCommand = HeroFaceRuntime.instance.lastCommand;
+        if (lastCommand != null) _applyFaceCommand(lastCommand);
+      }
     }
   }
 
@@ -195,12 +225,11 @@ class _Sa7biHero3DState extends State<Sa7biHero3D> {
         _bridgeReady = true;
         HeroFaceRuntime.instance.reportAvailableAnimations(animations);
         _lastMissingAnimation = null;
-
         _setBodyAnimation(widget.animationName);
 
-        final lastCommand = HeroFaceRuntime.instance.lastCommand;
-        if (lastCommand != null) {
-          _applyFaceCommand(lastCommand);
+        if (widget.enableFaceAnimations) {
+          final lastCommand = HeroFaceRuntime.instance.lastCommand;
+          if (lastCommand != null) _applyFaceCommand(lastCommand);
         }
       } else if (type == 'missing') {
         final name = decoded['animation'];
@@ -218,9 +247,8 @@ class _Sa7biHero3DState extends State<Sa7biHero3D> {
   }
 
   void _handleFaceCommand(HeroFaceCommand command) {
-    if (_bridgeReady) {
-      _applyFaceCommand(command);
-    }
+    if (!widget.enableFaceAnimations || !_bridgeReady) return;
+    _applyFaceCommand(command);
   }
 
   void _applyFaceCommand(HeroFaceCommand command) {
@@ -258,10 +286,11 @@ class _Sa7biHero3DState extends State<Sa7biHero3D> {
 
   @override
   void dispose() {
-    _faceSubscription?.cancel();
+    final subscription = _faceSubscription;
     _faceSubscription = null;
+    if (subscription != null) unawaited(subscription.cancel());
 
-    if (_bridgeReady) {
+    if (_bridgeReady && widget.enableFaceAnimations) {
       _runJavaScript('window.sa7biHeroBridge?.apply({type: "reset"});');
     }
 
