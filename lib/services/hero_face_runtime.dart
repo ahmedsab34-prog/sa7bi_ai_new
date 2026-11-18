@@ -36,18 +36,21 @@ class HeroFaceCommand {
 }
 
 /// حالة عرض خفيفة تستهلكها واجهة HERO 3D Lite.
-/// activeViseme هو رمز صوتي تقريبي للكلمة الحالية، وليس حركة فم داخل GLB.
+/// activeViseme رمز صوتي تقريبي للكلمة الحالية، وليس حركة فم داخل GLB.
+/// activeWord هو نص الكلمة التي أرسلها محرك TTS في آخر تحديث.
 @immutable
 class HeroLiteStatus {
   const HeroLiteStatus({
     this.isSpeaking = false,
     this.activeViseme = 'sil',
+    this.activeWord = '',
     this.expression = HeroExpression.neutral,
     this.revision = 0,
   });
 
   final bool isSpeaking;
   final String activeViseme;
+  final String activeWord;
   final HeroExpression expression;
   final int revision;
 }
@@ -56,7 +59,7 @@ class HeroLiteStatus {
 ///
 /// في وضع 3D Lite نستخدم حركات الجسم الموجودة في GLB، ونزامن مؤشرًا بصريًا
 /// حول المجسم مع حدود الكلمات التي يرسلها TTS. لا نفترض وجود Face Rig أو
-/// Morph Targets أو Animation Clips للوجه داخل ملف المجسم.
+/// Morph Targets أو Animation Clips للوجه داخل ملف المجسم الحالي.
 class HeroFaceRuntime {
   HeroFaceRuntime._();
 
@@ -137,21 +140,29 @@ class HeroFaceRuntime {
     _updateLiteStatus(
       isSpeaking: true,
       activeViseme: 'sil',
+      activeWord: '',
       expression: HeroExpression.neutral,
     );
     resetFace();
   }
 
-  /// TTS يرسل حدود الكلمات، لذلك المزامنة هنا كلمة بكلمة وبشكل تقريبي.
-  /// في 3D Lite تتحول إلى مؤشر حركة حول المجسم، لا إلى تحريك للفم نفسه.
+  /// يستقبل حدود الكلمات من TTS ويحدّث الكلمة والرمز الصوتي مع كل كلمة.
+  ///
+  /// في 3D Lite تتحول هذه البيانات إلى مؤشر مرئي حول المجسم،
+  /// وليست تحريكًا فعليًا للفم داخل ملف GLB.
   void onSpeechWord(String word) {
-    final viseme = visemeForWord(word);
+    final cleanWord = word.trim();
+    if (cleanWord.isEmpty) return;
+
+    final viseme = visemeForWord(cleanWord);
     final animationName = 'HERO_VISEME_$viseme';
+
     if (!requiredVisemeAnimationNames.contains(animationName)) return;
 
     _updateLiteStatus(
       isSpeaking: true,
       activeViseme: viseme,
+      activeWord: cleanWord,
     );
 
     _emit(
@@ -164,6 +175,7 @@ class HeroFaceRuntime {
     _updateLiteStatus(
       isSpeaking: false,
       activeViseme: 'sil',
+      activeWord: '',
       expression: HeroExpression.neutral,
     );
     resetFace();
@@ -202,12 +214,15 @@ class HeroFaceRuntime {
   void _updateLiteStatus({
     bool? isSpeaking,
     String? activeViseme,
+    String? activeWord,
     HeroExpression? expression,
   }) {
     final previous = _liteStatus.value;
+
     _liteStatus.value = HeroLiteStatus(
       isSpeaking: isSpeaking ?? previous.isSpeaking,
       activeViseme: activeViseme ?? previous.activeViseme,
+      activeWord: activeWord ?? previous.activeWord,
       expression: expression ?? previous.expression,
       revision: previous.revision + 1,
     );
@@ -235,6 +250,7 @@ class HeroFaceRuntime {
           (rune >= 0x064B && rune <= 0x065F) || rune == 0x0670;
       return !isArabicMark && rune != 0x0640;
     });
+
     return String.fromCharCodes(withoutMarks).trim();
   }
 
@@ -244,46 +260,57 @@ class HeroFaceRuntime {
     if (clean.isEmpty) return 'sil';
 
     final lower = clean.toLowerCase();
+
     if (lower.startsWith('th')) return 'TH';
     if (lower.startsWith('ch') || lower.startsWith('sh')) return 'CH';
     if (lower.startsWith('ph')) return 'FF';
 
     final first = clean.runes.first;
+
     switch (first) {
       case 0x0628: // ب
       case 0x0645: // م
       case 0x067E: // پ
         return 'PP';
+
       case 0x0641: // ف
       case 0x06A4: // ڤ
         return 'FF';
+
       case 0x062B: // ث
       case 0x0630: // ذ
       case 0x0638: // ظ
         return 'TH';
+
       case 0x062A: // ت
       case 0x062F: // د
       case 0x0637: // ط
       case 0x0636: // ض
         return 'DD';
+
       case 0x0643: // ك
       case 0x0642: // ق
       case 0x062E: // خ
       case 0x063A: // غ
         return 'kk';
+
       case 0x0634: // ش
       case 0x062C: // ج
       case 0x0686: // چ
         return 'CH';
+
       case 0x0633: // س
       case 0x0635: // ص
       case 0x0632: // ز
         return 'SS';
+
       case 0x0646: // ن
         return 'nn';
+
       case 0x0631: // ر
       case 0x0644: // ل
         return 'RR';
+
       case 0x0627: // ا
       case 0x0623: // أ
       case 0x0625: // إ
@@ -293,17 +320,22 @@ class HeroFaceRuntime {
       case 0x0647: // ه
       case 0x0629: // ة
         return 'aa';
+
       case 0x064A: // ي
       case 0x0649: // ى
       case 0x0626: // ئ
         return 'I';
+
       case 0x0648: // و
       case 0x0624: // ؤ
         return 'U';
     }
 
     final latin = lower.codeUnitAt(0);
-    if (latin == 0x70 || latin == 0x62 || latin == 0x6D) return 'PP';
+
+    if (latin == 0x70 || latin == 0x62 || latin == 0x6D) {
+      return 'PP';
+    }
     if (latin == 0x66 || latin == 0x76) return 'FF';
     if (latin == 0x74 || latin == 0x64) return 'DD';
     if (latin == 0x6B || latin == 0x67 || latin == 0x71) return 'kk';
