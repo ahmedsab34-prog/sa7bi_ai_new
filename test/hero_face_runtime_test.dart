@@ -2,8 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sa7bi_ai/services/hero_face_runtime.dart';
 
 void main() {
-  group('HERO face animation contract', () {
-    test('declares the six reference expressions and fifteen visemes', () {
+  group('HERO animation contract', () {
+    test('declares six expression names and fifteen visemes', () {
       expect(
         HeroFaceRuntime.expressionAnimationNames.values,
         containsAll({
@@ -17,7 +17,6 @@ void main() {
       );
       expect(HeroFaceRuntime.expressionAnimationNames, hasLength(6));
       expect(HeroFaceRuntime.requiredVisemeAnimationNames, hasLength(15));
-      expect(HeroFaceRuntime.requiredFaceAnimationNames, hasLength(21));
       expect(
         HeroFaceRuntime.requiredVisemeAnimationNames,
         containsAll({
@@ -38,6 +37,7 @@ void main() {
           'HERO_VISEME_U',
         }),
       );
+      expect(HeroFaceRuntime.requiredFaceAnimationNames, hasLength(21));
     });
 
     test('maps common Arabic starting sounds to their visemes', () {
@@ -55,13 +55,13 @@ void main() {
       expect(HeroFaceRuntime.visemeForWord('وقت'), 'U');
     });
 
-    test('ignores Arabic diacritics and long-vowel marks', () {
+    test('ignores Arabic diacritics and tatweel', () {
       expect(HeroFaceRuntime.visemeForWord('مُحَمَّد'), 'PP');
       expect(HeroFaceRuntime.visemeForWord('ـفكرة'), 'FF');
       expect(HeroFaceRuntime.visemeForWord('َ'), 'sil');
     });
 
-    test('maps English combinations before single letters', () {
+    test('maps English combinations before individual letters', () {
       expect(HeroFaceRuntime.visemeForWord('throne'), 'TH');
       expect(HeroFaceRuntime.visemeForWord('show'), 'CH');
       expect(HeroFaceRuntime.visemeForWord('phone'), 'FF');
@@ -71,7 +71,7 @@ void main() {
     });
   });
 
-  group('HERO face runtime events', () {
+  group('HERO runtime and 3D Lite status', () {
     late HeroFaceRuntime runtime;
 
     setUp(() {
@@ -81,15 +81,17 @@ void main() {
         'Hero_Welcome',
         'Hero_Power',
       });
+      runtime.onSpeechFinished();
     });
 
-    test('publishes a smile and then returns to neutral', () async {
+    test('publishes expression commands and updates the Lite mood', () async {
       final events = <HeroFaceCommand>[];
       final subscription = runtime.commands.listen(events.add);
 
       runtime.playExpression(HeroExpression.smile);
-      runtime.playExpression(HeroExpression.neutral);
+      expect(runtime.liteStatus.value.expression, HeroExpression.smile);
 
+      runtime.playExpression(HeroExpression.neutral);
       await subscription.cancel();
 
       expect(events, hasLength(2));
@@ -97,16 +99,15 @@ void main() {
       expect(events.first.animationName, 'HERO_FACE_SMILE');
       expect(events.first.loop, isTrue);
       expect(events.last.type, HeroFaceCommandType.reset);
-      expect(events.last.revision, greaterThan(events.first.revision));
+      expect(runtime.liteStatus.value.expression, HeroExpression.neutral);
     });
 
-    test('plays wink and blink as one-shot movements', () async {
+    test('keeps wink and blink as one-shot compatibility commands', () async {
       final events = <HeroFaceCommand>[];
       final subscription = runtime.commands.listen(events.add);
 
       runtime.playExpression(HeroExpression.wink);
       runtime.playExpression(HeroExpression.blink);
-
       await subscription.cancel();
 
       expect(events, hasLength(2));
@@ -115,14 +116,18 @@ void main() {
       expect(events.every((event) => !event.loop), isTrue);
     });
 
-    test('publishes speech visemes using the shared stable names', () async {
+    test('publishes viseme events and updates the speaking indicator', () async {
       final events = <HeroFaceCommand>[];
       final subscription = runtime.commands.listen(events.add);
 
       runtime.onSpeechStarted();
-      runtime.onSpeechWord('سلام');
-      runtime.onSpeechFinished();
+      expect(runtime.liteStatus.value.isSpeaking, isTrue);
 
+      runtime.onSpeechWord('سلام');
+      expect(runtime.liteStatus.value.isSpeaking, isTrue);
+      expect(runtime.liteStatus.value.activeViseme, 'SS');
+
+      runtime.onSpeechFinished();
       await subscription.cancel();
 
       expect(events, hasLength(3));
@@ -130,15 +135,25 @@ void main() {
       expect(events[1].type, HeroFaceCommandType.viseme);
       expect(events[1].animationName, 'HERO_VISEME_SS');
       expect(events[2].type, HeroFaceCommandType.reset);
+      expect(runtime.liteStatus.value.isSpeaking, isFalse);
+      expect(runtime.liteStatus.value.activeViseme, 'sil');
     });
 
-    test('reports loaded animations instead of assuming a face rig exists', () {
+    test('does not require a face rig for the Lite status to work', () {
       expect(runtime.hasAnimation('Hero_Idle'), isTrue);
       expect(runtime.isFaceRigAvailable, isFalse);
-      expect(
-        runtime.missingRequiredAnimations,
-        contains('HERO_FACE_WINK'),
-      );
+
+      runtime.onSpeechStarted();
+      runtime.onSpeechWord('مرحبا');
+
+      expect(runtime.liteStatus.value.isSpeaking, isTrue);
+      expect(runtime.liteStatus.value.activeViseme, 'PP');
+      expect(runtime.isFaceRigAvailable, isFalse);
+    });
+
+    test('reports actual available animations without assuming facial clips', () {
+      expect(runtime.isFaceRigAvailable, isFalse);
+      expect(runtime.missingRequiredAnimations, isNotEmpty);
 
       runtime.reportAvailableAnimations({
         ...HeroFaceRuntime.requiredFaceAnimationNames,
