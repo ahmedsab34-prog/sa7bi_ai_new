@@ -137,39 +137,43 @@ void main() {
   group('SocialGroupManagementService validation', () {
     final service = SocialGroupManagementService.instance;
 
-    test('rejects a group name shorter than three characters', () {
-      expectLater(
+    test('rejects a group name shorter than three characters', () async {
+      await expectLater(
         service.createPrivateGroup(name: 'ab'),
         throwsA(groupError('INVALID_GROUP_NAME')),
       );
     });
 
-    test('rejects a group name longer than forty characters', () {
-      expectLater(
-        service.createPrivateGroup(name: 'a' * 41),
+    test('rejects a group name longer than forty characters', () async {
+      final longName = List<String>.filled(41, 'a').join();
+
+      await expectLater(
+        service.createPrivateGroup(name: longName),
         throwsA(groupError('INVALID_GROUP_NAME')),
       );
     });
 
-    test('rejects a description longer than 160 characters', () {
-      expectLater(
+    test('rejects a description longer than 160 characters', () async {
+      final longDescription = List<String>.filled(161, 'a').join();
+
+      await expectLater(
         service.createPrivateGroup(
           name: 'مجموعة',
-          description: 'a' * 161,
+          description: longDescription,
         ),
         throwsA(groupError('INVALID_GROUP_DESCRIPTION')),
       );
     });
 
-    test('rejects malformed group invitation codes', () {
-      expectLater(
+    test('rejects malformed group invitation codes', () async {
+      await expectLater(
         service.joinByInviteCode('0000000000'),
         throwsA(groupError('GROUP_INVITE_INVALID')),
       );
     });
 
-    test('rejects invalid group identifiers before network access', () {
-      expectLater(
+    test('rejects invalid group identifiers before network access', () async {
+      await expectLater(
         service.createInvite('invalid-id'),
         throwsA(groupError('GROUP_NOT_FOUND')),
       );
