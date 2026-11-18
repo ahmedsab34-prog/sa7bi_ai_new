@@ -1,0 +1,103 @@
+
+name: Sa7bi AI Social and Audio Regression Tests
+
+on:
+  push:
+    branches:
+      - fix/build-692-network-client-lifecycle
+    paths:
+      - ".github/workflows/social-audio-regression.yml"
+      - "lib/services/audio_focus_coordinator.dart"
+      - "lib/services/hero_face_runtime.dart"
+      - "lib/services/social_community_service.dart"
+      - "lib/services/social_games_service.dart"
+      - "lib/services/social_group_management_service.dart"
+      - "lib/services/social_invite_link_service.dart"
+      - "lib/services/social_messaging_service.dart"
+      - "test/audio_focus_coordinator_test.dart"
+      - "test/hero_face_runtime_test.dart"
+      - "test/social_community_models_test.dart"
+      - "test/social_games_models_test.dart"
+      - "test/social_group_models_test.dart"
+      - "test/social_invite_link_service_test.dart"
+      - "test/social_messaging_models_test.dart"
+
+permissions:
+  contents: read
+
+jobs:
+  social-audio-tests:
+    name: Test Social, Games, HERO and Audio Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.38.1"
+          channel: stable
+          cache: true
+
+      - name: Show toolchain versions
+        run: |
+          flutter --version
+          dart --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check required test files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for file in \
+            test/audio_focus_coordinator_test.dart \
+            test/hero_face_runtime_test.dart \
+            test/social_community_models_test.dart \
+            test/social_games_models_test.dart \
+            test/social_group_models_test.dart \
+            test/social_invite_link_service_test.dart \
+            test/social_messaging_models_test.dart
+          do
+            test -f "$file"
+            echo "Found: $file"
+          done
+
+      - name: Run social and audio regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for file in \
+            test/audio_focus_coordinator_test.dart \
+            test/hero_face_runtime_test.dart \
+            test/social_community_models_test.dart \
+            test/social_games_models_test.dart \
+            test/social_group_models_test.dart \
+            test/social_invite_link_service_test.dart \
+            test/social_messaging_models_test.dart
+          do
+            echo
+            echo "=========================================="
+            echo "Running: $file"
+            echo "=========================================="
+
+            flutter test --reporter expanded "$file"
+          done
+
+      - name: Regression test summary
+        if: always()
+        run: |
+          {
+            echo "## Sa7bi AI Social and Audio Tests"
+            echo
+            echo "- Branch: ${GITHUB_REF_NAME}"
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- APK build: not performed"
+            echo "- Worker deployment: not performed"
+          } >> "$GITHUB_STEP_SUMMARY"
