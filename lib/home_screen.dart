@@ -15,6 +15,7 @@ import 'tiktok_style_feed_screen.dart';
 import 'widgets/short_video_entry_carousel.dart';
 import 'widgets/affiliate_carousel.dart';
 import 'widgets/app_header.dart';
+import 'widgets/sa7bi_hero_lite_panel.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onProfile;
@@ -384,6 +385,8 @@ class HomeScreenState extends State<HomeScreen>
                   112,
                 ),
                 children: [
+                  const Sa7biHeroLitePanel(),
+                  const SizedBox(height: 15),
                   _buildNewsHeader(),
                   const SizedBox(height: 8),
 
