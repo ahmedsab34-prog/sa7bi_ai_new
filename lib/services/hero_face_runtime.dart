@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-/// تعبيرات الوجه المطلوبة لشخصية HERO الواحدة.
-/// neutral هو وضع الراحة ولا يحتاج إلى Animation Clip منفصل.
+/// حالات التفاعل المرئية لشخصية HERO في وضع 3D Lite.
+/// هذه الحالات تغيّر واجهة التفاعل حول المجسم، ولا تحرّك شبكة الوجه نفسها.
 enum HeroExpression {
   neutral,
   smile,
@@ -29,24 +29,39 @@ class HeroFaceCommand {
     this.loop = false,
   });
 
-  /// رقم متزايد لتمييز الأمر الأحدث عن أي أمر قديم متأخر.
   final int revision;
   final HeroFaceCommandType type;
   final String? animationName;
   final bool loop;
 }
 
-/// الجسر الموحد بين أحداث الصوت وحركات الوجه المضمّنة داخل ملف HERO GLB.
+/// حالة عرض خفيفة تستهلكها واجهة HERO 3D Lite.
+/// activeViseme هو رمز صوتي تقريبي للكلمة الحالية، وليس حركة فم داخل GLB.
+@immutable
+class HeroLiteStatus {
+  const HeroLiteStatus({
+    this.isSpeaking = false,
+    this.activeViseme = 'sil',
+    this.expression = HeroExpression.neutral,
+    this.revision = 0,
+  });
+
+  final bool isSpeaking;
+  final String activeViseme;
+  final HeroExpression expression;
+  final int revision;
+}
+
+/// يجمع أوامر HERO القديمة مع حالة العرض الخفيفة.
 ///
-/// هذا الملف لا يرسم وجهًا بديلًا ولا يغيّر صورة الشخصية. هو يرسل أسماء
-/// Animation Clips إلى Model Viewer فقط؛ لذلك لا تظهر حركة حقيقية إلا بعد
-/// تضمين الـClips المطلوبة داخل assets/3d/sa7bi_hero.glb.
+/// في وضع 3D Lite نستخدم حركات الجسم الموجودة في GLB، ونزامن مؤشرًا بصريًا
+/// حول المجسم مع حدود الكلمات التي يرسلها TTS. لا نفترض وجود Face Rig أو
+/// Morph Targets أو Animation Clips للوجه داخل ملف المجسم.
 class HeroFaceRuntime {
   HeroFaceRuntime._();
 
   static final HeroFaceRuntime instance = HeroFaceRuntime._();
 
-  /// أسماء ثابتة يجب أن تطابق أسماء الـAnimations داخل ملف GLB حرفيًا.
   static const Map<HeroExpression, String> expressionAnimationNames = {
     HeroExpression.smile: 'HERO_FACE_SMILE',
     HeroExpression.sad: 'HERO_FACE_SAD',
@@ -56,7 +71,6 @@ class HeroFaceRuntime {
     HeroExpression.blink: 'HERO_FACE_BLINK',
   };
 
-  /// Visemes الخمسة عشر المتفق عليها بين Blender وFlutter.
   static const Set<String> requiredVisemeAnimationNames = {
     'HERO_VISEME_sil',
     'HERO_VISEME_PP',
@@ -75,8 +89,8 @@ class HeroFaceRuntime {
     'HERO_VISEME_U',
   };
 
-  /// ست حركات وجه فعلية: ابتسامة، حزن، دهشة، غضب، غمزة، ورمشة.
-  /// الوضع الطبيعي Neutral هو وضع الأوزان صفر ويُنفّذ بأمر reset.
+  /// أسماء توافقية محفوظة للمرحلة المستقبلية التي قد تضيف تحريك وجه حقيقيًا.
+  /// عدم وجودها داخل GLB لا يمنع تشغيل وضع 3D Lite.
   static Set<String> get requiredFaceAnimationNames =>
       Set<String>.unmodifiable({
         ...expressionAnimationNames.values,
@@ -89,6 +103,9 @@ class HeroFaceRuntime {
   final ValueNotifier<Set<String>> _availableAnimations =
       ValueNotifier<Set<String>>(const <String>{});
 
+  final ValueNotifier<HeroLiteStatus> _liteStatus =
+      ValueNotifier<HeroLiteStatus>(const HeroLiteStatus());
+
   int _revision = 0;
   HeroFaceCommand? _lastCommand;
 
@@ -97,6 +114,8 @@ class HeroFaceRuntime {
   ValueListenable<Set<String>> get availableAnimations =>
       _availableAnimations;
 
+  ValueListenable<HeroLiteStatus> get liteStatus => _liteStatus;
+
   HeroFaceCommand? get lastCommand => _lastCommand;
 
   bool get isFaceRigAvailable =>
@@ -104,8 +123,7 @@ class HeroFaceRuntime {
 
   bool hasAnimation(String name) => _availableAnimations.value.contains(name);
 
-  Set<String> get missingRequiredAnimations =>
-      Set<String>.unmodifiable(
+  Set<String> get missingRequiredAnimations => Set<String>.unmodifiable(
         requiredFaceAnimationNames.difference(_availableAnimations.value),
       );
 
@@ -115,17 +133,26 @@ class HeroFaceRuntime {
     );
   }
 
-  /// بداية الكلام تعيد الوجه إلى وضع الراحة قبل أول حركة فم.
   void onSpeechStarted() {
+    _updateLiteStatus(
+      isSpeaking: true,
+      activeViseme: 'sil',
+      expression: HeroExpression.neutral,
+    );
     resetFace();
   }
 
-  /// Flutter TTS يرسل حدود الكلمات، وليس توقيت كل فونيم على حدة.
-  /// لذلك هذا اختيار Viseme تقريبي للكلمة، وليس Lip Sync فونيميًا دقيقًا.
+  /// TTS يرسل حدود الكلمات، لذلك المزامنة هنا كلمة بكلمة وبشكل تقريبي.
+  /// في 3D Lite تتحول إلى مؤشر حركة حول المجسم، لا إلى تحريك للفم نفسه.
   void onSpeechWord(String word) {
     final viseme = visemeForWord(word);
     final animationName = 'HERO_VISEME_$viseme';
     if (!requiredVisemeAnimationNames.contains(animationName)) return;
+
+    _updateLiteStatus(
+      isSpeaking: true,
+      activeViseme: viseme,
+    );
 
     _emit(
       type: HeroFaceCommandType.viseme,
@@ -134,14 +161,24 @@ class HeroFaceRuntime {
   }
 
   void onSpeechFinished() {
+    _updateLiteStatus(
+      isSpeaking: false,
+      activeViseme: 'sil',
+      expression: HeroExpression.neutral,
+    );
     resetFace();
   }
 
+  /// في 3D Lite يغيّر هذا الاختيار رمز/لون/هالة التفاعل في الواجهة.
+  /// لا يدّعي تعديل ملامح الوجه داخل المجسم.
   void playExpression(HeroExpression expression) {
     if (expression == HeroExpression.neutral) {
+      _updateLiteStatus(expression: HeroExpression.neutral);
       resetFace();
       return;
     }
+
+    _updateLiteStatus(expression: expression);
 
     final animationName = expressionAnimationNames[expression];
     if (animationName == null) return;
@@ -149,15 +186,31 @@ class HeroFaceRuntime {
     _emit(
       type: HeroFaceCommandType.expression,
       animationName: animationName,
-      // الابتسامة والحزن والدهشة والغضب حالات مستمرة حتى اختيار غيرها.
-      // الغمزة والرمشة حركتان قصيرتان لمرة واحدة.
       loop: expression != HeroExpression.wink &&
           expression != HeroExpression.blink,
     );
   }
 
   void resetFace() {
+    _updateLiteStatus(
+      activeViseme: 'sil',
+      expression: HeroExpression.neutral,
+    );
     _emit(type: HeroFaceCommandType.reset);
+  }
+
+  void _updateLiteStatus({
+    bool? isSpeaking,
+    String? activeViseme,
+    HeroExpression? expression,
+  }) {
+    final previous = _liteStatus.value;
+    _liteStatus.value = HeroLiteStatus(
+      isSpeaking: isSpeaking ?? previous.isSpeaking,
+      activeViseme: activeViseme ?? previous.activeViseme,
+      expression: expression ?? previous.expression,
+      revision: previous.revision + 1,
+    );
   }
 
   void _emit({
@@ -176,7 +229,6 @@ class HeroFaceRuntime {
     if (!_commands.isClosed) _commands.add(command);
   }
 
-  /// يحذف التشكيل والتطويل قبل تحليل أول حرف عربي.
   static String _normalizeWord(String word) {
     final withoutMarks = word.runes.where((rune) {
       final isArabicMark =
@@ -186,72 +238,52 @@ class HeroFaceRuntime {
     return String.fromCharCodes(withoutMarks).trim();
   }
 
-  /// تحويل تقريبي لصوت بداية الكلمة إلى Viseme متوافق مع مواصفات HERO.
-  /// لا يحل محل مصدر phoneme timing حقيقي عند توفره.
+  /// يحوّل بداية الكلمة إلى Viseme تقريبي للعربية والإنجليزية.
   static String visemeForWord(String word) {
     final clean = _normalizeWord(word);
     if (clean.isEmpty) return 'sil';
 
     final lower = clean.toLowerCase();
-
-    // التركيبات الإنجليزية المركبة تُفحص قبل الحرف الأول.
     if (lower.startsWith('th')) return 'TH';
     if (lower.startsWith('ch') || lower.startsWith('sh')) return 'CH';
     if (lower.startsWith('ph')) return 'FF';
 
     final first = clean.runes.first;
     switch (first) {
-      // إغلاق الشفتين.
       case 0x0628: // ب
       case 0x0645: // م
       case 0x067E: // پ
         return 'PP';
-
-      // الشفة السفلى مع الأسنان.
       case 0x0641: // ف
       case 0x06A4: // ڤ
         return 'FF';
-
-      // اللسان بين الأسنان.
       case 0x062B: // ث
       case 0x0630: // ذ
       case 0x0638: // ظ
         return 'TH';
-
-      // طرف اللسان عند الأسنان/اللثة.
       case 0x062A: // ت
       case 0x062F: // د
       case 0x0637: // ط
       case 0x0636: // ض
         return 'DD';
-
-      // مؤخرة اللسان.
       case 0x0643: // ك
       case 0x0642: // ق
       case 0x062E: // خ
       case 0x063A: // غ
         return 'kk';
-
-      // أصوات الشين والجيم.
       case 0x0634: // ش
       case 0x062C: // ج
       case 0x0686: // چ
         return 'CH';
-
-      // أصوات الصفير.
       case 0x0633: // س
       case 0x0635: // ص
       case 0x0632: // ز
         return 'SS';
-
       case 0x0646: // ن
         return 'nn';
-
       case 0x0631: // ر
       case 0x0644: // ل
         return 'RR';
-
-      // فتح الفم.
       case 0x0627: // ا
       case 0x0623: // أ
       case 0x0625: // إ
@@ -261,32 +293,29 @@ class HeroFaceRuntime {
       case 0x0647: // ه
       case 0x0629: // ة
         return 'aa';
-
       case 0x064A: // ي
       case 0x0649: // ى
       case 0x0626: // ئ
         return 'I';
-
       case 0x0648: // و
       case 0x0624: // ؤ
         return 'U';
     }
 
-    // دعم الإنجليزية عند استخدام TTS بلغة غير العربية.
     final latin = lower.codeUnitAt(0);
-    if (latin == 0x70 || latin == 0x62 || latin == 0x6D) return 'PP'; // p b m
-    if (latin == 0x66 || latin == 0x76) return 'FF'; // f v
-    if (latin == 0x74 || latin == 0x64) return 'DD'; // t d
-    if (latin == 0x6B || latin == 0x67 || latin == 0x71) return 'kk'; // k g q
-    if (latin == 0x63 || latin == 0x6A) return 'CH'; // c j
-    if (latin == 0x73 || latin == 0x7A) return 'SS'; // s z
-    if (latin == 0x6E) return 'nn'; // n
-    if (latin == 0x72 || latin == 0x6C) return 'RR'; // r l
-    if (latin == 0x61) return 'aa'; // a
-    if (latin == 0x65) return 'E'; // e
-    if (latin == 0x69 || latin == 0x79) return 'I'; // i y
-    if (latin == 0x6F) return 'O'; // o
-    if (latin == 0x75 || latin == 0x77) return 'U'; // u w
+    if (latin == 0x70 || latin == 0x62 || latin == 0x6D) return 'PP';
+    if (latin == 0x66 || latin == 0x76) return 'FF';
+    if (latin == 0x74 || latin == 0x64) return 'DD';
+    if (latin == 0x6B || latin == 0x67 || latin == 0x71) return 'kk';
+    if (latin == 0x63 || latin == 0x6A) return 'CH';
+    if (latin == 0x73 || latin == 0x7A) return 'SS';
+    if (latin == 0x6E) return 'nn';
+    if (latin == 0x72 || latin == 0x6C) return 'RR';
+    if (latin == 0x61) return 'aa';
+    if (latin == 0x65) return 'E';
+    if (latin == 0x69 || latin == 0x79) return 'I';
+    if (latin == 0x6F) return 'O';
+    if (latin == 0x75 || latin == 0x77) return 'U';
 
     return 'sil';
   }
