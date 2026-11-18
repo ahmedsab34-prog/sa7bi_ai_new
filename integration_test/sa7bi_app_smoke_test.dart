@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -17,13 +19,16 @@ void main() {
   testWidgets(
     'Sa7bi AI tabs, conversation services, games, profile and diagnostics open without UI exceptions',
     (tester) async {
+      final semantics = tester.ensureSemantics();
+      addTearDown(semantics.dispose);
+
       await tester.pumpWidget(const sa7bi.Sa7biAiApp());
       await tester.pump(const Duration(seconds: 2));
 
       // Chat tab.
       await _tapMainTab(tester, 'الشات');
 
-      await _pumpUntilFound(
+      await _pumpUntilHitTestable(
         tester,
         find.byType(ChatTabScreen),
         description: 'Chat tab',
@@ -43,7 +48,7 @@ void main() {
       // Games tab.
       await _tapMainTab(tester, 'الألعاب');
 
-      await _pumpUntilFound(
+      await _pumpUntilHitTestable(
         tester,
         find.byType(InteractiveExperiencesScreen),
         description: 'Games tab',
@@ -55,8 +60,17 @@ void main() {
       // Open a local game hub without creating an online match.
       final localGames = find.text('ألعاب بدون إنترنت');
 
-      await tester.tap(localGames);
-      await _pumpUntilFound(
+      await tester.ensureVisible(localGames);
+
+      await _pumpUntilHitTestable(
+        tester,
+        localGames,
+        description: 'Local games card',
+      );
+
+      await tester.tap(localGames.hitTestable().first);
+
+      await _pumpUntilHitTestable(
         tester,
         find.byType(LocalGamesHubScreen),
         description: 'Local games hub',
@@ -70,7 +84,7 @@ void main() {
       // Profile tab. Profile data loads without initializing reminders.
       await _tapMainTab(tester, 'حسابي');
 
-      await _pumpUntilFound(
+      await _pumpUntilHitTestable(
         tester,
         find.byType(ProfileScreen),
         description: 'Profile screen',
@@ -78,16 +92,17 @@ void main() {
 
       final settingsTile = find.text('الإعدادات');
 
-      await _pumpUntilFound(
+      await tester.ensureVisible(settingsTile);
+
+      await _pumpUntilHitTestable(
         tester,
         settingsTile,
         description: 'Profile settings tile',
       );
 
-      await tester.ensureVisible(settingsTile);
-      await tester.tap(settingsTile);
+      await tester.tap(settingsTile.hitTestable().first);
 
-      await _pumpUntilFound(
+      await _pumpUntilHitTestable(
         tester,
         find.byType(SettingsScreen),
         description: 'Settings screen',
@@ -95,16 +110,17 @@ void main() {
 
       final founderTile = find.text('المؤسس والمطوّر');
 
-      await _pumpUntilFound(
+      await tester.ensureVisible(founderTile);
+
+      await _pumpUntilHitTestable(
         tester,
         founderTile,
         description: 'Founder settings tile',
       );
 
-      await tester.ensureVisible(founderTile);
-      await tester.tap(founderTile);
+      await tester.tap(founderTile.hitTestable().first);
 
-      await _pumpUntilFound(
+      await _pumpUntilHitTestable(
         tester,
         find.byType(OwnerProfileScreen),
         description: 'Founder profile screen',
@@ -135,8 +151,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       // Open the in-app diagnostics screen.
-      final diagnosticsButton =
-          find.byTooltip('تشخيص التطبيق');
+      final diagnosticsButton = find.byTooltip('تشخيص التطبيق');
 
       await _pumpUntilFound(
         tester,
@@ -144,9 +159,17 @@ void main() {
         description: 'Diagnostics button',
       );
 
-      await tester.tap(diagnosticsButton.first);
+      await tester.ensureVisible(diagnosticsButton.first);
 
-      await _pumpUntilFound(
+      await _pumpUntilHitTestable(
+        tester,
+        diagnosticsButton.first,
+        description: 'Diagnostics button',
+      );
+
+      await tester.tap(diagnosticsButton.first.hitTestable().first);
+
+      await _pumpUntilHitTestable(
         tester,
         find.byType(AppDiagnosticsScreen),
         description: 'Diagnostics screen',
@@ -216,6 +239,33 @@ Future<void> _pumpUntilFound(
   );
 }
 
+/// Waits until a widget is actually available for a pointer tap.
+///
+/// PageView keeps neighboring screens alive, so a widget can exist in the
+/// tree while its page is still offstage or moving during navigation.
+Future<void> _pumpUntilHitTestable(
+  WidgetTester tester,
+  Finder finder, {
+  required String description,
+  int maxPumps = 40,
+}) async {
+  final hitTestableFinder = finder.hitTestable();
+
+  for (var attempt = 0; attempt < maxPumps; attempt++) {
+    if (hitTestableFinder.evaluate().isNotEmpty) {
+      return;
+    }
+
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  expect(
+    hitTestableFinder,
+    findsWidgets,
+    reason: '$description did not become hit-testable.',
+  );
+}
+
 Future<void> _tapMainTab(
   WidgetTester tester,
   String label,
@@ -232,8 +282,38 @@ Future<void> _tapMainTab(
 
   expect(button, findsOneWidget);
 
-  await tester.tap(button);
-  await tester.pump(const Duration(milliseconds: 450));
+  await _pumpUntilHitTestable(
+    tester,
+    button,
+    description: 'Main navigation button: $label',
+  );
+
+  await tester.tap(button.hitTestable().first);
+
+  var selected = false;
+
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final selectedState = tester
+        .getSemantics(button.first)
+        .getSemanticsData()
+        .flagsCollection
+        .isSelected;
+
+    if (selectedState == Tristate.isTrue) {
+      selected = true;
+      break;
+    }
+  }
+
+  expect(
+    selected,
+    isTrue,
+    reason: 'The "$label" tab must become selected after tapping it.',
+  );
+
+  await tester.pump(const Duration(milliseconds: 100));
 
   expect(
     tester.takeException(),
