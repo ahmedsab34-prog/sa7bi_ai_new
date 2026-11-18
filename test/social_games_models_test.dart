@@ -134,8 +134,8 @@ void main() {
   group('SocialGamesService input validation', () {
     final service = SocialGamesService.instance;
 
-    test('rejects an invalid room identifier before network access', () {
-      expectLater(
+    test('rejects an invalid room identifier before network access', () async {
+      await expectLater(
         service.getRoom('not-a-valid-room'),
         throwsA(
           isA<SocialGamesException>().having(
@@ -147,8 +147,8 @@ void main() {
       );
     });
 
-    test('rejects an invalid tic-tac-toe cell before network access', () {
-      expectLater(
+    test('rejects an invalid tic-tac-toe cell before network access', () async {
+      await expectLater(
         service.playTicTacToe(
           roomId: '12345678-1234-1234-1234-123456789abc',
           index: 9,
