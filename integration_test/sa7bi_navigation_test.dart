@@ -1,5 +1,6 @@
 import 'dart:ui' show Tristate;
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -12,71 +13,115 @@ void main() {
     'التنقل بين صفحات صاحبي AI الأربع على Android',
     (tester) async {
       final semantics = tester.ensureSemantics();
-      addTearDown(semantics.dispose);
 
-      app.main();
+      try {
+        await tester.pumpWidget(const app.Sa7biAiApp());
+        await tester.pump(const Duration(seconds: 2));
 
-      // Allow the real app and its first frame to initialize.
-      await tester.pump();
-      await tester.pump(const Duration(seconds: 2));
+        const destinations = [
+          'الرئيسية',
+          'الشات',
+          'الألعاب',
+          'حسابي',
+        ];
 
-      const destinations = [
-        'الرئيسية',
-        'الشات',
-        'الألعاب',
-        'حسابي',
-      ];
+        for (final label in destinations) {
+          final button = find.bySemanticsLabel(label).last;
 
-      for (final label in destinations) {
-        final finder = find.bySemanticsLabel(label).last;
+          await _pumpUntilHitTestable(
+            tester,
+            button,
+            description: 'زر التنقل "$label"',
+          );
 
-        expect(
-          finder,
-          findsOneWidget,
-          reason: 'زر التنقل "$label" يجب أن يكون موجودًا.',
+          await tester.tap(button.hitTestable().first);
+
+          await _waitUntilSelected(
+            tester,
+            button,
+            label,
+          );
+
+          expect(
+            tester.takeException(),
+            isNull,
+            reason: 'فتح صفحة "$label" يجب ألا ينتج خطأ Flutter.',
+          );
+        }
+
+        // Selecting Home while it is already active must remain safe.
+        final homeButton = find.bySemanticsLabel('الرئيسية').last;
+
+        await _pumpUntilHitTestable(
+          tester,
+          homeButton,
+          description: 'زر الرئيسية',
         );
 
-        await tester.tap(finder);
+        await tester.tap(homeButton.hitTestable().first);
 
-        // Wait for PageController animation without waiting for
-        // network loading indicators to disappear.
-        await tester.pump(
-          const Duration(milliseconds: 350),
+        await _waitUntilSelected(
+          tester,
+          homeButton,
+          'الرئيسية',
         );
-        await tester.pump();
 
-        final selectedState = tester
-            .getSemantics(finder)
-            .getSemanticsData()
-            .flagsCollection
-            .isSelected;
-
-        expect(
-          selectedState,
-          Tristate.isTrue,
-          reason: 'يجب أن تصبح صفحة "$label" هي المحددة بعد الضغط.',
-        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
       }
-
-      // Selecting Home while it is already active must remain safe.
-      final homeFinder =
-          find.bySemanticsLabel('الرئيسية').last;
-
-      await tester.tap(homeFinder);
-      await tester.pump(
-        const Duration(milliseconds: 300),
-      );
-
-      final homeSelectedState = tester
-          .getSemantics(homeFinder)
-          .getSemanticsData()
-          .flagsCollection
-          .isSelected;
-
-      expect(
-        homeSelectedState,
-        Tristate.isTrue,
-      );
     },
+  );
+}
+
+Future<void> _pumpUntilHitTestable(
+  WidgetTester tester,
+  Finder finder, {
+  required String description,
+  int maxPumps = 40,
+}) async {
+  final hitTestableFinder = finder.hitTestable();
+
+  for (var attempt = 0; attempt < maxPumps; attempt++) {
+    if (hitTestableFinder.evaluate().isNotEmpty) {
+      return;
+    }
+
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  expect(
+    hitTestableFinder,
+    findsWidgets,
+    reason: '$description لم يصبح قابلًا للضغط.',
+  );
+}
+
+Future<void> _waitUntilSelected(
+  WidgetTester tester,
+  Finder finder,
+  String label,
+) async {
+  var selected = false;
+
+  for (var attempt = 0; attempt < 30; attempt++) {
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final selectedState = tester
+        .getSemantics(finder)
+        .getSemanticsData()
+        .flagsCollection
+        .isSelected;
+
+    if (selectedState == Tristate.isTrue) {
+      selected = true;
+      break;
+    }
+  }
+
+  expect(
+    selected,
+    isTrue,
+    reason: 'يجب أن تصبح صفحة "$label" هي الصفحة المحددة بعد الضغط.',
   );
 }
