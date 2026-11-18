@@ -15,8 +15,10 @@ void main() {
           'HERO_FACE_BLINK',
         }),
       );
+
       expect(HeroFaceRuntime.expressionAnimationNames, hasLength(6));
       expect(HeroFaceRuntime.requiredVisemeAnimationNames, hasLength(15));
+
       expect(
         HeroFaceRuntime.requiredVisemeAnimationNames,
         containsAll({
@@ -37,6 +39,7 @@ void main() {
           'HERO_VISEME_U',
         }),
       );
+
       expect(HeroFaceRuntime.requiredFaceAnimationNames, hasLength(21));
     });
 
@@ -76,11 +79,13 @@ void main() {
 
     setUp(() {
       runtime = HeroFaceRuntime.instance;
+
       runtime.reportAvailableAnimations(const {
         'Hero_Idle',
         'Hero_Welcome',
         'Hero_Power',
       });
+
       runtime.onSpeechFinished();
     });
 
@@ -89,9 +94,11 @@ void main() {
       final subscription = runtime.commands.listen(events.add);
 
       runtime.playExpression(HeroExpression.smile);
+
       expect(runtime.liteStatus.value.expression, HeroExpression.smile);
 
       runtime.playExpression(HeroExpression.neutral);
+
       await subscription.cancel();
 
       expect(events, hasLength(2));
@@ -108,6 +115,7 @@ void main() {
 
       runtime.playExpression(HeroExpression.wink);
       runtime.playExpression(HeroExpression.blink);
+
       await subscription.cancel();
 
       expect(events, hasLength(2));
@@ -121,22 +129,72 @@ void main() {
       final subscription = runtime.commands.listen(events.add);
 
       runtime.onSpeechStarted();
+
       expect(runtime.liteStatus.value.isSpeaking, isTrue);
+      expect(runtime.liteStatus.value.activeWord, '');
 
       runtime.onSpeechWord('سلام');
+
       expect(runtime.liteStatus.value.isSpeaking, isTrue);
       expect(runtime.liteStatus.value.activeViseme, 'SS');
+      expect(runtime.liteStatus.value.activeWord, 'سلام');
+
+      runtime.onSpeechWord('نور');
+
+      expect(runtime.liteStatus.value.isSpeaking, isTrue);
+      expect(runtime.liteStatus.value.activeViseme, 'nn');
+      expect(runtime.liteStatus.value.activeWord, 'نور');
 
       runtime.onSpeechFinished();
+
       await subscription.cancel();
 
-      expect(events, hasLength(3));
+      expect(events, hasLength(4));
       expect(events[0].type, HeroFaceCommandType.reset);
       expect(events[1].type, HeroFaceCommandType.viseme);
       expect(events[1].animationName, 'HERO_VISEME_SS');
-      expect(events[2].type, HeroFaceCommandType.reset);
+      expect(events[2].type, HeroFaceCommandType.viseme);
+      expect(events[2].animationName, 'HERO_VISEME_nn');
+      expect(events[3].type, HeroFaceCommandType.reset);
+
       expect(runtime.liteStatus.value.isSpeaking, isFalse);
       expect(runtime.liteStatus.value.activeViseme, 'sil');
+      expect(runtime.liteStatus.value.activeWord, '');
+    });
+
+    test('trims the current word and ignores empty word updates', () {
+      runtime.onSpeechStarted();
+
+      runtime.onSpeechWord('  مرحبا  ');
+
+      expect(runtime.liteStatus.value.activeWord, 'مرحبا');
+      expect(runtime.liteStatus.value.activeViseme, 'PP');
+
+      final previousRevision = runtime.liteStatus.value.revision;
+
+      runtime.onSpeechWord('   ');
+
+      expect(runtime.liteStatus.value.activeWord, 'مرحبا');
+      expect(runtime.liteStatus.value.activeViseme, 'PP');
+      expect(runtime.liteStatus.value.revision, previousRevision);
+    });
+
+    test('clears the current word after speech finishes', () {
+      runtime.onSpeechStarted();
+      runtime.onSpeechWord('كلمة');
+
+      expect(runtime.liteStatus.value.activeWord, 'كلمة');
+      expect(runtime.liteStatus.value.isSpeaking, isTrue);
+
+      runtime.onSpeechFinished();
+
+      expect(runtime.liteStatus.value.activeWord, '');
+      expect(runtime.liteStatus.value.activeViseme, 'sil');
+      expect(runtime.liteStatus.value.isSpeaking, isFalse);
+      expect(
+        runtime.liteStatus.value.expression,
+        HeroExpression.neutral,
+      );
     });
 
     test('does not require a face rig for the Lite status to work', () {
@@ -148,10 +206,12 @@ void main() {
 
       expect(runtime.liteStatus.value.isSpeaking, isTrue);
       expect(runtime.liteStatus.value.activeViseme, 'PP');
+      expect(runtime.liteStatus.value.activeWord, 'مرحبا');
       expect(runtime.isFaceRigAvailable, isFalse);
     });
 
-    test('reports actual available animations without assuming facial clips', () {
+    test('reports actual available animations without assuming facial clips',
+        () {
       expect(runtime.isFaceRigAvailable, isFalse);
       expect(runtime.missingRequiredAnimations, isNotEmpty);
 
