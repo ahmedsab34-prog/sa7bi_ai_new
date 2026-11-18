@@ -1,4 +1,3 @@
-
 name: Sa7bi AI - Android UI Smoke Test
 
 on:
@@ -273,12 +272,12 @@ jobs:
           adb -s "$SERIAL" shell getprop ro.build.version.release
           adb -s "$SERIAL" shell getprop ro.product.model
 
-          echo "Starting Sa7bi AI UI smoke test (attempt ${ATTEMPT})."
+          echo "Starting Sa7bi AI integration tests (attempt ${ATTEMPT})."
 
           set +e
           timeout --signal=TERM --kill-after=20s 10m \
             flutter test \
-              integration_test/sa7bi_app_smoke_test.dart \
+              integration_test \
               --no-pub \
               -d "$SERIAL" \
               --reporter expanded \
@@ -318,7 +317,7 @@ jobs:
 
           stop_logcat_capture
           write_failure_reason "none"
-          echo "Flutter integration test passed on attempt ${ATTEMPT}."
+          echo "Flutter integration tests passed on attempt ${ATTEMPT}."
           BASH
 
           chmod +x "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
