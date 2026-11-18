@@ -8,7 +8,8 @@ import 'sa7bi_hero_3d.dart';
 /// لوحة HERO 3D Lite للصفحة الرئيسية.
 ///
 /// تعرض مجسم GLB الأصلي وحركات الجسم الموجودة فقط. تعبيرات HERO تظهر
-/// كتفاعلات بصرية حول المجسم، ومؤشر الكلام يتزامن مع حدود كلمات TTS.
+/// كتفاعلات بصرية حول المجسم، ومؤشر الكلام يعرض الكلمة والرمز الصوتي
+/// مع حدود الكلمات التي يرسلها TTS.
 /// لا تتطلب عظام وجه أو Morph Targets أو تعديل ملف GLB.
 class Sa7biHeroLitePanel extends StatefulWidget {
   const Sa7biHeroLitePanel({super.key});
@@ -31,16 +32,19 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
   @override
   void initState() {
     super.initState();
+
     _talkPulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 820),
     );
+
     _runtime.liteStatus.addListener(_syncTalkPulse);
     _syncTalkPulse();
   }
 
   void _syncTalkPulse() {
     final speaking = _runtime.liteStatus.value.isSpeaking;
+
     if (speaking && !_talkPulseController.isAnimating) {
       _talkPulseController.repeat();
     } else if (!speaking && _talkPulseController.isAnimating) {
@@ -52,6 +56,7 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
 
   void _selectAnimation(String animationName) {
     if (_selectedAnimation == animationName) return;
+
     setState(() => _selectedAnimation = animationName);
   }
 
@@ -140,7 +145,9 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: accent.withValues(alpha: status.isSpeaking ? 0.18 : 0.08),
+                  color: accent.withValues(
+                    alpha: status.isSpeaking ? 0.18 : 0.08,
+                  ),
                   blurRadius: status.isSpeaking ? 24 : 16,
                   offset: const Offset(0, 7),
                 ),
@@ -160,7 +167,7 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                 const SizedBox(height: 8),
                 Text(
                   status.isSpeaking
-                      ? 'مؤشر التفاعل يتحرك مع الكلمات التي ينطقها محرك الصوت.'
+                      ? 'مؤشر الكلمة والرمز الصوتي يتغير مع حدود الكلمات التي يرسلها محرك الصوت.'
                       : 'المجسم الأصلي وحركات الجسم تعمل كما هي، والتفاعلات تظهر حوله دون تعديل ملف 3D.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
@@ -280,7 +287,9 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                 decoration: BoxDecoration(
                   color: const Color(0xCC081225),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: accent.withValues(alpha: 0.55)),
+                  border: Border.all(
+                    color: accent.withValues(alpha: 0.55),
+                  ),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -310,10 +319,15 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: Color(0xAA081225),
-                    borderRadius: BorderRadius.all(Radius.circular(18)),
+                    borderRadius: BorderRadius.all(
+                      Radius.circular(18),
+                    ),
                   ),
                   child: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
                     child: Text(
                       'اسحب لتدوير هيرو',
                       style: TextStyle(
@@ -332,19 +346,30 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
   }
 
   Widget _buildSpeechBadge(HeroLiteStatus status, Color accent) {
+    final wordAndViseme = status.activeWord.isEmpty
+        ? '... · ${status.activeViseme}'
+        : '${status.activeWord} · ${status.activeViseme}';
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xDD081225),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: accent.withValues(alpha: 0.55)),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.55),
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 9,
+          vertical: 6,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              status.isSpeaking ? Icons.graphic_eq_rounded : Icons.volume_up_rounded,
+              status.isSpeaking
+                  ? Icons.graphic_eq_rounded
+                  : Icons.volume_up_rounded,
               color: accent,
               size: 13,
             ),
@@ -357,6 +382,35 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (status.isSpeaking) ...[
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 92),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF19364A),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    child: Text(
+                      wordAndViseme,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textDirection: TextDirection.rtl,
+                      style: const TextStyle(
+                        color: Color(0xFFB7F7EF),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(width: 6),
             _SpeechPulse(
               animation: _talkPulseController,
@@ -430,6 +484,7 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
           runSpacing: 5,
           children: options.map((option) {
             final selected = status.expression == option.expression;
+
             return ChoiceChip(
               selected: selected,
               onSelected: (_) => _runtime.playExpression(option.expression),
@@ -450,7 +505,10 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                     ? const Color(0xFF9AF4FF)
                     : const Color(0x334A7198),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 2,
+                vertical: 0,
+              ),
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             );
@@ -486,6 +544,7 @@ class _SpeechPulse extends StatelessWidget {
       animation: animation,
       builder: (context, _) {
         const phases = <double>[0.0, 0.8, 1.6, 2.4, 3.2];
+
         return SizedBox(
           width: 25,
           height: 18,
@@ -493,8 +552,12 @@ class _SpeechPulse extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: List<Widget>.generate(phases.length, (index) {
-              final wave = math.sin(animation.value * math.pi * 2 + phases[index]).abs();
+              final wave = math
+                  .sin(animation.value * math.pi * 2 + phases[index])
+                  .abs();
+
               final barHeight = active ? 4.0 + wave * 12.0 : 4.0;
+
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 100),
                 width: 2.5,
@@ -540,7 +603,10 @@ class _HeroActionButton extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 5,
+            vertical: 9,
+          ),
           decoration: BoxDecoration(
             color: selected
                 ? const Color(0xFF67E8F9)
