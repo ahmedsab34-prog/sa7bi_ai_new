@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
@@ -23,7 +22,8 @@ import 'widgets/audio_center_with_header.dart';
 import 'widgets/khalasana_portal.dart';
 import 'widgets/social_invite_link_listener.dart';
 
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> _rootNavigatorKey =
+    GlobalKey<NavigatorState>();
 
 final _Sa7biNavigationObserver _sa7biNavigationObserver =
     _Sa7biNavigationObserver();
@@ -80,7 +80,9 @@ class Sa7biAiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _rootNavigatorKey,
-      navigatorObservers: <NavigatorObserver>[_sa7biNavigationObserver],
+      navigatorObservers: <NavigatorObserver>[
+        _sa7biNavigationObserver,
+      ],
       debugShowCheckedModeBanner: false,
       title: 'صاحبي AI',
       theme: Sa7biTheme.dark(),
@@ -91,11 +93,15 @@ class Sa7biAiApp extends StatelessWidget {
         return ValueListenableBuilder<_Sa7biRouteSnapshot>(
           valueListenable: _sa7biNavigationObserver.snapshot,
           builder: (context, route, _) {
-            final keyboardIsOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+            final keyboardIsOpen =
+                MediaQuery.viewInsetsOf(context).bottom > 0;
+
             final hidePortal = route.isPopup ||
                 route.routeName == '/khalasana' ||
                 keyboardIsOpen;
-            final bottomOffset = route.depth <= 1 ? 146.0 : 82.0;
+
+            final bottomOffset =
+                route.depth <= 1 ? 146.0 : 82.0;
 
             return Stack(
               fit: StackFit.expand,
@@ -104,15 +110,21 @@ class Sa7biAiApp extends StatelessWidget {
                 if (!hidePortal)
                   Positioned(
                     right: 8,
-                    bottom: MediaQuery.viewPaddingOf(context).bottom + bottomOffset,
-                    child: KhalasanaPortal(onTap: _openGlobalKhalasana),
+                    bottom:
+                        MediaQuery.viewPaddingOf(context).bottom +
+                            bottomOffset,
+                    child: KhalasanaPortal(
+                      onTap: _openGlobalKhalasana,
+                    ),
                   ),
               ],
             );
           },
         );
       },
-      home: const SocialInviteLinkListener(child: MainContainerScreen()),
+      home: const SocialInviteLinkListener(
+        child: MainContainerScreen(),
+      ),
     );
   }
 }
@@ -120,6 +132,7 @@ class Sa7biAiApp extends StatelessWidget {
 void _openGlobalKhalasana() {
   final navigator = _rootNavigatorKey.currentState;
   if (navigator == null) return;
+
   navigator.push<void>(
     MaterialPageRoute<void>(
       settings: const RouteSettings(name: '/khalasana'),
@@ -129,7 +142,10 @@ void _openGlobalKhalasana() {
 }
 
 class _Sa7biRouteSnapshot {
-  const _Sa7biRouteSnapshot({required this.depth, required this.activeRoute});
+  const _Sa7biRouteSnapshot({
+    required this.depth,
+    required this.activeRoute,
+  });
 
   final int depth;
   final Route<dynamic>? activeRoute;
@@ -150,7 +166,10 @@ class _Sa7biNavigationObserver extends NavigatorObserver {
 
   final ValueNotifier<_Sa7biRouteSnapshot> snapshot =
       ValueNotifier<_Sa7biRouteSnapshot>(
-    const _Sa7biRouteSnapshot(depth: 0, activeRoute: null),
+    const _Sa7biRouteSnapshot(
+      depth: 0,
+      activeRoute: null,
+    ),
   );
 
   /// يؤجل تحديث ValueNotifier إلى ما بعد انتهاء بناء الإطار الحالي.
@@ -185,7 +204,10 @@ class _Sa7biNavigationObserver extends NavigatorObserver {
   }
 
   @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+  void didPush(
+    Route<dynamic> route,
+    Route<dynamic>? previousRoute,
+  ) {
     super.didPush(route, previousRoute);
 
     _depth++;
@@ -193,7 +215,10 @@ class _Sa7biNavigationObserver extends NavigatorObserver {
   }
 
   @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+  void didPop(
+    Route<dynamic> route,
+    Route<dynamic>? previousRoute,
+  ) {
     super.didPop(route, previousRoute);
 
     if (_depth > 1) {
@@ -204,7 +229,10 @@ class _Sa7biNavigationObserver extends NavigatorObserver {
   }
 
   @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+  void didRemove(
+    Route<dynamic> route,
+    Route<dynamic>? previousRoute,
+  ) {
     super.didRemove(route, previousRoute);
 
     if (_depth > 1) {
@@ -238,10 +266,12 @@ class MainContainerScreen extends StatefulWidget {
   const MainContainerScreen({super.key});
 
   @override
-  State<MainContainerScreen> createState() => _MainContainerScreenState();
+  State<MainContainerScreen> createState() =>
+      _MainContainerScreenState();
 }
 
-class _MainContainerScreenState extends State<MainContainerScreen> {
+class _MainContainerScreenState
+    extends State<MainContainerScreen> {
   // 0 الرئيسية، 1 الشات، 2 الألعاب، 3 حسابي.
   int index = 0;
 
@@ -252,7 +282,9 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
       GlobalKey<HomeScreenState>();
 
   void _goToPage(int value) {
-    if (!mounted || value < 0 || value > 3 || value == index) return;
+    if (!mounted || value < 0 || value > 3 || value == index) {
+      return;
+    }
 
     setState(() => index = value);
 
@@ -272,7 +304,9 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
     if (value == index) {
       if (value == 0) {
-        unawaited(_homeKey.currentState?.refreshNews());
+        unawaited(
+          _homeKey.currentState?.refreshNews(),
+        );
       }
       return;
     }
@@ -367,7 +401,9 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
                         : Sa7biTheme.textSecondary,
                     fontSize: 9,
                     height: 1.15,
-                    fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                    fontWeight: selected
+                        ? FontWeight.w900
+                        : FontWeight.w600,
                   ),
                 ),
               ],
@@ -396,146 +432,165 @@ class _MainContainerScreenState extends State<MainContainerScreen> {
 
     final isChatTab = index == 1;
 
-    return Scaffold(
-      backgroundColor: Sa7biTheme.background,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            PageView(
-              controller: _pageController,
-              onPageChanged: (value) {
-                if (!mounted || index == value) return;
+    return PopScope<Object?>(
+      // الرجوع من التبويبات يعيد المستخدم إلى الرئيسية.
+      // من الرئيسية يسمح بالرجوع والخروج المعتاد.
+      canPop: index == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !mounted) return;
 
-                setState(() => index = value);
-              },
-              children: [
-                for (final page in pages)
-                  _KeepAliveMainPage(child: page),
-              ],
-            ),
-            if (!isChatTab)
-              Positioned(
-                left: 10,
-                right: 10,
-                bottom: 8,
-                child: MiniAudioPlayer(
-                  onProfileTap: openProfile,
-                ),
+        _goToPage(0);
+      },
+      child: Scaffold(
+        backgroundColor: Sa7biTheme.background,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              PageView(
+                controller: _pageController,
+                onPageChanged: (value) {
+                  if (!mounted || index == value) return;
+
+                  setState(() => index = value);
+                },
+                children: [
+                  for (final page in pages)
+                    _KeepAliveMainPage(child: page),
+                ],
               ),
-            if (!isChatTab)
-              Positioned(
-                left: 12,
-                bottom: 78,
-                child: Material(
-                  color: Colors.transparent,
-                  child: Tooltip(
-                    message: 'تشخيص التطبيق',
-                    child: InkWell(
-                      onTap: openDiagnostics,
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Sa7biTheme.surface.withValues(alpha: 0.96),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Sa7biTheme.border),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x55000000),
-                              blurRadius: 12,
-                              offset: Offset(0, 4),
+              if (!isChatTab)
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 8,
+                  child: MiniAudioPlayer(
+                    onProfileTap: openProfile,
+                  ),
+                ),
+              if (!isChatTab)
+                Positioned(
+                  left: 12,
+                  bottom: 78,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Tooltip(
+                      message: 'تشخيص التطبيق',
+                      child: InkWell(
+                        onTap: openDiagnostics,
+                        borderRadius: BorderRadius.circular(24),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Sa7biTheme.surface.withValues(
+                              alpha: 0.96,
                             ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.health_and_safety_outlined,
-                          color: Sa7biTheme.cyan,
-                          size: 20,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Sa7biTheme.border,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x55000000),
+                                blurRadius: 12,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.health_and_safety_outlined,
+                            color: Sa7biTheme.cyan,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            if (index == 2)
-              Positioned(
-                right: 10,
-                bottom: 130,
-                child: Material(
-                  color: Colors.transparent,
-                  child: Tooltip(
-                    message: 'الرسائل والمجموعات واللعب مع الذكاء الاصطناعي',
-                    child: InkWell(
-                      onTap: openSocialConnections,
-                      borderRadius: BorderRadius.circular(24),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Sa7biTheme.surface.withValues(alpha: 0.98),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Sa7biTheme.border),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x55000000),
-                              blurRadius: 12,
-                              offset: Offset(0, 4),
+              if (index == 2)
+                Positioned(
+                  right: 10,
+                  bottom: 130,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Tooltip(
+                      message:
+                          'الرسائل والمجموعات واللعب مع الذكاء الاصطناعي',
+                      child: InkWell(
+                        onTap: openSocialConnections,
+                        borderRadius: BorderRadius.circular(24),
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Sa7biTheme.surface.withValues(
+                              alpha: 0.98,
                             ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.groups_rounded,
-                          color: Sa7biTheme.cyan,
-                          size: 22,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Sa7biTheme.border,
+                            ),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x55000000),
+                                blurRadius: 12,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.groups_rounded,
+                            color: Sa7biTheme.cyan,
+                            size: 22,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
-        ),
-      ),
-      // شريط سفلي مضغوط بأربع خانات مع إبقاء مساحة اللمس واضحة.
-      bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Sa7biTheme.surface,
-          border: Border(
-            top: BorderSide(color: Sa7biTheme.border),
+            ],
           ),
         ),
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: 48,
-            child: Row(
-              children: [
-                _buildNavigationItem(
-                  value: 0,
-                  icon: Icons.home_outlined,
-                  selectedIcon: Icons.home_rounded,
-                  label: 'الرئيسية',
-                ),
-                _buildNavigationItem(
-                  value: 1,
-                  icon: Icons.chat_bubble_outline_rounded,
-                  selectedIcon: Icons.chat_rounded,
-                  label: 'الشات',
-                ),
-                _buildNavigationItem(
-                  value: 2,
-                  icon: Icons.sports_esports_outlined,
-                  selectedIcon: Icons.sports_esports_rounded,
-                  label: 'الألعاب',
-                ),
-                _buildNavigationItem(
-                  value: 3,
-                  icon: Icons.person_outline_rounded,
-                  selectedIcon: Icons.person_rounded,
-                  label: 'حسابي',
-                ),
-              ],
+        // شريط سفلي مضغوط بأربع خانات مع إبقاء مساحة اللمس واضحة.
+        bottomNavigationBar: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Sa7biTheme.surface,
+            border: Border(
+              top: BorderSide(color: Sa7biTheme.border),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  _buildNavigationItem(
+                    value: 0,
+                    icon: Icons.home_outlined,
+                    selectedIcon: Icons.home_rounded,
+                    label: 'الرئيسية',
+                  ),
+                  _buildNavigationItem(
+                    value: 1,
+                    icon: Icons.chat_bubble_outline_rounded,
+                    selectedIcon: Icons.chat_rounded,
+                    label: 'الشات',
+                  ),
+                  _buildNavigationItem(
+                    value: 2,
+                    icon: Icons.sports_esports_outlined,
+                    selectedIcon: Icons.sports_esports_rounded,
+                    label: 'الألعاب',
+                  ),
+                  _buildNavigationItem(
+                    value: 3,
+                    icon: Icons.person_outline_rounded,
+                    selectedIcon: Icons.person_rounded,
+                    label: 'حسابي',
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -550,7 +605,8 @@ class _KeepAliveMainPage extends StatefulWidget {
   final Widget child;
 
   @override
-  State<_KeepAliveMainPage> createState() => _KeepAliveMainPageState();
+  State<_KeepAliveMainPage> createState() =>
+      _KeepAliveMainPageState();
 }
 
 class _KeepAliveMainPageState extends State<_KeepAliveMainPage>
@@ -673,7 +729,8 @@ class MiniAudioPlayer extends StatelessWidget {
                 StreamBuilder<PlaybackState>(
                   stream: handler.playbackState,
                   builder: (context, snapshot) {
-                    final playing = snapshot.data?.playing ?? false;
+                    final playing =
+                        snapshot.data?.playing ?? false;
 
                     return IconButton(
                       padding: EdgeInsets.zero,
