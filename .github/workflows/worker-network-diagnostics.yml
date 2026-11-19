@@ -1,4 +1,4 @@
-# Manual rerun trigger: read-only Worker diagnostics.
+# Read-only Worker diagnostics with exact source identity checks.
 
 name: Sa7bi AI - Comprehensive Worker Diagnostics
 
@@ -19,49 +19,53 @@ concurrency:
 
 jobs:
   diagnose:
-    name: Diagnose Worker connectivity and API routes
+    name: Diagnose Worker connectivity, routes and source identity
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     env:
       PRIMARY: https://sa7bi-ai-new.ahmedsab34.workers.dev
       FALLBACK: https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev
+      EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
       REPEAT_COUNT: "3"
 
     steps:
-      - name: Collect environment and DNS evidence
+      - name: Verify branch and collect environment evidence
         shell: bash
         run: |
-          set +e
+          set -euo pipefail
+
+          test "${GITHUB_REPOSITORY}" = "ahmedsab34-prog/sa7bi_ai_new"
+          test "${GITHUB_REF_NAME}" = "fix/build-692-network-client-lifecycle"
+
           mkdir -p diagnostic-report
 
           {
-            echo "SA7BI AI - COMPREHENSIVE READ-ONLY DIAGNOSTIC"
+            echo "SA7BI AI - READ-ONLY WORKER DIAGNOSTIC"
             echo "UTC: $(date -u +%FT%TZ)"
-            echo "Repository: $GITHUB_REPOSITORY"
-            echo "Ref: $GITHUB_REF"
-            echo "Commit: $GITHUB_SHA"
+            echo "Repository: ${GITHUB_REPOSITORY}"
+            echo "Branch: ${GITHUB_REF_NAME}"
+            echo "Expected source commit: ${EXPECTED_SOURCE_COMMIT}"
             echo "Runner: $(uname -a)"
             echo
             echo "=== DNS ==="
 
             for host in \
               sa7bi-ai-new.ahmedsab34.workers.dev \
-              sa7bi-ai-new-fallback.ahmedsab34.workers.dev \
-              example.com
+              sa7bi-ai-new-fallback.ahmedsab34.workers.dev
             do
-              echo "--- $host"
-              getent ahosts "$host" 2>&1 | sort -u
-              echo "DNS command exit: ${PIPESTATUS[0]}"
+              echo "--- ${host}"
+              getent ahosts "${host}" 2>&1 | sort -u || true
             done
 
             echo
             echo "=== Tool versions ==="
             curl --version | head -n 2
             openssl version
+            jq --version
           } | tee diagnostic-report/environment.txt
 
-      - name: Probe both Workers three times
+      - name: Probe Primary, Fallback and API routes
         shell: bash
         run: |
           set +e
@@ -69,8 +73,28 @@ jobs:
           REPORT="diagnostic-report/results.tsv"
           DETAILS="diagnostic-report/details.txt"
 
-          printf 'host\tpath\tattempt\tcurl_exit\thttp_status\tdns_s\ttcp_s\ttls_s\ttotal_s\tremote_ip\terror\n' > "$REPORT"
-          : > "$DETAILS"
+          printf 'host\tpath\tattempt\tcurl_exit\thttp_status\tdns_s\ttcp_s\ttls_s\ttotal_s\tremote_ip\tsource_commit\tbackend_version\tfallback_route\tfallback_source_commit\tapi_ok\terror\n' > "${REPORT}"
+
+          : > "${DETAILS}"
+
+          header_value() {
+            local header_name="$1"
+            local header_file="$2"
+
+            grep -i "^${header_name}:" "${header_file}" \
+              | tail -n 1 \
+              | cut -d ':' -f 2- \
+              | tr -d '\r' \
+              | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+          }
+
+          json_value() {
+            local expression="$1"
+            local body_file="$2"
+
+            jq -r "${expression} // empty" "${body_file}" 2>/dev/null \
+              | head -c 160
+          }
 
           probe() {
             local host_label="$1"
@@ -78,8 +102,12 @@ jobs:
             local path="$3"
             local attempt="$4"
             local url="${base_url}${path}"
+
             local headers body error metrics
             local rc status dns tcp tls total ip
+            local source_commit backend_version
+            local fallback_route fallback_source_commit api_ok
+            local error_text
 
             headers="$(mktemp)"
             body="$(mktemp)"
@@ -89,16 +117,17 @@ jobs:
               --silent \
               --show-error \
               --connect-timeout 10 \
-              --max-time 25 \
+              --max-time 30 \
               --max-redirs 5 \
               --location \
-              --dump-header "$headers" \
-              --output "$body" \
+              --dump-header "${headers}" \
+              --output "${body}" \
               --write-out $'%{http_code}\t%{time_namelookup}\t%{time_connect}\t%{time_appconnect}\t%{time_total}\t%{remote_ip}' \
-              "$url" 2>"$error")
+              "${url}" 2>"${error}")
 
             rc=$?
-            IFS=$'\t' read -r status dns tcp tls total ip <<< "$metrics"
+
+            IFS=$'\t' read -r status dns tcp tls total ip <<< "${metrics}"
 
             status="${status:-000}"
             dns="${dns:-NA}"
@@ -107,37 +136,80 @@ jobs:
             total="${total:-NA}"
             ip="${ip:-NA}"
 
-            error_text="$(tr '\t\r\n' '   ' < "$error" | cut -c1-250)"
-            [ -n "$error_text" ] || error_text="none"
+            source_commit="$(json_value '.sourceCommit' "${body}")"
+            backend_version="$(json_value '.backendVersion' "${body}")"
 
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-              "$host_label" "$path" "$attempt" "$rc" "$status" \
-              "$dns" "$tcp" "$tls" "$total" "$ip" "$error_text" \
-              >> "$REPORT"
+            fallback_route="$(header_value \
+              "X-Sa7bi-Network-Fallback" "${headers}")"
+
+            fallback_source_commit="$(header_value \
+              "X-Sa7bi-Fallback-Source-Commit" "${headers}")"
+
+            if jq -e 'type == "object" and .ok == true' "${body}" \
+              >/dev/null 2>&1; then
+              api_ok="true"
+            elif jq -e 'type == "object" and .ok == false' "${body}" \
+              >/dev/null 2>&1; then
+              api_ok="false"
+            else
+              api_ok="n/a"
+            fi
+
+            error_text="$(tr '\t\r\n' '   ' < "${error}" | cut -c1-250)"
+            [ -n "${error_text}" ] || error_text="none"
+
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "${host_label}" \
+              "${path}" \
+              "${attempt}" \
+              "${rc}" \
+              "${status}" \
+              "${dns}" \
+              "${tcp}" \
+              "${tls}" \
+              "${total}" \
+              "${ip}" \
+              "${source_commit}" \
+              "${backend_version}" \
+              "${fallback_route}" \
+              "${fallback_source_commit}" \
+              "${api_ok}" \
+              "${error_text}" \
+              >> "${REPORT}"
 
             {
               echo
               echo "=================================================="
-              echo "HOST=$host_label PATH=$path ATTEMPT=$attempt"
-              echo "URL=$url"
-              echo "curl_exit=$rc HTTP=$status"
-              echo "DNS=${dns}s TCP=${tcp}s TLS=${tls}s TOTAL=${total}s IP=$ip"
-              echo "ERROR=$error_text"
-              echo "--- Response headers (last response block, truncated)"
-              tail -n 30 "$headers" | head -n 30
-              echo "--- Body (first 1000 bytes)"
-              head -c 1000 "$body"
+              echo "HOST=${host_label}"
+              echo "PATH=${path}"
+              echo "ATTEMPT=${attempt}"
+              echo "URL=${url}"
+              echo "curl_exit=${rc}"
+              echo "HTTP=${status}"
+              echo "DNS=${dns}s TCP=${tcp}s TLS=${tls}s TOTAL=${total}s"
+              echo "REMOTE_IP=${ip}"
+              echo "SOURCE_COMMIT=${source_commit}"
+              echo "BACKEND_VERSION=${backend_version}"
+              echo "FALLBACK_ROUTE=${fallback_route}"
+              echo "FALLBACK_SOURCE_COMMIT=${fallback_source_commit}"
+              echo "API_OK=${api_ok}"
+              echo "ERROR=${error_text}"
+              echo "--- Response headers"
+              tail -n 25 "${headers}"
+              echo "--- Response body (first 1200 bytes)"
+              head -c 1200 "${body}"
               echo
-            } >> "$DETAILS"
+            } >> "${DETAILS}"
 
-            echo "$host_label $path attempt $attempt -> HTTP $status, curl exit $rc"
+            echo "${host_label} ${path} attempt ${attempt} -> HTTP ${status}, curl exit ${rc}"
 
-            rm -f "$headers" "$body" "$error"
+            rm -f "${headers}" "${body}" "${error}"
           }
 
+          # Core checks on both Worker hostnames.
           for spec in \
-            "primary|$PRIMARY" \
-            "fallback|$FALLBACK"
+            "primary|${PRIMARY}" \
+            "fallback|${FALLBACK}"
           do
             label="${spec%%|*}"
             base="${spec#*|}"
@@ -148,18 +220,21 @@ jobs:
               /v1/service-status \
               /v1/diagnostics
             do
-              for attempt in 1 2 3; do
-                probe "$label" "$base" "$path" "$attempt"
+              for ((attempt=1; attempt<=REPEAT_COUNT; attempt++)); do
+                probe "${label}" "${base}" "${path}" "${attempt}"
                 sleep 1
               done
             done
           done
 
+          # Primary API route checks.
+          # Tafsir requires a valid positive tafsir ID.
           for path in \
             /v1/news \
             /v1/audio/quran \
-            /v1/tafsir \
+            '/v1/tafsir?tafsir=1&sura=1' \
             /v1/tafsir/books \
+            '/v1/tafsir/audio?tafsir=1&sura=1' \
             /v1/hadith \
             /v1/hadith/books \
             /v1/radio/health \
@@ -169,8 +244,8 @@ jobs:
             '/v1/podcasts/search?q=diagnostic' \
             /v1/shorts
           do
-            for attempt in 1 2 3; do
-              probe "primary" "$PRIMARY" "$path" "$attempt"
+            for ((attempt=1; attempt<=REPEAT_COUNT; attempt++)); do
+              probe "primary" "${PRIMARY}" "${path}" "${attempt}"
               sleep 1
             done
           done
@@ -183,114 +258,265 @@ jobs:
               sa7bi-ai-new.ahmedsab34.workers.dev \
               sa7bi-ai-new-fallback.ahmedsab34.workers.dev
             do
-              echo "--- $host"
+              echo "--- ${host}"
+
               timeout 15 openssl s_client \
-                -connect "$host:443" \
-                -servername "$host" \
+                -connect "${host}:443" \
+                -servername "${host}" \
                 -brief </dev/null 2>&1 | head -n 30
+
               echo "TLS pipeline exit: ${PIPESTATUS[0]}"
             done
-          } >> "$DETAILS" 2>&1
+          } >> "${DETAILS}" 2>&1
 
-      - name: Generate diagnosis and recommended actions
+      - name: Generate route and source identity diagnosis
         if: always()
         shell: bash
         run: |
           python3 - <<'PY' > diagnostic-report/diagnosis.txt
           import csv
+          import os
           from collections import defaultdict
 
           filename = "diagnostic-report/results.tsv"
+          expected = os.environ.get(
+              "EXPECTED_SOURCE_COMMIT", ""
+          ).strip().lower()
+
           try:
               with open(filename, newline="") as f:
                   rows = list(csv.DictReader(f, delimiter="\t"))
           except FileNotFoundError:
               rows = []
 
-          print("SA7BI AI - DIAGNOSIS AND NEXT ACTIONS")
-          print("=====================================")
+          print("SA7BI AI - WORKER DIAGNOSIS")
+          print("==========================")
+          print("Expected source commit:", expected or "not available")
 
           if not rows:
+              print()
               print("RESULT: No probe results were recorded.")
-              print("ACTION: Inspect the workflow logs for a script or runner failure.")
+              print("ACTION: Inspect earlier workflow steps.")
               raise SystemExit(0)
 
           groups = defaultdict(list)
+
           for row in rows:
               groups[(row["host"], row["path"])].append(row)
 
-          core_hosts = ("primary", "fallback")
-          for host in core_hosts:
+          def first(host, path):
+              return next(
+                  (
+                      row for row in rows
+                      if row["host"] == host
+                      and row["path"] == path
+                  ),
+                  None,
+              )
+
+          def compare(label, actual):
+              actual = (actual or "").strip()
+              actual_lower = actual.lower()
+
+              if not expected:
+                  print(f"{label}: NOT VERIFIED - expected commit missing")
+              elif not actual or actual_lower == "unknown":
+                  print(f"{label}: NOT VERIFIED - source identity missing")
+              elif actual_lower == expected:
+                  print(f"{label}: MATCH")
+              else:
+                  print(f"{label}: MISMATCH")
+                  print("  Expected:", expected)
+                  print("  Actual:  ", actual)
+
+          print()
+          print("=== PRIMARY / FALLBACK CONNECTIVITY ===")
+
+          for host in ("primary", "fallback"):
               core = [
-                  r for (h, p), values in groups.items()
-                  if h == host and p in ("/health", "/")
-                  for r in values
+                  row
+                  for (h, path), values in groups.items()
+                  if h == host and path in ("/health", "/")
+                  for row in values
               ]
-              http = [r for r in core if r["http_status"] not in ("000", "")]
-              ok = [r for r in core if r["http_status"] == "200"]
-              failures = [r for r in core if r["http_status"] == "000"]
+
+              http = [
+                  row for row in core
+                  if row["http_status"] not in ("000", "")
+              ]
+
+              ok = [
+                  row for row in core
+                  if row["http_status"] == "200"
+              ]
+
+              failures = [
+                  row for row in core
+                  if row["http_status"] == "000"
+              ]
 
               print()
-              print(f"HOST: {host}")
-              print(f"Core probes: {len(core)}; HTTP responses: {len(http)}; HTTP 200: {len(ok)}; no HTTP response: {len(failures)}")
+              print("HOST:", host)
+              print(
+                  f"Core attempts: {len(core)}; "
+                  f"HTTP responses: {len(http)}; "
+                  f"HTTP 200: {len(ok)}; "
+                  f"No HTTP response: {len(failures)}"
+              )
 
               if not core:
-                  print("ACTION: Core probes are missing; inspect earlier workflow steps.")
+                  print("RESULT: Core probes missing.")
               elif not http:
-                  exits = sorted({r["curl_exit"] for r in failures})
-                  errors = sorted({r["error"] for r in failures if r["error"] != "none"})
-                  print("LIKELY CLASS: DNS, TCP, TLS, timeout, or connection-level failure.")
-                  print("curl exit codes:", ", ".join(exits) or "not recorded")
-                  print("Observed errors:", " | ".join(errors[:5]) or "see details.txt")
-                  print("NEXT: Use DNS output, TCP/TLS timings, and OpenSSL results to isolate the failing layer.")
+                  print("RESULT: Connection-level failure.")
               elif not ok:
-                  statuses = sorted({r["http_status"] for r in http})
-                  print("LIKELY CLASS: The endpoint is reachable, but the core route did not return HTTP 200.")
-                  print("Observed HTTP statuses:", ", ".join(statuses))
-                  print("NEXT: Inspect response body and headers. Check route mapping, Worker deployment, and runtime errors.")
+                  statuses = sorted({
+                      row["http_status"] for row in http
+                  })
+                  print("RESULT: HTTP response but no HTTP 200.")
+                  print("Statuses:", ", ".join(statuses))
+              elif failures:
+                  print("RESULT: Reachable, but intermittent failures occurred.")
               else:
-                  print("RESULT: At least one core probe returned HTTP 200 from the GitHub runner.")
-                  if failures:
-                      print("WARNING: Some attempts had no HTTP response; investigate intermittent connectivity.")
-                  print("NEXT: Compare these results with the Android diagnostic and phone browser results.")
+                  print("RESULT: Core connectivity passed.")
 
           print()
-          print("ROUTE SUMMARY")
+          print("=== EXACT SOURCE IDENTITY ===")
+
+          primary_health = first("primary", "/health")
+          fallback_health = first("fallback", "/health")
+
+          primary_commit = (
+              primary_health["source_commit"]
+              if primary_health else ""
+          )
+
+          forwarded_primary_commit = (
+              fallback_health["source_commit"]
+              if fallback_health else ""
+          )
+
+          fallback_commit = (
+              fallback_health["fallback_source_commit"]
+              if fallback_health else ""
+          )
+
+          fallback_route = (
+              fallback_health["fallback_route"]
+              if fallback_health else ""
+          )
+
+          compare("Primary Worker source commit", primary_commit)
+          compare(
+              "Fallback Worker source commit",
+              fallback_commit,
+          )
+          compare(
+              "Primary commit forwarded through Fallback",
+              forwarded_primary_commit,
+          )
+
+          if fallback_route == "1":
+              print("Fallback routing header: CONFIRMED")
+          else:
+              print(
+                  "Fallback routing header: NOT CONFIRMED "
+                  f"(actual={fallback_route or 'missing'})"
+              )
+
+          print()
+          print("=== TAFSIR ROUTE VALIDATION ===")
+
+          tafsir_path = "/v1/tafsir?tafsir=1&sura=1"
+          tafsir_rows = groups.get(
+              ("primary", tafsir_path),
+              [],
+          )
+
+          if not tafsir_rows:
+              print("TAFSIR: NOT TESTED")
+          else:
+              statuses = [
+                  row["http_status"] for row in tafsir_rows
+              ]
+              api_flags = [
+                  row["api_ok"] for row in tafsir_rows
+              ]
+
+              passed = (
+                  all(status == "200" for status in statuses)
+                  and all(flag == "true" for flag in api_flags)
+              )
+
+              if passed:
+                  print(
+                      "TAFSIR: PASS - valid query returned HTTP 200 "
+                      "and ok=true on every attempt"
+                  )
+              else:
+                  print("TAFSIR: NEEDS REVIEW")
+                  print("HTTP statuses:", ", ".join(statuses))
+                  print("API ok flags:", ", ".join(api_flags))
+
+          print()
+          print("=== ROUTE SUMMARY ===")
+
           for (host, path), values in sorted(groups.items()):
-              statuses = [r["http_status"] for r in values]
+              statuses = [
+                  row["http_status"] for row in values
+              ]
+
+              api_flags = sorted({
+                  row["api_ok"] for row in values
+              })
+
               count_200 = statuses.count("200")
               count_no_response = statuses.count("000")
+
               if count_200 == len(values):
-                  state = "PASS: HTTP 200 on every attempt"
+                  state = "HTTP 200 on every attempt"
               elif count_200:
-                  state = "INTERMITTENT/MIXED: some attempts returned HTTP 200"
+                  state = "MIXED / INTERMITTENT"
               elif count_no_response == len(values):
-                  state = "CONNECTION FAILURE: no HTTP response on any attempt"
+                  state = "CONNECTION FAILURE"
               else:
-                  state = "HTTP RESPONSE BUT NOT 200: inspect endpoint-specific status/body"
-              print(f"{host} {path}: {state}; statuses={','.join(statuses)}")
+                  state = "HTTP RESPONSE BUT NOT 200"
+
+              print(
+                  f"{host} {path}: {state}; "
+                  f"statuses={','.join(statuses)}; "
+                  f"api_ok={','.join(api_flags)}"
+              )
 
           print()
-          print("INTERPRETATION GUIDE")
-          print("- curl exit 6: hostname resolution failed; inspect DNS and hostname.")
-          print("- curl exit 7: TCP connection failed; inspect reachability and port 443.")
-          print("- curl exit 28: connection or overall timeout; inspect timings and network path.")
-          print("- curl exit 35 or 60: TLS handshake or certificate verification problem.")
-          print("- HTTP 401/403: server was reached; inspect access policy or authentication.")
-          print("- HTTP 404: server was reached; inspect route/path or deployment version.")
-          print("- HTTP 5xx: server was reached; inspect Worker logs/runtime/dependencies.")
-          print("- HTTP 200 proves an HTTP response, not correctness of all business logic.")
-          print()
-          print("SAFETY")
-          print("- This workflow does not deploy or modify either Worker.")
-          print("- It does not send chat/image POST requests or alter credits.")
-          print("- A diagnosis is evidence-based guidance, not proof of a specific source-code line.")
-          print("- No source-code changes are made automatically.")
+          print("=== IMPORTANT INTERPRETATION ===")
+          print("- This workflow is read-only.")
+          print("- It does not deploy either Worker.")
+          print("- It does not change Cloudflare secrets or settings.")
+          print("- It does not send chat/image POST requests.")
+          print("- It does not reserve or deduct AI credits.")
+          print("- The expected commit is the commit that triggered this run.")
+          print("- Source identity MATCH means the live Worker reports that exact commit.")
+          print("- HTTP 200 alone does not prove business logic is correct.")
+          print("- GitHub runner success does not prove Android phone connectivity.")
+          print("- A green workflow means evidence collection completed; inspect the identity and route verdicts above.")
           PY
 
           cat diagnostic-report/diagnosis.txt
 
-      - name: Upload complete report
+      - name: Add findings to GitHub Actions summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Sa7bi AI Worker diagnostic findings"
+            echo
+            echo "- Branch: ${GITHUB_REF_NAME}"
+            echo "- Expected source commit: ${EXPECTED_SOURCE_COMMIT}"
+            echo
+            cat diagnostic-report/diagnosis.txt 2>/dev/null || true
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload complete diagnostic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
