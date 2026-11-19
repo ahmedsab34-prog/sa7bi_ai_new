@@ -7,10 +7,10 @@ import 'sa7bi_hero_3d.dart';
 
 /// لوحة HERO 3D Lite للصفحة الرئيسية.
 ///
-/// تعرض مجسم GLB الأصلي وحركات الجسم الموجودة فقط. تعبيرات HERO تظهر
-/// كتفاعلات بصرية حول المجسم، ومؤشر الكلام يعرض الكلمة والرمز الصوتي
-/// مع حدود الكلمات التي يرسلها TTS.
-/// لا تتطلب عظام وجه أو Morph Targets أو تعديل ملف GLB.
+/// تعرض مجسم HERO الأصلي وحركات الجسم الثلاث، وتشغّل تعبيرات الوجه
+/// وأشكال الفم المضمنة داخل assets/3d/sa7bi_hero.glb.
+/// أحداث TTS المتاحة هي حدود الكلمات؛ لذلك Lip Sync تقريبي على مستوى
+/// الكلمة وليس توقيتًا دقيقًا لكل فونيم.
 class Sa7biHeroLitePanel extends StatefulWidget {
   const Sa7biHeroLitePanel({super.key});
 
@@ -32,19 +32,16 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
   @override
   void initState() {
     super.initState();
-
     _talkPulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 820),
     );
-
     _runtime.liteStatus.addListener(_syncTalkPulse);
     _syncTalkPulse();
   }
 
   void _syncTalkPulse() {
     final speaking = _runtime.liteStatus.value.isSpeaking;
-
     if (speaking && !_talkPulseController.isAnimating) {
       _talkPulseController.repeat();
     } else if (!speaking && _talkPulseController.isAnimating) {
@@ -56,7 +53,6 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
 
   void _selectAnimation(String animationName) {
     if (_selectedAnimation == animationName) return;
-
     setState(() => _selectedAnimation = animationName);
   }
 
@@ -167,8 +163,8 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                 const SizedBox(height: 8),
                 Text(
                   status.isSpeaking
-                      ? 'مؤشر الكلمة والرمز الصوتي يتغير مع حدود الكلمات التي يرسلها محرك الصوت.'
-                      : 'المجسم الأصلي وحركات الجسم تعمل كما هي، والتفاعلات تظهر حوله دون تعديل ملف 3D.',
+                      ? 'أشكال الفم تتحرك مع الكلمات التي يرسلها محرك الصوت؛ التوقيت تقريبي على مستوى الكلمة.'
+                      : 'تعبيرات الوجه وأشكال الفم مضمّنة داخل مجسم HERO نفسه، مع الحفاظ على حركات الجسم الأصلية.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Color(0xFF9FB2C9),
@@ -277,7 +273,7 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                 animationName: _selectedAnimation,
                 cameraControls: true,
                 compact: true,
-                enableFaceAnimations: false,
+                enableFaceAnimations: true,
               ),
             ),
             Positioned(
@@ -287,9 +283,7 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                 decoration: BoxDecoration(
                   color: const Color(0xCC081225),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: accent.withValues(alpha: 0.55),
-                  ),
+                  border: Border.all(color: accent.withValues(alpha: 0.55)),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -319,15 +313,10 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: Color(0xAA081225),
-                    borderRadius: BorderRadius.all(
-                      Radius.circular(18),
-                    ),
+                    borderRadius: BorderRadius.all(Radius.circular(18)),
                   ),
                   child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                     child: Text(
                       'اسحب لتدوير هيرو',
                       style: TextStyle(
@@ -354,15 +343,10 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
       decoration: BoxDecoration(
         color: const Color(0xDD081225),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: accent.withValues(alpha: 0.55),
-        ),
+        border: Border.all(color: accent.withValues(alpha: 0.55)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 9,
-          vertical: 6,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -484,7 +468,6 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
           runSpacing: 5,
           children: options.map((option) {
             final selected = status.expression == option.expression;
-
             return ChoiceChip(
               selected: selected,
               onSelected: (_) => _runtime.playExpression(option.expression),
@@ -505,10 +488,7 @@ class _Sa7biHeroLitePanelState extends State<Sa7biHeroLitePanel>
                     ? const Color(0xFF9AF4FF)
                     : const Color(0x334A7198),
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 2,
-                vertical: 0,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0),
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             );
@@ -544,7 +524,6 @@ class _SpeechPulse extends StatelessWidget {
       animation: animation,
       builder: (context, _) {
         const phases = <double>[0.0, 0.8, 1.6, 2.4, 3.2];
-
         return SizedBox(
           width: 25,
           height: 18,
@@ -555,9 +534,7 @@ class _SpeechPulse extends StatelessWidget {
               final wave = math
                   .sin(animation.value * math.pi * 2 + phases[index])
                   .abs();
-
               final barHeight = active ? 4.0 + wave * 12.0 : 4.0;
-
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 100),
                 width: 2.5,
@@ -603,10 +580,7 @@ class _HeroActionButton extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 5,
-            vertical: 9,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 9),
           decoration: BoxDecoration(
             color: selected
                 ? const Color(0xFF67E8F9)
