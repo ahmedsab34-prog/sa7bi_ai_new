@@ -1,3 +1,4 @@
+
 name: Sa7bi AI - Android UI Smoke Test
 
 on:
@@ -197,6 +198,12 @@ jobs:
             timeout 6s sudo dmesg -T 2>&1 | tail -n 250 \
               > "${DIAG_DIR}/host-kernel-tail.txt" || true
 
+            if [[ -d /tmp/android-runner ]]; then
+              mkdir -p "${DIAG_DIR}/emulator-crash"
+              find /tmp/android-runner -maxdepth 4 -type f -printf '%p (%s bytes)\n' > "${DIAG_DIR}/emulator-crash/files.txt" 2>&1 || true
+              find /tmp/android-runner -maxdepth 4 -type f -iname '*crash*' -exec cp --parents {} "${DIAG_DIR}/emulator-crash" + 2>/dev/null || true
+            fi
+
             echo "$status" > "${DIAG_DIR}/exit-code.txt"
           }
 
@@ -257,6 +264,9 @@ jobs:
 
           echo "Waiting for Android emulator (attempt ${ATTEMPT})..."
           wait_for_online_device 180
+
+          echo "Allowing Android system services to settle before launching the app."
+          sleep 15
 
           timeout 8s adb -s "$SERIAL" shell svc power stayon true || true
           timeout 8s adb -s "$SERIAL" logcat -c || true
@@ -324,7 +334,7 @@ jobs:
           bash -n "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
           echo "Android UI script syntax validation passed."
 
-      - name: Run Android UI smoke test - Mesa software renderer
+      - name: Run Android UI smoke test - AOSP with SwiftShader
         id: android_ui_attempt_1
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2.35.0
@@ -332,28 +342,27 @@ jobs:
           SMOKE_ATTEMPT: "1"
         with:
           api-level: 34
-          target: google_apis
+          target: default
           arch: x86_64
           profile: pixel_2
-          cores: 2
-          ram-size: 3072M
-          heap-size: 512M
+          cores: 4
+          ram-size: 4096M
+          heap-size: 768M
           emulator-boot-timeout: 900
           emulator-port: 5554
           disable-linux-hw-accel: false
           disable-animations: true
           force-avd-creation: true
-          avd-name: sa7bi-ui-smoke-lavapipe
+          avd-name: sa7bi-ui-smoke-swiftshader
           emulator-options: >-
             -no-window
-            -gpu lavapipe
-            -feature -Vulkan
+            -gpu swiftshader_indirect
             -no-snapshot
             -noaudio
             -no-boot-anim
           script: bash "$RUNNER_TEMP/sa7bi-android-ui-smoke.sh"
 
-      - name: Run Android UI smoke test - software fallback renderer
+      - name: Run Android UI smoke test - AOSP software fallback
         id: android_ui_attempt_2
         if: >-
           steps.android_ui_attempt_1.outcome == 'failure' &&
@@ -364,12 +373,12 @@ jobs:
           SMOKE_ATTEMPT: "2"
         with:
           api-level: 34
-          target: google_apis
+          target: default
           arch: x86_64
           profile: pixel_2
-          cores: 2
+          cores: 4
           ram-size: 4096M
-          heap-size: 512M
+          heap-size: 768M
           emulator-boot-timeout: 900
           emulator-port: 5554
           disable-linux-hw-accel: false
@@ -379,7 +388,6 @@ jobs:
           emulator-options: >-
             -no-window
             -gpu software
-            -feature -Vulkan
             -no-snapshot
             -noaudio
             -no-boot-anim
