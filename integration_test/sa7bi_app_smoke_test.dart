@@ -1,3 +1,4 @@
+
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:sa7bi_ai/app_diagnostics_screen.dart';
-import 'package:sa7bi_ai/audio_center_screen.dart';
 import 'package:sa7bi_ai/chat_tab_screen.dart';
 import 'package:sa7bi_ai/interactive_experiences_screen.dart';
 import 'package:sa7bi_ai/local_board_games_screen.dart';
@@ -66,8 +66,10 @@ void main() {
           description: 'Audio center opened from the home header',
         );
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 400));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 400,
+        );
 
         // Header profile button selects the Profile main tab.
         final currentProfileButton =
@@ -145,8 +147,10 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         // Open the public/private groups workspace.
         await _tapText(tester, 'استكشف المجموعات');
@@ -171,8 +175,10 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         // Open private groups. No group is created or joined.
         await _tapText(tester, 'مجموعاتي الخاصة');
@@ -185,15 +191,21 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         // Return from workspace to Connect and then to Chat.
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         expect(find.byType(ChatTabScreen), findsOneWidget);
 
@@ -225,8 +237,10 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         // Local chess, XO and Rock-Paper-Scissors hub.
         await _tapText(
@@ -242,8 +256,10 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         // Wait for the online guest session check to finish.
         const checkingOnlineText = 'جاري تجهيز حساب اللعب...';
@@ -291,8 +307,10 @@ void main() {
         expect(find.text('إكس أو'), findsOneWidget);
         expect(find.text('الشطرنج'), findsOneWidget);
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         // Open AI games lobby without creating a match.
         await _tapText(tester, 'العب ضد صاحبي AI');
@@ -313,8 +331,10 @@ void main() {
 
         expect(tester.takeException(), isNull);
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         // ------------------------------------------------------------
         // Profile, settings, founder page and Android back behavior.
@@ -384,15 +404,19 @@ void main() {
         expect(tester.takeException(), isNull);
 
         // Pop the founder screen and Settings screen.
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 350));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 350,
+        );
 
         // Simulate the Android system Back button from the Profile tab.
         // The app must return to Home instead of closing.
-        await tester.binding.handlePopRoute();
+        await _pressAndroidBack(tester);
 
         await _waitForMainTabSelected(
           tester,
@@ -476,8 +500,10 @@ void main() {
         expect(tester.takeException(), isNull);
 
         // Do not start full diagnostics in this UI smoke test.
-        await tester.pageBack();
-        await tester.pump(const Duration(milliseconds: 400));
+        await _pressAndroidBack(
+          tester,
+          settleMilliseconds: 400,
+        );
 
         await _waitForMainTabSelected(
           tester,
@@ -489,6 +515,17 @@ void main() {
         semantics.dispose();
       }
     },
+  );
+}
+
+Future<void> _pressAndroidBack(
+  WidgetTester tester, {
+  int settleMilliseconds = 400,
+}) async {
+  // Simulate Android's system Back event without requiring a Cupertino back button.
+  await tester.binding.handlePopRoute();
+  await tester.pump(
+    Duration(milliseconds: settleMilliseconds),
   );
 }
 
