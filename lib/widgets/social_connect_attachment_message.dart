@@ -68,7 +68,10 @@ class _SocialConnectAttachmentMessageViewState
     // New tokens show an actual animated GIF, or a tappable 3D character card.
     final heroSticker = Sa7biHeroChatSticker.tryParse(widget.messageText);
     if (heroSticker != null) {
-      return Sa7biHeroChatStickerMessageView(sticker: heroSticker);
+      // The widget accepts the encoded message and resolves the sticker itself.
+      return Sa7biHeroChatStickerMessageView(
+        messageText: widget.messageText,
+      );
     }
 
     final envelope = _envelope;
