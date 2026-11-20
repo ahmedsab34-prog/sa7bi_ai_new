@@ -5,8 +5,8 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:sa7bi_ai/main.dart' as sa7bi;
 import 'package:sa7bi_ai/widgets/app_header.dart';
+import 'package:sa7bi_ai/widgets/khalasana_portal.dart';
 import 'package:sa7bi_ai/widgets/sa7bi_hero_3d.dart';
-import 'package:sa7bi_ai/widgets/sa7bi_hero_lite_panel.dart';
 import 'package:sa7bi_ai/chat_tab_screen.dart';
 import 'package:sa7bi_ai/interactive_experiences_screen.dart';
 import 'package:sa7bi_ai/profile_screen.dart';
@@ -19,12 +19,11 @@ void main() {
     await tester.pumpWidget(const sa7bi.Sa7biAiApp());
     await tester.pump(const Duration(seconds: 2));
 
-    // Home screen and HERO.
+    // Home screen and the single floating HERO character.
     expect(find.byType(AppHeader), findsOneWidget);
-    expect(find.byType(Sa7biHeroLitePanel), findsOneWidget);
+    expect(find.byType(KhalasanaPortal), findsOneWidget);
     expect(find.byType(Sa7biHero3D), findsOneWidget);
 
-    // The main navigation must contain one horizontal PageView.
     final pageViewFinder = find.byWidgetPredicate(
       (widget) =>
           widget is PageView &&
@@ -51,18 +50,20 @@ void main() {
 
     // Return to Home.
     await _tapMainTab(tester, 'الرئيسية');
-    expect(find.byType(Sa7biHeroLitePanel), findsOneWidget);
+    expect(find.byType(KhalasanaPortal), findsOneWidget);
     expect(find.byType(Sa7biHero3D), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // Verify horizontal PageView dragging uses the supported tester API.
+    // Verify horizontal PageView dragging.
     final pageView = pageViewFinder.first;
     final topLeft = tester.getTopLeft(pageView);
     final size = tester.getSize(pageView);
 
     await tester.timedDragFrom(
-      Offset(topLeft.dx + size.width * 0.85,
-          topLeft.dy + size.height * 0.20),
+      Offset(
+        topLeft.dx + size.width * 0.85,
+        topLeft.dy + size.height * 0.20,
+      ),
       Offset(-size.width * 0.65, 0),
       const Duration(milliseconds: 350),
     );
