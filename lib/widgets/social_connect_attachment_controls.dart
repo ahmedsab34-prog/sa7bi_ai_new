@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:io';
 
@@ -9,17 +8,16 @@ import '../services/social_community_service.dart';
 import '../services/social_messaging_attachments.dart';
 import '../services/social_messaging_service.dart';
 import '../services/social_voice_recording_service.dart';
+import 'sa7bi_hero_sticker_kit.dart';
 
-/// أدوات إرسال الملفات والرسائل الصوتية في صاحبي Connect.
+/// أدوات إرسال الملصقات والملفات والرسائل الصوتية في صاحبي Connect.
 class SocialConnectAttachmentControls extends StatefulWidget {
   const SocialConnectAttachmentControls({
     super.key,
     required this.scopeType,
     required this.scopeId,
     required this.onMessageSent,
-  }) : assert(
-          scopeType == 'conversation' || scopeType == 'group',
-        );
+  }) : assert(scopeType == 'conversation' || scopeType == 'group');
 
   final String scopeType;
   final String scopeId;
@@ -42,13 +40,8 @@ class SocialConnectAttachmentControls extends StatefulWidget {
 
   static String? contentTypeForFileName(String fileName) {
     final dot = fileName.lastIndexOf('.');
-    if (dot < 0 || dot == fileName.length - 1) {
-      return null;
-    }
-
-    return _mimeTypes[
-      fileName.substring(dot + 1).toLowerCase()
-    ];
+    if (dot < 0 || dot == fileName.length - 1) return null;
+    return _mimeTypes[fileName.substring(dot + 1).toLowerCase()];
   }
 
   @override
@@ -66,10 +59,38 @@ class _SocialConnectAttachmentControlsState
 
   @override
   void dispose() {
-    if (_recording) {
-      unawaited(_voice.cancel());
-    }
+    if (_recording) unawaited(_voice.cancel());
     super.dispose();
+  }
+
+  Future<void> _pickHeroSticker() async {
+    if (_busy || _recording) return;
+
+    final messageText = await Sa7biHeroStickerPicker.show(context);
+    if (!mounted || messageText == null || messageText.isEmpty) return;
+
+    setState(() => _busy = true);
+    try {
+      if (widget.scopeType == 'conversation') {
+        await SocialMessagingService.instance.sendMessage(
+          conversationId: widget.scopeId,
+          text: messageText,
+        );
+      } else {
+        await SocialCommunityService.instance.sendGroupMessage(
+          groupId: widget.scopeId,
+          text: messageText,
+        );
+      }
+
+      if (!mounted) return;
+      widget.onMessageSent();
+      _show('تم إرسال الملصق.');
+    } catch (error) {
+      if (mounted) _show(_friendly(error, 'تعذر إرسال الملصق.'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _pickFile() async {
@@ -84,33 +105,24 @@ class _SocialConnectAttachmentControlsState
         withData: false,
       );
 
-      if (!mounted || result == null || result.files.isEmpty) {
-        return;
-      }
+      if (!mounted || result == null || result.files.isEmpty) return;
 
       final selected = result.files.single;
       final path = selected.path;
-
       final mime =
-          SocialConnectAttachmentControls.contentTypeForFileName(
-        selected.name,
-      );
+          SocialConnectAttachmentControls.contentTypeForFileName(selected.name);
 
       if (path == null || path.trim().isEmpty) {
         _show('تعذر الوصول إلى الملف المختار.');
         return;
       }
-
       if (mime == null) {
         _show('نوع الملف غير مدعوم.');
         return;
       }
-
       await _sendFile(File(path), mime);
     } catch (error) {
-      if (mounted) {
-        _show(_friendly(error, 'تعذر اختيار الملف.'));
-      }
+      if (mounted) _show(_friendly(error, 'تعذر اختيار الملف.'));
     }
   }
 
@@ -120,25 +132,15 @@ class _SocialConnectAttachmentControlsState
     if (!_recording) {
       try {
         await _voice.start();
-
         if (!mounted) {
           await _voice.cancel();
           return;
         }
-
         setState(() => _recording = true);
-
-        _show(
-          'بدأ التسجيل. اضغط الميكروفون مرة أخرى لإيقافه وإرساله.',
-        );
+        _show('بدأ التسجيل. اضغط الميكروفون مرة أخرى لإيقافه وإرساله.');
       } catch (error) {
-        if (mounted) {
-          _show(
-            _friendly(error, 'تعذر بدء التسجيل الصوتي.'),
-          );
-        }
+        if (mounted) _show(_friendly(error, 'تعذر بدء التسجيل الصوتي.'));
       }
-
       return;
     }
 
@@ -148,33 +150,18 @@ class _SocialConnectAttachmentControlsState
     });
 
     File? recordedFile;
-
     try {
       recordedFile = await _voice.stop();
-
-      await _sendFile(
-        recordedFile,
-        'audio/mp4',
-        manageBusy: false,
-      );
+      await _sendFile(recordedFile, 'audio/mp4', manageBusy: false);
     } catch (error) {
-      if (mounted) {
-        _show(
-          _friendly(error, 'تعذر إنهاء التسجيل الصوتي.'),
-        );
-      }
+      if (mounted) _show(_friendly(error, 'تعذر إنهاء التسجيل الصوتي.'));
     } finally {
       if (recordedFile != null) {
         try {
-          if (await recordedFile.exists()) {
-            await recordedFile.delete();
-          }
+          if (await recordedFile.exists()) await recordedFile.delete();
         } catch (_) {}
       }
-
-      if (mounted) {
-        setState(() => _busy = false);
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -190,21 +177,17 @@ class _SocialConnectAttachmentControlsState
 
     try {
       if (!await file.exists()) {
-        throw const FileSystemException(
-          'Selected file does not exist.',
-        );
+        throw const FileSystemException('Selected file does not exist.');
       }
 
       if (widget.scopeType == 'conversation') {
-        await SocialMessagingService.instance
-            .sendPrivateAttachment(
+        await SocialMessagingService.instance.sendPrivateAttachment(
           conversationId: widget.scopeId,
           file: file,
           contentType: mime,
         );
       } else {
-        await SocialCommunityService.instance
-            .sendGroupAttachment(
+        await SocialCommunityService.instance.sendGroupAttachment(
           groupId: widget.scopeId,
           file: file,
           contentType: mime,
@@ -212,48 +195,31 @@ class _SocialConnectAttachmentControlsState
       }
 
       if (!mounted) return;
-
       widget.onMessageSent();
-
       _show('تم إرسال المرفق بنجاح.');
     } catch (error) {
-      if (mounted) {
-        _show(_friendly(error, 'تعذر إرسال المرفق.'));
-      }
+      if (mounted) _show(_friendly(error, 'تعذر إرسال المرفق.'));
     } finally {
-      if (manageBusy && mounted) {
-        setState(() => _busy = false);
-      }
+      if (manageBusy && mounted) setState(() => _busy = false);
     }
   }
 
   String _friendly(Object error, String fallback) {
-    if (error is SocialVoiceRecordingException) {
-      return error.message;
-    }
+    if (error is SocialVoiceRecordingException) return error.message;
 
     final dynamic candidate = error;
-
     try {
       final value = candidate.message;
-
-      if (value is String && value.trim().isNotEmpty) {
-        return value;
-      }
+      if (value is String && value.trim().isNotEmpty) return value;
     } catch (_) {}
-
     return fallback;
   }
 
   void _show(String message) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-          textDirection: TextDirection.rtl,
-        ),
+        content: Text(message, textDirection: TextDirection.rtl),
       ),
     );
   }
@@ -264,31 +230,42 @@ class _SocialConnectAttachmentControlsState
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          tooltip: 'إرفاق صورة أو ملف',
-          onPressed:
-              _busy || _recording ? null : _pickFile,
+          tooltip: 'ملصقات ثابتة ومتحركة وثلاثية الأبعاد',
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 42),
+          padding: EdgeInsets.zero,
+          onPressed: _busy || _recording ? null : _pickHeroSticker,
           icon: _busy
               ? const SizedBox(
-                  width: 19,
-                  height: 19,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(
-                  Icons.attach_file_rounded,
-                  color: Color(0xFF7FB4FF),
+                  Icons.gif_box_rounded,
+                  color: Color(0xFFFFD76A),
+                  size: 23,
                 ),
         ),
         IconButton(
-          tooltip: _recording
-              ? 'إيقاف التسجيل وإرساله'
-              : 'تسجيل رسالة صوتية',
+          tooltip: 'إرفاق صورة أو ملف',
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 42),
+          padding: EdgeInsets.zero,
+          onPressed: _busy || _recording ? null : _pickFile,
+          icon: const Icon(
+            Icons.attach_file_rounded,
+            color: Color(0xFF7FB4FF),
+          ),
+        ),
+        IconButton(
+          tooltip: _recording ? 'إيقاف التسجيل وإرساله' : 'تسجيل رسالة صوتية',
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 38, minHeight: 42),
+          padding: EdgeInsets.zero,
           onPressed: _busy ? null : _toggleRecording,
           icon: Icon(
-            _recording
-                ? Icons.stop_circle_rounded
-                : Icons.mic_rounded,
+            _recording ? Icons.stop_circle_rounded : Icons.mic_rounded,
             color: _recording
                 ? const Color(0xFFFF6868)
                 : const Color(0xFF57D99A),
