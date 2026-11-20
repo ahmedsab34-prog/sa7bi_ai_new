@@ -1,3 +1,4 @@
+
 name: Sa7bi AI - Android UI Smoke Test
 
 on:
@@ -64,10 +65,6 @@ jobs:
           channel: stable
           cache: true
 
-      # Flutter 3.38.1 uses an included Gradle build. Ensure that build has
-      # explicit plugin and dependency repositories before Gradle resolves
-      # Kotlin/Android plugin artifacts. This changes only the temporary
-      # Flutter SDK installed on this GitHub Actions runner.
       - name: Configure repositories for Flutter's included Gradle build
         shell: bash
         run: |
@@ -188,15 +185,8 @@ jobs:
             -no-snapshot
             -noaudio
             -no-boot-anim
-          script: |
-            set -euo pipefail
-            adb devices -l
-            adb -s emulator-5554 shell getprop sys.boot_completed
-            adb -s emulator-5554 shell svc power stayon true
-            flutter test integration_test \
-              --no-pub \
-              -d emulator-5554 \
-              --reporter expanded
+          script: >-
+            bash -lc 'set -euo pipefail; adb devices -l; test "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d "\r")" = "1"; adb -s emulator-5554 shell svc power stayon true; flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded'
 
       - name: Upload Android build and test diagnostics
         if: always()
