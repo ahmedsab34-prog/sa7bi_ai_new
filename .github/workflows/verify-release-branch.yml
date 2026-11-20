@@ -781,6 +781,31 @@ jobs:
             --title "Sa7bi AI - Latest Verified APK" \
             --notes-file release-notes.md
 
+      - name: Move apk-latest tag to the exact verified source commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          REF_PATH="repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}"
+          CREATE_PATH="repos/${GITHUB_REPOSITORY}/git/refs"
+
+          if gh api "${REF_PATH}" >/dev/null 2>&1; then
+            gh api --method PATCH "${REF_PATH}" \
+              -f sha="${SOURCE_SHA}" \
+              -F force=true >/dev/null
+          else
+            gh api --method POST "${CREATE_PATH}" \
+              -f ref="refs/tags/${RELEASE_TAG}" \
+              -f sha="${SOURCE_SHA}" >/dev/null
+          fi
+
+          ACTUAL_TAG_SHA="$(gh api "${REF_PATH}" --jq '.object.sha')"
+          echo "Expected tag target: ${SOURCE_SHA}"
+          echo "Actual tag target:   ${ACTUAL_TAG_SHA}"
+          test "${ACTUAL_TAG_SHA}" = "${SOURCE_SHA}"
+
       - name: Verify published APK checksum and stable tag target
         shell: bash
         env:
