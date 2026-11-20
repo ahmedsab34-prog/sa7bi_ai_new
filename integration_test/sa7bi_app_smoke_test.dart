@@ -1,4 +1,3 @@
-
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
@@ -13,6 +12,7 @@ import 'package:sa7bi_ai/local_games_hub_screen.dart';
 import 'package:sa7bi_ai/main.dart' as sa7bi;
 import 'package:sa7bi_ai/owner_profile_screen.dart';
 import 'package:sa7bi_ai/profile_screen.dart';
+import 'package:sa7bi_ai/services/hero_face_runtime.dart';
 import 'package:sa7bi_ai/settings_screen.dart';
 import 'package:sa7bi_ai/social_ai_games_screen.dart';
 import 'package:sa7bi_ai/social_connect_hub_screen.dart';
@@ -23,6 +23,7 @@ import 'package:sa7bi_ai/social_groups_workspace_screen.dart';
 import 'package:sa7bi_ai/social_private_groups_screen.dart';
 import 'package:sa7bi_ai/widgets/app_header.dart';
 import 'package:sa7bi_ai/widgets/audio_center_with_header.dart';
+import 'package:sa7bi_ai/widgets/sa7bi_hero_3d.dart';
 import 'package:sa7bi_ai/widgets/sa7bi_hero_lite_panel.dart';
 
 void main() {
@@ -49,7 +50,13 @@ void main() {
 
         expect(find.byType(AppHeader), findsOneWidget);
         expect(find.byType(Sa7biHeroLitePanel), findsOneWidget);
+        expect(find.byType(Sa7biHero3D), findsOneWidget);
         expect(find.byType(RefreshIndicator), findsOneWidget);
+
+        // The Android WebView must report the actual animation names loaded
+        // from the packaged GLB before the test sends face/speech commands.
+        await _waitForHeroFaceAnimations(tester);
+        await _exerciseHeroFaceAnimations(tester);
 
         final audioHeaderButton = _semanticButton('مركز الصوت');
         final profileHeaderButton = _semanticButton('الملف الشخصي');
@@ -71,9 +78,9 @@ void main() {
           settleMilliseconds: 400,
         );
 
-        // Header profile button selects the Profile main tab.
-        final currentProfileButton =
-            _semanticButton('الملف الشخصي');
+        // Header profile button selects the Profile main tab. Wait for the
+        // PageController animation as well as the selected semantics flag.
+        final currentProfileButton = _semanticButton('الملف الشخصي');
 
         await _pumpUntilHitTestable(
           tester,
@@ -88,6 +95,11 @@ void main() {
           'حسابي',
         );
 
+        await _pumpUntilFound(
+          tester,
+          find.byType(ProfileScreen),
+          description: 'Profile screen after the header PageView transition',
+        );
         expect(find.byType(ProfileScreen), findsOneWidget);
 
         await _tapMainTab(tester, 'الرئيسية');
@@ -424,6 +436,7 @@ void main() {
         );
 
         expect(find.byType(Sa7biHeroLitePanel), findsOneWidget);
+        expect(find.byType(Sa7biHero3D), findsOneWidget);
         expect(tester.takeException(), isNull);
 
         // Test the Home pull-to-refresh gesture.
@@ -518,6 +531,96 @@ void main() {
   );
 }
 
+Future<void> _waitForHeroFaceAnimations(
+  WidgetTester tester,
+) async {
+  final runtime = HeroFaceRuntime.instance;
+  const requiredBodyAnimations = <String>{
+    'Hero_Idle',
+    'Hero_Welcome',
+    'Hero_Power',
+  };
+
+  for (var attempt = 0; attempt < 120; attempt++) {
+    final animations = runtime.availableAnimations.value;
+    if (runtime.isFaceRigAvailable &&
+        animations.containsAll(requiredBodyAnimations)) {
+      return;
+    }
+
+    await tester.pump(const Duration(milliseconds: 200));
+  }
+
+  final available = runtime.availableAnimations.value.toList()..sort();
+  final missingFace = runtime.missingRequiredAnimations.toList()..sort();
+  final missingBody =
+      requiredBodyAnimations.difference(runtime.availableAnimations.value).toList()
+        ..sort();
+
+  fail(
+    'HERO Android WebView did not report the complete GLB animation set. '
+    'Missing face animations: $missingFace. '
+    'Missing body animations: $missingBody. '
+    'Animations reported by model-viewer: $available',
+  );
+}
+
+Future<void> _exerciseHeroFaceAnimations(
+  WidgetTester tester,
+) async {
+  final runtime = HeroFaceRuntime.instance;
+  final initialRevision = runtime.lastCommand?.revision ?? 0;
+
+  runtime.playExpression(HeroExpression.smile);
+  final expressionCommand = runtime.lastCommand;
+
+  expect(expressionCommand, isNotNull);
+  expect(expressionCommand!.type, HeroFaceCommandType.expression);
+  expect(expressionCommand.animationName, 'HERO_FACE_SMILE');
+  expect(
+    runtime.availableAnimations.value,
+    contains('HERO_FACE_SMILE'),
+  );
+  expect(runtime.liteStatus.value.expression, HeroExpression.smile);
+
+  await tester.pump(const Duration(milliseconds: 150));
+
+  // Simulate the word-boundary callbacks supplied by Flutter TTS.
+  runtime.onSpeechStarted();
+  runtime.onSpeechWord('مرحبا');
+
+  final visemeCommand = runtime.lastCommand;
+  expect(visemeCommand, isNotNull);
+  expect(visemeCommand!.type, HeroFaceCommandType.viseme);
+  expect(visemeCommand.animationName, 'HERO_VISEME_PP');
+  expect(
+    runtime.availableAnimations.value,
+    contains('HERO_VISEME_PP'),
+  );
+  expect(runtime.liteStatus.value.isSpeaking, isTrue);
+  expect(runtime.liteStatus.value.activeWord, 'مرحبا');
+  expect(runtime.liteStatus.value.activeViseme, 'PP');
+
+  await tester.pump(const Duration(milliseconds: 150));
+
+  runtime.onSpeechFinished();
+
+  expect(runtime.liteStatus.value.isSpeaking, isFalse);
+  expect(runtime.liteStatus.value.activeWord, isEmpty);
+  expect(runtime.liteStatus.value.activeViseme, 'sil');
+  expect(runtime.liteStatus.value.expression, HeroExpression.neutral);
+  expect(runtime.lastCommand?.type, HeroFaceCommandType.reset);
+  expect(
+    runtime.lastCommand!.revision,
+    greaterThan(initialRevision),
+  );
+  expect(
+    tester.takeException(),
+    isNull,
+    reason: 'HERO expression and speech callbacks must not throw.',
+  );
+}
+
 Future<void> _pressAndroidBack(
   WidgetTester tester, {
   int settleMilliseconds = 400,
@@ -572,13 +675,62 @@ bool _isMainTabSelected(
   return selectedState == Tristate.isTrue;
 }
 
+Finder _mainPageViewFinder() {
+  return find.byWidgetPredicate(
+    (widget) =>
+        widget is PageView &&
+        widget.scrollDirection == Axis.horizontal &&
+        widget.children.length == 4 &&
+        widget.children.every(
+          (child) => child.runtimeType.toString() == '_KeepAliveMainPage',
+        ),
+    description: 'The four-tab main PageView',
+  );
+}
+
+int _mainTabIndex(String label) {
+  switch (label) {
+    case 'الرئيسية':
+      return 0;
+    case 'الشات':
+      return 1;
+    case 'الألعاب':
+      return 2;
+    case 'حسابي':
+      return 3;
+    default:
+      throw ArgumentError.value(label, 'label', 'Unknown main tab');
+  }
+}
+
+double? _mainPagePosition(WidgetTester tester) {
+  final finder = _mainPageViewFinder();
+  if (finder.evaluate().length != 1) return null;
+
+  final controller = tester.widget<PageView>(finder.first).controller;
+  if (controller == null || !controller.hasClients) return null;
+
+  try {
+    return controller.page;
+  } catch (_) {
+    return null;
+  }
+}
+
+bool _isMainPageSettled(WidgetTester tester, String label) {
+  if (!_isMainTabSelected(tester, label)) return false;
+
+  final page = _mainPagePosition(tester);
+  return page != null && (page - _mainTabIndex(label)).abs() < 0.02;
+}
+
 Future<void> _waitForMainTabSelected(
   WidgetTester tester,
   String label, {
-  int maxPumps = 30,
+  int maxPumps = 80,
 }) async {
   for (var attempt = 0; attempt < maxPumps; attempt++) {
-    if (_isMainTabSelected(tester, label)) {
+    if (_isMainPageSettled(tester, label)) {
       return;
     }
 
@@ -590,36 +742,72 @@ Future<void> _waitForMainTabSelected(
     isTrue,
     reason: 'The "$label" tab did not become selected.',
   );
+  final page = _mainPagePosition(tester);
+  expect(
+    page,
+    isNotNull,
+    reason: 'The main PageView controller is not attached.',
+  );
+  expect(
+    (page! - _mainTabIndex(label)).abs(),
+    lessThan(0.02),
+    reason:
+        'The "$label" tab was selected before its PageView animation finished. '
+        'Actual page position: $page',
+  );
 }
 
 Future<void> _swipeToMainTab(
   WidgetTester tester,
   String label,
 ) async {
-  final pageView = find.byType(PageView).first;
+  final pageView = _mainPageViewFinder();
+  expect(pageView, findsOneWidget);
 
-  const swipeDirections = <Offset>[
-    Offset(-420, 0),
-    Offset(420, 0),
+  final topLeft = tester.getTopLeft(pageView);
+  final size = tester.getSize(pageView);
+  final edgeInset = size.width * 0.025;
+  final startY = topLeft.dy + size.height * 0.16;
+
+  // Start at the page edge, not in the central HERO WebView. This keeps
+  // the horizontal gesture in the Flutter PageView gesture arena.
+  final swipeDirections = <Offset>[
+    Offset(size.width * 0.72, 0),
+    Offset(-size.width * 0.72, 0),
   ];
 
   for (final direction in swipeDirections) {
-    await tester.drag(pageView, direction);
-    await tester.pump(const Duration(milliseconds: 350));
+    final start = Offset(
+      direction.dx > 0
+          ? topLeft.dx + edgeInset
+          : topLeft.dx + size.width - edgeInset,
+      startY,
+    );
 
-    for (var attempt = 0; attempt < 20; attempt++) {
-      if (_isMainTabSelected(tester, label)) {
+    await tester.dragFrom(
+      start,
+      direction,
+      duration: const Duration(milliseconds: 350),
+    );
+
+    for (var attempt = 0; attempt < 50; attempt++) {
+      if (_isMainPageSettled(tester, label)) {
         return;
       }
-
       await tester.pump(const Duration(milliseconds: 50));
     }
   }
 
+  await _waitForMainTabSelected(
+    tester,
+    label,
+    maxPumps: 20,
+  );
+
   expect(
-    _isMainTabSelected(tester, label),
+    _isMainPageSettled(tester, label),
     isTrue,
-    reason: 'Horizontal PageView swipe did not open "$label".',
+    reason: 'Horizontal swipe did not settle on "$label".',
   );
 }
 
