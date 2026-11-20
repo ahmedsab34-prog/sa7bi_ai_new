@@ -1,4 +1,3 @@
-
 name: sa7bi_ai
 description: Sa7bi AI - Your smart Arabic AI companion.
 publish_to: "none"
@@ -66,3 +65,4 @@ flutter:
     - app_icon.png
     - file_00000000b58881f4b9d70abfa1298442.png
     - assets/3d/sa7bi_hero.glb
+    - assets/stickers/
