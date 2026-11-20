@@ -9,10 +9,9 @@ import 'chat_message_list.dart';
 import 'chat_status_header.dart';
 import 'credits_status.dart';
 import 'rewarded_ad_button.dart';
-import 'sa7bi_hero_3d.dart';
 
-/// جسم شاشة المحادثة.
-/// منطق الذكاء والوسائط والحفظ موجود في ChatScreen والخدمات.
+/// جسم شاشة المحادثة. الشخصية موجودة بالفعل في الزر العائم العام،
+/// لذلك لا يتم إنشاء عارض 3D كبير داخل المحادثة أو حجز مساحة له.
 class ChatScreenBody extends StatelessWidget {
   final ChatController chatController;
   final ProfileService profileService;
@@ -73,21 +72,14 @@ class ChatScreenBody extends StatelessWidget {
       isScrollControlled: true,
       showDragHandle: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(22),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (sheetContext) {
         return Directionality(
           textDirection: TextDirection.rtl,
           child: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                14,
-                4,
-                14,
-                20,
-              ),
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -106,9 +98,7 @@ class ChatScreenBody extends StatelessWidget {
                       showRewardButton: false,
                     ),
                   if (showReward)
-                    const RewardedAdButton(
-                      compact: false,
-                    ),
+                    const RewardedAdButton(compact: false),
                 ],
               ),
             ),
@@ -128,17 +118,13 @@ class ChatScreenBody extends StatelessWidget {
       builder: (context, _) {
         final theme = chatController.theme;
         final messages = chatController.messages;
-
         final userName = profileService.displayName;
         final userPhoto = profileService.photoBytes;
+        const aiName = 'صاحبي AI';
 
-        // الاسم الظاهر داخل المحادثة موحد مع هوية التطبيق.
-        final aiName = 'صاحبي AI';
-
-        final safeTopic =
-            topic?.trim().isNotEmpty == true
-                ? topic!.trim()
-                : null;
+        final safeTopic = topic?.trim().isNotEmpty == true
+            ? topic!.trim()
+            : null;
 
         return ChatDynamicBackground(
           theme: theme,
@@ -151,30 +137,10 @@ class ChatScreenBody extends StatelessWidget {
                   title: title,
                   topic: safeTopic,
                   isLoading: chatController.isLoading,
-                  canClear: messages.isNotEmpty &&
-                      !chatController.isLoading,
-                  onClear: chatController.isLoading
-                      ? null
-                      : onClear,
+                  canClear: messages.isNotEmpty && !chatController.isLoading,
+                  onClear: chatController.isLoading ? null : onClear,
                   showTitle: false,
                 ),
-
-                // شخصية HERO الواحدة تظهر مع المحادثة وتتلقى إشارات الصوت.
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-                  child: SizedBox(
-                    height: 152,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: const Sa7biHero3D(
-                        cameraControls: false,
-                        compact: true,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // المحادثة تأخذ المساحة المتبقية.
                 Expanded(
                   child: messages.isEmpty
                       ? ChatEmptyState(
@@ -183,12 +149,9 @@ class ChatScreenBody extends StatelessWidget {
                           inlineHeading: null,
                           inlineTagline: null,
                           showTitle: false,
-                          subtitle:
-                              chatController.isKhalasana
-                                  ? 'قول لي محتاج إيه، '
-                                      'ونبدأ مع بعض من غير ما تحتاج تختار مجال.'
-                                  : 'اتكلم معايا براحتك، '
-                                      'وأنا هساعدك على قد ما أقدر.',
+                          subtitle: chatController.isKhalasana
+                              ? 'قول لي محتاج إيه، ونبدأ مع بعض من غير ما تحتاج تختار مجال.'
+                              : 'اتكلم معايا براحتك، وأنا هساعدك على قد ما أقدر.',
                         )
                       : ChatMessageList(
                           messages: messages,
@@ -200,12 +163,10 @@ class ChatScreenBody extends StatelessWidget {
                           controller: scrollController,
                         ),
                 ),
-
                 ChatComposer(
                   controller: textController,
                   focusNode: focusNode,
-                  isLoading: !enabled ||
-                      chatController.isLoading,
+                  isLoading: !enabled || chatController.isLoading,
                   isListening: isListening,
                   isGeneratingImage: isGeneratingImage,
                   onSend: onSend,
@@ -214,28 +175,20 @@ class ChatScreenBody extends StatelessWidget {
                   onVideo: !enabled ? null : onVideo,
                   onVoice: !enabled ? null : onVoice,
                   onText: !enabled ? null : onText,
-                  onSpeechToText:
-                      !enabled ? null : onSpeechToText,
-                  onImageGeneration:
-                      !enabled ? null : onImageGeneration,
-
-                  // نقل الرصيد والإعلان المكافئ لقائمة (+).
+                  onSpeechToText: !enabled ? null : onSpeechToText,
+                  onImageGeneration: !enabled ? null : onImageGeneration,
                   onCredits: !enabled
                       ? null
-                      : () {
-                          _showCreditsPanel(
+                      : () => _showCreditsPanel(
                             context,
                             showReward: false,
-                          );
-                        },
+                          ),
                   onRewardedAd: !enabled
                       ? null
-                      : () {
-                          _showCreditsPanel(
+                      : () => _showCreditsPanel(
                             context,
                             showReward: true,
-                          );
-                        },
+                          ),
                 ),
               ],
             ),
