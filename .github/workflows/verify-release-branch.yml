@@ -1,15 +1,17 @@
+
 name: Sa7bi AI - Single Source Verified Release
 
-run-name: Sa7bi AI Release - trigger ${{ github.sha }}
+run-name: Sa7bi AI Release - ${{ github.sha }}
 
 on:
   push:
     branches:
       - fix/build-692-network-client-lifecycle
+
   workflow_dispatch:
     inputs:
       publish_release:
-        description: "Push runs build and verification only. Set true only in a manual run when you explicitly approve deploying both Workers and publishing the verified APK."
+        description: "Set true only when you explicitly approve deploying both Workers and publishing the APK."
         required: true
         type: boolean
         default: false
@@ -36,16 +38,15 @@ env:
   FALLBACK_WORKER_URL: "https://sa7bi-ai-new-fallback.ahmedsab34.workers.dev"
 
 jobs:
-  refresh-dependencies:
-    name: Resolve and commit the Flutter dependency lockfile
+  verify-source:
+    name: Verify immutable source commit and committed lockfile
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     permissions:
-      contents: write
+      contents: read
 
     outputs:
-      source_sha: ${{ steps.sync.outputs.source_sha }}
-      lockfile_updated: ${{ steps.sync.outputs.lockfile_updated }}
+      source_sha: ${{ steps.source.outputs.source_sha }}
 
     steps:
       - name: Checkout the triggering commit
@@ -53,9 +54,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
-          persist-credentials: true
+          persist-credentials: false
 
-      - name: Verify repository, branch, and original source commit
+      - name: Verify repository, branch, commit, and lockfile
+        id: source
         shell: bash
         run: |
           set -euo pipefail
@@ -67,156 +69,47 @@ jobs:
           git ls-files --error-unmatch pubspec.lock >/dev/null
           test -s pubspec.lock
 
-          REMOTE_SHA="$(git ls-remote origin "refs/heads/${EXPECTED_BRANCH}" | awk 'NR == 1 { print $1 }')"
+          echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
-          if [ "${REMOTE_SHA}" != "${GITHUB_SHA}" ]; then
-            echo "::error::The release branch advanced before dependency resolution."
-            echo "Trigger commit: ${GITHUB_SHA}"
-            echo "Branch commit:  ${REMOTE_SHA}"
-            exit 1
-          fi
-
-          echo "Dependency resolution source: ${GITHUB_SHA}"
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "${{ env.FLUTTER_VERSION }}"
-          channel: stable
-          cache: true
-
-      - name: Resolve Flutter dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          flutter --version
-          flutter pub get
-          test -s pubspec.lock
-
-      - name: Commit the refreshed lockfile and select the exact build source
-        id: sync
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if git diff --quiet -- pubspec.lock; then
-            REMOTE_SHA="$(git ls-remote origin "refs/heads/${EXPECTED_BRANCH}" | awk 'NR == 1 { print $1 }')"
-
-            if [ "${REMOTE_SHA}" != "${GITHUB_SHA}" ]; then
-              echo "::error::The release branch advanced during dependency resolution."
-              exit 1
-            fi
-
-            echo "lockfile_updated=false" >> "${GITHUB_OUTPUT}"
-            echo "source_sha=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
-
-            echo "The committed dependency lockfile is already current."
-          else
-            mapfile -t CHANGED_FILES < <(git diff --name-only)
-
-            if [ "${#CHANGED_FILES[@]}" -ne 1 ] || [ "${CHANGED_FILES[0]}" != "pubspec.lock" ]; then
-              echo "::error::Dependency resolution changed files other than pubspec.lock."
-              printf '%s\n' "${CHANGED_FILES[@]}"
-              exit 1
-            fi
-
-            git diff --check
-
-            REMOTE_SHA="$(git ls-remote origin "refs/heads/${EXPECTED_BRANCH}" | awk 'NR == 1 { print $1 }')"
-
-            if [ "${REMOTE_SHA}" != "${GITHUB_SHA}" ]; then
-              echo "::error::The branch advanced before the lockfile could be committed."
-              exit 1
-            fi
-
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-            git add -- pubspec.lock
-            git commit -m "chore: sync Flutter dependency lockfile"
-
-            NEW_SOURCE_SHA="$(git rev-parse HEAD)"
-
-            git push origin "HEAD:refs/heads/${EXPECTED_BRANCH}"
-
-            REMOTE_SHA="$(git ls-remote origin "refs/heads/${EXPECTED_BRANCH}" | awk 'NR == 1 { print $1 }')"
-
-            if [ "${REMOTE_SHA}" != "${NEW_SOURCE_SHA}" ]; then
-              echo "::error::The pushed lockfile commit is not the current branch head."
-              exit 1
-            fi
-
-            echo "lockfile_updated=true" >> "${GITHUB_OUTPUT}"
-            echo "source_sha=${NEW_SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
-
-            {
-              echo "## Flutter dependency lockfile refreshed"
-              echo
-              echo "- Original trigger commit: ${GITHUB_SHA}"
-              echo "- New exact source commit: ${NEW_SOURCE_SHA}"
-              echo "- Updated file: pubspec.lock"
-              echo "- The APK build will use the new commit."
-            } >> "${GITHUB_STEP_SUMMARY}"
-          fi
-
-      - name: Record dependency resolution result
-        if: steps.sync.outputs.lockfile_updated != 'true'
-        shell: bash
-        run: |
           {
-            echo "## Flutter dependency lockfile is current"
+            echo "## Immutable source verified"
             echo
-            echo "- Exact source commit: ${{ steps.sync.outputs.source_sha }}"
-            echo "- No lockfile commit was necessary."
+            echo "- Repository: ${GITHUB_REPOSITORY}"
+            echo "- Branch: ${GITHUB_REF_NAME}"
+            echo "- Exact source commit: ${GITHUB_SHA}"
+            echo "- pubspec.lock: committed and unchanged"
+            echo "- Automatic lockfile commits: disabled"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   build-test-verify:
-    name: Build and verify the APK from the exact resolved commit
-    needs:
-      - refresh-dependencies
-    if: ${{ needs.refresh-dependencies.result == 'success' }}
+    name: Test and build the signed APK from the exact source commit
+    needs: verify-source
+    if: ${{ needs.verify-source.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
-      actions: read
 
     env:
-      SOURCE_SHA: ${{ needs.refresh-dependencies.outputs.source_sha }}
+      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
 
     outputs:
       artifact_name: ${{ steps.identity.outputs.artifact_name }}
 
     steps:
-      - name: Checkout the exact resolved source commit
+      - name: Checkout the exact verified source
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.refresh-dependencies.outputs.source_sha }}
+          ref: ${{ needs.verify-source.outputs.source_sha }}
           fetch-depth: 1
 
-      - name: Verify repository, branch, source commit, and lockfile
+      - name: Verify checked out source
         shell: bash
         run: |
           set -euo pipefail
-
-          test "${GITHUB_REPOSITORY}" = "ahmedsab34-prog/sa7bi_ai_new"
-          test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
-          test -n "${SOURCE_SHA}"
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
-
-          REMOTE_SHA="$(git ls-remote origin "refs/heads/${EXPECTED_BRANCH}" | awk 'NR == 1 { print $1 }')"
-
-          if [ "${REMOTE_SHA}" != "${SOURCE_SHA}" ]; then
-            echo "::error::The branch no longer points to the resolved source commit."
-            exit 1
-          fi
-
-          git ls-files --error-unmatch pubspec.lock >/dev/null
+          test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
           test -s pubspec.lock
-
-          echo "Repository: ${GITHUB_REPOSITORY}"
-          echo "Branch: ${GITHUB_REF_NAME}"
-          echo "Resolved source commit: ${SOURCE_SHA}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -228,7 +121,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --no-save --no-package-lock --no-audit --no-fund
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-save --no-package-lock --no-audit --no-fund
+          fi
 
       - name: Run backend provider and route tests
         working-directory: backend
@@ -244,14 +141,14 @@ jobs:
           set -euo pipefail
           node verify-admob-config.mjs
 
-      - name: Validate Primary Worker bundle without deployment
+      - name: Validate Primary Worker without deployment
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
           npx wrangler deploy --dry-run --config wrangler.toml
 
-      - name: Validate Fallback Worker bundle without deployment
+      - name: Validate Fallback Worker without deployment
         working-directory: backend
         shell: bash
         run: |
@@ -262,23 +159,30 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "${{ env.JAVA_VERSION }}"
+          java-version: "17"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "${{ env.FLUTTER_VERSION }}"
+          flutter-version: "3.38.1"
           channel: stable
           cache: true
 
-      - name: Calculate the APK version code from this unified run
-        id: version
+      - name: Resolve only the committed Flutter dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter --version
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.lock
+
+      - name: Calculate APK version code
         shell: bash
         run: |
           set -euo pipefail
 
           if ! [[ "${GITHUB_RUN_NUMBER}" =~ ^[0-9]+$ ]]; then
-            echo "::error::Unified workflow run number is invalid."
+            echo "::error::Invalid workflow run number."
             exit 1
           fi
 
@@ -290,9 +194,8 @@ jobs:
           fi
 
           echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "${GITHUB_ENV}"
-          echo "APK version code: ${BUILD_NUMBER}"
 
-      - name: Create release artifact identity
+      - name: Create artifact identity
         id: identity
         shell: bash
         run: |
@@ -306,23 +209,14 @@ jobs:
           {
             echo "Repository=${GITHUB_REPOSITORY}"
             echo "Branch=${EXPECTED_BRANCH}"
-            echo "TriggerCommit=${GITHUB_SHA}"
             echo "Commit=${SOURCE_SHA}"
             echo "RunID=${GITHUB_RUN_ID}"
             echo "RunNumber=${GITHUB_RUN_NUMBER}"
-            echo "RunAttempt=${GITHUB_RUN_ATTEMPT}"
             echo "AppVersion=${APP_VERSION}"
             echo "BuildNumber=${BUILD_NUMBER}"
             echo "ApplicationID=${EXPECTED_APPLICATION_ID}"
             echo "Artifact=${ARTIFACT_NAME}"
-          } | tee build-provenance.txt
-
-      - name: Verify committed dependency lockfile
-        shell: bash
-        run: |
-          set -euo pipefail
-          git ls-files --error-unmatch pubspec.lock >/dev/null
-          test -s pubspec.lock
+          } > build-provenance.txt
 
       - name: Configure permanent Android release signing
         shell: bash
@@ -334,17 +228,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${SA7BI_RELEASE_KEYSTORE_BASE64}" ] ||
-             [ -z "${SA7BI_RELEASE_STORE_PASSWORD}" ] ||
-             [ -z "${SA7BI_RELEASE_KEY_ALIAS}" ] ||
-             [ -z "${SA7BI_RELEASE_KEY_PASSWORD}" ]; then
-            echo "::error::All four permanent Android signing secrets are required."
-            exit 1
-          fi
+          test -n "${SA7BI_RELEASE_KEYSTORE_BASE64}"
+          test -n "${SA7BI_RELEASE_STORE_PASSWORD}"
+          test -n "${SA7BI_RELEASE_KEY_ALIAS}"
+          test -n "${SA7BI_RELEASE_KEY_PASSWORD}"
 
           mkdir -p android
 
-          printf '%s' "${SA7BI_RELEASE_KEYSTORE_BASE64}" | base64 --decode > android/sa7bi-release.jks
+          printf '%s' "${SA7BI_RELEASE_KEYSTORE_BASE64}" \
+            | base64 --decode > android/sa7bi-release.jks
 
           test -s android/sa7bi-release.jks
           chmod 600 android/sa7bi-release.jks
@@ -383,55 +275,37 @@ jobs:
           path.chmod(0o600)
           PY
 
-      - name: Install locked Flutter dependencies
+      - name: Analyze the Flutter project
         shell: bash
         run: |
           set -euo pipefail
-          flutter pub get
+          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos \
+            2>&1 | tee flutter-analyze-report.txt
 
-      - name: Confirm dependency lockfile is unchanged
+      - name: Run Flutter tests
         shell: bash
         run: |
           set -euo pipefail
-          git diff --exit-code -- pubspec.lock
+          flutter test --no-pub --reporter expanded \
+            2>&1 | tee flutter-test-report.txt
 
-      - name: Analyze the complete Flutter project
-        shell: bash
-        run: |
-          set -euo pipefail
-          flutter analyze --no-pub --no-fatal-warnings --no-fatal-infos 2>&1 | tee flutter-analyze-report.txt
-
-      - name: Run all Flutter tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          flutter test --no-pub --reporter expanded 2>&1 | tee flutter-test-report.txt
-
-      - name: Regenerate Android release configuration and verify the plugin registrant
+      - name: Regenerate Android release configuration
         shell: bash
         run: |
           set -euo pipefail
 
-          # Work around Flutter's stale Android plugin registrant when
-          # integration_test is correctly declared as a dev_dependency.
           flutter build apk --config-only
 
           REGISTRANT="android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java"
 
-          if [ ! -s "${REGISTRANT}" ]; then
-            echo "::error::Flutter did not generate the Android plugin registrant."
-            exit 1
-          fi
+          test -s "${REGISTRANT}"
 
           if grep -Fq 'dev.flutter.plugins.integration_test.IntegrationTestPlugin' "${REGISTRANT}"; then
-            echo "::error::The Release plugin registrant still contains the dev-only integration_test plugin."
-            echo "The APK build is stopped before Gradle compilation."
+            echo "::error::Release registrant contains the dev-only integration_test plugin."
             exit 1
           fi
 
-          echo "PASS: Android release plugin registrant excludes integration_test."
-
-      - name: Build the signed release APK from the resolved commit
+      - name: Build signed release APK
         shell: bash
         run: |
           set -euo pipefail
@@ -448,7 +322,7 @@ jobs:
             --dart-define="APP_BUILD_ID=${BUILD_ID}" \
             --dart-define="APP_SOURCE_ID=${SOURCE_ID}"
 
-      - name: Verify APK package, signature, version, and integrity
+      - name: Verify APK identity, signature, and checksum
         shell: bash
         run: |
           set -euo pipefail
@@ -456,8 +330,8 @@ jobs:
           APK="${APK_PATH}"
           test -s "${APK}"
 
-          APK_ANALYZER="$(find "${ANDROID_HOME}" -type f -name apkanalyzer -perm -u+x -print -quit 2>/dev/null)"
-          APK_SIGNER="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x -print -quit 2>/dev/null)"
+          APK_ANALYZER="$(find "${ANDROID_HOME}" -type f -name apkanalyzer -perm -u+x -print -quit)"
+          APK_SIGNER="$(find "${ANDROID_HOME}/build-tools" -type f -name apksigner -perm -u+x -print -quit)"
 
           test -n "${APK_ANALYZER}"
           test -n "${APK_SIGNER}"
@@ -467,12 +341,6 @@ jobs:
           ACTUAL_CODE="$("${APK_ANALYZER}" manifest version-code "${APK}")"
           APK_BYTES="$(stat -c%s "${APK}")"
           APK_SHA256="$(sha256sum "${APK}" | awk '{print $1}')"
-
-          echo "Application ID: ${ACTUAL_ID}"
-          echo "Version: ${ACTUAL_VERSION}"
-          echo "Version code: ${ACTUAL_CODE}"
-          echo "APK bytes: ${APK_BYTES}"
-          echo "APK SHA-256: ${APK_SHA256}"
 
           test "${ACTUAL_ID}" = "${EXPECTED_APPLICATION_ID}"
           test "${ACTUAL_VERSION}" = "${APP_VERSION}"
@@ -503,11 +371,8 @@ jobs:
             tr '[:upper:]' '[:lower:]'
           )"
 
-          if [ -z "${ACTUAL_CERT_SHA256}" ] ||
-             [ "${ACTUAL_CERT_SHA256}" != "${EXPECTED_CERT_SHA256}" ]; then
-            echo "::error::Release signing certificate mismatch."
-            exit 1
-          fi
+          test -n "${ACTUAL_CERT_SHA256}"
+          test "${ACTUAL_CERT_SHA256}" = "${EXPECTED_CERT_SHA256}"
 
           mkdir -p release-artifact
 
@@ -519,30 +384,24 @@ jobs:
           {
             echo "Repository=${GITHUB_REPOSITORY}"
             echo "Branch=${EXPECTED_BRANCH}"
-            echo "TriggerCommit=${GITHUB_SHA}"
             echo "Commit=${SOURCE_SHA}"
             echo "RunID=${GITHUB_RUN_ID}"
             echo "RunNumber=${GITHUB_RUN_NUMBER}"
-            echo "RunAttempt=${GITHUB_RUN_ATTEMPT}"
             echo "AppVersion=${ACTUAL_VERSION}"
             echo "ApplicationID=${ACTUAL_ID}"
             echo "VersionCode=${ACTUAL_CODE}"
             echo "APKSize=${APK_BYTES}"
             echo "APK_SHA256=${APK_SHA256}"
             echo "SigningCertificateSHA256=${ACTUAL_CERT_SHA256}"
-            echo "CanonicalFilename=${RELEASE_APK_NAME}"
-            echo "CanonicalReleaseTag=${RELEASE_TAG}"
-            echo "SourceCommit=${SOURCE_SHA}"
-            echo "WorkerDeployment=required-before-publication"
           } > release-artifact/build-provenance.txt
 
           cp flutter-analyze-report.txt release-artifact/
           cp flutter-test-report.txt release-artifact/
 
-      - name: Reject this APK if the branch advanced during the build
+      - name: Reject APK if source branch advanced
         uses: actions/github-script@v7
         env:
-          SOURCE_SHA: ${{ needs.refresh-dependencies.outputs.source_sha }}
+          SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
         with:
           script: |
             const branchName = "fix/build-692-network-client-lifecycle";
@@ -554,16 +413,11 @@ jobs:
               branch: branchName,
             });
 
-            core.info(`APK source commit: ${expectedSha}`);
-            core.info(`Current branch commit: ${branch.commit.sha}`);
-
             if (branch.commit.sha !== expectedSha) {
-              core.setFailed(
-                "The branch advanced during the build. This older APK cannot be deployed or published."
-              );
+              core.setFailed("The branch advanced during the build. This APK cannot be released.");
             }
 
-      - name: Upload the one verified APK artifact
+      - name: Upload the verified APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.identity.outputs.artifact_name }}
@@ -575,60 +429,50 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## APK built and verified from the resolved source commit"
+            echo "## APK built and verified"
             echo
-            echo "- Trigger commit: ${GITHUB_SHA}"
-            echo "- Exact APK source commit: ${SOURCE_SHA}"
+            echo "- Exact source commit: ${SOURCE_SHA}"
             echo "- APK version code: ${BUILD_NUMBER}"
-            echo "- This exact APK artifact will be passed to the release job."
-            echo "- No second APK build is performed for GitHub Releases."
+            echo "- Artifact: ${{ steps.identity.outputs.artifact_name }}"
+            echo "- No second APK build is used for publication."
+            echo "- No Worker deployment was performed by this job."
           } >> "${GITHUB_STEP_SUMMARY}"
 
   deploy-workers:
-    name: Deploy and verify Primary and Fallback from the same commit
+    name: Deploy and verify both Workers from the APK source commit
     needs:
-      - refresh-dependencies
+      - verify-source
       - build-test-verify
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true && needs.verify-source.result == 'success' && needs.build-test-verify.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       contents: read
 
     env:
-      SOURCE_SHA: ${{ needs.refresh-dependencies.outputs.source_sha }}
+      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
     steps:
-      - name: Checkout the exact APK source commit
+      - name: Checkout exact APK source commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.refresh-dependencies.outputs.source_sha }}
+          ref: ${{ needs.verify-source.outputs.source_sha }}
           fetch-depth: 1
 
-      - name: Verify branch, commit, and Cloudflare credentials
+      - name: Verify source and Cloudflare credentials
         shell: bash
         run: |
           set -euo pipefail
 
-          test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
           test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+          test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
+          test -n "${CLOUDFLARE_API_TOKEN}"
+          test -n "${CLOUDFLARE_ACCOUNT_ID}"
 
           REMOTE_SHA="$(git ls-remote origin "refs/heads/${EXPECTED_BRANCH}" | awk 'NR == 1 { print $1 }')"
-
-          if [ "${REMOTE_SHA}" != "${SOURCE_SHA}" ]; then
-            echo "::error::The branch advanced before Worker deployment."
-            exit 1
-          fi
-
-          if [ -z "${CLOUDFLARE_API_TOKEN}" ] ||
-             [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
-            echo "::error::Cloudflare credentials are missing."
-            exit 1
-          fi
-
-          echo "Worker source commit: ${SOURCE_SHA}"
+          test "${REMOTE_SHA}" = "${SOURCE_SHA}"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -640,9 +484,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --no-save --no-package-lock --no-audit --no-fund
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-save --no-package-lock --no-audit --no-fund
+          fi
 
-      - name: Re-run backend tests and AdMob checks before deployment
+      - name: Re-run backend checks before deployment
         working-directory: backend
         shell: bash
         run: |
@@ -650,35 +498,36 @@ jobs:
           npm run check
           node verify-admob-config.mjs
 
-      - name: Verify the exact approved Worker targets
+      - name: Verify configured Worker targets
         shell: bash
         run: |
           set -euo pipefail
-
           grep -Fx 'name = "sa7bi-ai-new"' backend/wrangler.toml
           grep -Fx 'main = "src/index-v2.js"' backend/wrangler.toml
           grep -Fx 'name = "sa7bi-ai-new-fallback"' backend/wrangler-fallback.toml
           grep -Fx 'main = "src/fallback.js"' backend/wrangler-fallback.toml
           grep -Fx 'service = "sa7bi-ai-new"' backend/wrangler-fallback.toml
 
-      - name: Dry-run Primary Worker with this commit identity
+      - name: Dry-run Primary Worker
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --dry-run --config wrangler.toml --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+          npx wrangler deploy --dry-run --config wrangler.toml \
+            --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
 
-      - name: Dry-run Fallback Worker with this commit identity
+      - name: Dry-run Fallback Worker
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --dry-run --config wrangler-fallback.toml --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+          npx wrangler deploy --dry-run --config wrangler-fallback.toml \
+            --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
 
-      - name: Confirm branch has not advanced before deployment
+      - name: Confirm source branch has not advanced
         uses: actions/github-script@v7
         env:
-          SOURCE_SHA: ${{ needs.refresh-dependencies.outputs.source_sha }}
+          SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
         with:
           script: |
             const branchName = "fix/build-692-network-client-lifecycle";
@@ -691,29 +540,29 @@ jobs:
             });
 
             if (branch.commit.sha !== expectedSha) {
-              core.setFailed(
-                "The branch advanced before deployment. No Workers will be deployed from this older commit."
-              );
+              core.setFailed("Source branch advanced. Deployment stopped.");
             }
 
-      - name: Deploy Primary Worker from this commit
+      - name: Deploy Primary Worker
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --config wrangler.toml --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+          npx wrangler deploy --config wrangler.toml \
+            --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
 
-      - name: Deploy Fallback Worker from this commit
+      - name: Deploy Fallback Worker
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
-          npx wrangler deploy --config wrangler-fallback.toml --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+          npx wrangler deploy --config wrangler-fallback.toml \
+            --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
 
-      - name: Verify live Worker health and exact source identity
+      - name: Verify live source identity of both Workers
         shell: bash
         env:
-          EXPECTED_SOURCE_COMMIT: ${{ needs.refresh-dependencies.outputs.source_sha }}
+          EXPECTED_SOURCE_COMMIT: ${{ needs.verify-source.outputs.source_sha }}
           PRIMARY_URL: ${{ env.WORKER_URL }}
           FALLBACK_URL: ${{ env.FALLBACK_WORKER_URL }}
         run: |
@@ -736,135 +585,115 @@ jobs:
                       "Accept": "application/json",
                       "Cache-Control": "no-cache, no-store, max-age=0",
                       "Pragma": "no-cache",
-                      "User-Agent": "Sa7bi-AI-Unified-Release/1.1",
+                      "User-Agent": "Sa7bi-AI-Unified-Release",
                   },
               )
               with urllib.request.urlopen(request, timeout=25) as response:
                   if response.status != 200:
-                      raise RuntimeError(
-                          f"Health check failed: HTTP {response.status}"
-                      )
+                      raise RuntimeError(f"HTTP {response.status}")
                   body = json.loads(response.read().decode("utf-8"))
                   return body, response.headers
 
           primary_data, _ = fetch(primary_url)
-          primary_commit = str(
-              primary_data.get("sourceCommit", "")
-          ).strip()
+          primary_commit = str(primary_data.get("sourceCommit", "")).strip()
 
-          print("Primary expected:", expected)
-          print("Primary actual:  ", primary_commit)
+          print("Expected commit:", expected)
+          print("Primary commit:", primary_commit)
 
           if primary_commit.lower() != expected.lower():
-              raise RuntimeError(
-                  "Primary Worker source commit does not match the APK."
-              )
+              raise RuntimeError("Primary Worker source identity mismatch.")
 
-          max_attempts = 19
-          delay_seconds = 5
           verified = False
-          last_error = "No successful fallback identity response."
+          last_error = "Fallback identity not verified."
 
-          for attempt in range(1, max_attempts + 1):
+          for attempt in range(1, 20):
               try:
-                  fallback_data, fallback_headers = fetch(fallback_url)
+                  fallback_data, headers = fetch(fallback_url)
 
                   fallback_route = str(
-                      fallback_headers.get(
-                          "X-Sa7bi-Network-Fallback", ""
-                      )
+                      headers.get("X-Sa7bi-Network-Fallback", "")
                   ).strip()
+
                   fallback_commit = str(
-                      fallback_headers.get(
-                          "X-Sa7bi-Fallback-Source-Commit", ""
-                      )
+                      headers.get("X-Sa7bi-Fallback-Source-Commit", "")
                   ).strip()
-                  forwarded_primary_commit = str(
+
+                  forwarded_commit = str(
                       fallback_data.get("sourceCommit", "")
                   ).strip()
 
-                  print(f"Fallback attempt: {attempt}/{max_attempts}")
-                  print("Fallback expected:", expected)
-                  print("Fallback actual:  ", fallback_commit)
-                  print("Fallback route:   ", fallback_route)
-                  print("Forwarded primary:", forwarded_primary_commit)
+                  print("Fallback attempt:", attempt)
+                  print("Fallback route:", fallback_route)
+                  print("Fallback commit:", fallback_commit)
+                  print("Forwarded commit:", forwarded_commit)
 
                   if fallback_route != "1":
-                      raise RuntimeError(
-                          "Fallback response did not confirm fallback routing."
-                      )
+                      raise RuntimeError("Fallback route header is missing.")
 
                   if fallback_commit.lower() != expected.lower():
-                      raise RuntimeError(
-                          "Fallback Worker source commit is not updated yet."
-                      )
+                      raise RuntimeError("Fallback source identity mismatch.")
 
-                  if forwarded_primary_commit.lower() != expected.lower():
-                      raise RuntimeError(
-                          "Fallback is forwarding a different Primary source commit."
-                      )
+                  if forwarded_commit.lower() != expected.lower():
+                      raise RuntimeError("Fallback forwards a different Primary identity.")
 
                   verified = True
-                  print(
-                      "PASS: APK, Primary, and Fallback use the same source commit."
-                  )
                   break
 
               except Exception as error:
                   last_error = str(error)
-
-                  if attempt < max_attempts:
-                      remaining = (max_attempts - attempt) * delay_seconds
-                      print(
-                          f"Fallback identity not ready: {last_error}. "
-                          f"Retrying in {delay_seconds}s; "
-                          f"up to {remaining}s remain.",
-                          flush=True,
-                      )
-                      time.sleep(delay_seconds)
+                  print("Fallback verification pending:", last_error)
+                  if attempt < 19:
+                      time.sleep(5)
 
           if not verified:
               raise RuntimeError(
-                  f"Fallback Worker identity did not match {expected} "
-                  f"after {max_attempts} attempts. Last issue: {last_error}"
+                  f"Fallback verification failed: {last_error}"
               )
+
+          print("PASS: Primary and Fallback match the APK source commit.")
           PY
 
       - name: Worker deployment summary
         shell: bash
         run: |
           {
-            echo "## Both Workers deployed and verified"
+            echo "## Both Workers verified"
             echo
             echo "- Exact source commit: ${SOURCE_SHA}"
             echo "- Primary: ${WORKER_URL}"
             echo "- Fallback: ${FALLBACK_WORKER_URL}"
-            echo "- Both live source identities match the APK commit."
+            echo "- Both live identities matched the APK source."
           } >> "${GITHUB_STEP_SUMMARY}"
 
   publish-canonical-release:
-    name: Publish the exact APK artifact to the stable GitHub Release
+    name: Publish the exact verified APK to apk-latest
     needs:
-      - refresh-dependencies
+      - verify-source
       - build-test-verify
       - deploy-workers
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' && needs.deploy-workers.result == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release == true && needs.verify-source.result == 'success' && needs.build-test-verify.result == 'success' && needs.deploy-workers.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: write
 
     env:
-      SOURCE_SHA: ${{ needs.refresh-dependencies.outputs.source_sha }}
+      SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
 
     steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-source.outputs.source_sha }}
+          fetch-depth: 0
+
       - name: Download the APK from this exact workflow run
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build-test-verify.outputs.artifact_name }}
           path: release-artifact
 
-      - name: Verify APK artifact, provenance, and source commit
+      - name: Verify APK artifact and provenance
         shell: bash
         run: |
           set -euo pipefail
@@ -876,14 +705,13 @@ jobs:
           test -s build-provenance.txt
 
           grep -Fx "Commit=${SOURCE_SHA}" build-provenance.txt
-
           sha256sum --check "${RELEASE_APK_NAME}.sha256"
           unzip -tq "${RELEASE_APK_NAME}"
 
-      - name: Confirm branch still points to the APK and Worker commit
+      - name: Confirm branch still points to the exact source
         uses: actions/github-script@v7
         env:
-          SOURCE_SHA: ${{ needs.refresh-dependencies.outputs.source_sha }}
+          SOURCE_SHA: ${{ needs.verify-source.outputs.source_sha }}
         with:
           script: |
             const branchName = "fix/build-692-network-client-lifecycle";
@@ -895,22 +723,16 @@ jobs:
               branch: branchName,
             });
 
-            core.info(`Release source commit: ${expectedSha}`);
-            core.info(`Current branch commit: ${branch.commit.sha}`);
-
             if (branch.commit.sha !== expectedSha) {
-              core.setFailed(
-                "The branch advanced before publication. The stable APK will not be updated from an older commit."
-              );
+              core.setFailed("Branch advanced. Stable APK publication stopped.");
             }
 
-      - name: Prepare stable release notes
+      - name: Prepare release notes
         shell: bash
         run: |
           set -euo pipefail
 
           cd release-artifact
-
           APK_SHA256="$(awk '{print $1}' "${RELEASE_APK_NAME}.sha256")"
 
           {
@@ -918,19 +740,18 @@ jobs:
             echo
             echo "- Repository: ${GITHUB_REPOSITORY}"
             echo "- Branch: ${EXPECTED_BRANCH}"
-            echo "- Trigger commit: ${GITHUB_SHA}"
             echo "- Exact source commit: ${SOURCE_SHA}"
             echo "- App version: ${APP_VERSION}"
             echo "- APK: ${RELEASE_APK_NAME}"
             echo "- APK SHA-256: ${APK_SHA256}"
-            echo "- Primary and Fallback Workers deployed and verified against this commit"
+            echo "- Primary and Fallback Workers verified against this commit"
             echo
             echo "## Permanent download link"
             echo
             echo "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_APK_NAME}"
           } > release-notes.md
 
-      - name: Publish or update the single stable APK release
+      - name: Publish or update the stable APK release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -939,7 +760,9 @@ jobs:
 
           cd release-artifact
 
-          if ! gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+          if ! gh release view "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+
             gh release create "${RELEASE_TAG}" \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${SOURCE_SHA}" \
@@ -958,141 +781,91 @@ jobs:
             --title "Sa7bi AI - Latest Verified APK" \
             --notes-file release-notes.md
 
-      - name: Verify the published asset, SHA-256, and exact Git tag target
+      - name: Verify published APK checksum and stable tag target
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          cd release-artifact
+          mkdir -p published-check
+          cd published-check
 
-          gh release view "${RELEASE_TAG}" \
+          gh release download "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --json tagName,assets,body > release-state.json
+            --pattern "${RELEASE_APK_NAME}" \
+            --pattern "${RELEASE_APK_NAME}.sha256"
 
-          test "$(jq -r '.tagName' release-state.json)" = "${RELEASE_TAG}"
-
-          PUBLISHED_COUNT="$(
-            jq --arg name "${RELEASE_APK_NAME}" \
-              '[.assets[] | select(.name == $name)] | length' \
-              release-state.json
-          )"
-
-          test "${PUBLISHED_COUNT}" -eq 1
-
-          EXPECTED_SIZE="$(stat -c%s "${RELEASE_APK_NAME}")"
-
-          PUBLISHED_SIZE="$(
-            jq --arg name "${RELEASE_APK_NAME}" \
-              -r '.assets[] | select(.name == $name) | .size' \
-              release-state.json
-          )"
-
-          test "${PUBLISHED_SIZE}" = "${EXPECTED_SIZE}"
+          test -s "${RELEASE_APK_NAME}"
+          test -s "${RELEASE_APK_NAME}.sha256"
+          sha256sum --check "${RELEASE_APK_NAME}.sha256"
 
           EXPECTED_SHA="$(awk '{print $1}' "${RELEASE_APK_NAME}.sha256")"
+          ORIGINAL_SHA="$(awk '{print $1}' "../release-artifact/${RELEASE_APK_NAME}.sha256")"
 
-          PUBLISHED_SHA="$(
-            jq --arg name "${RELEASE_APK_NAME}" \
-              -r '.assets[] | select(.name == $name) | .digest // ""' \
-              release-state.json |
-            sed 's/^sha256://'
-          )"
+          test "${EXPECTED_SHA}" = "${ORIGINAL_SHA}"
 
-          test -n "${PUBLISHED_SHA}"
-          test "${PUBLISHED_SHA}" = "${EXPECTED_SHA}"
+          git fetch --force origin \
+            "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
 
-          CURRENT_BRANCH_SHA="$(
-            gh api "repos/${GITHUB_REPOSITORY}/branches/${EXPECTED_BRANCH}" \
-              --jq '.commit.sha'
-          )"
+          TAG_TARGET_SHA="$(git rev-parse "refs/tags/${RELEASE_TAG}^{}")"
 
-          if [ "${CURRENT_BRANCH_SHA}" != "${SOURCE_SHA}" ]; then
-            echo "::error::The release branch advanced before the stable tag update."
-            exit 1
-          fi
-
-          TAG_REF_GET_API="repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}"
-          TAG_REF_UPDATE_API="repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}"
-
-          if gh api "${TAG_REF_GET_API}" >/dev/null 2>&1; then
-            gh api "${TAG_REF_UPDATE_API}" \
-              -X PATCH \
-              -f sha="${SOURCE_SHA}" \
-              -F force=true >/dev/null
-          else
-            gh api "repos/${GITHUB_REPOSITORY}/git/refs" \
-              -X POST \
-              -f ref="refs/tags/${RELEASE_TAG}" \
-              -f sha="${SOURCE_SHA}" >/dev/null
-          fi
-
-          TAG_TARGET_SHA="$(
-            gh api "${TAG_REF_GET_API}" \
-              --jq '.object.sha'
-          )"
-
-          echo "Expected tag target: ${SOURCE_SHA}"
-          echo "Actual tag target:   ${TAG_TARGET_SHA}"
+          echo "Expected source: ${SOURCE_SHA}"
+          echo "Actual tag target: ${TAG_TARGET_SHA}"
 
           if [ "${TAG_TARGET_SHA}" != "${SOURCE_SHA}" ]; then
-            echo "::error::The stable Git tag does not point to the exact APK source commit."
+            echo "::error::Stable release tag does not point to the APK source commit."
             exit 1
           fi
 
-          jq -r '.body' release-state.json | grep -F "${SOURCE_SHA}"
-
           {
-            echo "## Unified release successfully published"
+            echo "## Unified release published and verified"
             echo
             echo "- APK source commit: ${SOURCE_SHA}"
             echo "- Primary Worker source commit: ${SOURCE_SHA}"
             echo "- Fallback Worker source commit: ${SOURCE_SHA}"
-            echo "- Stable Git tag target: ${TAG_TARGET_SHA}"
-            echo "- APK size: ${PUBLISHED_SIZE} bytes"
-            echo "- APK SHA-256: ${PUBLISHED_SHA}"
+            echo "- Stable tag target: ${TAG_TARGET_SHA}"
+            echo "- APK SHA-256: ${EXPECTED_SHA}"
             echo
-            echo "### One permanent download link"
+            echo "### Permanent APK link"
             echo
             echo "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${RELEASE_APK_NAME}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   manual-build-only:
-    name: Build-only verification artifact (no deployment or publication)
+    name: Build-only result - no deployment or publication
     needs:
-      - refresh-dependencies
+      - verify-source
       - build-test-verify
-    if: ${{ (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release != true)) && needs.refresh-dependencies.result == 'success' && needs.build-test-verify.result == 'success' }}
+    if: ${{ (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_release != true)) && needs.verify-source.result == 'success' && needs.build-test-verify.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
     steps:
-      - name: Record the manual build-only result
+      - name: Record safe build-only result
         shell: bash
         run: |
           {
-            echo "## Build-only verification completed - no deployment requested"
+            echo "## Build-only verification completed"
             echo
-            echo "- Trigger commit: ${GITHUB_SHA}"
-            echo "- Resolved source commit: ${{ needs.refresh-dependencies.outputs.source_sha }}"
-            echo "- Verified APK artifact: available in this workflow run"
+            echo "- Source commit: ${{ needs.verify-source.outputs.source_sha }}"
+            echo "- APK artifact: uploaded to this workflow run"
             echo "- Worker deployment: NO"
-            echo "- Stable GitHub Release: unchanged"
+            echo "- Stable APK release: unchanged"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   release-blocked:
     name: Release blocked because a required stage failed
     needs:
-      - refresh-dependencies
+      - verify-source
       - build-test-verify
       - deploy-workers
     if: >-
       ${{ always() &&
           github.event_name == 'workflow_dispatch' &&
           inputs.publish_release == true &&
-          (needs.refresh-dependencies.result != 'success' ||
+          (needs.verify-source.result != 'success' ||
            needs.build-test-verify.result != 'success' ||
            needs.deploy-workers.result != 'success') }}
     runs-on: ubuntu-latest
@@ -1100,17 +873,17 @@ jobs:
       contents: read
 
     steps:
-      - name: Record the blocked release
+      - name: Record blocked release
         shell: bash
         run: |
           {
             echo "## Unified release blocked"
             echo
             echo "- Trigger commit: ${GITHUB_SHA}"
-            echo "- Resolved source commit: ${{ needs.refresh-dependencies.outputs.source_sha }}"
-            echo "- Dependency refresh result: ${{ needs.refresh-dependencies.result }}"
-            echo "- APK build result: ${{ needs.build-test-verify.result }}"
-            echo "- Worker deployment result: ${{ needs.deploy-workers.result }}"
-            echo "- Stable APK link was not confirmed as updated."
-            echo "- Repair the failed stage before another release."
+            echo "- Source verification: ${{ needs.verify-source.result }}"
+            echo "- APK build: ${{ needs.build-test-verify.result }}"
+            echo "- Worker deployment: ${{ needs.deploy-workers.result }}"
+            echo "- Stable APK publication was not authorized by this job."
+            echo "- If one Worker deployed and the other failed, do not publish the APK."
+            echo "- Re-run the approved deployment from the same exact source commit after reviewing the failure."
           } >> "${GITHUB_STEP_SUMMARY}"
