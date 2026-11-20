@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -37,10 +38,12 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
 
   Offset _dragOffset = Offset.zero;
   String _bodyAnimation = 'Hero_Idle';
+
   Timer? _bodyTimer;
   Timer? _bodyResetTimer;
   Timer? _faceTimer;
   Timer? _faceResetTimer;
+
   int _bodyIndex = 0;
   int _faceIndex = 0;
   bool _foreground = true;
@@ -48,18 +51,27 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addObserver(this);
-    _foreground = WidgetsBinding.instance.lifecycleState == null ||
-        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-    if (_foreground) _startMotionTimers();
+
+    _foreground =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState ==
+            AppLifecycleState.resumed;
+
+    if (_foreground) {
+      _startMotionTimers();
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final nextForeground = state == AppLifecycleState.resumed;
+
     if (_foreground == nextForeground) return;
 
     _foreground = nextForeground;
+
     if (nextForeground) {
       _startMotionTimers();
     } else {
@@ -69,10 +81,12 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
 
   void _startMotionTimers() {
     _stopMotionTimers();
+
     _bodyTimer = Timer.periodic(
       const Duration(seconds: 9),
       (_) => _playNextBodyAnimation(),
     );
+
     _faceTimer = Timer.periodic(
       const Duration(seconds: 8),
       (_) => _playNextIdleExpression(),
@@ -84,6 +98,7 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
     _bodyResetTimer?.cancel();
     _faceTimer?.cancel();
     _faceResetTimer?.cancel();
+
     _bodyTimer = null;
     _bodyResetTimer = null;
     _faceTimer = null;
@@ -91,49 +106,83 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
   }
 
   void _playNextBodyAnimation() {
-    if (!mounted || !_foreground || _faceRuntime.liteStatus.value.isSpeaking) {
+    if (!mounted ||
+        !_foreground ||
+        _faceRuntime.liteStatus.value.isSpeaking) {
       return;
     }
 
-    final animation = _bodyIndex.isEven ? 'Hero_Welcome' : 'Hero_Power';
+    final animation =
+        _bodyIndex.isEven ? 'Hero_Welcome' : 'Hero_Power';
+
     _bodyIndex++;
-    setState(() => _bodyAnimation = animation);
+
+    setState(() {
+      _bodyAnimation = animation;
+    });
 
     _bodyResetTimer?.cancel();
-    _bodyResetTimer = Timer(const Duration(milliseconds: 2600), () {
-      if (!mounted || !_foreground) return;
-      setState(() => _bodyAnimation = 'Hero_Idle');
-    });
+
+    _bodyResetTimer = Timer(
+      const Duration(milliseconds: 2600),
+      () {
+        if (!mounted || !_foreground) return;
+
+        setState(() {
+          _bodyAnimation = 'Hero_Idle';
+        });
+      },
+    );
   }
 
   void _playNextIdleExpression() {
-    if (!mounted || !_foreground || _faceRuntime.liteStatus.value.isSpeaking) {
+    if (!mounted ||
+        !_foreground ||
+        _faceRuntime.liteStatus.value.isSpeaking) {
       return;
     }
 
-    final expression = _idleExpressions[_faceIndex % _idleExpressions.length];
+    final expression =
+        _idleExpressions[_faceIndex % _idleExpressions.length];
+
     _faceIndex++;
+
     _faceRuntime.playExpression(expression);
 
     _faceResetTimer?.cancel();
-    _faceResetTimer = Timer(const Duration(milliseconds: 1450), () {
-      if (!mounted || !_foreground || _faceRuntime.liteStatus.value.isSpeaking) {
-        return;
-      }
-      _faceRuntime.playExpression(HeroExpression.neutral);
-    });
+
+    _faceResetTimer = Timer(
+      const Duration(milliseconds: 1450),
+      () {
+        if (!mounted ||
+            !_foreground ||
+            _faceRuntime.liteStatus.value.isSpeaking) {
+          return;
+        }
+
+        _faceRuntime.playExpression(HeroExpression.neutral);
+      },
+    );
   }
 
   void _move(DragUpdateDetails details, Size screen) {
     const edge = 5.0;
+
     setState(() {
       final next = _dragOffset + details.delta;
+
       _dragOffset = Offset(
         next.dx
-            .clamp(-screen.width + _width + edge, screen.width - _width - edge)
+            .clamp(
+              -screen.width + _width + edge,
+              screen.width - _width - edge,
+            )
             .toDouble(),
         next.dy
-            .clamp(-screen.height + _height + edge, screen.height - _height - edge)
+            .clamp(
+              -screen.height + _height + edge,
+              screen.height - _height - edge,
+            )
             .toDouble(),
       );
     });
@@ -159,65 +208,62 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
           onPanUpdate: (details) => _move(details, screen),
-          child: Tooltip(
-            message: 'خلصانة',
-            child: SizedBox(
-              width: _width,
-              height: _height,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF081225).withValues(alpha: 0.94),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0x9972D7FF),
-                    width: 1.2,
+          child: SizedBox(
+            width: _width,
+            height: _height,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xFF081225).withValues(alpha: 0.94),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0x9972D7FF),
+                  width: 1.2,
+                ),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: Color(0x55000000),
+                    blurRadius: 13,
+                    offset: Offset(0, 5),
                   ),
-                  boxShadow: const <BoxShadow>[
-                    BoxShadow(
-                      color: Color(0x55000000),
-                      blurRadius: 13,
-                      offset: Offset(0, 5),
+                  BoxShadow(
+                    color: Color(0x2272D7FF),
+                    blurRadius: 12,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(19),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    IgnorePointer(
+                      child: Sa7biHero3D(
+                        animationName: _bodyAnimation,
+                        cameraControls: false,
+                        compact: true,
+                        enableFaceAnimations: true,
+                      ),
                     ),
-                    BoxShadow(
-                      color: Color(0x2272D7FF),
-                      blurRadius: 12,
-                      spreadRadius: 1,
+                    Positioned(
+                      left: 7,
+                      right: 7,
+                      bottom: 4,
+                      child: Container(
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD76A),
+                          borderRadius: BorderRadius.circular(4),
+                          boxShadow: const <BoxShadow>[
+                            BoxShadow(
+                              color: Color(0x99FFD76A),
+                              blurRadius: 7,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(19),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      IgnorePointer(
-                        child: Sa7biHero3D(
-                          animationName: _bodyAnimation,
-                          cameraControls: false,
-                          compact: true,
-                          enableFaceAnimations: true,
-                        ),
-                      ),
-                      Positioned(
-                        left: 7,
-                        right: 7,
-                        bottom: 4,
-                        child: Container(
-                          height: 3,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFD76A),
-                            borderRadius: BorderRadius.circular(4),
-                            boxShadow: const <BoxShadow>[
-                              BoxShadow(
-                                color: Color(0x99FFD76A),
-                                blurRadius: 7,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
