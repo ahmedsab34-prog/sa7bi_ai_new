@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../audio_player_service.dart';
+import '../models/sa7bi_hero_chat_sticker.dart';
+import '../models/social_sticker.dart';
 import '../services/social_attachment_service.dart';
+import 'sa7bi_hero_sticker_kit.dart';
+import 'social_sticker_kit.dart';
 
-class SocialConnectAttachmentMessageView
-    extends StatefulWidget {
+class SocialConnectAttachmentMessageView extends StatefulWidget {
   const SocialConnectAttachmentMessageView({
     super.key,
     required this.messageText,
@@ -40,23 +43,15 @@ class _SocialConnectAttachmentMessageViewState
     covariant SocialConnectAttachmentMessageView oldWidget,
   ) {
     super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.messageText != widget.messageText) {
-      _prepare();
-    }
+    if (oldWidget.messageText != widget.messageText) _prepare();
   }
 
   void _prepare() {
-    _envelope = SocialAttachmentMessageCodec.decode(
-      widget.messageText,
-    );
-
+    _envelope = SocialAttachmentMessageCodec.decode(widget.messageText);
     final attachment = _envelope?.attachment;
-
     _download = attachment == null
         ? null
-        : SocialAttachmentService.instance
-            .downloadToTemporaryFile(
+        : SocialAttachmentService.instance.downloadToTemporaryFile(
             attachmentId: attachment.id,
             fileName: attachment.fileName,
           );
@@ -64,15 +59,23 @@ class _SocialConnectAttachmentMessageViewState
 
   @override
   Widget build(BuildContext context) {
-    final envelope = _envelope;
+    // Keep all previous static sticker tokens working in private and group chats.
+    final classicSticker = Sa7biSticker.tryParse(widget.messageText);
+    if (classicSticker != null) {
+      return Sa7biStickerMessageView(sticker: classicSticker);
+    }
 
+    // New tokens show an actual animated GIF, or a tappable 3D character card.
+    final heroSticker = Sa7biHeroChatSticker.tryParse(widget.messageText);
+    if (heroSticker != null) {
+      return Sa7biHeroChatStickerMessageView(sticker: heroSticker);
+    }
+
+    final envelope = _envelope;
     if (envelope == null) {
       return SelectableText(
         widget.messageText,
-        style: TextStyle(
-          color: widget.textColor,
-          height: 1.45,
-        ),
+        style: TextStyle(color: widget.textColor, height: 1.45),
       );
     }
 
@@ -88,17 +91,12 @@ class _SocialConnectAttachmentMessageViewState
                 SizedBox(
                   width: 17,
                   height: 17,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 9),
                 Text(
                   'تحميل المرفق...',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
                 ),
               ],
             ),
@@ -108,10 +106,7 @@ class _SocialConnectAttachmentMessageViewState
         if (snapshot.hasError || !snapshot.hasData) {
           return const Text(
             'تعذر تحميل المرفق. تحقق من الاتصال وحاول مرة أخرى.',
-            style: TextStyle(
-              color: Color(0xFFFFB4B4),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Color(0xFFFFB4B4), fontSize: 12),
           );
         }
 
@@ -151,26 +146,18 @@ class _SocialAttachmentPreview extends StatelessWidget {
               width: 245,
               height: 185,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) {
-                return const _AttachmentFileCard(
-                  icon: Icons.broken_image_outlined,
-                  title: 'تعذر عرض الصورة',
-                  subtitle: 'يمكنك مشاركة الملف لفتحه بتطبيق آخر.',
-                );
-              },
+              errorBuilder: (_, __, ___) => const _AttachmentFileCard(
+                icon: Icons.broken_image_outlined,
+                title: 'تعذر عرض الصورة',
+                subtitle: 'يمكنك مشاركة الملف لفتحه بتطبيق آخر.',
+              ),
             ),
           ),
           if (caption.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(
-              caption,
-              style: const TextStyle(color: Colors.white),
-            ),
+            Text(caption, style: const TextStyle(color: Colors.white)),
           ],
-          _AttachmentShareButton(
-            file: file,
-            caption: caption,
-          ),
+          _AttachmentShareButton(file: file, caption: caption),
         ],
       );
     }
@@ -185,10 +172,7 @@ class _SocialAttachmentPreview extends StatelessWidget {
           ),
           if (caption.isNotEmpty) ...[
             const SizedBox(height: 5),
-            Text(
-              caption,
-              style: const TextStyle(color: Colors.white70),
-            ),
+            Text(caption, style: const TextStyle(color: Colors.white70)),
           ],
         ],
       );
@@ -204,32 +188,22 @@ class _SocialAttachmentPreview extends StatelessWidget {
           title: attachment.fileName,
           subtitle: _formatSize(attachment.sizeBytes),
         ),
-        _AttachmentShareButton(
-          file: file,
-          caption: caption,
-        ),
+        _AttachmentShareButton(file: file, caption: caption),
         if (caption.isNotEmpty)
-          Text(
-            caption,
-            style: const TextStyle(color: Colors.white70),
-          ),
+          Text(caption, style: const TextStyle(color: Colors.white70)),
       ],
     );
   }
 
   String _formatSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
-
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }
 
-/// Uses the app's central background audio player.
-/// It does not create an additional just_audio player.
+/// Uses the app's central background audio player; it does not create another
+/// just_audio player for every voice message.
 class _InlineAudioAttachment extends StatefulWidget {
   const _InlineAudioAttachment({
     required this.file,
@@ -244,17 +218,13 @@ class _InlineAudioAttachment extends StatefulWidget {
       _InlineAudioAttachmentState();
 }
 
-class _InlineAudioAttachmentState
-    extends State<_InlineAudioAttachment> {
+class _InlineAudioAttachmentState extends State<_InlineAudioAttachment> {
   Future<void> _toggle() async {
     try {
       final handler = AudioController.handler;
       final currentId = handler?.mediaItem.value?.id;
-
       if (currentId == widget.file.path) {
-        final isPlaying =
-            handler?.playbackState.value.playing ?? false;
-
+        final isPlaying = handler?.playbackState.value.playing ?? false;
         if (isPlaying) {
           await AudioController.pause();
         } else {
@@ -269,11 +239,8 @@ class _InlineAudioAttachmentState
       }
     } catch (_) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذر تشغيل الرسالة الصوتية.'),
-        ),
+        const SnackBar(content: Text('تعذر تشغيل الرسالة الصوتية.')),
       );
     }
   }
@@ -282,22 +249,16 @@ class _InlineAudioAttachmentState
   Widget build(BuildContext context) {
     return StreamBuilder<PlaybackState>(
       stream: AudioController.handler?.playbackState,
-      initialData:
-          AudioController.handler?.playbackState.value,
+      initialData: AudioController.handler?.playbackState.value,
       builder: (context, snapshot) {
         final handler = AudioController.handler;
         final currentId = handler?.mediaItem.value?.id;
-
         final isCurrent = currentId == widget.file.path;
-        final isPlaying =
-            isCurrent && (snapshot.data?.playing ?? false);
+        final isPlaying = isCurrent && (snapshot.data?.playing ?? false);
 
         return Container(
           constraints: const BoxConstraints(maxWidth: 245),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 5,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
             color: const Color(0x332A9D8F),
             borderRadius: BorderRadius.circular(12),
@@ -307,9 +268,7 @@ class _InlineAudioAttachmentState
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: isPlaying
-                    ? 'إيقاف مؤقت'
-                    : 'تشغيل الرسالة الصوتية',
+                tooltip: isPlaying ? 'إيقاف مؤقت' : 'تشغيل الرسالة الصوتية',
                 onPressed: _toggle,
                 icon: Icon(
                   isPlaying
@@ -324,10 +283,7 @@ class _InlineAudioAttachmentState
                   widget.fileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
                 ),
               ),
             ],
@@ -362,11 +318,7 @@ class _AttachmentFileCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            color: const Color(0xFF7FB4FF),
-            size: 25,
-          ),
+          Icon(icon, color: const Color(0xFF7FB4FF), size: 25),
           const SizedBox(width: 9),
           Flexible(
             child: Column(
@@ -385,10 +337,7 @@ class _AttachmentFileCard extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 10,
-                  ),
+                  style: const TextStyle(color: Colors.white54, fontSize: 10),
                 ),
               ],
             ),
@@ -415,24 +364,16 @@ class _AttachmentShareButton extends StatelessWidget {
         try {
           await Share.shareXFiles(
             <XFile>[XFile(file.path)],
-            text: caption.isEmpty
-                ? 'مرفق من صاحبي Connect'
-                : caption,
+            text: caption.isEmpty ? 'مرفق من صاحبي Connect' : caption,
           );
         } catch (_) {
           if (!context.mounted) return;
-
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('تعذرت مشاركة المرفق.'),
-            ),
+            const SnackBar(content: Text('تعذرت مشاركة المرفق.')),
           );
         }
       },
-      icon: const Icon(
-        Icons.open_in_new_rounded,
-        size: 16,
-      ),
+      icon: const Icon(Icons.open_in_new_rounded, size: 16),
       label: const Text('فتح أو مشاركة الملف'),
       style: TextButton.styleFrom(
         foregroundColor: const Color(0xFF9BC8FF),
