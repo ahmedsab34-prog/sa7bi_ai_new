@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'theme/sa7bi_theme.dart';
 
@@ -61,6 +62,8 @@ class OwnerProfileScreen extends StatelessWidget {
                   icon: Icons.public_rounded,
                   direction: TextDirection.ltr,
                 ),
+                const SizedBox(height: 12),
+                _buildSocialLinksCard(),
                 const SizedBox(height: 12),
                 _buildMissionCard(),
                 const SizedBox(height: 12),
@@ -314,6 +317,210 @@ class OwnerProfileScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openSocialLink(BuildContext context, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      _showSocialLinkError(context);
+      return;
+    }
+
+    try {
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && context.mounted) {
+        _showSocialLinkError(context);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        _showSocialLinkError(context);
+      }
+    }
+  }
+
+  void _showSocialLinkError(BuildContext context) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('تعذر فتح الرابط. حاول مرة أخرى.'),
+        ),
+      );
+  }
+
+  Widget _buildSocialLinksCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Sa7biTheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Sa7biTheme.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.20),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.connect_without_contact_rounded,
+                color: Sa7biTheme.cyan,
+                size: 22,
+              ),
+              SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  'تابع القنوات الرسمية',
+                  style: TextStyle(
+                    color: Sa7biTheme.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'تابع أخبار ومحتوى صاحبي AI من القنوات الرسمية للمؤسس.',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              color: Sa7biTheme.textSecondary,
+              fontSize: 12,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 9,
+            runSpacing: 9,
+            children: [
+              _buildSocialLink(
+                context: context,
+                title: 'Facebook',
+                handle: '@ahmedsab34',
+                icon: Icons.facebook_rounded,
+                color: const Color(0xFF1877F2),
+                url: 'https://www.facebook.com/ahmedsab34',
+              ),
+              _buildSocialLink(
+                context: context,
+                title: 'Telegram',
+                handle: '@ahmed_sab34',
+                icon: Icons.send_rounded,
+                color: const Color(0xFF2AABEE),
+                url: 'https://t.me/ahmed_sab34',
+              ),
+              _buildSocialLink(
+                context: context,
+                title: 'Instagram',
+                handle: '@ahmedsab34',
+                icon: Icons.camera_alt_rounded,
+                color: const Color(0xFFE66AA6),
+                url: 'https://www.instagram.com/ahmedsab34/',
+              ),
+              _buildSocialLink(
+                context: context,
+                title: 'TikTok',
+                handle: '@ahmedsab344',
+                icon: Icons.music_note_rounded,
+                color: Sa7biTheme.textPrimary,
+                url: 'https://www.tiktok.com/@ahmedsab344',
+              ),
+              _buildSocialLink(
+                context: context,
+                title: 'YouTube',
+                handle: '@ahmedsab3440',
+                icon: Icons.play_circle_fill_rounded,
+                color: const Color(0xFFFF4545),
+                url: 'https://www.youtube.com/@ahmedsab3440',
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          const Text(
+            'تفتح الروابط القنوات خارج التطبيق. لا نطلب كلمات مرور أو صلاحيات دخول.',
+            textDirection: TextDirection.rtl,
+            style: TextStyle(
+              color: Sa7biTheme.textMuted,
+              fontSize: 10,
+              height: 1.55,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSocialLink({
+    required BuildContext context,
+    required String title,
+    required String handle,
+    required IconData icon,
+    required Color color,
+    required String url,
+  }) {
+    return Material(
+      color: Sa7biTheme.backgroundRaised,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () => _openSocialLink(context, url),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          constraints: const BoxConstraints(minWidth: 126),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Sa7biTheme.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 21),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    textDirection: TextDirection.ltr,
+                    style: const TextStyle(
+                      color: Sa7biTheme.textPrimary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    handle,
+                    textDirection: TextDirection.ltr,
+                    style: const TextStyle(
+                      color: Sa7biTheme.textSecondary,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 5),
+              const Icon(
+                Icons.open_in_new_rounded,
+                color: Sa7biTheme.textMuted,
+                size: 13,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
