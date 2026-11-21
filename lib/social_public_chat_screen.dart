@@ -7,7 +7,7 @@ import 'services/social_messaging_service.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// الغرفة العامة الواحدة المشتركة بين مستخدمي صاحبي Connect.
-/// التحديث هنا polling كل 5 ثوانٍ، وليس WebSocket.
+/// التحديث كل 5 ثوانٍ باستخدام polling، وليس WebSocket.
 class SocialPublicChatScreen extends StatefulWidget {
   const SocialPublicChatScreen({super.key});
 
@@ -22,7 +22,6 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
   final ScrollController _scrollController = ScrollController();
 
   Timer? _pollTimer;
-
   List<SocialPublicMessage> _messages = [];
 
   bool _loading = true;
@@ -74,7 +73,9 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
       final merged = <String, SocialPublicMessage>{};
 
       for (final message in _messages) {
-        merged[message.id] = message;
+        if (message.id.isNotEmpty) {
+          merged[message.id] = message;
+        }
       }
 
       for (final message in incoming) {
@@ -158,8 +159,6 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
       });
 
       _scrollToLatest();
-
-      // تحديث السجل بعد الإرسال لجلب أي رسائل وصلت بالتزامن.
       unawaited(_loadMessages(silent: true));
     } on SocialMessagingException catch (error) {
       if (mounted) {
@@ -191,7 +190,8 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
               style: TextStyle(color: Colors.white),
             ),
             content: const Text(
-              'اختار سبب الإبلاغ. سيتم تسجيل البلاغ للمراجعة، ولا يعني ذلك حذف الرسالة تلقائيًا.',
+              'اختار سبب الإبلاغ. سيتم تسجيل البلاغ للمراجعة، '
+              'ولا يعني ذلك حذف الرسالة تلقائيًا.',
               style: TextStyle(
                 color: Colors.white70,
                 height: 1.5,
