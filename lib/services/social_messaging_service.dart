@@ -59,12 +59,12 @@ class SocialMessagingService {
   // ---------------------------------------------------------------------------
 
   /// تحميل رسائل الغرفة العامة المشتركة بين مستخدمي صاحبي.
-  /// before يستخدم لتحميل الرسائل الأقدم عند إضافة pagination.
   Future<List<SocialPublicMessage>> getPublicMessages({
     int limit = 50,
     int? before,
   }) async {
     final safeLimit = limit.clamp(1, 50);
+
     final query = <String, String>{
       'limit': safeLimit.toString(),
     };
@@ -154,12 +154,13 @@ class SocialMessagingService {
     String box = 'inbox',
   }) async {
     final safeBox = box == 'outbox' ? 'outbox' : 'inbox';
+
     final result = await _request(
       'GET',
       '/v1/social/invitations?box=$safeBox',
     );
-    final values = result['invitations'];
 
+    final values = result['invitations'];
     if (values is! List) return const [];
 
     return values
@@ -206,6 +207,7 @@ class SocialMessagingService {
     required bool accept,
   }) async {
     final action = accept ? 'accept' : 'decline';
+
     final result = await _request(
       'POST',
       '/v1/social/invitations/$invitationId/$action',
@@ -234,8 +236,8 @@ class SocialMessagingService {
       'GET',
       '/v1/social/conversations',
     );
-    final values = result['conversations'];
 
+    final values = result['conversations'];
     if (values is! List) return const [];
 
     return values
@@ -254,6 +256,7 @@ class SocialMessagingService {
       '/v1/social/conversations',
       body: {'userId': userId},
     );
+
     final conversation = _asMap(result['conversation']);
     final id = conversation['id'];
 
@@ -272,12 +275,13 @@ class SocialMessagingService {
     int limit = 50,
   }) async {
     final safeLimit = limit.clamp(1, 100);
+
     final result = await _request(
       'GET',
       '/v1/social/messages?conversationId=${Uri.encodeQueryComponent(conversationId)}&limit=$safeLimit',
     );
-    final values = result['messages'];
 
+    final values = result['messages'];
     if (values is! List) return const [];
 
     return values
@@ -327,7 +331,17 @@ class SocialMessagingService {
   // Shared network request handling
   // ---------------------------------------------------------------------------
 
-  Uri _uri(String path) => Uri.parse(AppConfig.buildBackendUrl(path));
+  /// يقبل مسارًا نسبيًا أو رابطًا كاملًا.
+  /// هذا ضروري لأن تحميل رسائل الشات العام يبني URI مع query parameters.
+  Uri _uri(String path) {
+    final parsed = Uri.tryParse(path);
+
+    if (parsed != null && parsed.hasScheme) {
+      return parsed;
+    }
+
+    return Uri.parse(AppConfig.buildBackendUrl(path));
+  }
 
   Future<Map<String, dynamic>> _request(
     String method,
@@ -337,6 +351,7 @@ class SocialMessagingService {
     await initialize();
 
     final token = _token;
+
     if (token == null || token.isEmpty) {
       throw const SocialMessagingException(
         'AUTH_REQUIRED',
@@ -406,9 +421,11 @@ class SocialMessagingService {
       final value = jsonDecode(
         utf8.decode(response.bodyBytes, allowMalformed: true),
       );
+
       if (value is! Map) {
         throw const FormatException('Expected a JSON object.');
       }
+
       decoded = Map<String, dynamic>.from(value);
     } catch (_) {
       throw SocialMessagingException(
@@ -425,6 +442,7 @@ class SocialMessagingService {
         decoded['error'],
         'HTTP_${response.statusCode}',
       );
+
       throw SocialMessagingException(
         error,
         _friendlyMessage(error, decoded['message']),
@@ -437,7 +455,10 @@ class SocialMessagingService {
 
   static Map<String, dynamic> _asMap(dynamic value) {
     if (value is Map<String, dynamic>) return value;
-    if (value is Map) return Map<String, dynamic>.from(value);
+
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
 
     throw const SocialMessagingException(
       'INVALID_SERVER_RESPONSE',
@@ -738,7 +759,11 @@ SocialMessageUser _readUser(dynamic value) {
   if (value is Map) {
     return SocialMessageUser.fromJson(Map<String, dynamic>.from(value));
   }
-  return const SocialMessageUser(id: '', username: 'لاعب');
+
+  return const SocialMessageUser(
+    id: '',
+    username: 'لاعب',
+  );
 }
 
 int _readInt(dynamic value) {
