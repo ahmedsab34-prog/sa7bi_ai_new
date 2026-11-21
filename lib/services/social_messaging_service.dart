@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -8,8 +9,8 @@ import 'sa7bi_network_client.dart';
 import 'social_guest_session_service.dart';
 import 'social_session_storage.dart';
 
-/// خدمة الدعوات داخل التطبيق والمحادثات الخاصة.
-/// تستخدم جلسة حساب الألعاب نفسها، ولا تنشئ حسابًا أو رمز دخول منفصلًا.
+/// خدمة المحادثات الخاصة والعامة ودعوات الألعاب.
+/// تستخدم جلسة الحساب نفسها ولا تنشئ جلسة دخول منفصلة.
 class SocialMessagingService {
   SocialMessagingService._();
 
@@ -22,8 +23,6 @@ class SocialMessagingService {
 
   bool get isSignedIn => _token != null && _token!.isNotEmpty;
 
-  /// يضمن وجود جلسة ضيف أو استعادة الجلسة السابقة،
-  /// ثم يقرأ رمز الدخول المشترك مع خدمة الألعاب.
   Future<void> initialize() async {
     if (_token != null && _token!.isNotEmpty) return;
 
@@ -50,11 +49,106 @@ class SocialMessagingService {
     _token = await SocialSessionStorage.instance.readToken();
   }
 
-  /// يعيد قراءة الجلسة عند الحاجة بعد تسجيل الدخول أو الخروج في شاشة أخرى.
   Future<void> refreshSession() async {
     _token = null;
     await initialize();
   }
+
+  // ---------------------------------------------------------------------------
+  // Public global chat
+  // ---------------------------------------------------------------------------
+
+  /// تحميل رسائل الغرفة العامة المشتركة بين مستخدمي صاحبي.
+  /// before يستخدم لتحميل الرسائل الأقدم عند إضافة pagination.
+  Future<List<SocialPublicMessage>> getPublicMessages({
+    int limit = 50,
+    int? before,
+  }) async {
+    final safeLimit = limit.clamp(1, 50);
+    final query = <String, String>{
+      'limit': safeLimit.toString(),
+    };
+
+    if (before != null && before > 0) {
+      query['before'] = before.toString();
+    }
+
+    final uri = _uri('/v1/social/public/messages')
+        .replace(queryParameters: query);
+
+    final result = await _request(
+      'GET',
+      uri.toString(),
+    );
+
+    final values = result['messages'];
+    if (values is! List) return const [];
+
+    final currentUserId = result['currentUserId'] is String
+        ? result['currentUserId'] as String
+        : '';
+
+    return values
+        .whereType<Map>()
+        .map(
+          (item) => SocialPublicMessage.fromJson(
+            Map<String, dynamic>.from(item),
+            currentUserId: currentUserId,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  /// إرسال رسالة إلى الغرفة العامة المشتركة.
+  Future<SocialPublicMessage> sendPublicMessage(String text) async {
+    final cleaned = text.trim();
+
+    if (cleaned.isEmpty || cleaned.length > 3000) {
+      throw const SocialMessagingException(
+        'INVALID_MESSAGE',
+        'اكتب رسالة من حرف واحد إلى 3000 حرف.',
+      );
+    }
+
+    final result = await _request(
+      'POST',
+      '/v1/social/public/messages',
+      body: {'text': cleaned},
+    );
+
+    return SocialPublicMessage.fromJson(
+      _asMap(result['message']),
+      currentUserId: '',
+    ).copyWith(isMine: true);
+  }
+
+  /// الإبلاغ عن رسالة في الغرفة العامة.
+  Future<void> reportPublicMessage({
+    required String messageId,
+    required String reason,
+  }) async {
+    final cleanedReason = reason.trim();
+
+    if (messageId.trim().isEmpty || cleanedReason.isEmpty) {
+      throw const SocialMessagingException(
+        'INVALID_REPORT',
+        'اختر سببًا واضحًا للإبلاغ عن الرسالة.',
+      );
+    }
+
+    await _request(
+      'POST',
+      '/v1/social/public/report',
+      body: {
+        'messageId': messageId.trim(),
+        'reason': cleanedReason,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Game invitations
+  // ---------------------------------------------------------------------------
 
   Future<List<SocialGameInvitation>> getInvitations({
     String box = 'inbox',
@@ -107,7 +201,6 @@ class SocialMessagingService {
     return SocialGameInvitation.fromJson(_asMap(result['invitation']));
   }
 
-  /// قبول الدعوة يعيد roomId. الرفض يعيد null.
   Future<String?> respondToInvitation({
     required String invitationId,
     required bool accept,
@@ -131,6 +224,10 @@ class SocialMessagingService {
       'تم قبول الدعوة لكن الخادم لم يُرجع معرّف المباراة.',
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Private conversations
+  // ---------------------------------------------------------------------------
 
   Future<List<SocialConversationSummary>> getConversations() async {
     final result = await _request(
@@ -226,6 +323,10 @@ class SocialMessagingService {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Shared network request handling
+  // ---------------------------------------------------------------------------
+
   Uri _uri(String path) => Uri.parse(AppConfig.buildBackendUrl(path));
 
   Future<Map<String, dynamic>> _request(
@@ -280,10 +381,8 @@ class SocialMessagingService {
 
     late final http.Response response;
 
-    // مهلة مستقلة لقراءة جسم الرد، وليس لإرسال الطلب فقط.
     try {
-      response = await http.Response.fromStream(streamed)
-          .timeout(_timeout);
+      response = await http.Response.fromStream(streamed).timeout(_timeout);
     } on TimeoutException {
       throw const SocialMessagingException(
         'NETWORK_TIMEOUT',
@@ -387,6 +486,12 @@ class SocialMessagingService {
         return serverMessage is String && serverMessage.isNotEmpty
             ? serverMessage
             : 'نص الرسالة غير صالح.';
+      case 'ALREADY_REPORTED':
+        return 'سبق لك الإبلاغ عن هذه الرسالة.';
+      case 'MESSAGE_NOT_FOUND':
+        return 'الرسالة المطلوب الإبلاغ عنها غير موجودة.';
+      case 'INVALID_REPORT':
+        return 'بيانات الإبلاغ غير مكتملة.';
       case 'NETWORK_TIMEOUT':
         return 'انتهت مهلة الاتصال. حاول مرة أخرى.';
       default:
@@ -394,6 +499,58 @@ class SocialMessagingService {
             ? serverMessage
             : 'تعذر إكمال الطلب ($error). حاول مرة أخرى.';
     }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Models
+// -----------------------------------------------------------------------------
+
+class SocialPublicMessage {
+  const SocialPublicMessage({
+    required this.id,
+    required this.senderId,
+    required this.username,
+    required this.text,
+    required this.createdAt,
+    required this.isMine,
+  });
+
+  final String id;
+  final String senderId;
+  final String username;
+  final String text;
+  final int createdAt;
+  final bool isMine;
+
+  SocialPublicMessage copyWith({bool? isMine}) {
+    return SocialPublicMessage(
+      id: id,
+      senderId: senderId,
+      username: username,
+      text: text,
+      createdAt: createdAt,
+      isMine: isMine ?? this.isMine,
+    );
+  }
+
+  factory SocialPublicMessage.fromJson(
+    Map<String, dynamic> json, {
+    required String currentUserId,
+  }) {
+    final senderId =
+        json['senderId'] is String ? json['senderId'] as String : '';
+
+    return SocialPublicMessage(
+      id: json['id'] is String ? json['id'] as String : '',
+      senderId: senderId,
+      username: json['username'] is String
+          ? json['username'] as String
+          : 'مستخدم صاحبي',
+      text: json['text'] is String ? json['text'] as String : '',
+      createdAt: _readInt(json['createdAt']),
+      isMine: currentUserId.isNotEmpty && senderId == currentUserId,
+    );
   }
 }
 
