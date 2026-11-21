@@ -8,6 +8,13 @@ void main() {
   testWidgets(
     'Connect hub shows public chat first, private chats, groups and one HERO',
     (tester) async {
+      // Give the ListView enough room to build all destination cards.
+      tester.view.physicalSize = const Size(1080, 3200);
+      tester.view.devicePixelRatio = 1.0;
+
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       await tester.pumpWidget(
         const MaterialApp(
           home: SocialConnectHubScreen(),
@@ -23,12 +30,16 @@ void main() {
 
       expect(publicChat, findsOneWidget);
       expect(find.text('ادخل الشات العام'), findsOneWidget);
+
       expect(privateChats, findsOneWidget);
       expect(find.text('افتح المحادثات'), findsOneWidget);
+
       expect(groups, findsOneWidget);
       expect(find.text('استكشف المجموعات'), findsOneWidget);
+
       expect(hero, findsOneWidget);
 
+      // Verify the intended visual order.
       expect(
         tester.getTopLeft(publicChat).dy,
         lessThan(tester.getTopLeft(privateChats).dy),
@@ -49,6 +60,7 @@ void main() {
         find.textContaining('البطل الخارق الوحيد'),
         findsOneWidget,
       );
+
       expect(find.text('صاحبي الرفيق'), findsNothing);
       expect(find.textContaining('شخصية صاحبي 3D'), findsNothing);
 
