@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -145,6 +146,15 @@ class ChatVoiceService {
           listenMode: ListenMode.dictation,
           partialResults: true,
           cancelOnError: true,
+
+          // زيادة مهلة الصمت حتى لا تنتهي الجلسة عند
+          // الوقفات القصيرة أثناء الكلام.
+          pauseFor: const Duration(seconds: 10),
+
+          // حد أقصى للجلسة الواحدة.
+          // يمكن بدء جلسة ثانية وسيُضاف نصها إلى النص السابق
+          // من شاشة ChatScreen.
+          listenFor: const Duration(seconds: 60),
         ),
         onResult: (result) {
           final recognized = result.recognizedWords.trim();
