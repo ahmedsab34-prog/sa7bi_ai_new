@@ -1,8 +1,10 @@
+
 import 'package:flutter/material.dart';
 
 import 'sa7bi_hero_3d_screen.dart';
 import 'social_connections_screen.dart';
 import 'social_groups_workspace_screen.dart';
+import 'social_public_chat_screen.dart';
 import 'theme/sa7bi_theme.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
@@ -10,6 +12,14 @@ import 'widgets/sa7bi_subpage_app_bar.dart';
 /// HERO is the only 3D Sa7bi character shown in the app.
 class SocialConnectHubScreen extends StatelessWidget {
   const SocialConnectHubScreen({super.key});
+
+  void _openPublicChat(BuildContext context) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const SocialPublicChatScreen(),
+      ),
+    );
+  }
 
   void _openPrivateChats(BuildContext context) {
     Navigator.of(context).push<void>(
@@ -43,7 +53,7 @@ class SocialConnectHubScreen extends StatelessWidget {
         backgroundColor: Sa7biTheme.background,
         appBar: const Sa7biSubpageAppBar(
           title: 'صاحبي Connect',
-          subtitle: 'تواصل مع أصحابك ومع شخصية HERO الوحيدة لصاحبي',
+          subtitle: 'غرفتك للتواصل مع كل أصحاب صاحبي',
         ),
         body: SafeArea(
           top: false,
@@ -61,7 +71,7 @@ class SocialConnectHubScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'اختار محادثة خاصة أو استكشف المجتمعات العامة ومجموعاتك الخاصة.',
+                'ابدأ من الغرفة العامة، أو انتقل لمحادثاتك الخاصة ومجموعاتك.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Sa7biTheme.textSecondary,
@@ -70,22 +80,37 @@ class SocialConnectHubScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              _HeroPreviewCard(onPressed: () => _openHero(context)),
+
+              // The shared public room is the first communication destination.
+              _ConnectDestinationCard(
+                title: 'الشات العام',
+                subtitle: 'غرفة واحدة مشتركة لكل أصحاب صاحبي',
+                description:
+                    'اتكلم مع مستخدمي التطبيق في غرفة عامة واحدة. '
+                    'تقدر تشوف الرسائل الجديدة وترسل رسالتك وتبلّغ عن '
+                    'أي رسالة غير مناسبة.',
+                icon: Icons.public_rounded,
+                color: Sa7biTheme.cyan,
+                buttonText: 'ادخل الشات العام',
+                onPressed: () => _openPublicChat(context),
+              ),
               const SizedBox(height: 14),
+
               _ConnectDestinationCard(
                 title: 'المحادثات والأصدقاء',
-                subtitle: 'تواصل مباشر مع الأشخاص',
+                subtitle: 'محادثاتك الخاصة مع أصحابك',
                 description:
                     'ابحث عن أصحابك، افتح محادثة خاصة، تابع الرسائل الجديدة، '
-                    'شارك الاستيكرات وأرسل دعوات الألعاب.',
+                    'وشارك دعوات الألعاب.',
                 icon: Icons.forum_rounded,
-                color: Sa7biTheme.cyan,
+                color: const Color(0xFF8EA8FF),
                 buttonText: 'افتح المحادثات',
                 onPressed: () => _openPrivateChats(context),
               ),
               const SizedBox(height: 14),
+
               _ConnectDestinationCard(
-                title: 'المجموعات العامة',
+                title: 'المجموعات',
                 subtitle: 'مجتمعات عامة ومجموعات خاصة بالدعوة',
                 description:
                     'استكشف المجموعات العامة، أنشئ مجموعة خاصة، انضم برمز دعوة، '
@@ -95,7 +120,13 @@ class SocialConnectHubScreen extends StatelessWidget {
                 buttonText: 'استكشف المجموعات',
                 onPressed: () => _openGroups(context),
               ),
+              const SizedBox(height: 14),
+
+              _HeroPreviewCard(
+                onPressed: () => _openHero(context),
+              ),
               const SizedBox(height: 18),
+
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -114,10 +145,12 @@ class SocialConnectHubScreen extends StatelessWidget {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'المجموعات هنا عامة للاكتشاف والانضمام، أما مجموعاتك الخاصة '
-                        'فتظل بالدعوة فقط. الرسائل محمية بصلاحيات الحساب والعضوية، '
-                        'لكنها ليست مشفرة من طرف إلى طرف في هذه النسخة، ولا تشمل '
-                        'مكالمات صوت أو فيديو أو إرسال ملفات اجتماعية حتى الآن.',
+                        'الشات العام مساحة مشتركة بين مستخدمي صاحبي. '
+                        'لا تشارك كلمات المرور أو البيانات الشخصية. '
+                        'الرسائل ليست مشفرة من طرف إلى طرف في هذه النسخة. '
+                        'الإبلاغ يسجل البلاغ للمراجعة ولا يحذف الرسالة تلقائيًا. '
+                        'لا تتوفر مكالمات صوت أو فيديو أو إرسال ملفات اجتماعية '
+                        'من هذه الشاشة حتى الآن.',
                         style: TextStyle(
                           color: Sa7biTheme.textSecondary,
                           fontSize: 10,
