@@ -1,3 +1,4 @@
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -66,6 +67,10 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _listening = false;
   bool _generatingImage = false;
   bool _sending = false;
+
+  /// النص الموجود قبل بدء جلسة الإملاء الحالية.
+  /// يسمح بتجميع أكثر من مقطع صوتي في نفس مربع الرسالة.
+  String _speechBaseText = '';
 
   String get _serviceKey {
     final explicit = (widget.serviceKey ?? '').trim();
@@ -1060,25 +1065,35 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
+    // احتفظ بالنص الحالي حتى تضيف الجلسة الصوتية الجديدة إليه.
+    _speechBaseText = _textController.text.trim();
+
     final started = await _voiceService.startListening(
       localeId: 'ar-EG',
       onResult: (String text, bool isFinal) {
         if (!mounted) return;
 
-        if (text.trim().isNotEmpty) {
-          _textController.text = text.trim();
-          _textController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _textController.text.length),
+        final recognized = text.trim();
+
+        if (recognized.isNotEmpty) {
+          final base = _speechBaseText;
+          final combined = base.isEmpty
+              ? recognized
+              : '$base $recognized';
+
+          _textController.value = TextEditingValue(
+            text: combined,
+            selection: TextSelection.collapsed(
+              offset: combined.length,
+            ),
           );
         }
 
+        // النتيجة النهائية توقف حالة التسجيل فقط؛ لا ترسل الرسالة.
+        // المستخدم يراجع النص ثم يضغط زر الإرسال بنفسه.
         setState(() {
           _listening = !isFinal;
         });
-
-        if (isFinal && _textController.text.trim().isNotEmpty) {
-          _send();
-        }
       },
     );
 
