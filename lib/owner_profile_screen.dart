@@ -63,7 +63,7 @@ class OwnerProfileScreen extends StatelessWidget {
                   direction: TextDirection.ltr,
                 ),
                 const SizedBox(height: 12),
-                _buildSocialLinksCard(),
+                _buildSocialLinksCard(context),
                 const SizedBox(height: 12),
                 _buildMissionCard(),
                 const SizedBox(height: 12),
@@ -353,7 +353,7 @@ class OwnerProfileScreen extends StatelessWidget {
       );
   }
 
-  Widget _buildSocialLinksCard() {
+  Widget _buildSocialLinksCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
