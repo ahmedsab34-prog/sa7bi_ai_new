@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../models/sa7bi_hero_chat_sticker.dart';
 import '../models/social_sticker.dart';
-import 'sa7bi_hero_3d.dart';
 import 'social_sticker_kit.dart';
 
-/// Returns a message token for an animated GIF, a 2.5D HERO sticker,
-/// or one of the existing 100 classic stickers.
+/// اختيار ملصقات HERO المتحركة والثابتة.
+/// لا يفتح أي عارض GLB أو WebView.
 class Sa7biHeroStickerPicker {
   Sa7biHeroStickerPicker._();
 
@@ -19,7 +18,9 @@ class Sa7biHeroStickerPicker {
       backgroundColor: const Color(0xFF101827),
       barrierColor: Colors.black54,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(22),
+        ),
       ),
       builder: (_) => const _Sa7biHeroStickerPickerSheet(),
     );
@@ -32,7 +33,7 @@ class _Sa7biHeroStickerPickerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: SizedBox(
         height: MediaQuery.sizeOf(context).height * 0.78,
         child: Column(
@@ -82,10 +83,9 @@ class _Sa7biHeroStickerPickerSheet extends StatelessWidget {
               labelColor: Color(0xFFFFD76A),
               unselectedLabelColor: Colors.white60,
               indicatorColor: Color(0xFFFFD76A),
-              tabs: <Widget>[
-                Tab(text: 'GIF متحركة'),
-                Tab(text: 'HERO 2.5D'),
-                Tab(text: 'ثابتة'),
+              tabs: [
+                Tab(text: 'HERO متحرك 2.5D'),
+                Tab(text: 'ملصقات ثابتة'),
               ],
             ),
             Expanded(
@@ -94,10 +94,6 @@ class _Sa7biHeroStickerPickerSheet extends StatelessWidget {
                   _HeroMotionGrid(
                     stickers: Sa7biHeroChatStickerCatalog.animatedGifs,
                   ),
-                  _HeroMotionGrid(
-                    stickers: Sa7biHeroChatStickerCatalog.threeDimensional,
-                    threeDimensional: true,
-                  ),
                   const _ClassicStickerGrid(),
                 ],
               ),
@@ -105,9 +101,12 @@ class _Sa7biHeroStickerPickerSheet extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.fromLTRB(14, 0, 14, 12),
               child: Text(
-                'ملصقات HERO تعرض نفس الشخصية بنظام 2.5D داخل المحادثة.',
+                'شخصية HERO واحدة بنفس الوجه والدرع وشعار صاحبي AI.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white54, fontSize: 10),
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 10,
+                ),
               ),
             ),
           ],
@@ -120,11 +119,9 @@ class _Sa7biHeroStickerPickerSheet extends StatelessWidget {
 class _HeroMotionGrid extends StatelessWidget {
   const _HeroMotionGrid({
     required this.stickers,
-    this.threeDimensional = false,
   });
 
   final List<Sa7biHeroChatSticker> stickers;
-  final bool threeDimensional;
 
   @override
   Widget build(BuildContext context) {
@@ -139,12 +136,15 @@ class _HeroMotionGrid extends StatelessWidget {
       itemCount: stickers.length,
       itemBuilder: (context, index) {
         final sticker = stickers[index];
+
         return Material(
           color: const Color(0xFF19263A),
           borderRadius: BorderRadius.circular(15),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => Navigator.pop(context, sticker.toMessageText()),
+            onTap: () {
+              Navigator.pop(context, sticker.toMessageText());
+            },
             child: Padding(
               padding: const EdgeInsets.all(7),
               child: Column(
@@ -154,11 +154,13 @@ class _HeroMotionGrid extends StatelessWidget {
                       sticker.assetPath,
                       fit: BoxFit.contain,
                       gaplessPlayback: true,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.white38,
-                        size: 28,
-                      ),
+                      errorBuilder: (_, __, ___) {
+                        return const Icon(
+                          Icons.broken_image_outlined,
+                          color: Colors.white38,
+                          size: 28,
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 5),
@@ -173,15 +175,6 @@ class _HeroMotionGrid extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  if (threeDimensional)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 2),
-                      child: Icon(
-                        Icons.view_in_ar_rounded,
-                        color: Color(0xFFFFD76A),
-                        size: 14,
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -198,6 +191,7 @@ class _ClassicStickerGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stickers = Sa7biStickerCatalog.all;
+
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 18),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -209,9 +203,12 @@ class _ClassicStickerGrid extends StatelessWidget {
       itemCount: stickers.length,
       itemBuilder: (context, index) {
         final sticker = stickers[index];
+
         return InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () => Navigator.pop(context, sticker.toMessageText()),
+          onTap: () {
+            Navigator.pop(context, sticker.toMessageText());
+          },
           child: Sa7biStickerArt(
             sticker: sticker,
             showBrand: true,
@@ -222,7 +219,8 @@ class _ClassicStickerGrid extends StatelessWidget {
   }
 }
 
-/// Displays both old static sticker tokens and the new animated/2.5D tokens.
+/// عرض ملصقات HERO القديمة والجديدة داخل الرسائل.
+/// رموز 3D القديمة تظل قابلة للعرض كـGIF فقط، بلا فتح مجسم.
 class Sa7biHeroChatStickerMessageView extends StatelessWidget {
   const Sa7biHeroChatStickerMessageView({
     super.key,
@@ -234,151 +232,57 @@ class Sa7biHeroChatStickerMessageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final oldSticker = Sa7biSticker.tryParse(messageText);
+
     if (oldSticker != null) {
       return Sa7biStickerMessageView(sticker: oldSticker);
     }
 
     final sticker = Sa7biHeroChatSticker.tryParse(messageText);
+
     if (sticker == null) {
       return SelectableText(
         messageText,
-        style: const TextStyle(color: Colors.white, height: 1.45),
-      );
-    }
-
-    final preview = ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: Image.asset(
-        sticker.assetPath,
-        width: 148,
-        height: 148,
-        fit: BoxFit.contain,
-        gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => const SizedBox(
-          width: 148,
-          height: 148,
-          child: Icon(
-            Icons.broken_image_outlined,
-            color: Colors.white38,
-            size: 32,
-          ),
+        style: const TextStyle(
+          color: Colors.white,
+          height: 1.45,
         ),
-      ),
-    );
-
-    if (!sticker.isThreeDimensional) {
-      return preview;
+      );
     }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
+        ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          onTap: () => _openThreeDimensionalViewer(context, sticker),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              preview,
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 11,
-                  vertical: 7,
+          child: Image.asset(
+            sticker.assetPath,
+            width: 148,
+            height: 148,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) {
+              return const SizedBox(
+                width: 148,
+                height: 148,
+                child: Icon(
+                  Icons.broken_image_outlined,
+                  color: Colors.white38,
+                  size: 32,
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFFFD76A)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.view_in_ar_rounded,
-                      color: Color(0xFFFFD76A),
-                      size: 17,
-                    ),
-                    SizedBox(width: 6),
-                    Text(
-                      'اعرض HERO 2.5D',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              );
+            },
           ),
         ),
         const SizedBox(height: 3),
         Text(
           sticker.title,
-          style: const TextStyle(color: Colors.white70, fontSize: 10),
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 10,
+          ),
         ),
       ],
-    );
-  }
-
-  void _openThreeDimensionalViewer(
-    BuildContext context,
-    Sa7biHeroChatSticker sticker,
-  ) {
-    showDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return Dialog.fullscreen(
-          backgroundColor: const Color(0xFF080B13),
-          child: Scaffold(
-            backgroundColor: const Color(0xFF080B13),
-            appBar: AppBar(
-              backgroundColor: const Color(0xFF101827),
-              foregroundColor: Colors.white,
-              title: const Text(
-                'صاحبي AI',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
-              ),
-              leading: IconButton(
-                tooltip: 'إغلاق',
-                onPressed: () => Navigator.pop(dialogContext),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ),
-            body: SafeArea(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: Sa7biHero3D(
-                        animationName: sticker.animationName ?? 'Hero_Idle',
-                        cameraControls: true,
-                        compact: false,
-                        enableFaceAnimations: false,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                    child: Text(
-                      sticker.title,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }
