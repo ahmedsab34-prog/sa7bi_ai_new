@@ -118,7 +118,8 @@ class _HeroPainter extends CustomPainter {
   static const skin = Color(0xFFD69B7A);
   static const hair = Color(0xFF17191E);
 
-  Paint paint(Color color, {PaintingStyle style = PaintingStyle.fill}) {
+  // دالة رسم مساعدة باسم مختلف عن CustomPainter.paint.
+  Paint makePaint(Color color, {PaintingStyle style = PaintingStyle.fill}) {
     return Paint()
       ..color = color
       ..style = style
@@ -188,7 +189,7 @@ class _HeroPainter extends CustomPainter {
       c.drawLine(
         Offset(10, y),
         Offset(350, y),
-        paint(const Color(0x1872DFFF))
+        makePaint(const Color(0x1872DFFF))
           ..style = PaintingStyle.stroke
           ..strokeWidth = .7,
       );
@@ -389,7 +390,7 @@ class _HeroPainter extends CustomPainter {
         Offset(246, 316), Offset(220, 350),
         Offset(140, 350), Offset(114, 316),
       ]),
-      paint(gold, style: PaintingStyle.stroke)..strokeWidth = 2.5,
+      makePaint(gold, style: PaintingStyle.stroke)..strokeWidth = 2.5,
     );
 
     final logo = TextPainter(
@@ -414,7 +415,7 @@ class _HeroPainter extends CustomPainter {
       const Offset(180, 390),
       13,
       gradient(
-        const Rect.fromCircle(
+        Rect.fromCircle(
           center: Offset(180, 390),
           radius: 13,
         ),
@@ -424,11 +425,11 @@ class _HeroPainter extends CustomPainter {
     c.drawCircle(
       const Offset(180, 390),
       18,
-      paint(gold, style: PaintingStyle.stroke)..strokeWidth = 2,
+      makePaint(gold, style: PaintingStyle.stroke)..strokeWidth = 2,
     );
 
     // خطوط الطاقة.
-    final energy = paint(cyan, style: PaintingStyle.stroke)
+    final energy = makePaint(cyan, style: PaintingStyle.stroke)
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
 
@@ -477,11 +478,11 @@ class _HeroPainter extends CustomPainter {
     // الأذنان.
     c.drawOval(
       const Rect.fromLTWH(119, 117, 25, 43),
-      paint(skin),
+      makePaint(skin),
     );
     c.drawOval(
       const Rect.fromLTWH(216, 117, 25, 43),
-      paint(skin),
+      makePaint(skin),
     );
 
     // الوجه ظاهر بالكامل.
@@ -523,7 +524,7 @@ class _HeroPainter extends CustomPainter {
       ..moveTo(190, 112)
       ..quadraticBezierTo(207, 102, 219, 114);
 
-    final browPaint = paint(hair, style: PaintingStyle.stroke)
+    final browPaint = makePaint(hair, style: PaintingStyle.stroke)
       ..strokeWidth = 5
       ..strokeCap = StrokeCap.round;
 
@@ -543,7 +544,7 @@ class _HeroPainter extends CustomPainter {
         c.drawLine(
           Offset(x - 11, 128),
           Offset(x + 11, 128),
-          paint(hair, style: PaintingStyle.stroke)
+          makePaint(hair, style: PaintingStyle.stroke)
             ..strokeWidth = 3
             ..strokeCap = StrokeCap.round,
         );
@@ -554,17 +555,17 @@ class _HeroPainter extends CustomPainter {
             width: 25,
             height: surprised ? 16 : 12,
           ),
-          paint(Colors.white),
+          makePaint(Colors.white),
         );
         c.drawCircle(
           Offset(x, 128),
           5,
-          paint(const Color(0xFF38251F)),
+          makePaint(const Color(0xFF38251F)),
         );
         c.drawCircle(
           Offset(x - 1.5, 126),
           1.5,
-          paint(Colors.white),
+          makePaint(Colors.white),
         );
       }
     }
@@ -573,12 +574,12 @@ class _HeroPainter extends CustomPainter {
       c.drawLine(
         const Offset(145, 108),
         const Offset(171, 117),
-        paint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
+        makePaint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
       );
       c.drawLine(
         const Offset(190, 117),
         const Offset(216, 108),
-        paint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
+        makePaint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
       );
     }
 
@@ -590,7 +591,7 @@ class _HeroPainter extends CustomPainter {
 
     c.drawPath(
       nose,
-      paint(
+      makePaint(
         const Color(0xFF925D4B),
         style: PaintingStyle.stroke,
       )..strokeWidth = 2,
@@ -614,7 +615,7 @@ class _HeroPainter extends CustomPainter {
           width: 20,
           height: height,
         ),
-        paint(const Color(0xFF55252B)),
+        makePaint(const Color(0xFF55252B)),
       );
     } else {
       final mouth = Path()
@@ -628,7 +629,7 @@ class _HeroPainter extends CustomPainter {
 
       c.drawPath(
         mouth,
-        paint(
+        makePaint(
           const Color(0xFF713A35),
           style: PaintingStyle.stroke,
         )
@@ -681,7 +682,7 @@ class _HeroPainter extends CustomPainter {
         width: 170 + motion * 5,
         height: 9,
       ),
-      paint(cyan, style: PaintingStyle.stroke)..strokeWidth = 2,
+      makePaint(cyan, style: PaintingStyle.stroke)..strokeWidth = 2,
     );
 
     canvas.restore();
