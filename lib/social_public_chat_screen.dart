@@ -4,6 +4,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'services/social_messaging_service.dart';
+import 'widgets/sa7bi_hero_3d.dart';
+import 'widgets/sa7bi_hero_sticker_kit.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// الغرفة العامة الواحدة المشتركة بين مستخدمي صاحبي Connect.
@@ -128,9 +130,32 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
   }
 
   Future<void> _send() async {
+    await _sendContent(
+      _composer.text,
+      clearComposer: true,
+    );
+  }
+
+  Future<void> _pickHeroSticker() async {
     if (_sending) return;
 
-    final text = _composer.text.trim();
+    final token = await Sa7biHeroStickerPicker.show(context);
+    if (!mounted || token == null || token.trim().isEmpty) return;
+
+    // Keep any draft text the user has already typed.
+    await _sendContent(
+      token,
+      clearComposer: false,
+    );
+  }
+
+  Future<void> _sendContent(
+    String value, {
+    required bool clearComposer,
+  }) async {
+    if (_sending) return;
+
+    final text = value.trim();
     if (text.isEmpty) return;
 
     if (text.length > 3000) {
@@ -150,7 +175,9 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
 
       if (!mounted) return;
 
-      _composer.clear();
+      if (clearComposer) {
+        _composer.clear();
+      }
 
       setState(() {
         if (!_messages.any((item) => item.id == message.id)) {
@@ -301,13 +328,8 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
               ),
               const SizedBox(height: 4),
             ],
-            Text(
-              message.text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                height: 1.5,
-              ),
+            Sa7biHeroChatStickerMessageView(
+              messageText: message.text,
             ),
             const SizedBox(height: 5),
             Row(
@@ -390,7 +412,31 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
+            Tooltip(
+              message: 'ملصقات HERO',
+              child: Material(
+                color: const Color(0xFF172033),
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  key: const ValueKey<String>('public-chat-hero-stickers'),
+                  onTap: _sending ? null : _pickHeroSticker,
+                  child: const SizedBox(
+                    width: 46,
+                    height: 46,
+                    child: IgnorePointer(
+                      child: Sa7biHero3D(
+                        compact: true,
+                        cameraControls: false,
+                        enableFaceAnimations: true,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
             IconButton.filled(
               tooltip: 'إرسال الرسالة',
               onPressed: _sending ? null : _send,
