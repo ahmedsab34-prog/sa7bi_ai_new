@@ -6,7 +6,6 @@ import 'theme/sa7bi_theme.dart';
 import 'widgets/sa7bi_hero_3d.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
-/// عارض الشخصية الوحيدة HERO مع حركات الجسم وتعبيرات الوجه المتاحة فعليًا.
 class Sa7biHero3DScreen extends StatefulWidget {
   const Sa7biHero3DScreen({super.key});
 
@@ -37,7 +36,7 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
         backgroundColor: Sa7biTheme.background,
         appBar: const Sa7biSubpageAppBar(
           title: 'صاحبي HERO',
-          subtitle: 'الشخصية الرسمية المعتمدة — بطل واحد',
+          subtitle: 'الشخصية الرسمية — عرض 2.5D',
         ),
         body: SafeArea(
           top: false,
@@ -64,6 +63,7 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                 child: Sa7biHero3D(
                   animationName: _selectedAnimation,
                   cameraControls: true,
+                  enableFaceAnimations: true,
                 ),
               ),
               const SizedBox(height: 14),
@@ -78,7 +78,7 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'حركات الجسم الأساسية',
+                      'حركات HERO',
                       style: TextStyle(
                         color: Sa7biTheme.textPrimary,
                         fontSize: 14,
@@ -90,19 +90,19 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _AnimationChoiceButton(
+                        _HeroChoice(
                           label: 'الاستعداد',
                           icon: Icons.shield_rounded,
                           selected: !isWelcome && !isPower,
                           onPressed: () => _selectAnimation(_idle),
                         ),
-                        _AnimationChoiceButton(
+                        _HeroChoice(
                           label: 'تحية البطل',
                           icon: Icons.waving_hand_rounded,
                           selected: isWelcome,
                           onPressed: () => _selectAnimation(_welcome),
                         ),
-                        _AnimationChoiceButton(
+                        _HeroChoice(
                           label: 'وضع القوة',
                           icon: Icons.bolt_rounded,
                           selected: isPower,
@@ -113,14 +113,19 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                     const SizedBox(height: 12),
                     const _HintRow(
                       icon: Icons.pan_tool_alt_rounded,
+                      text: 'اسحب بإصبعك لتغيير زاوية العرض.',
+                    ),
+                    const SizedBox(height: 7),
+                    const _HintRow(
+                      icon: Icons.face_retouching_natural,
                       text:
-                          'اسحب بإصبعك لتدوير الشخصية، واستخدم إصبعين للتقريب.',
+                          'الوجه مكشوف بالكامل، بلا خوذة أو قناع أو غطاء. الدرع يبدأ أسفل الوجه ويغطي الجسم فقط.',
                     ),
                     const SizedBox(height: 7),
                     const _HintRow(
                       icon: Icons.auto_awesome_rounded,
                       text:
-                          'المرجع الرسمي: وجه مكشوف بنفس الملامح والشعر، ودرع أحمر وذهبي وأزرق داكن، وخطوط طاقة سماوية، وشعار صاحبي AI في منتصف الصدر. بدون خوذة أو قناع أو عباءة.',
+                          'ألوان الدرع: الأحمر والذهبي والأزرق الداكن، مع إضاءة سماوية وشعار صاحبي AI على الصدر.',
                     ),
                   ],
                 ),
@@ -136,8 +141,10 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                   border: Border.all(color: Sa7biTheme.border),
                 ),
                 child: const Text(
-                  'تعبيرات الوجه وحركات الفم لا تعمل إلا بعد تضمينها فعليًا داخل ملف GLB. '
-                  'أزرار الوجه تتفعّل لكل حركة عندما يعلن العارض عن اسمها داخل المجسم.',
+                  'هذا إصدار 2.5D مرسوم محليًا داخل Flutter. '
+                  'التعبيرات الحالية تغيّر رسم العينين والحاجبين والفم. '
+                  'حركة الفم مع الصوت تقريبية حسب الكلمات التي يرسلها TTS، '
+                  'وليست مزامنة فونيمية دقيقة.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Sa7biTheme.textSecondary,
@@ -154,8 +161,8 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
   }
 }
 
-class _AnimationChoiceButton extends StatelessWidget {
-  const _AnimationChoiceButton({
+class _HeroChoice extends StatelessWidget {
+  const _HeroChoice({
     required this.label,
     required this.icon,
     required this.selected,
@@ -173,20 +180,12 @@ class _AnimationChoiceButton extends StatelessWidget {
         ? FilledButton.icon(
             onPressed: onPressed,
             icon: Icon(icon, size: 17),
-            label: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: Text(label),
           )
         : OutlinedButton.icon(
             onPressed: onPressed,
             icon: Icon(icon, size: 17),
-            label: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            label: Text(label),
           );
   }
 }
@@ -198,107 +197,93 @@ class _FaceExpressionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final runtime = HeroFaceRuntime.instance;
 
-    return ValueListenableBuilder<Set<String>>(
-      valueListenable: runtime.availableAnimations,
-      builder: (context, animations, _) {
-        final options = <_FaceExpressionOption>[
-          _FaceExpressionOption(
-            expression: HeroExpression.smile,
-            label: 'ابتسامة',
-            icon: Icons.sentiment_satisfied_alt_rounded,
-          ),
-          _FaceExpressionOption(
-            expression: HeroExpression.sad,
-            label: 'حزن',
-            icon: Icons.sentiment_dissatisfied_rounded,
-          ),
-          _FaceExpressionOption(
-            expression: HeroExpression.surprise,
-            label: 'دهشة',
-            icon: Icons.sentiment_very_satisfied_rounded,
-          ),
-          _FaceExpressionOption(
-            expression: HeroExpression.angry,
-            label: 'غضب',
-            icon: Icons.mood_bad_rounded,
-          ),
-          _FaceExpressionOption(
-            expression: HeroExpression.wink,
-            label: 'غمزة',
-            icon: Icons.visibility_off_rounded,
-          ),
-          _FaceExpressionOption(
-            expression: HeroExpression.blink,
-            label: 'رمش',
-            icon: Icons.visibility_rounded,
-          ),
-        ];
+    final options = <_FaceExpressionOption>[
+      _FaceExpressionOption(
+        expression: HeroExpression.smile,
+        label: 'ابتسامة',
+        icon: Icons.sentiment_satisfied_alt_rounded,
+      ),
+      _FaceExpressionOption(
+        expression: HeroExpression.sad,
+        label: 'حزن',
+        icon: Icons.sentiment_dissatisfied_rounded,
+      ),
+      _FaceExpressionOption(
+        expression: HeroExpression.surprise,
+        label: 'دهشة',
+        icon: Icons.sentiment_very_satisfied_rounded,
+      ),
+      _FaceExpressionOption(
+        expression: HeroExpression.angry,
+        label: 'غضب',
+        icon: Icons.mood_bad_rounded,
+      ),
+      _FaceExpressionOption(
+        expression: HeroExpression.wink,
+        label: 'غمزة',
+        icon: Icons.visibility_off_rounded,
+      ),
+      _FaceExpressionOption(
+        expression: HeroExpression.blink,
+        label: 'رمش',
+        icon: Icons.visibility_rounded,
+      ),
+    ];
 
-        final missingCount = runtime.missingRequiredAnimations.length;
-        final allReady = runtime.isFaceRigAvailable;
-
-        return Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Sa7biTheme.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Sa7biTheme.border),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Sa7biTheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Sa7biTheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'تعبيرات وجه HERO',
+            style: TextStyle(
+              color: Sa7biTheme.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              const Text(
-                'تعبيرات وجه HERO',
-                style: TextStyle(
-                  color: Sa7biTheme.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
+              OutlinedButton.icon(
+                onPressed: () => runtime.playExpression(
+                  HeroExpression.neutral,
                 ),
+                icon: const Icon(
+                  Icons.face_retouching_natural,
+                  size: 17,
+                ),
+                label: const Text('طبيعي'),
               ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => runtime.playExpression(
-                      HeroExpression.neutral,
-                    ),
-                    icon: const Icon(
-                      Icons.face_retouching_natural,
-                      size: 17,
-                    ),
-                    label: const Text('طبيعي'),
+              for (final option in options)
+                OutlinedButton.icon(
+                  onPressed: () => runtime.playExpression(
+                    option.expression,
                   ),
-                  for (final option in options)
-                    OutlinedButton.icon(
-                      onPressed: animations.contains(
-                        HeroFaceRuntime.expressionAnimationNames[
-                          option.expression
-                        ],
-                      )
-                          ? () => runtime.playExpression(option.expression)
-                          : null,
-                      icon: Icon(option.icon, size: 17),
-                      label: Text(option.label),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 9),
-              Text(
-                allReady
-                    ? 'تم اكتشاف حركات الوجه الست والـVisemes الخمسة عشر داخل GLB.'
-                    : 'Rig الوجه غير مكتمل داخل GLB بعد. الحركات المطلوبة غير المكتشفة: $missingCount من ${HeroFaceRuntime.requiredFaceAnimationNames.length}.',
-                style: const TextStyle(
-                  color: Sa7biTheme.textSecondary,
-                  fontSize: 10,
-                  height: 1.6,
+                  icon: Icon(option.icon, size: 17),
+                  label: Text(option.label),
                 ),
-              ),
             ],
           ),
-        );
-      },
+          const SizedBox(height: 9),
+          const Text(
+            'التعبيرات مرسومة مباشرة داخل Flutter، ولا تحتاج إلى Face Rig أو GLB.',
+            style: TextStyle(
+              color: Sa7biTheme.textSecondary,
+              fontSize: 10,
+              height: 1.6,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
