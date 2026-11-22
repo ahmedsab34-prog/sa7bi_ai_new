@@ -307,14 +307,14 @@ class _Sa7biHero3DState extends State<Sa7biHero3D> {
     // وضع اختبار التنقل: يحتفظ بعنصر HERO في شجرة الواجهة
     // لكنه لا يشغّل WebView أو محرك 3D داخل المحاكي.
     if (Sa7biHero3D.debugDisableWebViewForTests) {
-      return const Semantics(
+      return Semantics(
         label: 'HERO 3D test placeholder',
         child: ColoredBox(
-          color: Color(0xFF081225),
+          color: const Color(0xFF081225),
           child: Center(
             child: Icon(
               Icons.smart_toy_rounded,
-              color: Color(0xFF72D7FF),
+              color: const Color(0xFF72D7FF),
               size: 30,
             ),
           ),
