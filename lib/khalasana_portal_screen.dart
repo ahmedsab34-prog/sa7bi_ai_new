@@ -162,6 +162,12 @@ class _KhalasanaPortalScreenState
         return 'تسوق';
       case ServiceKeys.hobbiesSports:
         return 'هوايات';
+      case ServiceKeys.sportsNews:
+        return 'رياضة';
+      case ServiceKeys.entertainment:
+        return 'ترفيه';
+      case ServiceKeys.technology:
+        return 'تقنية';
       case ServiceKeys.podcasts:
         return 'بودكاست';
       case ServiceKeys.education:
