@@ -229,6 +229,66 @@ try {
     [],
   );
 
+  // ==========================================================
+  // TEST 5: CATEGORY-SPECIFIC RSS FEEDS
+  // ==========================================================
+
+  const categoryRequests = [];
+
+  globalThis.fetch = async (url, options = {}) => {
+    categoryRequests.push(String(url));
+    assert.equal(options.method, "GET");
+
+    return new Response(rss, {
+      status: 200,
+      headers: { "Content-Type": "application/rss+xml" },
+    });
+  };
+
+  for (const category of ["sports", "entertainment", "technology"]) {
+    const categoryResponse = await handleNews(
+      new Request(
+        `https://worker.example/v1/news?category=${category}`,
+      ),
+    );
+    const categoryBody = await categoryResponse.json();
+
+    assert.equal(categoryResponse.status, 200);
+    assert.equal(categoryBody.ok, true);
+    assert.equal(categoryBody.category, category);
+    assert.ok(categoryBody.items.length >= 1);
+  }
+
+  assert.ok(
+    categoryRequests.some((url) =>
+      decodeURIComponent(url).includes("رياضة"),
+    ),
+  );
+
+  assert.ok(
+    categoryRequests.some((url) =>
+      decodeURIComponent(url).includes("السينما"),
+    ),
+  );
+
+  assert.ok(
+    categoryRequests.some((url) =>
+      decodeURIComponent(url).includes("الذكاء الاصطناعي"),
+    ),
+  );
+
+  const invalidCategory = await handleNews(
+    new Request(
+      "https://worker.example/v1/news?category=not-a-category",
+    ),
+  );
+
+  assert.equal(invalidCategory.status, 400);
+  assert.equal(
+    (await invalidCategory.json()).error,
+    "UNSUPPORTED_NEWS_CATEGORY",
+  );
+
   console.log(
     "news provider smoke test: PASS",
   );
