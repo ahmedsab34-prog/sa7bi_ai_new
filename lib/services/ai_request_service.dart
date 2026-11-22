@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
+import 'ai_news_service.dart';
 import 'sa7bi_network_client.dart';
 
 /// نقطة الاتصال الموحدة بخدمات الذكاء الاصطناعي.
@@ -216,6 +217,102 @@ class AiRequestService {
     return data;
   }
 
+  static String? _newsCategoryForService(String? serviceTitle) {
+    final title = (serviceTitle ?? '').trim().toLowerCase();
+
+    if (title.contains('الرياضة والمباريات') ||
+        title.contains('sports_news')) {
+      return 'sports';
+    }
+
+    if (title.contains('الترفيه والمنوعات') ||
+        title.contains('entertainment')) {
+      return 'entertainment';
+    }
+
+    if (title.contains('التكنولوجيا والابتكار') ||
+        title.contains('technology')) {
+      return 'technology';
+    }
+
+    return null;
+  }
+
+  static bool _asksForCurrentCategoryNews(
+    String prompt,
+    String category,
+  ) {
+    final expression = switch (category) {
+      'sports' => RegExp(
+          r'(خبر|أخبار|مباراة|ماتش|نتيجة|نتائج|ترتيب|الدوري|بطولة|انتقال|هداف|مواعيد|جدول|اليوم|الآن|مباشر|عاجل|latest|news|score|match|fixture|transfer|standings)',
+          caseSensitive: false,
+        ),
+      'entertainment' => RegExp(
+          r'(خبر|أخبار|ترند|مسلسل|فيلم|سينما|ممثل|ممثلة|مغني|مغنية|ألبوم|حفلة|مهرجان|عرض|إصدار|اليوم|الآن|latest|news|trending|movie|series|album|concert)',
+          caseSensitive: false,
+        ),
+      'technology' => RegExp(
+          r'(خبر|أخبار|تحديث|إصدار|نسخة|جديد|جديدة|الآن|اليوم|ذكاء اصطناعي|تقنية|تكنولوجيا|ابتكار|جهاز|هاتف|معالج|ثغرة|latest|news|update|release|technology|tech|device|phone|security)',
+          caseSensitive: false,
+        ),
+      _ => RegExp(r'(?!)'),
+    };
+
+    return expression.hasMatch(prompt);
+  }
+
+  static Future<String?> _loadCategoryNewsContext({
+    required String? serviceTitle,
+    required String prompt,
+  }) async {
+    final category = _newsCategoryForService(serviceTitle);
+
+    if (category == null ||
+        !_asksForCurrentCategoryNews(prompt, category)) {
+      return null;
+    }
+
+    try {
+      final items = await AiNewsService.getNews(
+        category: category,
+        forceRefresh: true,
+        timeout: const Duration(seconds: 8),
+      );
+
+      if (items.isEmpty) {
+        return 'لم تصل أخبار حديثة قابلة للتحقق من مصادر هذا التخصص الآن. '
+            'لا تخترع خبرًا أو نتيجة أو موعدًا، وقل للمستخدم بوضوح إن '
+            'مصادر الأخبار غير متاحة حاليًا.';
+      }
+
+      final selected = items.take(5).toList(growable: false);
+      final newsLines = <String>[];
+
+      for (final item in selected) {
+        final parsedDate = AiNewsService.parseNewsDate(item.pubDate);
+        final dateLabel = parsedDate == null
+            ? 'تاريخ النشر غير متاح'
+            : parsedDate.toLocal().toString();
+
+        newsLines.add(
+          '- ${item.title}\n'
+          '  المصدر: ${item.source}\n'
+          '  تاريخ النشر: $dateLabel\n'
+          '  الرابط: ${item.link}',
+        );
+      }
+
+      return 'مصادر أخبار حديثة مرتبطة بالتخصص المختار. '
+          'هذه بيانات عناوين وروابط وتواريخ فقط؛ لا تستنتج تفاصيل '
+          'غير موجودة فيها، ولا تعتبرها نتائج مباشرة لحظة بلحظة. '
+          'اذكر تاريخ الخبر ومصدره، وافصل بين الخبر المؤكد والرأي.\n'
+          '${newsLines.join('\n')}';
+    } catch (_) {
+      return 'تعذر الاتصال بمصادر الأخبار الحديثة لهذا التخصص. '
+          'لا تعرض معلومات قديمة على أنها جديدة ولا تخمن نتائج أو مواعيد.';
+    }
+  }
+
   static Future<String> getResponse({
     required String prompt,
     String? serviceContext,
@@ -259,11 +356,27 @@ class AiRequestService {
 
     messages.add({'role': 'user', 'content': text});
 
+    final categoryNewsContext = await _loadCategoryNewsContext(
+      serviceTitle: serviceTitle,
+      prompt: text,
+    );
+
+    final contextParts = <String>[
+      if (serviceContext != null && serviceContext.trim().isNotEmpty)
+        serviceContext.trim(),
+      if (categoryNewsContext != null &&
+          categoryNewsContext.trim().isNotEmpty)
+        categoryNewsContext.trim(),
+    ];
+
+    final effectiveServiceContext =
+        contextParts.isEmpty ? null : contextParts.join('\n\n');
+
     final body = <String, dynamic>{'messages': messages};
     _addServiceData(
       body,
       serviceTitle: serviceTitle,
-      serviceContext: serviceContext,
+      serviceContext: effectiveServiceContext,
     );
 
     final response = await _post(
