@@ -1,11 +1,9 @@
 
 import 'package:flutter/material.dart';
-
 import '../services/hero_face_runtime.dart';
 
-/// HERO 2.5D:
-/// رسم محلي داخل Flutter، بلا GLB أو WebView أو خدمة مدفوعة.
-/// يحافظ على اسم Sa7biHero3D وخصائصه لتجنب كسر الاستدعاءات الحالية.
+/// HERO 2.5D - نسخة Flutter مجانية.
+/// نفس الشخصية تستخدم في العرض الكبير وأيقونة خلصانة المصغرة.
 class Sa7biHero3D extends StatefulWidget {
   const Sa7biHero3D({
     super.key,
@@ -29,15 +27,15 @@ class Sa7biHero3D extends StatefulWidget {
 
 class _Sa7biHero3DState extends State<Sa7biHero3D>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _breathing;
+  late final AnimationController _motion;
   Offset _rotation = Offset.zero;
 
   @override
   void initState() {
     super.initState();
-    _breathing = AnimationController(
+    _motion = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2600),
+      duration: const Duration(milliseconds: 2400),
       lowerBound: -1,
       upperBound: 1,
     )..repeat(reverse: true);
@@ -45,17 +43,19 @@ class _Sa7biHero3DState extends State<Sa7biHero3D>
 
   @override
   void dispose() {
-    _breathing.dispose();
+    _motion.dispose();
     super.dispose();
   }
 
   void _onDrag(DragUpdateDetails details) {
-    if (!widget.cameraControls) return;
+    if (!widget.cameraControls || widget.compact) return;
 
     setState(() {
       _rotation = Offset(
-        (_rotation.dx + details.delta.dx * 0.004).clamp(-0.30, 0.30),
-        (_rotation.dy + details.delta.dy * 0.003).clamp(-0.16, 0.16),
+        (_rotation.dx + details.delta.dx * .003)
+            .clamp(-.25, .25).toDouble(),
+        (_rotation.dy + details.delta.dy * .002)
+            .clamp(-.12, .12).toDouble(),
       );
     });
   }
@@ -65,28 +65,29 @@ class _Sa7biHero3DState extends State<Sa7biHero3D>
     return ValueListenableBuilder<HeroLiteStatus>(
       valueListenable: HeroFaceRuntime.instance.liteStatus,
       builder: (context, status, _) {
-        final visibleStatus = widget.enableFaceAnimations
+        final faceStatus = widget.enableFaceAnimations
             ? status
             : const HeroLiteStatus();
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onPanUpdate: widget.cameraControls ? _onDrag : null,
-          child: ClipRect(
-            child: AnimatedBuilder(
-              animation: _breathing,
-              builder: (context, _) {
-                return CustomPaint(
-                  painter: _Hero25DPainter(
-                    animationName: widget.animationName,
-                    status: visibleStatus,
-                    breathing: _breathing.value,
-                    rotation: _rotation,
-                  ),
-                  child: const SizedBox.expand(),
-                );
-              },
-            ),
+          onPanUpdate: widget.cameraControls && !widget.compact
+              ? _onDrag
+              : null,
+          child: AnimatedBuilder(
+            animation: _motion,
+            builder: (context, _) {
+              return CustomPaint(
+                painter: _HeroPainter(
+                  status: faceStatus,
+                  motion: _motion.value,
+                  rotation: _rotation,
+                  animationName: widget.animationName,
+                  compact: widget.compact,
+                ),
+                child: const SizedBox.expand(),
+              );
+            },
           ),
         );
       },
@@ -94,36 +95,38 @@ class _Sa7biHero3DState extends State<Sa7biHero3D>
   }
 }
 
-class _Hero25DPainter extends CustomPainter {
-  const _Hero25DPainter({
-    required this.animationName,
+class _HeroPainter extends CustomPainter {
+  const _HeroPainter({
     required this.status,
-    required this.breathing,
+    required this.motion,
     required this.rotation,
+    required this.animationName,
+    required this.compact,
   });
 
-  final String animationName;
   final HeroLiteStatus status;
-  final double breathing;
+  final double motion;
   final Offset rotation;
+  final String animationName;
+  final bool compact;
 
-  static const Color navy = Color(0xFF07162D);
-  static const Color blue = Color(0xFF073C83);
-  static const Color cyan = Color(0xFF39DFFF);
-  static const Color gold = Color(0xFFFFC247);
-  static const Color red = Color(0xFFB82035);
-  static const Color skin = Color(0xFFC98D6D);
-  static const Color skinLight = Color(0xFFE5B18D);
-  static const Color hair = Color(0xFF171A20);
+  static const navy = Color(0xFF071329);
+  static const blue = Color(0xFF0751A0);
+  static const cyan = Color(0xFF45DFFF);
+  static const gold = Color(0xFFFFC34D);
+  static const red = Color(0xFFB52235);
+  static const skin = Color(0xFFD69B7A);
+  static const hair = Color(0xFF17191E);
 
-  Paint _paint(Color color, {PaintingStyle style = PaintingStyle.fill}) {
+  Paint paint(Color color, {PaintingStyle style = PaintingStyle.fill}) {
     return Paint()
       ..color = color
       ..style = style
       ..isAntiAlias = true;
   }
 
-  Paint _gradient(Rect rect, List<Color> colors, {bool vertical = false}) {
+  Paint gradient(Rect rect, List<Color> colors,
+      {bool vertical = false}) {
     return Paint()
       ..isAntiAlias = true
       ..shader = LinearGradient(
@@ -133,35 +136,7 @@ class _Hero25DPainter extends CustomPainter {
       ).createShader(rect);
   }
 
-  void _roundRect(
-    Canvas canvas,
-    Rect rect,
-    double radius,
-    Paint paint,
-  ) {
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(radius)),
-      paint,
-    );
-  }
-
-  void _glow(
-    Canvas canvas,
-    Offset center,
-    double radius, {
-    Color color = cyan,
-    double opacity = 0.42,
-  }) {
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = color.withValues(alpha: opacity)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 0.65),
-    );
-  }
-
-  Path _polygon(List<Offset> points) {
+  Path polygon(List<Offset> points) {
     final path = Path()..moveTo(points.first.dx, points.first.dy);
     for (final point in points.skip(1)) {
       path.lineTo(point.dx, point.dy);
@@ -169,314 +144,254 @@ class _Hero25DPainter extends CustomPainter {
     return path..close();
   }
 
-  void _drawBackground(Canvas canvas) {
-    final rect = const Rect.fromLTWH(0, 0, 360, 640);
+  void glow(Canvas c, Offset p, double radius, Color color) {
+    c.drawCircle(
+      p,
+      radius,
+      Paint()
+        ..color = color.withValues(alpha: .35)
+        ..maskFilter = MaskFilter.blur(
+          BlurStyle.normal,
+          radius * .7,
+        ),
+    );
+  }
 
-    canvas.drawRect(
+  void rounded(Canvas c, Rect r, double radius, Paint p) {
+    c.drawRRect(
+      RRect.fromRectAndRadius(r, Radius.circular(radius)),
+      p,
+    );
+  }
+
+  void drawBackground(Canvas c) {
+    final rect = const Rect.fromLTWH(0, 0, 360, 640);
+    c.drawRect(
       rect,
       Paint()
         ..shader = const RadialGradient(
-          center: Alignment(0, -0.28),
-          radius: 0.86,
+          center: Alignment(0, -.3),
+          radius: .9,
           colors: [
-            Color(0xFF153A68),
+            Color(0xFF164274),
             Color(0xFF091A32),
-            Color(0xFF050B17),
+            Color(0xFF040A15),
           ],
         ).createShader(rect),
     );
 
-    for (var i = 0; i < 7; i++) {
-      final y = 72.0 + i * 76;
-      canvas.drawLine(
-        Offset(12, y),
-        Offset(348, y),
-        _paint(const Color(0x1672DFFF), style: PaintingStyle.stroke)
-          ..strokeWidth = 0.7,
+    glow(c, const Offset(180, 350), 105, cyan);
+    glow(c, const Offset(180, 570), 55, gold);
+
+    for (int i = 0; i < 8; i++) {
+      final y = 60.0 + i * 75;
+      c.drawLine(
+        Offset(10, y),
+        Offset(350, y),
+        paint(const Color(0x1872DFFF))
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = .7,
       );
     }
-
-    _glow(canvas, const Offset(180, 330), 110);
-    _glow(
-      canvas,
-      const Offset(180, 565),
-      65,
-      color: gold,
-      opacity: 0.16,
-    );
   }
 
-  void _drawBody(Canvas canvas) {
-    final breath = breathing * 2.0;
-    final shoulderY = 232.0 + breath * 0.7;
-
-    // ظل الجسم.
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: const Offset(180, 604),
-        width: 215,
-        height: 27,
-      ),
-      _paint(const Color(0x66000000)),
-    );
+  void drawBody(Canvas c) {
+    final breath = motion * 2.0;
+    final shoulder = 230.0 + breath;
 
     // الساقان.
-    final leftLeg = _polygon(const [
-      Offset(112, 420),
-      Offset(178, 425),
-      Offset(169, 558),
-      Offset(150, 601),
-      Offset(91, 594),
-      Offset(101, 526),
-    ]);
-    final rightLeg = _polygon(const [
-      Offset(183, 425),
-      Offset(248, 420),
-      Offset(260, 526),
-      Offset(272, 594),
-      Offset(211, 601),
-      Offset(191, 558),
-    ]);
-
-    canvas.drawPath(leftLeg, _gradient(
-      const Rect.fromLTWH(90, 420, 90, 185),
-      [gold, blue, navy, red],
-      vertical: true,
-    ));
-    canvas.drawPath(rightLeg, _gradient(
-      const Rect.fromLTWH(180, 420, 100, 185),
-      [red, blue, navy, gold],
-      vertical: true,
-    ));
-
-    // ألواح الفخذ والركبة.
-    canvas.drawPath(
-      _polygon(const [
-        Offset(111, 438),
-        Offset(164, 443),
-        Offset(153, 493),
-        Offset(106, 490),
+    c.drawPath(
+      polygon(const [
+        Offset(112, 415), Offset(177, 420),
+        Offset(168, 560), Offset(151, 598),
+        Offset(91, 592), Offset(101, 520),
       ]),
-      _gradient(
+      gradient(
+        const Rect.fromLTWH(90, 415, 90, 185),
+        [gold, blue, navy, red],
+        vertical: true,
+      ),
+    );
+
+    c.drawPath(
+      polygon(const [
+        Offset(183, 420), Offset(248, 415),
+        Offset(259, 520), Offset(269, 592),
+        Offset(209, 598), Offset(192, 560),
+      ]),
+      gradient(
+        const Rect.fromLTWH(180, 415, 100, 185),
+        [red, blue, navy, gold],
+        vertical: true,
+      ),
+    );
+
+    // ألواح الفخذ.
+    c.drawPath(
+      polygon(const [
+        Offset(109, 438), Offset(164, 442),
+        Offset(154, 492), Offset(106, 489),
+      ]),
+      gradient(
         const Rect.fromLTWH(105, 438, 60, 55),
-        [gold, Color(0xFF9C641C)],
-      ),
-    );
-    canvas.drawPath(
-      _polygon(const [
-        Offset(195, 443),
-        Offset(249, 438),
-        Offset(254, 490),
-        Offset(207, 493),
-      ]),
-      _gradient(
-        const Rect.fromLTWH(195, 438, 60, 55),
-        [gold, Color(0xFF9C641C)],
+        [gold, Color(0xFF9B5D1B)],
       ),
     );
 
-    _roundRect(
-      canvas,
-      const Rect.fromLTWH(112, 500, 42, 35),
-      10,
-      _gradient(
-        const Rect.fromLTWH(112, 500, 42, 35),
+    c.drawPath(
+      polygon(const [
+        Offset(196, 442), Offset(251, 438),
+        Offset(254, 489), Offset(206, 492),
+      ]),
+      gradient(
+        const Rect.fromLTWH(195, 438, 60, 55),
+        [gold, Color(0xFF9B5D1B)],
+      ),
+    );
+
+    // الركبتان.
+    rounded(
+      c,
+      const Rect.fromLTWH(111, 500, 43, 34),
+      9,
+      gradient(
+        const Rect.fromLTWH(111, 500, 43, 34),
         [cyan, blue, navy],
       ),
     );
-    _roundRect(
-      canvas,
-      const Rect.fromLTWH(207, 500, 42, 35),
-      10,
-      _gradient(
-        const Rect.fromLTWH(207, 500, 42, 35),
+    rounded(
+      c,
+      const Rect.fromLTWH(206, 500, 43, 34),
+      9,
+      gradient(
+        const Rect.fromLTWH(206, 500, 43, 34),
         [cyan, blue, navy],
       ),
     );
 
     // الحذاء.
-    _roundRect(
-      canvas,
-      const Rect.fromLTWH(77, 575, 92, 34),
-      13,
-      _gradient(
-        const Rect.fromLTWH(77, 575, 92, 34),
+    rounded(
+      c,
+      const Rect.fromLTWH(77, 575, 92, 32),
+      12,
+      gradient(
+        const Rect.fromLTWH(77, 575, 92, 32),
         [blue, navy, red],
       ),
     );
-    _roundRect(
-      canvas,
-      const Rect.fromLTWH(191, 575, 92, 34),
-      13,
-      _gradient(
-        const Rect.fromLTWH(191, 575, 92, 34),
+    rounded(
+      c,
+      const Rect.fromLTWH(191, 575, 92, 32),
+      12,
+      gradient(
+        const Rect.fromLTWH(191, 575, 92, 32),
         [red, navy, blue],
       ),
     );
-    _roundRect(
-      canvas,
-      const Rect.fromLTWH(89, 600, 69, 5),
-      3,
-      _paint(cyan),
-    );
-    _roundRect(
-      canvas,
-      const Rect.fromLTWH(202, 600, 69, 5),
-      3,
-      _paint(cyan),
-    );
 
     // الذراعان.
-    final leftArm = _polygon([
-      Offset(91, shoulderY + 4),
-      const Offset(48, 255),
-      const Offset(29, 348),
-      const Offset(48, 421),
-      const Offset(88, 416),
-      const Offset(80, 350),
-      const Offset(119, 286),
-    ]);
-    final rightArm = _polygon([
-      Offset(269, shoulderY + 4),
-      const Offset(312, 255),
-      const Offset(331, 348),
-      const Offset(312, 421),
-      const Offset(272, 416),
-      const Offset(280, 350),
-      const Offset(241, 286),
-    ]);
-
-    canvas.drawPath(
-      leftArm,
-      _gradient(
-        const Rect.fromLTWH(25, 235, 100, 190),
+    c.drawPath(
+      polygon([
+        Offset(103, shoulder + 8),
+        const Offset(50, 258),
+        const Offset(29, 350),
+        const Offset(49, 419),
+        const Offset(86, 414),
+        const Offset(80, 350),
+        const Offset(123, 286),
+      ]),
+      gradient(
+        const Rect.fromLTWH(25, 235, 105, 190),
         [gold, red, blue, navy],
       ),
     );
-    canvas.drawPath(
-      rightArm,
-      _gradient(
-        const Rect.fromLTWH(235, 235, 100, 190),
-        [red, gold, blue, navy],
-      ),
-    );
 
-    // ألواح الساعدين.
-    canvas.drawPath(
-      _polygon(const [
-        Offset(35, 333),
-        Offset(77, 337),
-        Offset(83, 399),
-        Offset(53, 414),
-        Offset(39, 387),
+    c.drawPath(
+      polygon([
+        Offset(257, shoulder + 8),
+        const Offset(310, 258),
+        const Offset(331, 350),
+        const Offset(311, 419),
+        const Offset(274, 414),
+        const Offset(280, 350),
+        const Offset(237, 286),
       ]),
-      _gradient(
-        const Rect.fromLTWH(35, 333, 50, 82),
-        [blue, cyan, navy],
-        vertical: true,
-      ),
-    );
-    canvas.drawPath(
-      _polygon(const [
-        Offset(325, 333),
-        Offset(283, 337),
-        Offset(277, 399),
-        Offset(307, 414),
-        Offset(321, 387),
-      ]),
-      _gradient(
-        const Rect.fromLTWH(275, 333, 50, 82),
-        [blue, cyan, navy],
-        vertical: true,
+      gradient(
+        const Rect.fromLTWH(235, 235, 105, 190),
+        [gold, red, blue, navy],
       ),
     );
 
     // الكتفان.
-    canvas.drawOval(
-      const Rect.fromLTWH(49, 224, 84, 68),
-      _gradient(
-        const Rect.fromLTWH(49, 224, 84, 68),
+    c.drawOval(
+      const Rect.fromLTWH(49, 222, 84, 70),
+      gradient(
+        const Rect.fromLTWH(49, 222, 84, 70),
         [gold, red, Color(0xFF76202C)],
       ),
     );
-    canvas.drawOval(
-      const Rect.fromLTWH(227, 224, 84, 68),
-      _gradient(
-        const Rect.fromLTWH(227, 224, 84, 68),
+    c.drawOval(
+      const Rect.fromLTWH(227, 222, 84, 70),
+      gradient(
+        const Rect.fromLTWH(227, 222, 84, 70),
         [gold, red, Color(0xFF76202C)],
       ),
     );
 
-    canvas.drawOval(
-      const Rect.fromLTWH(65, 238, 51, 34),
-      _paint(blue, style: PaintingStyle.stroke)..strokeWidth = 5,
-    );
-    canvas.drawOval(
-      const Rect.fromLTWH(244, 238, 51, 34),
-      _paint(blue, style: PaintingStyle.stroke)..strokeWidth = 5,
-    );
-
-    // الجذع والدرع الصدري.
-    final torso = _polygon([
-      Offset(112, shoulderY),
-      Offset(248, shoulderY),
-      const Offset(270, 390),
-      const Offset(235, 455),
-      const Offset(125, 455),
-      const Offset(90, 390),
-    ]);
-
-    canvas.drawPath(
-      torso,
-      _gradient(
+    // الجذع.
+    c.drawPath(
+      polygon([
+        Offset(112, shoulder),
+        Offset(248, shoulder),
+        const Offset(270, 390),
+        const Offset(235, 455),
+        const Offset(125, 455),
+        const Offset(90, 390),
+      ]),
+      gradient(
         const Rect.fromLTWH(90, 230, 180, 230),
         [Color(0xFF164E91), navy, Color(0xFF050B16)],
         vertical: true,
       ),
     );
 
-    final chest = _polygon(const [
-      Offset(117, 251),
-      Offset(243, 251),
-      Offset(260, 320),
-      Offset(228, 367),
-      Offset(132, 367),
-      Offset(100, 320),
-    ]);
-
-    canvas.drawPath(
-      chest,
-      _gradient(
+    // الدرع الأمامي.
+    c.drawPath(
+      polygon(const [
+        Offset(117, 251), Offset(243, 251),
+        Offset(260, 320), Offset(228, 367),
+        Offset(132, 367), Offset(100, 320),
+      ]),
+      gradient(
         const Rect.fromLTWH(100, 250, 160, 120),
         [gold, red, blue, navy],
         vertical: true,
       ),
     );
 
-    final chestInner = _polygon(const [
-      Offset(127, 263),
-      Offset(233, 263),
-      Offset(246, 316),
-      Offset(220, 350),
-      Offset(140, 350),
-      Offset(114, 316),
-    ]);
-
-    canvas.drawPath(
-      chestInner,
-      _gradient(
+    c.drawPath(
+      polygon(const [
+        Offset(127, 263), Offset(233, 263),
+        Offset(246, 316), Offset(220, 350),
+        Offset(140, 350), Offset(114, 316),
+      ]),
+      gradient(
         const Rect.fromLTWH(114, 263, 132, 87),
         [Color(0xFF0755B8), Color(0xFF061B3A)],
         vertical: true,
       ),
     );
 
-    canvas.drawPath(
-      chestInner,
-      _paint(gold, style: PaintingStyle.stroke)..strokeWidth = 2.5,
+    // إطار ذهبي حول شعار الصدر.
+    c.drawPath(
+      polygon(const [
+        Offset(127, 263), Offset(233, 263),
+        Offset(246, 316), Offset(220, 350),
+        Offset(140, 350), Offset(114, 316),
+      ]),
+      paint(gold, style: PaintingStyle.stroke)..strokeWidth = 2.5,
     );
 
-    // شعار صاحبي AI.
     final logo = TextPainter(
       text: const TextSpan(
         text: 'صاحبي AI',
@@ -484,147 +399,103 @@ class _Hero25DPainter extends CustomPainter {
           color: Colors.white,
           fontSize: 21,
           fontWeight: FontWeight.w900,
-          shadows: [
-            Shadow(color: cyan, blurRadius: 8),
-          ],
+          shadows: [Shadow(color: cyan, blurRadius: 8)],
         ),
       ),
       textDirection: TextDirection.rtl,
       textAlign: TextAlign.center,
     )..layout(maxWidth: 128);
 
-    logo.paint(canvas, Offset(180 - logo.width / 2, 294));
+    logo.paint(c, Offset(180 - logo.width / 2, 294));
 
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: const Offset(180, 327),
-        width: 82,
-        height: 15,
-      ),
-      0.15,
-      2.85,
-      false,
-      _paint(gold, style: PaintingStyle.stroke)..strokeWidth = 3,
-    );
-
-    // نواة الطاقة.
-    _glow(canvas, const Offset(180, 390), 23);
-    canvas.drawCircle(
+    // مفاعل الطاقة.
+    glow(c, const Offset(180, 390), 24, cyan);
+    c.drawCircle(
       const Offset(180, 390),
       13,
-      _gradient(
-        const Rect.fromCircle(center: Offset(180, 390), radius: 13),
+      gradient(
+        const Rect.fromCircle(
+          center: Offset(180, 390),
+          radius: 13,
+        ),
         [Colors.white, cyan, blue],
       ),
     );
-    canvas.drawCircle(
+    c.drawCircle(
       const Offset(180, 390),
       18,
-      _paint(gold, style: PaintingStyle.stroke)..strokeWidth = 2,
+      paint(gold, style: PaintingStyle.stroke)..strokeWidth = 2,
     );
 
     // خطوط الطاقة.
-    final energyPaint = _paint(
-      cyan,
-      style: PaintingStyle.stroke,
-    )
+    final energy = paint(cyan, style: PaintingStyle.stroke)
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
 
-    canvas.drawPath(
-      _polygon(const [
-        Offset(117, 365),
-        Offset(137, 385),
-        Offset(125, 411),
-        Offset(148, 428),
-      ])..close(),
-      energyPaint,
+    c.drawPath(
+      polygon(const [
+        Offset(117, 365), Offset(137, 385),
+        Offset(125, 411), Offset(148, 428),
+      ]),
+      energy,
     );
-    canvas.drawPath(
-      _polygon(const [
-        Offset(243, 365),
-        Offset(223, 385),
-        Offset(235, 411),
-        Offset(212, 428),
-      ])..close(),
-      energyPaint,
-    );
-
-    // القبضتان.
-    canvas.drawCircle(
-      const Offset(63, 421),
-      22,
-      _gradient(
-        const Rect.fromCircle(center: Offset(63, 421), radius: 22),
-        [blue, navy, red],
-      ),
-    );
-    canvas.drawCircle(
-      const Offset(297, 421),
-      22,
-      _gradient(
-        const Rect.fromCircle(center: Offset(297, 421), radius: 22),
-        [red, navy, blue],
-      ),
+    c.drawPath(
+      polygon(const [
+        Offset(243, 365), Offset(223, 385),
+        Offset(235, 411), Offset(212, 428),
+      ]),
+      energy,
     );
   }
 
-  void _drawHead(Canvas canvas) {
-    final headOffset = Offset(rotation.dx * 12, rotation.dy * 8);
+  void drawHead(Canvas c) {
+    c.save();
+    c.translate(rotation.dx * 10, rotation.dy * 7);
 
-    canvas.save();
-    canvas.translate(headOffset.dx, headOffset.dy);
-
-    // الرقبة والياقة أسفل الذقن، من دون تغطية الوجه.
-    _roundRect(
-      canvas,
-      const Rect.fromLTWH(151, 192, 58, 62),
-      17,
-      _gradient(
-        const Rect.fromLTWH(151, 192, 58, 62),
-        [skinLight, skin, Color(0xFF85513F)],
+    // الرقبة والياقة أسفل الوجه فقط.
+    rounded(
+      c,
+      const Rect.fromLTWH(151, 190, 58, 61),
+      16,
+      gradient(
+        const Rect.fromLTWH(151, 190, 58, 61),
+        [Color(0xFFE2AE8C), skin, Color(0xFF85513F)],
         vertical: true,
       ),
     );
 
-    _roundRect(
-      canvas,
+    rounded(
+      c,
       const Rect.fromLTWH(139, 222, 82, 22),
-      9,
-      _gradient(
+      8,
+      gradient(
         const Rect.fromLTWH(139, 222, 82, 22),
         [red, gold, navy],
       ),
     );
 
     // الأذنان.
-    canvas.drawOval(
+    c.drawOval(
       const Rect.fromLTWH(119, 117, 25, 43),
-      _paint(skin),
+      paint(skin),
     );
-    canvas.drawOval(
+    c.drawOval(
       const Rect.fromLTWH(216, 117, 25, 43),
-      _paint(skin),
+      paint(skin),
     );
 
-    // الوجه المكشوف بالكامل.
-    final faceRect = const Rect.fromLTWH(128, 53, 104, 157);
-    canvas.drawOval(
-      faceRect,
-      _gradient(
-        faceRect,
-        [skinLight, skin, Color(0xFFB9785B)],
-        vertical: true,
-      ),
+    // الوجه ظاهر بالكامل.
+    const face = Rect.fromLTWH(128, 53, 104, 157);
+    c.drawOval(
+      face,
+      gradient(face, [
+        Color(0xFFE7B18E),
+        skin,
+        Color(0xFFB9785B),
+      ], vertical: true),
     );
 
-    // ظل جانبي طبيعي.
-    canvas.drawOval(
-      const Rect.fromLTWH(194, 83, 31, 112),
-      _paint(const Color(0x22713C30)),
-    );
-
-    // الشعر القصير الداكن، أعلى الرأس فقط.
+    // الشعر القصير الداكن.
     final hairPath = Path()
       ..moveTo(128, 121)
       ..quadraticBezierTo(121, 75, 146, 49)
@@ -635,27 +506,16 @@ class _Hero25DPainter extends CustomPainter {
       ..quadraticBezierTo(144, 99, 128, 121)
       ..close();
 
-    canvas.drawPath(
+    c.drawPath(
       hairPath,
-      _gradient(
+      gradient(
         const Rect.fromLTWH(125, 35, 110, 90),
-        [Color(0xFF34343A), hair, Color(0xFF090D15)],
+        [Color(0xFF3A3A40), hair, Color(0xFF090D15)],
         vertical: true,
       ),
     );
 
-    // لمعة الشعر.
-    canvas.drawArc(
-      const Rect.fromLTWH(143, 44, 66, 35),
-      3.3,
-      2.1,
-      false,
-      _paint(const Color(0x665E6571), style: PaintingStyle.stroke)
-        ..strokeWidth = 3,
-    );
-
-    // الحاجبان الكثيفان.
-    final browColor = hair;
+    // الحاجبان.
     final leftBrow = Path()
       ..moveTo(143, 113)
       ..quadraticBezierTo(158, 103, 171, 112);
@@ -663,18 +523,12 @@ class _Hero25DPainter extends CustomPainter {
       ..moveTo(190, 112)
       ..quadraticBezierTo(207, 102, 219, 114);
 
-    canvas.drawPath(
-      leftBrow,
-      _paint(browColor, style: PaintingStyle.stroke)
-        ..strokeWidth = 5
-        ..strokeCap = StrokeCap.round,
-    );
-    canvas.drawPath(
-      rightBrow,
-      _paint(browColor, style: PaintingStyle.stroke)
-        ..strokeWidth = 5
-        ..strokeCap = StrokeCap.round,
-    );
+    final browPaint = paint(hair, style: PaintingStyle.stroke)
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+
+    c.drawPath(leftBrow, browPaint);
+    c.drawPath(rightBrow, browPaint);
 
     final surprised = status.expression == HeroExpression.surprise;
     final angry = status.expression == HeroExpression.angry;
@@ -683,47 +537,48 @@ class _Hero25DPainter extends CustomPainter {
 
     // العينان.
     for (final x in [157.0, 203.0]) {
-      final isWinkEye = wink && x == 203.0;
-      final eyeRect = Rect.fromCenter(
-        center: Offset(x, 128),
-        width: 25,
-        height: surprised ? 16 : 12,
-      );
+      final closed = blink || (wink && x == 203.0);
 
-      if (blink || isWinkEye) {
-        canvas.drawLine(
+      if (closed) {
+        c.drawLine(
           Offset(x - 11, 128),
           Offset(x + 11, 128),
-          _paint(hair, style: PaintingStyle.stroke)
+          paint(hair, style: PaintingStyle.stroke)
             ..strokeWidth = 3
             ..strokeCap = StrokeCap.round,
         );
       } else {
-        canvas.drawOval(eyeRect, _paint(Colors.white));
-        canvas.drawCircle(
-          Offset(x, 128),
-          5.2,
-          _paint(const Color(0xFF38251F)),
+        c.drawOval(
+          Rect.fromCenter(
+            center: Offset(x, 128),
+            width: 25,
+            height: surprised ? 16 : 12,
+          ),
+          paint(Colors.white),
         );
-        canvas.drawCircle(
+        c.drawCircle(
+          Offset(x, 128),
+          5,
+          paint(const Color(0xFF38251F)),
+        );
+        c.drawCircle(
           Offset(x - 1.5, 126),
           1.5,
-          _paint(Colors.white),
+          paint(Colors.white),
         );
       }
     }
 
-    // خطوط الغضب فوق الحاجبين.
     if (angry) {
-      canvas.drawLine(
+      c.drawLine(
         const Offset(145, 108),
         const Offset(171, 117),
-        _paint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
+        paint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
       );
-      canvas.drawLine(
+      c.drawLine(
         const Offset(190, 117),
         const Offset(216, 108),
-        _paint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
+        paint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
       );
     }
 
@@ -732,33 +587,34 @@ class _Hero25DPainter extends CustomPainter {
       ..moveTo(181, 129)
       ..quadraticBezierTo(175, 151, 180, 154)
       ..quadraticBezierTo(185, 158, 190, 153);
-    canvas.drawPath(
+
+    c.drawPath(
       nose,
-      _paint(const Color(0xFF925D4B), style: PaintingStyle.stroke)
-        ..strokeWidth = 2
-        ..strokeCap = StrokeCap.round,
+      paint(
+        const Color(0xFF925D4B),
+        style: PaintingStyle.stroke,
+      )..strokeWidth = 2,
     );
 
-    // الفم: تعبيرات مرسومة، وليست Lip Sync صوتية دقيقة.
-    final mouthY = 174.0;
-    final speaking = status.isSpeaking;
+    // الفم والتعبيرات.
     final smile = status.expression == HeroExpression.smile;
     final sad = status.expression == HeroExpression.sad;
+    const mouthY = 174.0;
 
-    if (speaking && status.activeViseme != 'sil') {
-      final mouthHeight = switch (status.activeViseme) {
+    if (status.isSpeaking && status.activeViseme != 'sil') {
+      final height = switch (status.activeViseme) {
         'aa' || 'O' || 'U' => 12.0,
         'E' || 'I' => 5.0,
         _ => 7.0,
       };
 
-      canvas.drawOval(
+      c.drawOval(
         Rect.fromCenter(
-          center: Offset(180, mouthY),
+          center: const Offset(180, mouthY),
           width: 20,
-          height: mouthHeight,
+          height: height,
         ),
-        _paint(const Color(0xFF55252B)),
+        paint(const Color(0xFF55252B)),
       );
     } else {
       final mouth = Path()
@@ -770,74 +626,73 @@ class _Hero25DPainter extends CustomPainter {
           mouthY,
         );
 
-      canvas.drawPath(
+      c.drawPath(
         mouth,
-        _paint(const Color(0xFF713A35), style: PaintingStyle.stroke)
+        paint(
+          const Color(0xFF713A35),
+          style: PaintingStyle.stroke,
+        )
           ..strokeWidth = 3
           ..strokeCap = StrokeCap.round,
       );
     }
 
-    // لمسة ضوء على الخدّين.
-    if (smile) {
-      _glow(canvas, const Offset(145, 158), 10, color: red, opacity: 0.18);
-      _glow(canvas, const Offset(215, 158), 10, color: red, opacity: 0.18);
-    }
-
-    canvas.restore();
+    c.restore();
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
 
-    final scale = size.width / 360;
-    final heightScale = size.height / 640;
-    final fittedScale = scale < heightScale ? scale : heightScale;
+    final scaleX = size.width / 360;
+    final scaleY = size.height / 640;
+    final scale = scaleX < scaleY ? scaleX : scaleY;
 
     canvas.save();
-    canvas.translate(
-      (size.width - 360 * fittedScale) / 2,
-      (size.height - 640 * fittedScale) / 2,
-    );
-    canvas.scale(fittedScale);
 
-    _drawBackground(canvas);
+    canvas.translate(
+      (size.width - 360 * scale) / 2,
+      (size.height - 640 * scale) / 2,
+    );
+    canvas.scale(scale);
+
+    drawBackground(canvas);
 
     canvas.save();
     final lean = animationName == 'Hero_Welcome'
-        ? -0.025
+        ? -.025
         : animationName == 'Hero_Power'
-            ? 0.018
+            ? .018
             : 0.0;
+
     canvas.translate(180, 320);
-    canvas.rotate(lean + rotation.dx * 0.10);
+    canvas.rotate(lean + rotation.dx * .08);
     canvas.translate(-180, -320);
 
-    _drawBody(canvas);
-    _drawHead(canvas);
+    drawBody(canvas);
+    drawHead(canvas);
 
     canvas.restore();
 
-    // حلقة طاقة صغيرة أسفل الشخصية.
+    // قاعدة ضوء أسفل الشخصية.
     canvas.drawOval(
       Rect.fromCenter(
-        center: const Offset(180, 618),
-        width: 170 + breathing * 5,
-        height: 10,
+        center: Offset(180, 618),
+        width: 170 + motion * 5,
+        height: 9,
       ),
-      _paint(cyan.withValues(alpha: 0.55), style: PaintingStyle.stroke)
-        ..strokeWidth = 2,
+      paint(cyan, style: PaintingStyle.stroke)..strokeWidth = 2,
     );
 
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _Hero25DPainter oldDelegate) {
-    return oldDelegate.animationName != animationName ||
-        oldDelegate.status.revision != status.revision ||
-        oldDelegate.breathing != breathing ||
-        oldDelegate.rotation != rotation;
+  bool shouldRepaint(covariant _HeroPainter old) {
+    return old.status.revision != status.revision ||
+        old.motion != motion ||
+        old.rotation != rotation ||
+        old.animationName != animationName ||
+        old.compact != compact;
   }
 }
