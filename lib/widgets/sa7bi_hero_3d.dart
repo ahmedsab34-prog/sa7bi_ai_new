@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -8,9 +9,6 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../services/hero_face_runtime.dart';
 
 /// يعرض مجسم HERO المحلي وحركات الجسم الموجودة داخل ملف GLB.
-///
-/// enableFaceAnimations متاح للتوافق مع أي شاشة قديمة، لكن وضع 3D Lite
-/// يعطّله حتى لا نحاول تشغيل Face Clips غير موجودة داخل المجسم الحالي.
 class Sa7biHero3D extends StatefulWidget {
   const Sa7biHero3D({
     super.key,
@@ -19,6 +17,12 @@ class Sa7biHero3D extends StatefulWidget {
     this.compact = false,
     this.enableFaceAnimations = true,
   });
+
+  /// تعطيل WebView في اختبار التنقل فقط.
+  ///
+  /// القيمة الافتراضية false، وبالتالي لا يتغير تشغيل HERO في التطبيق.
+  @visibleForTesting
+  static bool debugDisableWebViewForTests = false;
 
   final String animationName;
   final bool cameraControls;
@@ -300,6 +304,24 @@ class _Sa7biHero3DState extends State<Sa7biHero3D> {
 
   @override
   Widget build(BuildContext context) {
+    // وضع اختبار التنقل: يحتفظ بعنصر HERO في شجرة الواجهة
+    // لكنه لا يشغّل WebView أو محرك 3D داخل المحاكي.
+    if (Sa7biHero3D.debugDisableWebViewForTests) {
+      return const Semantics(
+        label: 'HERO 3D test placeholder',
+        child: ColoredBox(
+          color: Color(0xFF081225),
+          child: Center(
+            child: Icon(
+              Icons.smart_toy_rounded,
+              color: Color(0xFF72D7FF),
+              size: 30,
+            ),
+          ),
+        ),
+      );
+    }
+
     final compact = widget.compact;
 
     return ModelViewer(
