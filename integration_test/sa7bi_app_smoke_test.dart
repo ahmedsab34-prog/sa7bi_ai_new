@@ -32,8 +32,7 @@ void main() {
     expect(find.byType(KhalasanaPortal), findsOneWidget);
     expect(find.byType(Sa7biHero3D), findsOneWidget);
 
-    // افحص Widget Semantics مباشرة بدل البحث في شجرة
-    // الوصول الدلالي التي قد لا تكون مفعّلة أثناء الاختبار.
+    // فحص Semantics مباشرة.
     final heroPlaceholder = find.descendant(
       of: find.byType(Sa7biHero3D),
       matching: find.byWidgetPredicate(
@@ -90,7 +89,9 @@ void main() {
       const Duration(milliseconds: 350),
     );
 
-    await tester.pumpAndSettle();
+    // HERO لديه حركة تنفس مستمرة؛ لذلك لا نستخدم pumpAndSettle.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
 
     expect(tester.takeException(), isNull);
   });
@@ -127,9 +128,10 @@ Future<void> _tapMainTab(
   expect(hitTarget, findsOneWidget);
 
   await tester.tap(hitTarget);
-  await tester.pumpAndSettle(
-    const Duration(milliseconds: 100),
-  );
+
+  // انتقال التبويب مدته 260ms، بينما HERO يستمر في الحركة.
+  await tester.pump(const Duration(milliseconds: 350));
+  await tester.pump();
 
   expect(
     tester.takeException(),
