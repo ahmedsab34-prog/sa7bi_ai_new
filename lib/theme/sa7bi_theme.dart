@@ -1,54 +1,65 @@
-
 import 'package:flutter/material.dart';
 
 /// الهوية البصرية الموحدة لتطبيق صاحبي AI.
-/// كحلي وأسود ونبيتي مع أزرق مضيء ولمسات سماوية.
+///
+/// الاتجاه المعتمد:
+/// - خلفيات كحلية عميقة.
+/// - بنفسجي للعناصر الثانوية.
+/// - ذهبي للعناصر المميزة.
+/// - سماوي/أزرق للتفاعل والاتصال.
+///
+/// نحافظ على أسماء الثوابت القديمة حتى لا تنكسر
+/// الشاشات الحالية التي تعتمد عليها.
 abstract final class Sa7biTheme {
   // ============================================================
-  // BASE COLORS
+  // BACKGROUNDS
   // ============================================================
 
-  static const Color background = Color(0xFF050812);
-  static const Color backgroundRaised = Color(0xFF090F1D);
+  static const Color background = Color(0xFF060918);
+  static const Color backgroundRaised = Color(0xFF0B1022);
 
-  static const Color surface = Color(0xFF0D1525);
-  static const Color surfaceRaised = Color(0xFF142039);
-  static const Color surfaceSoft = Color(0xFF1C2A45);
+  static const Color surface = Color(0xFF111A30);
+  static const Color surfaceRaised = Color(0xFF192541);
+  static const Color surfaceSoft = Color(0xFF263555);
 
-  static const Color navy = Color(0xFF101C35);
-  static const Color navyDeep = Color(0xFF080E1C);
-  static const Color black = Color(0xFF03050A);
+  static const Color navy = Color(0xFF111C37);
+  static const Color navyDeep = Color(0xFF080D1E);
+  static const Color black = Color(0xFF03050B);
 
   // ============================================================
   // BRAND COLORS
   // ============================================================
 
-  static const Color blue = Color(0xFF4B8DFF);
-  static const Color blueBright = Color(0xFF67B7FF);
-  static const Color cyan = Color(0xFF66D9F2);
+  static const Color blue = Color(0xFF5799FF);
+  static const Color blueBright = Color(0xFF8BBEFF);
+  static const Color cyan = Color(0xFF69E2EE);
 
-  static const Color wine = Color(0xFF8F2147);
-  static const Color wineDeep = Color(0xFF52132E);
-  static const Color burgundy = Color(0xFF6D1738);
+  static const Color violet = Color(0xFF8C79E6);
+  static const Color purple = Color(0xFFB3A2FF);
 
-  static const Color violet = Color(0xFF9A83D9);
-  static const Color purple = Color(0xFFB39DFF);
+  static const Color gold = Color(0xFFD9B469);
+  static const Color goldBright = Color(0xFFF0D28F);
+  static const Color goldDeep = Color(0xFF92703A);
 
-  // أسماء التوافق القديمة تظل متاحة.
-  static const Color gold = wine;
+  // أسماء توافقية قديمة مستخدمة داخل المشروع.
+  static const Color wine = Color(0xFF772A55);
+  static const Color wineDeep = Color(0xFF4C1C3A);
+  static const Color burgundy = Color(0xFF6F234B);
+
   static const Color success = Color(0xFF57D6B1);
-  static const Color danger = Color(0xFFFF6F83);
+  static const Color danger = Color(0xFFFF7188);
 
   // ============================================================
   // TEXT AND BORDERS
   // ============================================================
 
-  static const Color textPrimary = Color(0xFFF5F7FC);
-  static const Color textSecondary = Color(0xFFA7B3C9);
-  static const Color textMuted = Color(0xFF73829D);
+  static const Color textPrimary = Color(0xFFF5F5FA);
+  static const Color textSecondary = Color(0xFFB5BED2);
+  static const Color textMuted = Color(0xFF7D89A3);
 
-  static const Color border = Color(0x334D6B9B);
-  static const Color borderWine = Color(0x667D2449);
+  static const Color border = Color(0x334D6594);
+  static const Color borderWine = Color(0x667D315C);
+  static const Color borderGold = Color(0x668F7444);
 
   // ============================================================
   // BRAND GRADIENTS
@@ -59,8 +70,8 @@ abstract final class Sa7biTheme {
     end: Alignment.bottomLeft,
     colors: <Color>[
       blueBright,
-      blue,
-      wine,
+      violet,
+      gold,
     ],
   );
 
@@ -68,15 +79,15 @@ abstract final class Sa7biTheme {
     begin: Alignment.topRight,
     end: Alignment.bottomLeft,
     colors: <Color>[
-      Color(0xFF1C3154),
-      Color(0xFF111A31),
-      Color(0xFF321326),
-      Color(0xFF090D18),
+      Color(0xFF20284A),
+      Color(0xFF17152F),
+      Color(0xFF30213D),
+      Color(0xFF090D1B),
     ],
     stops: <double>[
       0.0,
-      0.42,
-      0.76,
+      0.38,
+      0.72,
       1.0,
     ],
   );
@@ -85,9 +96,19 @@ abstract final class Sa7biTheme {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: <Color>[
-      Color(0xFF1C2942),
-      Color(0xFF111B2D),
-      Color(0xFF090F1C),
+      Color(0xFF202B49),
+      Color(0xFF151D35),
+      Color(0xFF0B1224),
+    ],
+  );
+
+  static const LinearGradient violetGradient = LinearGradient(
+    begin: Alignment.topRight,
+    end: Alignment.bottomLeft,
+    colors: <Color>[
+      Color(0xFFAA96FF),
+      Color(0xFF6F5BC3),
+      Color(0xFF342A68),
     ],
   );
 
@@ -95,9 +116,9 @@ abstract final class Sa7biTheme {
     begin: Alignment.topRight,
     end: Alignment.bottomLeft,
     colors: <Color>[
-      Color(0xFF9D2B54),
-      Color(0xFF6F1B3B),
-      Color(0xFF321222),
+      Color(0xFF9B4778),
+      Color(0xFF6F2B58),
+      Color(0xFF32182E),
     ],
   );
 
@@ -105,14 +126,21 @@ abstract final class Sa7biTheme {
     begin: Alignment.topRight,
     end: Alignment.bottomLeft,
     colors: <Color>[
-      Color(0xFF5DABFF),
-      Color(0xFF2861B7),
-      Color(0xFF142C55),
+      Color(0xFF82B8FF),
+      Color(0xFF3B76C7),
+      Color(0xFF1A315A),
     ],
   );
 
-  // اسم قديم مستخدم في بعض الواجهات.
-  static const LinearGradient goldGradient = wineGradient;
+  static const LinearGradient goldGradient = LinearGradient(
+    begin: Alignment.topRight,
+    end: Alignment.bottomLeft,
+    colors: <Color>[
+      goldBright,
+      gold,
+      goldDeep,
+    ],
+  );
 
   // ============================================================
   // THEME
@@ -120,11 +148,11 @@ abstract final class Sa7biTheme {
 
   static ThemeData dark() {
     final scheme = ColorScheme.fromSeed(
-      seedColor: blue,
+      seedColor: violet,
       brightness: Brightness.dark,
     ).copyWith(
       primary: blueBright,
-      secondary: wine,
+      secondary: violet,
       tertiary: cyan,
       surface: surface,
       error: danger,
@@ -138,9 +166,8 @@ abstract final class Sa7biTheme {
       canvasColor: background,
       fontFamily: 'sans',
       dividerColor: border,
-
-      splashColor: blue.withValues(alpha: 0.09),
-      highlightColor: cyan.withValues(alpha: 0.035),
+      splashColor: blue.withValues(alpha: 0.10),
+      highlightColor: cyan.withValues(alpha: 0.04),
 
       appBarTheme: const AppBarTheme(
         backgroundColor: background,
@@ -161,7 +188,7 @@ abstract final class Sa7biTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(20),
           side: const BorderSide(color: border),
         ),
       ),
@@ -170,11 +197,11 @@ abstract final class Sa7biTheme {
         filled: true,
         fillColor: surfaceRaised,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 12,
+          horizontal: 15,
+          vertical: 13,
         ),
         hintStyle: const TextStyle(
-          color: textSecondary,
+          color: textMuted,
           fontSize: 13,
         ),
         labelStyle: const TextStyle(
@@ -192,8 +219,8 @@ abstract final class Sa7biTheme {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(
-            color: blueBright,
-            width: 1.4,
+            color: gold,
+            width: 1.3,
           ),
         ),
       ),
@@ -203,14 +230,14 @@ abstract final class Sa7biTheme {
           backgroundColor: blue,
           foregroundColor: Colors.white,
           disabledBackgroundColor: surfaceSoft,
-          disabledForegroundColor: textSecondary,
-          minimumSize: const Size(0, 42),
+          disabledForegroundColor: textMuted,
+          minimumSize: const Size(0, 44),
           padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 10,
+            horizontal: 17,
+            vertical: 11,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(15),
           ),
           textStyle: const TextStyle(
             fontSize: 13,
@@ -221,19 +248,19 @@ abstract final class Sa7biTheme {
 
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: wine,
+          backgroundColor: violet,
           foregroundColor: Colors.white,
           disabledBackgroundColor: surfaceSoft,
-          disabledForegroundColor: textSecondary,
-          minimumSize: const Size(0, 42),
-          elevation: 3,
-          shadowColor: wine.withValues(alpha: 0.25),
+          disabledForegroundColor: textMuted,
+          minimumSize: const Size(0, 44),
+          elevation: 2,
+          shadowColor: violet.withValues(alpha: 0.22),
           padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 10,
+            horizontal: 17,
+            vertical: 11,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(15),
           ),
           textStyle: const TextStyle(
             fontSize: 13,
@@ -244,15 +271,15 @@ abstract final class Sa7biTheme {
 
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: blueBright,
-          minimumSize: const Size(0, 40),
+          foregroundColor: goldBright,
+          minimumSize: const Size(0, 42),
           padding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 9,
+            horizontal: 15,
+            vertical: 10,
           ),
-          side: const BorderSide(color: border),
+          side: const BorderSide(color: borderGold),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(15),
           ),
           textStyle: const TextStyle(
             fontSize: 12,
@@ -277,7 +304,7 @@ abstract final class Sa7biTheme {
       ),
 
       progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: blueBright,
+        color: cyan,
         linearTrackColor: surfaceSoft,
       ),
 
@@ -289,7 +316,7 @@ abstract final class Sa7biTheme {
         ),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(15),
           side: const BorderSide(color: border),
         ),
       ),
