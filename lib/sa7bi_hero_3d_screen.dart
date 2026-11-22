@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import 'services/hero_face_runtime.dart';
@@ -36,7 +37,7 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
         backgroundColor: Sa7biTheme.background,
         appBar: const Sa7biSubpageAppBar(
           title: 'صاحبي HERO',
-          subtitle: 'شخصية صاحبي الأصلية — بطل واحد',
+          subtitle: 'الشخصية الرسمية المعتمدة — بطل واحد',
         ),
         body: SafeArea(
           top: false,
@@ -112,13 +113,14 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                     const SizedBox(height: 12),
                     const _HintRow(
                       icon: Icons.pan_tool_alt_rounded,
-                      text: 'اسحب بإصبعك لتدوير الشخصية، واستخدم إصبعين للتقريب.',
+                      text:
+                          'اسحب بإصبعك لتدوير الشخصية، واستخدم إصبعين للتقريب.',
                     ),
                     const SizedBox(height: 7),
                     const _HintRow(
                       icon: Icons.auto_awesome_rounded,
                       text:
-                          'حافظ على شعار صاحبي AI الأصلي على الصدر وعلى الدرع الأزرق والذهبي والعباءة الحمراء.',
+                          'المرجع الرسمي: وجه مكشوف بنفس الملامح والشعر، ودرع أحمر وذهبي وأزرق داكن، وخطوط طاقة سماوية، وشعار صاحبي AI في منتصف الصدر. بدون خوذة أو قناع أو عباءة.',
                     ),
                   ],
                 ),
@@ -171,12 +173,20 @@ class _AnimationChoiceButton extends StatelessWidget {
         ? FilledButton.icon(
             onPressed: onPressed,
             icon: Icon(icon, size: 17),
-            label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            label: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           )
         : OutlinedButton.icon(
             onPressed: onPressed,
             icon: Icon(icon, size: 17),
-            label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            label: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           );
   }
 }
@@ -238,7 +248,7 @@ class _FaceExpressionPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Text(
-                'تعبيرات وجه HERO المطابقة للمرجع',
+                'تعبيرات وجه HERO',
                 style: TextStyle(
                   color: Sa7biTheme.textPrimary,
                   fontSize: 14,
