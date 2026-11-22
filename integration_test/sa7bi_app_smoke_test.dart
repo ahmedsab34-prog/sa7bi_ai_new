@@ -16,8 +16,8 @@ void main() {
 
   testWidgets('Sa7bi AI main navigation and HERO smoke test',
       (tester) async {
-    // اختبار التبويبات لا يحتاج إلى تشغيل محرك WebView ثلاثي الأبعاد.
-    // اختبار ملف GLB والـFace Rig موجود بصورة مستقلة.
+    // اختبار التنقل لا يحتاج إلى تشغيل WebView ثلاثي الأبعاد.
+    // نحتفظ بعنصر HERO نفسه داخل شجرة الواجهة.
     Sa7biHero3D.debugDisableWebViewForTests = true;
 
     addTearDown(() {
@@ -27,14 +27,24 @@ void main() {
     await tester.pumpWidget(const sa7bi.Sa7biAiApp());
     await tester.pump(const Duration(seconds: 2));
 
-    // Home screen and the single floating HERO character.
+    // فحص الهيدر وبوابة خالسانة وشخصية HERO الواحدة.
     expect(find.byType(AppHeader), findsOneWidget);
     expect(find.byType(KhalasanaPortal), findsOneWidget);
     expect(find.byType(Sa7biHero3D), findsOneWidget);
-    expect(
-      find.bySemanticsLabel('HERO 3D test placeholder'),
-      findsOneWidget,
+
+    // افحص Widget Semantics مباشرة بدل البحث في شجرة
+    // الوصول الدلالي التي قد لا تكون مفعّلة أثناء الاختبار.
+    final heroPlaceholder = find.descendant(
+      of: find.byType(Sa7biHero3D),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == 'HERO 3D test placeholder',
+        description: 'HERO 3D test placeholder Semantics widget',
+      ),
     );
+
+    expect(heroPlaceholder, findsOneWidget);
 
     final pageViewFinder = find.byWidgetPredicate(
       (widget) =>
@@ -45,28 +55,28 @@ void main() {
 
     expect(pageViewFinder, findsOneWidget);
 
-    // Navigate to Chat.
+    // الانتقال إلى الشات.
     await _tapMainTab(tester, 'الشات');
     expect(find.byType(ChatTabScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // Navigate to Games.
+    // الانتقال إلى الألعاب.
     await _tapMainTab(tester, 'الألعاب');
     expect(find.byType(InteractiveExperiencesScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // Navigate to Profile.
+    // الانتقال إلى الحساب الشخصي.
     await _tapMainTab(tester, 'حسابي');
     expect(find.byType(ProfileScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // Return to Home.
+    // العودة إلى الرئيسية.
     await _tapMainTab(tester, 'الرئيسية');
     expect(find.byType(KhalasanaPortal), findsOneWidget);
     expect(find.byType(Sa7biHero3D), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // Verify horizontal PageView dragging.
+    // التحقق من السحب الأفقي بين الصفحات.
     final pageView = pageViewFinder.first;
     final topLeft = tester.getTopLeft(pageView);
     final size = tester.getSize(pageView);
