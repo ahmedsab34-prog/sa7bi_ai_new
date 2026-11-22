@@ -1,9 +1,14 @@
 
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:model_viewer_plus/model_viewer_plus.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
 import '../services/hero_face_runtime.dart';
 
-/// HERO 2.5D - نسخة Flutter مجانية.
-/// نفس الشخصية تستخدم في العرض الكبير وأيقونة خلصانة المصغرة.
+/// يعرض مجسم HERO المحلي وحركات الجسم الموجودة داخل ملف GLB.
 class Sa7biHero3D extends StatefulWidget {
   const Sa7biHero3D({
     super.key,
@@ -13,6 +18,9 @@ class Sa7biHero3D extends StatefulWidget {
     this.enableFaceAnimations = true,
   });
 
+  /// تعطيل WebView في اختبار التنقل فقط.
+  ///
+  /// القيمة الافتراضية false، وبالتالي لا يتغير تشغيل HERO في التطبيق.
   @visibleForTesting
   static bool debugDisableWebViewForTests = false;
 
@@ -25,686 +33,326 @@ class Sa7biHero3D extends StatefulWidget {
   State<Sa7biHero3D> createState() => _Sa7biHero3DState();
 }
 
-class _Sa7biHero3DState extends State<Sa7biHero3D>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _motion;
-  Offset _rotation = Offset.zero;
+class _Sa7biHero3DState extends State<Sa7biHero3D> {
+  static const String _viewerId = 'sa7bi-hero-model';
+  static const String _channelName = 'Sa7biHeroBridge';
+
+  static const String _bridgeScript = r'''
+(() => {
+  const viewerId = 'sa7bi-hero-model';
+  const channelName = 'Sa7biHeroBridge';
+
+  const post = (payload) => {
+    try {
+      const channel = window[channelName];
+      if (channel && typeof channel.postMessage === 'function') {
+        channel.postMessage(JSON.stringify(payload));
+      }
+    } catch (_) {}
+  };
+
+  const install = () => {
+    const viewer = document.getElementById(viewerId);
+    if (!viewer) {
+      window.setTimeout(install, 80);
+      return;
+    }
+
+    let activeExpression = null;
+    let activeViseme = null;
+    const reportedMissing = new Set();
+
+    const bridge = {
+      animations: [],
+
+      setBodyAnimation(name) {
+        if (
+          !viewer.loaded ||
+          !Array.isArray(viewer.availableAnimations) ||
+          !viewer.availableAnimations.includes(name)
+        ) {
+          post({type: 'missing', animation: name});
+          return false;
+        }
+
+        viewer.animationName = name;
+        viewer.play();
+        return true;
+      },
+
+      apply(command) {
+        if (!viewer.loaded || !command) return false;
+
+        if (command.type === 'reset') {
+          if (activeExpression) {
+            viewer.detachAnimation(activeExpression, {fade: 0.08});
+          }
+          if (activeViseme) {
+            viewer.detachAnimation(activeViseme, {fade: 0.05});
+          }
+          activeExpression = null;
+          activeViseme = null;
+          return true;
+        }
+
+        const name = command.animationName;
+        if (
+          typeof name !== 'string' ||
+          !viewer.availableAnimations.includes(name)
+        ) {
+          if (typeof name === 'string' && !reportedMissing.has(name)) {
+            reportedMissing.add(name);
+            post({type: 'missing', animation: name});
+          }
+          return false;
+        }
+
+        if (command.type === 'expression') {
+          if (activeExpression) {
+            viewer.detachAnimation(activeExpression, {fade: 0.08});
+          }
+
+          viewer.appendAnimation(name, {
+            repetitions: command.loop ? null : 1,
+            weight: 1,
+            timeScale: 1,
+            fade: 0.08
+          });
+          activeExpression = name;
+          return true;
+        }
+
+        if (command.type === 'viseme') {
+          if (activeViseme) {
+            viewer.detachAnimation(activeViseme, {fade: 0.04});
+          }
+
+          viewer.appendAnimation(name, {
+            repetitions: 1,
+            weight: 1,
+            timeScale: 1,
+            fade: 0.04
+          });
+          activeViseme = name;
+          return true;
+        }
+
+        return false;
+      }
+    };
+
+    window.sa7biHeroBridge = bridge;
+
+    const announceReady = () => {
+      if (!viewer.loaded) return;
+      bridge.animations = Array.from(viewer.availableAnimations || []);
+      post({type: 'ready', animations: bridge.animations});
+    };
+
+    viewer.addEventListener('load', announceReady);
+    viewer.addEventListener('error', () => post({type: 'error'}));
+
+    if (viewer.loaded) announceReady();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', install, {once: true});
+  } else {
+    install();
+  }
+})();
+''';
+
+  WebViewController? _webViewController;
+  StreamSubscription<HeroFaceCommand>? _faceSubscription;
+  bool _bridgeReady = false;
+  String? _lastMissingAnimation;
 
   @override
   void initState() {
     super.initState();
-    _motion = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-      lowerBound: -1,
-      upperBound: 1,
-    )..repeat(reverse: true);
+    _syncFaceSubscription();
+  }
+
+  void _syncFaceSubscription() {
+    if (widget.enableFaceAnimations) {
+      _faceSubscription ??=
+          HeroFaceRuntime.instance.commands.listen(_handleFaceCommand);
+      return;
+    }
+
+    final subscription = _faceSubscription;
+    _faceSubscription = null;
+    if (subscription != null) {
+      unawaited(subscription.cancel());
+    }
+
+    if (_bridgeReady) {
+      _runJavaScript('window.sa7biHeroBridge?.apply({type: "reset"});');
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant Sa7biHero3D oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.animationName != widget.animationName) {
+      _setBodyAnimation(widget.animationName);
+    }
+
+    if (oldWidget.enableFaceAnimations != widget.enableFaceAnimations) {
+      _syncFaceSubscription();
+      if (widget.enableFaceAnimations && _bridgeReady) {
+        final lastCommand = HeroFaceRuntime.instance.lastCommand;
+        if (lastCommand != null) _applyFaceCommand(lastCommand);
+      }
+    }
+  }
+
+  void _onWebViewCreated(WebViewController controller) {
+    _webViewController = controller;
+  }
+
+  void _onBridgeMessage(JavaScriptMessage message) {
+    try {
+      final decoded = jsonDecode(message.message);
+      if (decoded is! Map) return;
+
+      final type = decoded['type'];
+
+      if (type == 'ready') {
+        final rawAnimations = decoded['animations'];
+        final animations = rawAnimations is List
+            ? rawAnimations.whereType<String>().toSet()
+            : <String>{};
+
+        _bridgeReady = true;
+        HeroFaceRuntime.instance.reportAvailableAnimations(animations);
+        _lastMissingAnimation = null;
+        _setBodyAnimation(widget.animationName);
+
+        if (widget.enableFaceAnimations) {
+          final lastCommand = HeroFaceRuntime.instance.lastCommand;
+          if (lastCommand != null) _applyFaceCommand(lastCommand);
+        }
+      } else if (type == 'missing') {
+        final name = decoded['animation'];
+        if (name is String && name != _lastMissingAnimation) {
+          _lastMissingAnimation = name;
+          debugPrint('HERO animation is not present in GLB: $name');
+        }
+      } else if (type == 'error') {
+        _bridgeReady = false;
+        HeroFaceRuntime.instance.reportAvailableAnimations(const <String>[]);
+      }
+    } catch (error) {
+      debugPrint('HERO bridge message could not be parsed: $error');
+    }
+  }
+
+  void _handleFaceCommand(HeroFaceCommand command) {
+    if (!widget.enableFaceAnimations || !_bridgeReady) return;
+    _applyFaceCommand(command);
+  }
+
+  void _applyFaceCommand(HeroFaceCommand command) {
+    final controller = _webViewController;
+    if (!_bridgeReady || controller == null) return;
+
+    final payload = jsonEncode({
+      'type': command.type.name,
+      'animationName': command.animationName,
+      'loop': command.loop,
+    });
+
+    _runJavaScript('window.sa7biHeroBridge?.apply($payload);');
+  }
+
+  void _setBodyAnimation(String animationName) {
+    if (!_bridgeReady) return;
+
+    final safeName = jsonEncode(animationName);
+    _runJavaScript(
+      'window.sa7biHeroBridge?.setBodyAnimation($safeName);',
+    );
+  }
+
+  void _runJavaScript(String script) {
+    final controller = _webViewController;
+    if (controller == null) return;
+
+    unawaited(
+      controller.runJavaScript(script).catchError((Object error) {
+        debugPrint('HERO JavaScript command failed: $error');
+      }),
+    );
   }
 
   @override
   void dispose() {
-    _motion.dispose();
+    final subscription = _faceSubscription;
+    _faceSubscription = null;
+    if (subscription != null) unawaited(subscription.cancel());
+
+    if (_bridgeReady && widget.enableFaceAnimations) {
+      _runJavaScript('window.sa7biHeroBridge?.apply({type: "reset"});');
+    }
+
+    _webViewController = null;
     super.dispose();
-  }
-
-  void _onDrag(DragUpdateDetails details) {
-    if (!widget.cameraControls || widget.compact) return;
-
-    setState(() {
-      _rotation = Offset(
-        (_rotation.dx + details.delta.dx * .003)
-            .clamp(-.25, .25).toDouble(),
-        (_rotation.dy + details.delta.dy * .002)
-            .clamp(-.12, .12).toDouble(),
-      );
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<HeroLiteStatus>(
-      valueListenable: HeroFaceRuntime.instance.liteStatus,
-      builder: (context, status, _) {
-        final faceStatus = widget.enableFaceAnimations
-            ? status
-            : const HeroLiteStatus();
-
-        return Semantics(
-          label: Sa7biHero3D.debugDisableWebViewForTests
-              ? 'HERO 3D test placeholder'
-              : null,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onPanUpdate: widget.cameraControls && !widget.compact
-                ? _onDrag
-                : null,
-            child: AnimatedBuilder(
-              animation: _motion,
-              builder: (context, _) {
-                return CustomPaint(
-                  painter: _HeroPainter(
-                    status: faceStatus,
-                    motion: _motion.value,
-                    rotation: _rotation,
-                    animationName: widget.animationName,
-                    compact: widget.compact,
-                  ),
-                  child: const SizedBox.expand(),
-                );
-              },
+    // وضع اختبار التنقل: يحتفظ بعنصر HERO في شجرة الواجهة
+    // لكنه لا يشغّل WebView أو محرك 3D داخل المحاكي.
+    if (Sa7biHero3D.debugDisableWebViewForTests) {
+      return const Semantics(
+        label: 'HERO 3D test placeholder',
+        child: ColoredBox(
+          color: Color(0xFF081225),
+          child: Center(
+            child: Icon(
+              Icons.smart_toy_rounded,
+              color: Color(0xFF72D7FF),
+              size: 30,
             ),
           ),
-        );
+        ),
+      );
+    }
+
+    final compact = widget.compact;
+
+    return ModelViewer(
+      id: _viewerId,
+      src: 'assets/3d/sa7bi_hero.glb',
+      alt: 'صاحبي HERO بالشخصية الأصلية وشعار تطبيق صاحبي على الصدر',
+      backgroundColor: const Color(0xFF081225),
+      ar: false,
+      cameraControls: widget.cameraControls,
+      autoRotate: false,
+      autoPlay: true,
+      animationName: 'Hero_Idle',
+      animationCrossfadeDuration: 350,
+      disableZoom: !widget.cameraControls,
+      disablePan: !widget.cameraControls,
+      shadowIntensity: 0.9,
+      shadowSoftness: 0.95,
+      exposure: 1.1,
+      cameraOrbit: compact ? '0deg 78deg 2.35m' : '0deg 78deg 3.55m',
+      cameraTarget: compact ? '0m 1.62m 0m' : '0m 1.35m 0m',
+      minCameraOrbit: compact ? 'auto 48deg 1.8m' : 'auto 35deg 2.5m',
+      maxCameraOrbit: compact ? 'auto 100deg 3.2m' : 'auto 110deg 5m',
+      relatedJs: _bridgeScript,
+      javascriptChannels: {
+        JavascriptChannel(
+          _channelName,
+          onMessageReceived: _onBridgeMessage,
+        ),
       },
+      onWebViewCreated: _onWebViewCreated,
+      debugLogging: false,
     );
-  }
-}
-
-class _HeroPainter extends CustomPainter {
-  const _HeroPainter({
-    required this.status,
-    required this.motion,
-    required this.rotation,
-    required this.animationName,
-    required this.compact,
-  });
-
-  final HeroLiteStatus status;
-  final double motion;
-  final Offset rotation;
-  final String animationName;
-  final bool compact;
-
-  static const navy = Color(0xFF071329);
-  static const blue = Color(0xFF0751A0);
-  static const cyan = Color(0xFF45DFFF);
-  static const gold = Color(0xFFFFC34D);
-  static const red = Color(0xFFB52235);
-  static const skin = Color(0xFFD69B7A);
-  static const hair = Color(0xFF17191E);
-
-  // دالة رسم مساعدة باسم مختلف عن CustomPainter.paint.
-  Paint makePaint(
-    Color color, {
-    PaintingStyle style = PaintingStyle.fill,
-  }) {
-    return Paint()
-      ..color = color
-      ..style = style
-      ..isAntiAlias = true;
-  }
-
-  Paint gradient(
-    Rect rect,
-    List<Color> colors, {
-    bool vertical = false,
-  }) {
-    return Paint()
-      ..isAntiAlias = true
-      ..shader = LinearGradient(
-        begin: vertical ? Alignment.topCenter : Alignment.centerLeft,
-        end: vertical ? Alignment.bottomCenter : Alignment.centerRight,
-        colors: colors,
-      ).createShader(rect);
-  }
-
-  Path polygon(List<Offset> points) {
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (final point in points.skip(1)) {
-      path.lineTo(point.dx, point.dy);
-    }
-    return path..close();
-  }
-
-  void glow(Canvas c, Offset p, double radius, Color color) {
-    c.drawCircle(
-      p,
-      radius,
-      Paint()
-        ..color = color.withValues(alpha: .35)
-        ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal,
-          radius * .7,
-        ),
-    );
-  }
-
-  void rounded(Canvas c, Rect r, double radius, Paint p) {
-    c.drawRRect(
-      RRect.fromRectAndRadius(r, Radius.circular(radius)),
-      p,
-    );
-  }
-
-  void drawBackground(Canvas c) {
-    final rect = const Rect.fromLTWH(0, 0, 360, 640);
-    c.drawRect(
-      rect,
-      Paint()
-        ..shader = const RadialGradient(
-          center: Alignment(0, -.3),
-          radius: .9,
-          colors: [
-            Color(0xFF164274),
-            Color(0xFF091A32),
-            Color(0xFF040A15),
-          ],
-        ).createShader(rect),
-    );
-
-    glow(c, const Offset(180, 350), 105, cyan);
-    glow(c, const Offset(180, 570), 55, gold);
-
-    for (int i = 0; i < 8; i++) {
-      final y = 60.0 + i * 75;
-      c.drawLine(
-        Offset(10, y),
-        Offset(350, y),
-        makePaint(const Color(0x1872DFFF))
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = .7,
-      );
-    }
-  }
-
-  void drawBody(Canvas c) {
-    final breath = motion * 2.0;
-    final shoulder = 230.0 + breath;
-
-    // الساقان.
-    c.drawPath(
-      polygon(const [
-        Offset(112, 415), Offset(177, 420),
-        Offset(168, 560), Offset(151, 598),
-        Offset(91, 592), Offset(101, 520),
-      ]),
-      gradient(
-        const Rect.fromLTWH(90, 415, 90, 185),
-        [gold, blue, navy, red],
-        vertical: true,
-      ),
-    );
-
-    c.drawPath(
-      polygon(const [
-        Offset(183, 420), Offset(248, 415),
-        Offset(259, 520), Offset(269, 592),
-        Offset(209, 598), Offset(192, 560),
-      ]),
-      gradient(
-        const Rect.fromLTWH(180, 415, 100, 185),
-        [red, blue, navy, gold],
-        vertical: true,
-      ),
-    );
-
-    // ألواح الفخذ.
-    c.drawPath(
-      polygon(const [
-        Offset(109, 438), Offset(164, 442),
-        Offset(154, 492), Offset(106, 489),
-      ]),
-      gradient(
-        const Rect.fromLTWH(105, 438, 60, 55),
-        [gold, Color(0xFF9B5D1B)],
-      ),
-    );
-
-    c.drawPath(
-      polygon(const [
-        Offset(196, 442), Offset(251, 438),
-        Offset(254, 489), Offset(206, 492),
-      ]),
-      gradient(
-        const Rect.fromLTWH(195, 438, 60, 55),
-        [gold, Color(0xFF9B5D1B)],
-      ),
-    );
-
-    // الركبتان.
-    rounded(
-      c,
-      const Rect.fromLTWH(111, 500, 43, 34),
-      9,
-      gradient(
-        const Rect.fromLTWH(111, 500, 43, 34),
-        [cyan, blue, navy],
-      ),
-    );
-    rounded(
-      c,
-      const Rect.fromLTWH(206, 500, 43, 34),
-      9,
-      gradient(
-        const Rect.fromLTWH(206, 500, 43, 34),
-        [cyan, blue, navy],
-      ),
-    );
-
-    // الحذاء.
-    rounded(
-      c,
-      const Rect.fromLTWH(77, 575, 92, 32),
-      12,
-      gradient(
-        const Rect.fromLTWH(77, 575, 92, 32),
-        [blue, navy, red],
-      ),
-    );
-    rounded(
-      c,
-      const Rect.fromLTWH(191, 575, 92, 32),
-      12,
-      gradient(
-        const Rect.fromLTWH(191, 575, 92, 32),
-        [red, navy, blue],
-      ),
-    );
-
-    // الذراعان.
-    c.drawPath(
-      polygon([
-        Offset(103, shoulder + 8),
-        const Offset(50, 258),
-        const Offset(29, 350),
-        const Offset(49, 419),
-        const Offset(86, 414),
-        const Offset(80, 350),
-        const Offset(123, 286),
-      ]),
-      gradient(
-        const Rect.fromLTWH(25, 235, 105, 190),
-        [gold, red, blue, navy],
-      ),
-    );
-
-    c.drawPath(
-      polygon([
-        Offset(257, shoulder + 8),
-        const Offset(310, 258),
-        const Offset(331, 350),
-        const Offset(311, 419),
-        const Offset(274, 414),
-        const Offset(280, 350),
-        const Offset(237, 286),
-      ]),
-      gradient(
-        const Rect.fromLTWH(235, 235, 105, 190),
-        [gold, red, blue, navy],
-      ),
-    );
-
-    // الكتفان.
-    c.drawOval(
-      const Rect.fromLTWH(49, 222, 84, 70),
-      gradient(
-        const Rect.fromLTWH(49, 222, 84, 70),
-        [gold, red, Color(0xFF76202C)],
-      ),
-    );
-    c.drawOval(
-      const Rect.fromLTWH(227, 222, 84, 70),
-      gradient(
-        const Rect.fromLTWH(227, 222, 84, 70),
-        [gold, red, Color(0xFF76202C)],
-      ),
-    );
-
-    // الجذع.
-    c.drawPath(
-      polygon([
-        Offset(112, shoulder),
-        Offset(248, shoulder),
-        const Offset(270, 390),
-        const Offset(235, 455),
-        const Offset(125, 455),
-        const Offset(90, 390),
-      ]),
-      gradient(
-        const Rect.fromLTWH(90, 230, 180, 230),
-        [Color(0xFF164E91), navy, Color(0xFF050B16)],
-        vertical: true,
-      ),
-    );
-
-    // الدرع الأمامي.
-    c.drawPath(
-      polygon(const [
-        Offset(117, 251), Offset(243, 251),
-        Offset(260, 320), Offset(228, 367),
-        Offset(132, 367), Offset(100, 320),
-      ]),
-      gradient(
-        const Rect.fromLTWH(100, 250, 160, 120),
-        [gold, red, blue, navy],
-        vertical: true,
-      ),
-    );
-
-    c.drawPath(
-      polygon(const [
-        Offset(127, 263), Offset(233, 263),
-        Offset(246, 316), Offset(220, 350),
-        Offset(140, 350), Offset(114, 316),
-      ]),
-      gradient(
-        const Rect.fromLTWH(114, 263, 132, 87),
-        [Color(0xFF0755B8), Color(0xFF061B3A)],
-        vertical: true,
-      ),
-    );
-
-    // إطار ذهبي حول شعار الصدر.
-    c.drawPath(
-      polygon(const [
-        Offset(127, 263), Offset(233, 263),
-        Offset(246, 316), Offset(220, 350),
-        Offset(140, 350), Offset(114, 316),
-      ]),
-      makePaint(gold, style: PaintingStyle.stroke)..strokeWidth = 2.5,
-    );
-
-    final logo = TextPainter(
-      text: const TextSpan(
-        text: 'صاحبي AI',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 21,
-          fontWeight: FontWeight.w900,
-          shadows: [Shadow(color: cyan, blurRadius: 8)],
-        ),
-      ),
-      textDirection: TextDirection.rtl,
-      textAlign: TextAlign.center,
-    )..layout(maxWidth: 128);
-
-    logo.paint(c, Offset(180 - logo.width / 2, 294));
-
-    // مفاعل الطاقة.
-    glow(c, const Offset(180, 390), 24, cyan);
-    c.drawCircle(
-      const Offset(180, 390),
-      13,
-      gradient(
-        Rect.fromCircle(
-          center: Offset(180, 390),
-          radius: 13,
-        ),
-        [Colors.white, cyan, blue],
-      ),
-    );
-    c.drawCircle(
-      const Offset(180, 390),
-      18,
-      makePaint(gold, style: PaintingStyle.stroke)..strokeWidth = 2,
-    );
-
-    // خطوط الطاقة.
-    final energy = makePaint(cyan, style: PaintingStyle.stroke)
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-
-    c.drawPath(
-      polygon(const [
-        Offset(117, 365), Offset(137, 385),
-        Offset(125, 411), Offset(148, 428),
-      ]),
-      energy,
-    );
-    c.drawPath(
-      polygon(const [
-        Offset(243, 365), Offset(223, 385),
-        Offset(235, 411), Offset(212, 428),
-      ]),
-      energy,
-    );
-  }
-
-  void drawHead(Canvas c) {
-    c.save();
-    c.translate(rotation.dx * 10, rotation.dy * 7);
-
-    // الرقبة والياقة أسفل الوجه فقط.
-    rounded(
-      c,
-      const Rect.fromLTWH(151, 190, 58, 61),
-      16,
-      gradient(
-        const Rect.fromLTWH(151, 190, 58, 61),
-        [Color(0xFFE2AE8C), skin, Color(0xFF85513F)],
-        vertical: true,
-      ),
-    );
-
-    rounded(
-      c,
-      const Rect.fromLTWH(139, 222, 82, 22),
-      8,
-      gradient(
-        const Rect.fromLTWH(139, 222, 82, 22),
-        [red, gold, navy],
-      ),
-    );
-
-    // الأذنان.
-    c.drawOval(
-      const Rect.fromLTWH(119, 117, 25, 43),
-      makePaint(skin),
-    );
-    c.drawOval(
-      const Rect.fromLTWH(216, 117, 25, 43),
-      makePaint(skin),
-    );
-
-    // الوجه ظاهر بالكامل.
-    const face = Rect.fromLTWH(128, 53, 104, 157);
-    c.drawOval(
-      face,
-      gradient(face, [
-        Color(0xFFE7B18E),
-        skin,
-        Color(0xFFB9785B),
-      ], vertical: true),
-    );
-
-    // الشعر القصير الداكن.
-    final hairPath = Path()
-      ..moveTo(128, 121)
-      ..quadraticBezierTo(121, 75, 146, 49)
-      ..quadraticBezierTo(177, 27, 207, 51)
-      ..quadraticBezierTo(238, 71, 230, 121)
-      ..quadraticBezierTo(219, 101, 211, 91)
-      ..quadraticBezierTo(185, 103, 158, 91)
-      ..quadraticBezierTo(144, 99, 128, 121)
-      ..close();
-
-    c.drawPath(
-      hairPath,
-      gradient(
-        const Rect.fromLTWH(125, 35, 110, 90),
-        [Color(0xFF3A3A40), hair, Color(0xFF090D15)],
-        vertical: true,
-      ),
-    );
-
-    // الحاجبان.
-    final leftBrow = Path()
-      ..moveTo(143, 113)
-      ..quadraticBezierTo(158, 103, 171, 112);
-    final rightBrow = Path()
-      ..moveTo(190, 112)
-      ..quadraticBezierTo(207, 102, 219, 114);
-
-    final browPaint = makePaint(hair, style: PaintingStyle.stroke)
-      ..strokeWidth = 5
-      ..strokeCap = StrokeCap.round;
-
-    c.drawPath(leftBrow, browPaint);
-    c.drawPath(rightBrow, browPaint);
-
-    final surprised = status.expression == HeroExpression.surprise;
-    final angry = status.expression == HeroExpression.angry;
-    final wink = status.expression == HeroExpression.wink;
-    final blink = status.expression == HeroExpression.blink;
-
-    // العينان.
-    for (final x in [157.0, 203.0]) {
-      final closed = blink || (wink && x == 203.0);
-
-      if (closed) {
-        c.drawLine(
-          Offset(x - 11, 128),
-          Offset(x + 11, 128),
-          makePaint(hair, style: PaintingStyle.stroke)
-            ..strokeWidth = 3
-            ..strokeCap = StrokeCap.round,
-        );
-      } else {
-        c.drawOval(
-          Rect.fromCenter(
-            center: Offset(x, 128),
-            width: 25,
-            height: surprised ? 16 : 12,
-          ),
-          makePaint(Colors.white),
-        );
-        c.drawCircle(
-          Offset(x, 128),
-          5,
-          makePaint(const Color(0xFF38251F)),
-        );
-        c.drawCircle(
-          Offset(x - 1.5, 126),
-          1.5,
-          makePaint(Colors.white),
-        );
-      }
-    }
-
-    if (angry) {
-      c.drawLine(
-        const Offset(145, 108),
-        const Offset(171, 117),
-        makePaint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
-      );
-      c.drawLine(
-        const Offset(190, 117),
-        const Offset(216, 108),
-        makePaint(hair, style: PaintingStyle.stroke)..strokeWidth = 3,
-      );
-    }
-
-    // الأنف.
-    final nose = Path()
-      ..moveTo(181, 129)
-      ..quadraticBezierTo(175, 151, 180, 154)
-      ..quadraticBezierTo(185, 158, 190, 153);
-
-    c.drawPath(
-      nose,
-      makePaint(
-        const Color(0xFF925D4B),
-        style: PaintingStyle.stroke,
-      )..strokeWidth = 2,
-    );
-
-    // الفم والتعبيرات.
-    final smile = status.expression == HeroExpression.smile;
-    final sad = status.expression == HeroExpression.sad;
-    const mouthY = 174.0;
-
-    if (status.isSpeaking && status.activeViseme != 'sil') {
-      final height = switch (status.activeViseme) {
-        'aa' || 'O' || 'U' => 12.0,
-        'E' || 'I' => 5.0,
-        _ => 7.0,
-      };
-
-      c.drawOval(
-        Rect.fromCenter(
-          center: const Offset(180, mouthY),
-          width: 20,
-          height: height,
-        ),
-        makePaint(const Color(0xFF55252B)),
-      );
-    } else {
-      final mouth = Path()
-        ..moveTo(163, mouthY)
-        ..quadraticBezierTo(
-          180,
-          mouthY + (smile ? 11 : sad ? -8 : 2),
-          197,
-          mouthY,
-        );
-
-      c.drawPath(
-        mouth,
-        makePaint(
-          const Color(0xFF713A35),
-          style: PaintingStyle.stroke,
-        )
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round,
-      );
-    }
-
-    c.restore();
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-
-    final scaleX = size.width / 360;
-    final scaleY = size.height / 640;
-    final scale = scaleX < scaleY ? scaleX : scaleY;
-
-    canvas.save();
-
-    canvas.translate(
-      (size.width - 360 * scale) / 2,
-      (size.height - 640 * scale) / 2,
-    );
-    canvas.scale(scale);
-
-    drawBackground(canvas);
-
-    canvas.save();
-    final lean = animationName == 'Hero_Welcome'
-        ? -.025
-        : animationName == 'Hero_Power'
-            ? .018
-            : 0.0;
-
-    canvas.translate(180, 320);
-    canvas.rotate(lean + rotation.dx * .08);
-    canvas.translate(-180, -320);
-
-    drawBody(canvas);
-    drawHead(canvas);
-
-    canvas.restore();
-
-    // قاعدة ضوء أسفل الشخصية.
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(180, 618),
-        width: 170 + motion * 5,
-        height: 9,
-      ),
-      makePaint(cyan, style: PaintingStyle.stroke)..strokeWidth = 2,
-    );
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _HeroPainter old) {
-    return old.status.revision != status.revision ||
-        old.motion != motion ||
-        old.rotation != rotation ||
-        old.animationName != animationName ||
-        old.compact != compact;
   }
 }
