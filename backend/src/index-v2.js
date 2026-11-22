@@ -1,4 +1,3 @@
-
 // Sa7bi AI Worker entry point.
 // Preserves existing social, messaging, matchmaking,
 // invite links and tafsir-text routes.
@@ -28,6 +27,8 @@ import {
   handleTafsirText,
   handleTafsirTextBooks,
 } from "./content/tafsir-text.js";
+
+import { handleNews } from "./content/news.js";
 
 const ANDROID_PACKAGE_NAME = "com.example.sa7bi_ai_new";
 
@@ -329,6 +330,15 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
+
+    // News route is intercepted here so category query parameters reach
+    // the category-aware RSS handler instead of the legacy default route.
+    if (
+      request.method === "GET" &&
+      path === "/v1/news"
+    ) {
+      return handleNews(request);
+    }
 
     if (
       request.method === "GET" &&
