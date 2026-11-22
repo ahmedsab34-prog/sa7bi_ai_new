@@ -140,7 +140,7 @@ export function parseRssItems(
     const source =
       stripHtml(
         firstMatch(block, [
-          /<source[^>]*>([\s\S]*?)<\/source>/i,
+          /<(?:news:)?source[^>]*>([\s\S]*?)<\/(?:news:)?source>/i,
         ]),
       ) || fallbackSource;
 
@@ -208,7 +208,46 @@ async function fetchFeedsInParallel(
   return items;
 }
 
-export async function fetchGoogleNews() {
+const CATEGORY_QUERIES = Object.freeze({
+  sports: [
+    "رياضة كرة القدم مباريات الدوري المصري",
+    "أخبار الرياضة والبطولات والنتائج",
+  ],
+  entertainment: [
+    "أخبار الفن السينما المسلسلات الموسيقى مصر",
+    "ترفيه ثقافة مهرجانات أفلام",
+  ],
+  technology: [
+    "تكنولوجيا الذكاء الاصطناعي الابتكار مصر",
+    "أخبار التقنية الأجهزة والبرمجيات",
+  ],
+});
+
+const CATEGORY_LABELS = Object.freeze({
+  sports: "الرياضة والمباريات",
+  entertainment: "الترفيه والمنوعات",
+  technology: "التكنولوجيا والابتكار",
+});
+
+function categoryFeedUrls(category, provider) {
+  const queries = CATEGORY_QUERIES[category] || [];
+
+  return queries.map((query) => provider === "google"
+    ? `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=ar&gl=EG&ceid=EG:ar`
+    : `https://www.bing.com/news/search?q=${encodeURIComponent(query)}&format=rss&setlang=ar`);
+}
+
+export async function fetchGoogleNews(category = null) {
+  if (
+    category &&
+    Object.prototype.hasOwnProperty.call(CATEGORY_QUERIES, category)
+  ) {
+    return fetchFeedsInParallel(
+      categoryFeedUrls(category, "google"),
+      CATEGORY_LABELS[category],
+    );
+  }
+
   return fetchFeedsInParallel(
     [
       "https://news.google.com/rss?hl=ar&gl=EG&ceid=EG:ar",
@@ -219,7 +258,17 @@ export async function fetchGoogleNews() {
   );
 }
 
-export async function fetchBingNews() {
+export async function fetchBingNews(category = null) {
+  if (
+    category &&
+    Object.prototype.hasOwnProperty.call(CATEGORY_QUERIES, category)
+  ) {
+    return fetchFeedsInParallel(
+      categoryFeedUrls(category, "bing"),
+      CATEGORY_LABELS[category],
+    );
+  }
+
   return fetchFeedsInParallel(
     [
       "https://www.bing.com/news/search?q=Egypt&format=rss&setlang=ar",
@@ -389,11 +438,12 @@ export function normalizeAndSortItems(input) {
 export async function fetchAllNewsWithStats({
   now = Date.now(),
   maxAgeDays = MAX_NEWS_AGE_DAYS,
+  category = null,
 } = {}) {
   const [googleResult, bingResult] =
     await Promise.allSettled([
-      fetchGoogleNews(),
-      fetchBingNews(),
+      fetchGoogleNews(category),
+      fetchBingNews(category),
     ]);
 
   const google =
@@ -435,11 +485,38 @@ export async function fetchAllNews(options) {
   return result.items;
 }
 
-export async function handleNews() {
+export async function handleNews(request = null) {
+  const requestUrl = request ? new URL(request.url) : null;
+  const requestedCategory =
+    requestUrl?.searchParams.get("category")?.trim().toLowerCase() || null;
+
+  if (
+    requestedCategory &&
+    !Object.prototype.hasOwnProperty.call(
+      CATEGORY_QUERIES,
+      requestedCategory,
+    )
+  ) {
+    return json(
+      {
+        ok: false,
+        error: "UNSUPPORTED_NEWS_CATEGORY",
+        supportedCategories: Object.keys(CATEGORY_QUERIES),
+        items: [],
+        count: 0,
+        backendVersion: BACKEND_VERSION,
+      },
+      400,
+      {
+        "Cache-Control": "no-store, max-age=0",
+      },
+    );
+  }
+
   const refreshedAt = new Date().toISOString();
 
   try {
-    const result = await fetchAllNewsWithStats();
+    const result = await fetchAllNewsWithStats({ category: requestedCategory });
 
     const freshness = {
       ...result.stats,
@@ -462,6 +539,8 @@ export async function handleNews() {
           items: [],
           count: 0,
           backendVersion: BACKEND_VERSION,
+          category: requestedCategory,
+          categoryLabel: requestedCategory ? CATEGORY_LABELS[requestedCategory] : null,
           refreshedAt,
           freshness,
         },
@@ -478,6 +557,8 @@ export async function handleNews() {
         items: result.items,
         count: result.items.length,
         backendVersion: BACKEND_VERSION,
+        category: requestedCategory,
+        categoryLabel: requestedCategory ? CATEGORY_LABELS[requestedCategory] : null,
         refreshedAt,
         freshness,
       },
