@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import 'sa7bi_hero_3d_screen.dart';
@@ -6,10 +5,11 @@ import 'social_connections_screen.dart';
 import 'social_groups_workspace_screen.dart';
 import 'social_public_chat_screen.dart';
 import 'theme/sa7bi_theme.dart';
+import 'widgets/sa7bi_glass_surface.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
-/// The Sa7bi Connect landing page.
-/// HERO is the only 3D Sa7bi character shown in the app.
+/// صفحة صاحبي Connect الرئيسية.
+/// تحافظ على وجهات التنقل والخدمات الموجودة دون تغييرها.
 class SocialConnectHubScreen extends StatelessWidget {
   const SocialConnectHubScreen({super.key});
 
@@ -53,219 +53,121 @@ class SocialConnectHubScreen extends StatelessWidget {
         backgroundColor: Sa7biTheme.background,
         appBar: const Sa7biSubpageAppBar(
           title: 'صاحبي Connect',
-          subtitle: 'غرفتك للتواصل مع كل أصحاب صاحبي',
+          subtitle: 'تواصل مع أصحابك في مكان واحد',
         ),
         body: SafeArea(
           top: false,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(13, 16, 13, 28),
+            padding: const EdgeInsets.fromLTRB(15, 17, 15, 30),
             children: [
-              const Text(
-                'كل تواصلك في مكان واحد',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Sa7biTheme.textPrimary,
-                  fontSize: 19,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'ابدأ من الغرفة العامة، أو انتقل لمحادثاتك الخاصة ومجموعاتك.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Sa7biTheme.textSecondary,
-                  fontSize: 11,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 14),
+              _buildIntro(),
+              const SizedBox(height: 19),
 
-              // The shared public room is the first communication destination.
               _ConnectDestinationCard(
-                title: 'الشات العام',
-                subtitle: 'غرفة واحدة مشتركة لكل أصحاب صاحبي',
+                title: 'الغرفة العامة',
+                subtitle: 'كل أصحاب صاحبي في مكان واحد',
                 description:
-                    'اتكلم مع مستخدمي التطبيق في غرفة عامة واحدة. '
-                    'تقدر تشوف الرسائل الجديدة وترسل رسالتك وتبلّغ عن '
-                    'أي رسالة غير مناسبة.',
+                    'ادخل الغرفة العامة المشتركة، وتابع الرسائل '
+                    'واشارك أصحاب التطبيق الحديث.',
                 icon: Icons.public_rounded,
                 color: Sa7biTheme.cyan,
-                buttonText: 'ادخل الشات العام',
+                tag: 'مجتمع صاحبي',
+                buttonText: 'افتح الشات العام',
                 onPressed: () => _openPublicChat(context),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 13),
 
               _ConnectDestinationCard(
-                title: 'المحادثات والأصدقاء',
-                subtitle: 'محادثاتك الخاصة مع أصحابك',
+                title: 'محادثاتي الخاصة',
+                subtitle: 'تواصل مباشر مع أصدقائك',
                 description:
-                    'ابحث عن أصحابك، افتح محادثة خاصة، تابع الرسائل الجديدة، '
-                    'وشارك دعوات الألعاب.',
+                    'ابحث عن أصحابك، وافتح محادثاتك الخاصة، '
+                    'وتابع الرسائل وحالة الاتصال.',
                 icon: Icons.forum_rounded,
-                color: const Color(0xFF8EA8FF),
+                color: Sa7biTheme.blueBright,
+                tag: 'محادثات شخصية',
                 buttonText: 'افتح المحادثات',
                 onPressed: () => _openPrivateChats(context),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 13),
 
               _ConnectDestinationCard(
                 title: 'المجموعات',
-                subtitle: 'مجتمعات عامة ومجموعات خاصة بالدعوة',
+                subtitle: 'مجتمعات عامة ومجموعات خاصة',
                 description:
-                    'استكشف المجموعات العامة، أنشئ مجموعة خاصة، انضم برمز دعوة، '
-                    'وأدر أعضاء مجموعاتك وصلاحيات المشرفين.',
+                    'استكشف المجتمعات العامة، وأنشئ مجموعاتك '
+                    'الخاصة، وادعُ أصحابك للانضمام.',
                 icon: Icons.groups_rounded,
                 color: Sa7biTheme.success,
+                tag: 'مجتمعات وأصدقاء',
                 buttonText: 'استكشف المجموعات',
                 onPressed: () => _openGroups(context),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 17),
 
               _HeroPreviewCard(
                 onPressed: () => _openHero(context),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 17),
 
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Sa7biTheme.surfaceRaised,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Sa7biTheme.border),
-                ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      color: Sa7biTheme.textSecondary,
-                      size: 18,
-                    ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'الشات العام مساحة مشتركة بين مستخدمي صاحبي. '
-                        'لا تشارك كلمات المرور أو البيانات الشخصية. '
-                        'الرسائل ليست مشفرة من طرف إلى طرف في هذه النسخة. '
-                        'الإبلاغ يسجل البلاغ للمراجعة ولا يحذف الرسالة تلقائيًا. '
-                        'لا تتوفر مكالمات صوت أو فيديو أو إرسال ملفات اجتماعية '
-                        'من هذه الشاشة حتى الآن.',
-                        style: TextStyle(
-                          color: Sa7biTheme.textSecondary,
-                          fontSize: 10,
-                          height: 1.65,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const _ConnectSafetyNotice(),
             ],
           ),
         ),
       ),
     );
   }
-}
 
-class _HeroPreviewCard extends StatelessWidget {
-  const _HeroPreviewCard({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return _CharacterPreviewCard(
-      title: 'صاحبي HERO',
-      subtitle: 'البطل الخارق الوحيد بشعار التطبيق الأصلي المضيء على الصدر',
-      icon: Icons.shield_rounded,
-      color: const Color(0xFFFFB84D),
-      onPressed: onPressed,
-    );
-  }
-}
-
-class _CharacterPreviewCard extends StatelessWidget {
-  const _CharacterPreviewCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onPressed,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Sa7biTheme.surface,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withValues(alpha: 0.38)),
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [
-                color.withValues(alpha: 0.14),
-                const Color(0xFF101827),
+  Widget _buildIntro() {
+    return Sa7biGlassSurface(
+      padding: const EdgeInsets.fromLTRB(17, 20, 17, 19),
+      radius: 23,
+      showGlow: true,
+      gradient: Sa7biTheme.premiumGradient,
+      child: Column(
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: Sa7biTheme.brandGradient,
+              boxShadow: [
+                BoxShadow(
+                  color: Sa7biTheme.violet.withValues(alpha: 0.25),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
               ],
             ),
+            child: const Icon(
+              Icons.forum_rounded,
+              color: Colors.white,
+              size: 29,
+            ),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Icon(icon, color: color, size: 27),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Sa7biTheme.textPrimary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: Sa7biTheme.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: color,
-                size: 17,
-              ),
-            ],
+          const SizedBox(height: 13),
+          const Text(
+            'كل أصحابك أقرب',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Sa7biTheme.textPrimary,
+              fontSize: 21,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-        ),
+          const SizedBox(height: 7),
+          const Text(
+            'مكان واحد للمحادثات والأصدقاء والمجموعات '
+            'والتواصل مع مجتمع صاحبي.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Sa7biTheme.textSecondary,
+              fontSize: 12,
+              height: 1.7,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -278,6 +180,7 @@ class _ConnectDestinationCard extends StatelessWidget {
     required this.description,
     required this.icon,
     required this.color,
+    required this.tag,
     required this.buttonText,
     required this.onPressed,
   });
@@ -287,99 +190,243 @@ class _ConnectDestinationCard extends StatelessWidget {
   final String description;
   final IconData icon;
   final Color color;
+  final String tag;
   final String buttonText;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Sa7biTheme.surface,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: color.withValues(alpha: 0.38),
-            width: 1.2,
-          ),
-          gradient: LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [
-              color.withValues(alpha: 0.13),
-              Sa7biTheme.surface,
-              Sa7biTheme.surface,
+    return Sa7biGlassSurface(
+      padding: const EdgeInsets.all(15),
+      radius: 21,
+      borderColor: color.withValues(alpha: 0.35),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.28),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Sa7biTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: color,
+                size: 16,
+              ),
             ],
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 51,
-                  height: 51,
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(
-                      color: color.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  child: Icon(icon, color: color, size: 27),
+          const SizedBox(height: 13),
+          Text(
+            description,
+            style: const TextStyle(
+              color: Sa7biTheme.textSecondary,
+              fontSize: 11,
+              height: 1.7,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
-                const SizedBox(width: 11),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: Sa7biTheme.textPrimary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  tag,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: onPressed,
+                style: FilledButton.styleFrom(
+                  backgroundColor: color.withValues(alpha: 0.18),
+                  foregroundColor: color,
+                  elevation: 0,
+                  minimumSize: const Size(0, 39),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 13,
+                  ),
+                  side: BorderSide(
+                    color: color.withValues(alpha: 0.35),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      buttonText,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
+                    ),
+                    const SizedBox(width: 5),
+                    const Icon(
+                      Icons.arrow_back_rounded,
+                      size: 15,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroPreviewCard extends StatelessWidget {
+  const _HeroPreviewCard({
+    required this.onPressed,
+  });
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Sa7biGlassSurface(
+      padding: const EdgeInsets.all(14),
+      radius: 21,
+      borderColor: Sa7biTheme.borderGold,
+      gradient: Sa7biTheme.wineGradient,
+      onTap: onPressed,
+      child: Row(
+        children: [
+          Container(
+            width: 51,
+            height: 51,
+            decoration: BoxDecoration(
+              color: Sa7biTheme.gold.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Sa7biTheme.gold.withValues(alpha: 0.35),
+              ),
+            ),
+            child: const Icon(
+              Icons.shield_rounded,
+              color: Sa7biTheme.goldBright,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'صاحبي HERO',
+                  style: TextStyle(
+                    color: Sa7biTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  'شخصية صاحبي الرئيسية',
+                  style: TextStyle(
+                    color: Sa7biTheme.goldBright,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 13),
-            Text(
-              description,
-              style: const TextStyle(
+          ),
+          const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Sa7biTheme.goldBright,
+            size: 16,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConnectSafetyNotice extends StatelessWidget {
+  const _ConnectSafetyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Sa7biGlassSurface(
+      padding: const EdgeInsets.all(13),
+      radius: 16,
+      borderColor: Sa7biTheme.border,
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.security_rounded,
+            color: Sa7biTheme.gold,
+            size: 19,
+          ),
+          SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'حافظ على خصوصيتك. لا تشارك كلمات المرور أو '
+              'البيانات الحساسة. المحادثات في هذه النسخة '
+              'ليست مشفرة من طرف إلى طرف.',
+              style: TextStyle(
                 color: Sa7biTheme.textSecondary,
-                height: 1.6,
-                fontSize: 11,
+                fontSize: 10,
+                height: 1.7,
               ),
             ),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: onPressed,
-              icon: const Icon(Icons.arrow_back_rounded, size: 17),
-              label: Text(
-                buttonText,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
