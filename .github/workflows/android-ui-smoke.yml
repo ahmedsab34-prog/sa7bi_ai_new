@@ -188,34 +188,13 @@ jobs:
             -camera-back none
             -camera-front none
           script: |
-            set -eu
-
             mkdir -p build/android-ui-smoke
-
-            capture_diagnostics() {
-              adb -s emulator-5554 logcat -d -v time \
-                > build/android-ui-smoke/logcat.txt 2>&1 || true
-
-              adb devices -l \
-                > build/android-ui-smoke/adb-devices.txt 2>&1 || true
-            }
-
-            trap capture_diagnostics EXIT
-
-            echo "Checking emulator connection..."
             adb devices -l
-
-            BOOT_STATUS="$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')"
-            test "${BOOT_STATUS}" = "1"
-
+            adb -s emulator-5554 shell getprop sys.boot_completed | grep -q '^1$'
             adb -s emulator-5554 shell svc power stayon true
-
-            echo "Starting Sa7bi AI integration test..."
-
-            flutter test integration_test/sa7bi_app_smoke_test.dart \
-              --no-pub \
-              -d emulator-5554 \
-              --reporter expanded
+            adb -s emulator-5554 logcat -d -v time > build/android-ui-smoke/logcat-before-test.txt 2>&1
+            flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded
+            adb -s emulator-5554 logcat -d -v time > build/android-ui-smoke/logcat-after-test.txt 2>&1
 
       - name: Upload Android smoke diagnostics
         if: always()
