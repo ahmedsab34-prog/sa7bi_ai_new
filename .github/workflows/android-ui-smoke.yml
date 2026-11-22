@@ -170,9 +170,9 @@ jobs:
           target: default
           arch: x86_64
           profile: pixel_2
-          cores: 4
-          ram-size: 4096M
-          heap-size: 768M
+          cores: 2
+          ram-size: 3072M
+          heap-size: 512M
           emulator-boot-timeout: 900
           emulator-port: 5554
           disable-linux-hw-accel: false
@@ -185,16 +185,31 @@ jobs:
             -no-snapshot
             -noaudio
             -no-boot-anim
+            -camera-back none
+            -camera-front none
           script: >-
-            bash -lc 'set -euo pipefail; adb devices -l; test "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d "\r")" = "1"; adb -s emulator-5554 shell svc power stayon true; flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded'
+            bash -lc 'set -euo pipefail;
+            mkdir -p build/android-ui-smoke;
+            capture_diagnostics() {
+              adb -s emulator-5554 logcat -d -v time
+                > build/android-ui-smoke/logcat.txt 2>&1 || true;
+              adb devices -l
+                > build/android-ui-smoke/adb-devices.txt 2>&1 || true;
+            };
+            trap capture_diagnostics EXIT;
+            adb devices -l;
+            test "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d "\r")" = "1";
+            adb -s emulator-5554 shell svc power stayon true;
+            flutter test integration_test/sa7bi_app_smoke_test.dart
+              --no-pub
+              -d emulator-5554
+              --reporter expanded'
 
-      - name: Upload Android build and test diagnostics
+      - name: Upload Android smoke diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sa7bi-android-ui-smoke-reports
-          path: |
-            build/app/outputs/flutter-apk/app-debug.apk
-            build/
+          name: sa7bi-android-ui-smoke-diagnostics
+          path: build/android-ui-smoke/
           if-no-files-found: warn
           retention-days: 7
