@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../models/sa7bi_hero_chat_sticker.dart';
@@ -5,7 +6,7 @@ import '../models/social_sticker.dart';
 import 'sa7bi_hero_3d.dart';
 import 'social_sticker_kit.dart';
 
-/// Returns a message token for an animated GIF, a 3D character sticker,
+/// Returns a message token for an animated GIF, a 2.5D HERO sticker,
 /// or one of the existing 100 classic stickers.
 class Sa7biHeroStickerPicker {
   Sa7biHeroStickerPicker._();
@@ -83,7 +84,7 @@ class _Sa7biHeroStickerPickerSheet extends StatelessWidget {
               indicatorColor: Color(0xFFFFD76A),
               tabs: <Widget>[
                 Tab(text: 'GIF متحركة'),
-                Tab(text: 'مجسم 3D'),
+                Tab(text: 'HERO 2.5D'),
                 Tab(text: 'ثابتة'),
               ],
             ),
@@ -104,7 +105,7 @@ class _Sa7biHeroStickerPickerSheet extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.fromLTRB(14, 0, 14, 12),
               child: Text(
-                'الملصقات الثلاثية الأبعاد تفتح المجسم عند الضغط عليها داخل الرسالة.',
+                'ملصقات HERO تعرض نفس الشخصية بنظام 2.5D داخل المحادثة.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white54, fontSize: 10),
               ),
@@ -221,7 +222,7 @@ class _ClassicStickerGrid extends StatelessWidget {
   }
 }
 
-/// Displays both old static sticker tokens and the new animated/3D tokens.
+/// Displays both old static sticker tokens and the new animated/2.5D tokens.
 class Sa7biHeroChatStickerMessageView extends StatelessWidget {
   const Sa7biHeroChatStickerMessageView({
     super.key,
@@ -300,7 +301,7 @@ class Sa7biHeroChatStickerMessageView extends StatelessWidget {
                     ),
                     SizedBox(width: 6),
                     Text(
-                      'افتح المجسم 3D',
+                      'اعرض HERO 2.5D',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 11,
