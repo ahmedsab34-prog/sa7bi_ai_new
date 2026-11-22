@@ -69,25 +69,30 @@ class _Sa7biHero3DState extends State<Sa7biHero3D>
             ? status
             : const HeroLiteStatus();
 
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onPanUpdate: widget.cameraControls && !widget.compact
-              ? _onDrag
+        return Semantics(
+          label: Sa7biHero3D.debugDisableWebViewForTests
+              ? 'HERO 3D test placeholder'
               : null,
-          child: AnimatedBuilder(
-            animation: _motion,
-            builder: (context, _) {
-              return CustomPaint(
-                painter: _HeroPainter(
-                  status: faceStatus,
-                  motion: _motion.value,
-                  rotation: _rotation,
-                  animationName: widget.animationName,
-                  compact: widget.compact,
-                ),
-                child: const SizedBox.expand(),
-              );
-            },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanUpdate: widget.cameraControls && !widget.compact
+                ? _onDrag
+                : null,
+            child: AnimatedBuilder(
+              animation: _motion,
+              builder: (context, _) {
+                return CustomPaint(
+                  painter: _HeroPainter(
+                    status: faceStatus,
+                    motion: _motion.value,
+                    rotation: _rotation,
+                    animationName: widget.animationName,
+                    compact: widget.compact,
+                  ),
+                  child: const SizedBox.expand(),
+                );
+              },
+            ),
           ),
         );
       },
@@ -119,15 +124,21 @@ class _HeroPainter extends CustomPainter {
   static const hair = Color(0xFF17191E);
 
   // دالة رسم مساعدة باسم مختلف عن CustomPainter.paint.
-  Paint makePaint(Color color, {PaintingStyle style = PaintingStyle.fill}) {
+  Paint makePaint(
+    Color color, {
+    PaintingStyle style = PaintingStyle.fill,
+  }) {
     return Paint()
       ..color = color
       ..style = style
       ..isAntiAlias = true;
   }
 
-  Paint gradient(Rect rect, List<Color> colors,
-      {bool vertical = false}) {
+  Paint gradient(
+    Rect rect,
+    List<Color> colors, {
+    bool vertical = false,
+  }) {
     return Paint()
       ..isAntiAlias = true
       ..shader = LinearGradient(
