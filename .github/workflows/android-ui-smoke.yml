@@ -69,7 +69,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           FLUTTER_SETTINGS="${FLUTTER_ROOT}/packages/flutter_tools/gradle/settings.gradle.kts"
           test -f "${FLUTTER_SETTINGS}"
 
@@ -171,7 +170,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           cores: 2
-          ram-size: 3072M
+          ram-size: 4096M
           heap-size: 512M
           emulator-boot-timeout: 900
           emulator-port: 5554
@@ -188,13 +187,102 @@ jobs:
             -camera-back none
             -camera-front none
           script: |
-            mkdir -p build/android-ui-smoke
-            adb devices -l
-            adb -s emulator-5554 shell getprop sys.boot_completed | grep -q '^1$'
-            adb -s emulator-5554 shell svc power stayon true
-            adb -s emulator-5554 logcat -d -v time > build/android-ui-smoke/logcat-before-test.txt 2>&1
-            flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded
-            adb -s emulator-5554 logcat -d -v time > build/android-ui-smoke/logcat-after-test.txt 2>&1
+            set -uo pipefail
+            DIAG_DIR="build/android-ui-smoke"
+            SERIAL="emulator-5554"
+            mkdir -p "${DIAG_DIR}"
+
+            capture_host_state() {
+              {
+                echo "===== UTC: $(date -u '+%Y-%m-%dT%H:%M:%SZ') ====="
+                echo "===== adb devices ====="
+                adb devices -l
+                echo "===== host memory ====="
+                free -h
+                echo "===== host disk ====="
+                df -h
+                echo "===== emulator processes ====="
+                ps -eo pid,ppid,%mem,%cpu,rss,stat,etime,args | grep -E '[e]mulator|[q]emu|[a]db'
+              } >> "${DIAG_DIR}/host-state.txt" 2>&1
+            }
+
+            capture_device_state() {
+              local label="$1"
+              echo "===== ${label} =====" >> "${DIAG_DIR}/device-state.txt"
+              timeout 25 adb -s "${SERIAL}" get-state >> "${DIAG_DIR}/device-state.txt" 2>&1 || true
+              timeout 25 adb -s "${SERIAL}" shell getprop >> "${DIAG_DIR}/device-state.txt" 2>&1 || true
+              timeout 25 adb -s "${SERIAL}" shell dumpsys meminfo >> "${DIAG_DIR}/meminfo-${label}.txt" 2>&1 || true
+              timeout 25 adb -s "${SERIAL}" shell dumpsys activity processes >> "${DIAG_DIR}/processes-${label}.txt" 2>&1 || true
+            }
+
+            stop_background_capture() {
+              if [[ -n "${MONITOR_PID:-}" ]]; then
+                kill "${MONITOR_PID}" 2>/dev/null || true
+                wait "${MONITOR_PID}" 2>/dev/null || true
+                MONITOR_PID=""
+              fi
+              if [[ -n "${LOGCAT_PID:-}" ]]; then
+                kill "${LOGCAT_PID}" 2>/dev/null || true
+                wait "${LOGCAT_PID}" 2>/dev/null || true
+                LOGCAT_PID=""
+              fi
+            }
+
+            finish_diagnostics() {
+              local result_code="$?"
+              trap - EXIT
+              stop_background_capture
+              echo "Integration test exit code: ${result_code}" > "${DIAG_DIR}/test-exit-code.txt"
+              capture_host_state
+              capture_device_state "final"
+              timeout 30 adb -s "${SERIAL}" logcat -d -b all -v threadtime > "${DIAG_DIR}/logcat-final.txt" 2>&1 || true
+              exit "${result_code}"
+            }
+            trap finish_diagnostics EXIT
+
+            echo "===== Emulator readiness ====="
+            adb devices -l | tee "${DIAG_DIR}/adb-devices-before.txt"
+            adb -s "${SERIAL}" shell getprop sys.boot_completed | grep -q '^1$'
+            adb -s "${SERIAL}" shell svc power stayon true
+            capture_host_state
+            capture_device_state "before-test"
+
+            adb -s "${SERIAL}" logcat -b all -v threadtime > "${DIAG_DIR}/logcat-live.txt" 2>&1 &
+            LOGCAT_PID="$!"
+
+            (
+              while true; do
+                printf '\n===== %s =====\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "${DIAG_DIR}/adb-watch.txt"
+                if ! adb -s "${SERIAL}" get-state 2>&1 | tee -a "${DIAG_DIR}/adb-watch.txt" | grep -qx 'device'; then
+                  echo "ADB device became unavailable." >> "${DIAG_DIR}/adb-watch.txt"
+                  adb devices -l >> "${DIAG_DIR}/adb-watch.txt" 2>&1 || true
+                  free -h >> "${DIAG_DIR}/adb-watch.txt" 2>&1 || true
+                  ps -eo pid,ppid,%mem,%cpu,rss,stat,etime,args | grep -E '[e]mulator|[q]emu|[a]db' >> "${DIAG_DIR}/adb-watch.txt" 2>&1 || true
+                  break
+                fi
+                sleep 5
+              done
+            ) &
+            MONITOR_PID="$!"
+
+            set +e
+            flutter test integration_test/sa7bi_app_smoke_test.dart \
+              --no-pub \
+              -d "${SERIAL}" \
+              --reporter expanded 2>&1 | tee "${DIAG_DIR}/flutter-integration-test.txt"
+            TEST_EXIT="${PIPESTATUS[0]}"
+            set -e
+
+            echo "Flutter integration test exit code: ${TEST_EXIT}"
+            if [[ "${TEST_EXIT}" -ne 0 ]]; then
+              echo "Test failed; collecting failure-time diagnostics."
+              capture_host_state
+              capture_device_state "failure"
+              timeout 30 adb -s "${SERIAL}" logcat -d -b all -v threadtime > "${DIAG_DIR}/logcat-at-failure.txt" 2>&1 || true
+              adb devices -l > "${DIAG_DIR}/adb-devices-at-failure.txt" 2>&1 || true
+            fi
+
+            exit "${TEST_EXIT}"
 
       - name: Upload Android smoke diagnostics
         if: always()
