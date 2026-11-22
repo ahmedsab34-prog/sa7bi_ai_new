@@ -9,6 +9,7 @@ import 'sa7bi_network_client.dart';
 ///
 /// الوظائف:
 /// - جلب الأخبار من Worker.
+/// - جلب أخبار بتصنيف محدد عند الحاجة.
 /// - طلب تحديث جديد عند السحب لأسفل.
 /// - إزالة تكرار الروابط والعناوين.
 /// - ترتيب الأخبار من الأحدث إلى الأقدم.
@@ -26,17 +27,40 @@ class AiNewsService {
 
   /// جلب الأخبار.
   ///
+  /// الفئات المدعومة:
+  /// sports
+  /// entertainment
+  /// technology
+  ///
   /// forceRefresh = true:
   /// - يضيف قيمة متغيرة إلى الرابط لكسر كاش الرابط السابق.
   /// - يرسل ترويسات تمنع التخزين المؤقت لدى العميل.
   static Future<List<NewsItem>> getNews({
     bool forceRefresh = false,
+    String? category,
+    Duration timeout = const Duration(seconds: 25),
   }) async {
     try {
       final baseUri = Uri.parse(newsEndpoint);
       final query = Map<String, String>.from(
         baseUri.queryParameters,
       );
+
+      final normalizedCategory = category?.trim().toLowerCase();
+      const supportedCategories = <String>{
+        'sports',
+        'entertainment',
+        'technology',
+      };
+
+      if (normalizedCategory != null &&
+          normalizedCategory.isNotEmpty) {
+        if (!supportedCategories.contains(normalizedCategory)) {
+          return <NewsItem>[];
+        }
+
+        query['category'] = normalizedCategory;
+      }
 
       if (forceRefresh) {
         query['refresh'] = DateTime.now()
@@ -60,7 +84,7 @@ class AiNewsService {
 
       final response = await Sa7biNetworkClient.client
           .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 25));
+          .timeout(timeout);
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
