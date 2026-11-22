@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -23,8 +22,8 @@ class KhalasanaPortal extends StatefulWidget {
 
 class _KhalasanaPortalState extends State<KhalasanaPortal>
     with WidgetsBindingObserver {
-  static const double _width = 76;
-  static const double _height = 98;
+  static const double _width = 60;
+  static const double _height = 78;
 
   static const List<HeroExpression> _idleExpressions = <HeroExpression>[
     HeroExpression.smile,
