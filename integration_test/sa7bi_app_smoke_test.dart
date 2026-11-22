@@ -16,6 +16,14 @@ void main() {
 
   testWidgets('Sa7bi AI main navigation and HERO smoke test',
       (tester) async {
+    // اختبار التبويبات لا يحتاج إلى تشغيل محرك WebView ثلاثي الأبعاد.
+    // اختبار ملف GLB والـFace Rig موجود بصورة مستقلة.
+    Sa7biHero3D.debugDisableWebViewForTests = true;
+
+    addTearDown(() {
+      Sa7biHero3D.debugDisableWebViewForTests = false;
+    });
+
     await tester.pumpWidget(const sa7bi.Sa7biAiApp());
     await tester.pump(const Duration(seconds: 2));
 
@@ -23,6 +31,10 @@ void main() {
     expect(find.byType(AppHeader), findsOneWidget);
     expect(find.byType(KhalasanaPortal), findsOneWidget);
     expect(find.byType(Sa7biHero3D), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('HERO 3D test placeholder'),
+      findsOneWidget,
+    );
 
     final pageViewFinder = find.byWidgetPredicate(
       (widget) =>
