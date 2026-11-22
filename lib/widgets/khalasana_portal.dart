@@ -1,13 +1,10 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../services/hero_face_runtime.dart';
 import 'sa7bi_hero_3d.dart';
 
-/// One lightweight, draggable 3D character button shared by every app page.
-/// The original GLB is loaded once here; chat messages use GIF previews and
-/// open a separate 3D dialog only when the user taps a 3D sticker.
+/// أيقونة HERO المصغّرة لفتح خلصانة.
+/// العرض المرئي 52×64 dp، مع مساحة لمس لا تقل عن 48×48.
 class KhalasanaPortal extends StatefulWidget {
   const KhalasanaPortal({
     super.key,
@@ -20,149 +17,11 @@ class KhalasanaPortal extends StatefulWidget {
   State<KhalasanaPortal> createState() => _KhalasanaPortalState();
 }
 
-class _KhalasanaPortalState extends State<KhalasanaPortal>
-    with WidgetsBindingObserver {
-  static const double _width = 60;
-  static const double _height = 78;
-
-  static const List<HeroExpression> _idleExpressions = <HeroExpression>[
-    HeroExpression.smile,
-    HeroExpression.wink,
-    HeroExpression.blink,
-    HeroExpression.surprise,
-    HeroExpression.neutral,
-  ];
-
-  final HeroFaceRuntime _faceRuntime = HeroFaceRuntime.instance;
+class _KhalasanaPortalState extends State<KhalasanaPortal> {
+  static const double _width = 52;
+  static const double _height = 64;
 
   Offset _dragOffset = Offset.zero;
-  String _bodyAnimation = 'Hero_Idle';
-
-  Timer? _bodyTimer;
-  Timer? _bodyResetTimer;
-  Timer? _faceTimer;
-  Timer? _faceResetTimer;
-
-  int _bodyIndex = 0;
-  int _faceIndex = 0;
-  bool _foreground = true;
-
-  @override
-  void initState() {
-    super.initState();
-
-    WidgetsBinding.instance.addObserver(this);
-
-    _foreground =
-        WidgetsBinding.instance.lifecycleState == null ||
-        WidgetsBinding.instance.lifecycleState ==
-            AppLifecycleState.resumed;
-
-    if (_foreground) {
-      _startMotionTimers();
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    final nextForeground = state == AppLifecycleState.resumed;
-
-    if (_foreground == nextForeground) return;
-
-    _foreground = nextForeground;
-
-    if (nextForeground) {
-      _startMotionTimers();
-    } else {
-      _stopMotionTimers();
-    }
-  }
-
-  void _startMotionTimers() {
-    _stopMotionTimers();
-
-    _bodyTimer = Timer.periodic(
-      const Duration(seconds: 9),
-      (_) => _playNextBodyAnimation(),
-    );
-
-    _faceTimer = Timer.periodic(
-      const Duration(seconds: 8),
-      (_) => _playNextIdleExpression(),
-    );
-  }
-
-  void _stopMotionTimers() {
-    _bodyTimer?.cancel();
-    _bodyResetTimer?.cancel();
-    _faceTimer?.cancel();
-    _faceResetTimer?.cancel();
-
-    _bodyTimer = null;
-    _bodyResetTimer = null;
-    _faceTimer = null;
-    _faceResetTimer = null;
-  }
-
-  void _playNextBodyAnimation() {
-    if (!mounted ||
-        !_foreground ||
-        _faceRuntime.liteStatus.value.isSpeaking) {
-      return;
-    }
-
-    final animation =
-        _bodyIndex.isEven ? 'Hero_Welcome' : 'Hero_Power';
-
-    _bodyIndex++;
-
-    setState(() {
-      _bodyAnimation = animation;
-    });
-
-    _bodyResetTimer?.cancel();
-
-    _bodyResetTimer = Timer(
-      const Duration(milliseconds: 2600),
-      () {
-        if (!mounted || !_foreground) return;
-
-        setState(() {
-          _bodyAnimation = 'Hero_Idle';
-        });
-      },
-    );
-  }
-
-  void _playNextIdleExpression() {
-    if (!mounted ||
-        !_foreground ||
-        _faceRuntime.liteStatus.value.isSpeaking) {
-      return;
-    }
-
-    final expression =
-        _idleExpressions[_faceIndex % _idleExpressions.length];
-
-    _faceIndex++;
-
-    _faceRuntime.playExpression(expression);
-
-    _faceResetTimer?.cancel();
-
-    _faceResetTimer = Timer(
-      const Duration(milliseconds: 1450),
-      () {
-        if (!mounted ||
-            !_foreground ||
-            _faceRuntime.liteStatus.value.isSpeaking) {
-          return;
-        }
-
-        _faceRuntime.playExpression(HeroExpression.neutral);
-      },
-    );
-  }
 
   void _move(DragUpdateDetails details, Size screen) {
     const edge = 5.0;
@@ -188,13 +47,6 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
   }
 
   @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _stopMotionTimers();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final screen = MediaQuery.sizeOf(context);
 
@@ -202,7 +54,7 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
       offset: _dragOffset,
       child: Semantics(
         button: true,
-        label: 'افتح خلصانة أو اسحب لتحريك الشخصية',
+        label: 'افتح خلصانة أو اسحب لتحريك شخصية صاحبي',
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
@@ -213,32 +65,32 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: const Color(0xFF081225).withValues(alpha: 0.94),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: const Color(0x9972D7FF),
-                  width: 1.2,
+                  width: 1.1,
                 ),
-                boxShadow: const <BoxShadow>[
+                boxShadow: const [
                   BoxShadow(
-                    color: Color(0x55000000),
-                    blurRadius: 13,
-                    offset: Offset(0, 5),
+                    color: Color(0x44000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 4),
                   ),
                   BoxShadow(
                     color: Color(0x2272D7FF),
-                    blurRadius: 12,
+                    blurRadius: 9,
                     spreadRadius: 1,
                   ),
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(19),
+                borderRadius: BorderRadius.circular(15),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    IgnorePointer(
+                    const IgnorePointer(
                       child: Sa7biHero3D(
-                        animationName: _bodyAnimation,
+                        animationName: 'Hero_Idle',
                         cameraControls: false,
                         compact: true,
                         enableFaceAnimations: true,
@@ -247,16 +99,16 @@ class _KhalasanaPortalState extends State<KhalasanaPortal>
                     Positioned(
                       left: 7,
                       right: 7,
-                      bottom: 4,
+                      bottom: 3,
                       child: Container(
-                        height: 3,
+                        height: 2.5,
                         decoration: BoxDecoration(
                           color: const Color(0xFFFFD76A),
                           borderRadius: BorderRadius.circular(4),
-                          boxShadow: const <BoxShadow>[
+                          boxShadow: const [
                             BoxShadow(
                               color: Color(0x99FFD76A),
-                              blurRadius: 7,
+                              blurRadius: 6,
                             ),
                           ],
                         ),
