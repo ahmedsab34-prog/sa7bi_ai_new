@@ -8,7 +8,6 @@ void main() {
   testWidgets(
     'Connect hub shows public chat first, private chats, groups and one HERO',
     (tester) async {
-      // Give the ListView enough room to build all destination cards.
       tester.view.physicalSize = const Size(1080, 3200);
       tester.view.devicePixelRatio = 1.0;
 
@@ -22,14 +21,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Public chat is the first destination.
-      final publicChat = find.text('الشات العام');
-      final privateChats = find.text('المحادثات والأصدقاء');
+      // Current public room destination.
+      final publicRoom = find.text('الغرفة العامة');
+      final privateChats = find.text('محادثاتي الخاصة');
       final groups = find.text('المجموعات');
       final hero = find.text('صاحبي HERO');
 
-      expect(publicChat, findsOneWidget);
-      expect(find.text('ادخل الشات العام'), findsOneWidget);
+      expect(publicRoom, findsOneWidget);
+      expect(find.text('افتح الشات العام'), findsOneWidget);
 
       expect(privateChats, findsOneWidget);
       expect(find.text('افتح المحادثات'), findsOneWidget);
@@ -39,9 +38,9 @@ void main() {
 
       expect(hero, findsOneWidget);
 
-      // Verify the intended visual order.
+      // Verify destination order.
       expect(
-        tester.getTopLeft(publicChat).dy,
+        tester.getTopLeft(publicRoom).dy,
         lessThan(tester.getTopLeft(privateChats).dy),
       );
 
@@ -56,17 +55,16 @@ void main() {
       );
 
       // HERO is the only character destination.
+      expect(find.text('صاحبي HERO'), findsOneWidget);
+      expect(find.text('صاحبي الرفيق'), findsNothing);
       expect(
-        find.textContaining('البطل الخارق الوحيد'),
-        findsOneWidget,
+        find.textContaining('شخصية صاحبي 3D'),
+        findsNothing,
       );
 
-      expect(find.text('صاحبي الرفيق'), findsNothing);
-      expect(find.textContaining('شخصية صاحبي 3D'), findsNothing);
-
-      // The public-room safety notice is present.
+      // Current privacy notice.
       final safetyNotice = find.textContaining(
-        'الشات العام مساحة مشتركة بين مستخدمي صاحبي',
+        'حافظ على خصوصيتك',
       );
 
       await tester.scrollUntilVisible(
