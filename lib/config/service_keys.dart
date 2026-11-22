@@ -42,6 +42,12 @@ class ServiceKeys {
 
   static const String hobbiesSports = 'hobbies_sports';
 
+  static const String sportsNews = 'sports_news';
+
+  static const String entertainment = 'entertainment';
+
+  static const String technology = 'technology';
+
   static const String podcasts = 'podcasts';
 
   static const String education = 'education';
@@ -77,6 +83,9 @@ class ServiceKeys {
       case social:
       case venting:
       case hobbiesSports:
+      case sportsNews:
+      case entertainment:
+      case technology:
       case podcasts:
       case education:
       case career:
@@ -107,6 +116,9 @@ class ServiceKeys {
     social,
     venting,
     hobbiesSports,
+    sportsNews,
+    entertainment,
+    technology,
     podcasts,
     education,
     career,
