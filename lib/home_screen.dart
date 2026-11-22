@@ -12,20 +12,23 @@ import 'services/ads_service.dart';
 import 'services/ai_news_service.dart' as network_news;
 import 'shorts_feed_screen.dart';
 import 'tiktok_style_feed_screen.dart';
-import 'widgets/short_video_entry_carousel.dart';
+import 'theme/sa7bi_theme.dart';
 import 'widgets/affiliate_carousel.dart';
 import 'widgets/app_header.dart';
+import 'widgets/home_news_card.dart';
 import 'widgets/sa7bi_hero_lite_panel.dart';
+import 'widgets/sa7bi_glass_surface.dart';
+import 'widgets/short_video_entry_carousel.dart';
 
 class HomeScreen extends StatefulWidget {
-  final VoidCallback? onProfile;
-  final VoidCallback? onAudio;
-
   const HomeScreen({
     super.key,
     this.onProfile,
     this.onAudio,
   });
+
+  final VoidCallback? onProfile;
+  final VoidCallback? onAudio;
 
   @override
   HomeScreenState createState() => HomeScreenState();
@@ -33,16 +36,25 @@ class HomeScreen extends StatefulWidget {
 
 class HomeScreenState extends State<HomeScreen>
     with WidgetsBindingObserver {
-  static const String _newsCacheKey = 'sa7bi_home_news_cache_v1';
-  static const String _newsCacheTimeKey = 'sa7bi_home_news_cache_time_v1';
+  static const String _newsCacheKey =
+      'sa7bi_home_news_cache_v1';
+
+  static const String _newsCacheTimeKey =
+      'sa7bi_home_news_cache_time_v1';
+
   static const Duration _autoRefreshInterval =
       Duration(minutes: 20);
 
+  static const Duration _newsTimeout =
+      Duration(seconds: 25);
+
   Timer? _autoRefreshTimer;
 
-  List<NewsItem> _news = [];
+  List<NewsItem> _news = <NewsItem>[];
+
   bool _loading = true;
   bool _refreshing = false;
+
   String? _error;
   DateTime? _lastUpdated;
 
@@ -61,7 +73,9 @@ class HomeScreenState extends State<HomeScreen>
           return;
         }
 
-        unawaited(_loadNews(pullToRefresh: true));
+        unawaited(
+          _loadNews(pullToRefresh: true),
+        );
       },
     );
 
@@ -69,7 +83,9 @@ class HomeScreenState extends State<HomeScreen>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(
+    AppLifecycleState state,
+  ) {
     if (state != AppLifecycleState.resumed) return;
 
     final lastUpdate = _lastUpdated;
@@ -79,7 +95,9 @@ class HomeScreenState extends State<HomeScreen>
             _autoRefreshInterval;
 
     if (shouldRefresh) {
-      unawaited(_loadNews(pullToRefresh: true));
+      unawaited(
+        _loadNews(pullToRefresh: true),
+      );
     }
   }
 
@@ -87,6 +105,7 @@ class HomeScreenState extends State<HomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
+
     super.dispose();
   }
 
@@ -98,12 +117,24 @@ class HomeScreenState extends State<HomeScreen>
     await _loadNews();
   }
 
-  Future<void> refreshNews() =>
-      _loadNews(pullToRefresh: true);
+  Future<void> refreshNews() {
+    return _loadNews(pullToRefresh: true);
+  }
+
+  bool _isSafeHttpUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+
+    return uri != null &&
+        uri.hasAuthority &&
+        uri.host.isNotEmpty &&
+        (uri.scheme == 'https' || uri.scheme == 'http') &&
+        uri.userInfo.isEmpty;
+  }
 
   Future<void> _loadCachedNews() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+
       final cachedJson = prefs.getString(_newsCacheKey);
 
       if (cachedJson == null || cachedJson.trim().isEmpty) {
@@ -111,6 +142,7 @@ class HomeScreenState extends State<HomeScreen>
       }
 
       final decoded = jsonDecode(cachedJson);
+
       if (decoded is! List) return;
 
       final cachedItems = <NewsItem>[];
@@ -118,29 +150,23 @@ class HomeScreenState extends State<HomeScreen>
       for (final raw in decoded) {
         if (raw is! Map) continue;
 
-        final item = NewsItem(
-          title: raw['title']?.toString() ?? '',
-          source: raw['source']?.toString() ?? 'الأخبار',
-          link: raw['link']?.toString() ?? '',
-          imageUrl: raw['imageUrl']?.toString() ?? '',
-          description: raw['description']?.toString() ?? '',
-          pubDate: raw['pubDate']?.toString() ?? '',
+        final title = raw['title']?.toString().trim() ?? '';
+        final link = raw['link']?.toString().trim() ?? '';
+
+        if (title.isEmpty || !_isSafeHttpUrl(link)) {
+          continue;
+        }
+
+        cachedItems.add(
+          NewsItem(
+            title: title,
+            source: raw['source']?.toString() ?? 'الأخبار',
+            link: link,
+            imageUrl: raw['imageUrl']?.toString() ?? '',
+            description: raw['description']?.toString() ?? '',
+            pubDate: raw['pubDate']?.toString() ?? '',
+          ),
         );
-
-        if (item.title.trim().isEmpty ||
-            item.link.trim().isEmpty) {
-          continue;
-        }
-
-        final uri = Uri.tryParse(item.link.trim());
-
-        if (uri == null ||
-            (uri.scheme != 'https' &&
-                uri.scheme != 'http')) {
-          continue;
-        }
-
-        cachedItems.add(item);
       }
 
       if (cachedItems.isEmpty || !mounted) return;
@@ -149,15 +175,20 @@ class HomeScreenState extends State<HomeScreen>
 
       setState(() {
         _news = cachedItems;
+
         _lastUpdated = cachedTime == null
             ? null
-            : DateTime.fromMillisecondsSinceEpoch(cachedTime);
+            : DateTime.fromMillisecondsSinceEpoch(
+                cachedTime,
+              );
+
         _loading = false;
+
         _error =
             'تعرض الأخبار المحفوظة لحين تحديثها من الإنترنت.';
       });
     } catch (_) {
-      // تلف الكاش لا يمنع تحميل الأخبار من الإنترنت.
+      // الكاش التالف لا يمنع محاولة الاتصال بالخدمة.
     }
   }
 
@@ -181,13 +212,17 @@ class HomeScreenState extends State<HomeScreen>
         }).toList(),
       );
 
-      await prefs.setString(_newsCacheKey, encoded);
+      await prefs.setString(
+        _newsCacheKey,
+        encoded,
+      );
+
       await prefs.setInt(
         _newsCacheTimeKey,
         savedAt.millisecondsSinceEpoch,
       );
     } catch (_) {
-      // فشل حفظ الكاش لا يمنع عرض الأخبار.
+      // فشل حفظ الكاش لا يمنع عرض الأخبار الحالية.
     }
   }
 
@@ -198,7 +233,11 @@ class HomeScreenState extends State<HomeScreen>
 
     setState(() {
       _refreshing = true;
-      if (_news.isEmpty) _loading = true;
+
+      if (_news.isEmpty) {
+        _loading = true;
+      }
+
       _error = null;
     });
 
@@ -206,11 +245,14 @@ class HomeScreenState extends State<HomeScreen>
       final networkResult =
           await network_news.AiNewsService.getNews(
         forceRefresh: pullToRefresh,
-      ).timeout(
-        const Duration(seconds: 25),
-      );
+      ).timeout(_newsTimeout);
 
       final result = networkResult
+          .where(
+            (item) =>
+                item.title.trim().isNotEmpty &&
+                _isSafeHttpUrl(item.link),
+          )
           .map(
             (item) => NewsItem(
               title: item.title,
@@ -234,16 +276,14 @@ class HomeScreenState extends State<HomeScreen>
           _error = null;
         });
 
-        unawaited(_saveCachedNews(result, updatedAt));
+        unawaited(
+          _saveCachedNews(result, updatedAt),
+        );
       } else {
         setState(() {
-          if (_news.isEmpty) {
-            _error =
-                'لا توجد أخبار متاحة حاليًا. تحقق من الإنترنت وحاول مرة أخرى.';
-          } else {
-            _error =
-                'تعذر تحديث الأخبار؛ ما زالت الأخبار المحفوظة ظاهرة.';
-          }
+          _error = _news.isEmpty
+              ? 'لا توجد أخبار متاحة حاليًا. تحقق من الإنترنت وحاول مرة أخرى.'
+              : 'تعذر تحديث الأخبار؛ ما زالت الأخبار المحفوظة ظاهرة.';
         });
       }
     } on TimeoutException {
@@ -273,7 +313,8 @@ class HomeScreenState extends State<HomeScreen>
   }
 
   String _formatNewsPublishedAt(String value) {
-    final publishedAt = network_news.AiNewsService.parseNewsDate(value);
+    final publishedAt =
+        network_news.AiNewsService.parseNewsDate(value);
 
     if (publishedAt == null) {
       return 'وقت النشر غير متاح';
@@ -281,8 +322,10 @@ class HomeScreenState extends State<HomeScreen>
 
     final local = publishedAt.toLocal();
     final now = DateTime.now();
+
     final time =
-        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
 
     if (local.year == now.year &&
         local.month == now.month &&
@@ -290,7 +333,10 @@ class HomeScreenState extends State<HomeScreen>
       return 'اليوم • $time';
     }
 
-    final yesterday = now.subtract(const Duration(days: 1));
+    final yesterday = now.subtract(
+      const Duration(days: 1),
+    );
+
     if (local.year == yesterday.year &&
         local.month == yesterday.month &&
         local.day == yesterday.day) {
@@ -299,13 +345,17 @@ class HomeScreenState extends State<HomeScreen>
 
     final day = local.day.toString().padLeft(2, '0');
     final month = local.month.toString().padLeft(2, '0');
+
     return '$day/$month • $time';
   }
 
   String _formatUpdatedAt(DateTime? value) {
-    if (value == null) return 'لم يتم التحديث بعد';
+    if (value == null) {
+      return 'لم يتم التحديث بعد';
+    }
 
     final local = value.toLocal();
+
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
 
@@ -315,18 +365,12 @@ class HomeScreenState extends State<HomeScreen>
   Future<void> _openNews(NewsItem item) async {
     final url = item.link.trim();
 
-    if (url.isEmpty || !mounted) return;
+    if (!mounted || !_isSafeHttpUrl(url)) return;
 
-    final uri = Uri.tryParse(url);
+    final uri = Uri.parse(url);
 
-    if (uri == null ||
-        (uri.scheme != 'https' &&
-            uri.scheme != 'http')) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute(
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
         builder: (_) => NewsWebViewScreen(
           title: item.title,
           url: uri.toString(),
@@ -357,6 +401,207 @@ class HomeScreenState extends State<HomeScreen>
     );
   }
 
+  List<Widget> _buildNewsItems() {
+    final widgets = <Widget>[];
+
+    for (var index = 0; index < _news.length; index++) {
+      final item = _news[index];
+
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: HomeNewsCard(
+            item: item,
+            index: index,
+            publishedLabel: _formatNewsPublishedAt(
+              item.pubDate,
+            ),
+            onTap: () => _openNews(item),
+          ),
+        ),
+      );
+
+      // إدراج الريلز بعد كل خمسة أخبار.
+      if ((index + 1) % 5 == 0) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 11),
+            child: ShortVideoEntryCarousel(
+              onReelsTap: _openReels,
+              onShortsTap: _openTikTokStyleShorts,
+            ),
+          ),
+        );
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _buildOfflineStatus() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 11),
+      child: Sa7biGlassSurface(
+        radius: 15,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 11,
+          vertical: 8,
+        ),
+        borderColor: Sa7biTheme.blue.withValues(alpha: 0.4),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF192B43),
+            Color(0xFF111B30),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.cloud_off_rounded,
+              color: Sa7biTheme.cyan,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _error ?? '',
+                style: const TextStyle(
+                  color: Sa7biTheme.textSecondary,
+                  fontSize: 10,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'تحديث الأخبار',
+              visualDensity: VisualDensity.compact,
+              onPressed: _refreshing ? null : refreshNews,
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: Sa7biTheme.cyan,
+                size: 19,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorCard() {
+    return Sa7biGlassSurface(
+      radius: 19,
+      borderColor: Sa7biTheme.danger.withValues(alpha: 0.45),
+      gradient: const LinearGradient(
+        colors: [
+          Color(0xFF351D32),
+          Color(0xFF1A172B),
+        ],
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.wifi_off_rounded,
+            color: Sa7biTheme.danger,
+            size: 31,
+          ),
+          const SizedBox(height: 9),
+          Text(
+            _error ?? 'تعذر تحميل الأخبار.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Sa7biTheme.textPrimary,
+              fontSize: 12,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 11),
+          OutlinedButton.icon(
+            onPressed: _refreshing ? null : refreshNews,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('إعادة المحاولة'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyCard() {
+    return const Sa7biGlassSurface(
+      radius: 18,
+      child: Column(
+        children: [
+          Icon(
+            Icons.newspaper_rounded,
+            color: Sa7biTheme.textMuted,
+            size: 29,
+          ),
+          SizedBox(height: 9),
+          Text(
+            'الأخبار هتظهر هنا لما تكون متاحة.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Sa7biTheme.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeCard() {
+    return Sa7biGlassSurface(
+      radius: 21,
+      showGlow: true,
+      borderColor: Sa7biTheme.borderGold,
+      gradient: Sa7biTheme.premiumGradient,
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 43,
+            height: 43,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: Sa7biTheme.goldGradient,
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: Sa7biTheme.navyDeep,
+              size: 23,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'أهلاً بيك في صاحبي AI',
+                  style: TextStyle(
+                    color: Sa7biTheme.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'ذكاء اصطناعي، أخبار، وفيديوهات في مكان واحد.',
+                  style: TextStyle(
+                    color: Sa7biTheme.textSecondary,
+                    fontSize: 10,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -367,37 +612,48 @@ class HomeScreenState extends State<HomeScreen>
             onProfileTap: widget.onProfile,
             onAudioTap: widget.onAudio,
           ),
-
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 7),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: const _HomeAdBanner(),
           ),
-
           Expanded(
             child: RefreshIndicator(
+              color: Sa7biTheme.goldBright,
+              backgroundColor: Sa7biTheme.surface,
               onRefresh: refreshNews,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(
                   12,
-                  8,
+                  7,
                   12,
-                  112,
+                  118,
                 ),
                 children: [
+                  _buildWelcomeCard(),
+                  const SizedBox(height: 10),
+
+                  // الشخصية الوحيدة تظهر في البوابة العائمة العامة.
                   const Sa7biHeroLitePanel(),
-                  const SizedBox(height: 15),
-                  _buildNewsHeader(),
-                  const SizedBox(height: 8),
+
+                  HomeNewsSectionHeader(
+                    title: 'آخر الأخبار',
+                    subtitle: _formatUpdatedAt(_lastUpdated),
+                    refreshing: _refreshing,
+                    onRefresh: refreshNews,
+                  ),
+                  const SizedBox(height: 10),
 
                   if (_error != null && _news.isNotEmpty)
                     _buildOfflineStatus(),
 
                   if (_loading && _news.isEmpty)
                     const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 38),
+                      padding: EdgeInsets.symmetric(vertical: 34),
                       child: Center(
-                        child: CircularProgressIndicator(),
+                        child: CircularProgressIndicator(
+                          color: Sa7biTheme.cyan,
+                        ),
                       ),
                     ),
 
@@ -419,8 +675,8 @@ class HomeScreenState extends State<HomeScreen>
                     child: Text(
                       _formatUpdatedAt(_lastUpdated),
                       style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 10,
+                        color: Sa7biTheme.textMuted,
+                        fontSize: 9,
                       ),
                     ),
                   ),
@@ -430,339 +686,6 @@ class HomeScreenState extends State<HomeScreen>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildNewsHeader() {
-    return Row(
-      children: [
-        const Icon(
-          Icons.newspaper_rounded,
-          color: Color(0xFF67E8F9),
-          size: 22,
-        ),
-        const SizedBox(width: 8),
-        const Expanded(
-          child: Text(
-            'آخر الأخبار',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        if (_refreshing)
-          const SizedBox(
-            width: 15,
-            height: 15,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-            ),
-          )
-        else
-          Text(
-            _formatUpdatedAt(_lastUpdated),
-            style: const TextStyle(
-              color: Colors.white54,
-              fontSize: 10,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildOfflineStatus() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 11,
-        vertical: 8,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF182333),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0x3372D7FF),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.cloud_off_rounded,
-            color: Color(0xFF72D7FF),
-            size: 17,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              _error!,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 10,
-                height: 1.4,
-              ),
-            ),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(
-              minWidth: 30,
-              minHeight: 30,
-            ),
-            tooltip: 'تحديث الأخبار',
-            onPressed: _refreshing ? null : refreshNews,
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: Color(0xFF67E8F9),
-              size: 18,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorCard() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF251A1A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0x66FF7979),
-        ),
-      ),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.wifi_off_rounded,
-            color: Color(0xFFFF8B8B),
-            size: 28,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _error ?? 'تعذر تحميل الأخبار.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              height: 1.6,
-            ),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            onPressed: _refreshing ? null : refreshNews,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('إعادة المحاولة'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF11141D),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: const Text(
-        'الأخبار هتظهر هنا لما تكون متاحة.',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Colors.white70,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildNewsItems() {
-    final widgets = <Widget>[];
-
-    for (var i = 0; i < _news.length; i++) {
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 9),
-          child: _buildNewsCard(_news[i], i),
-        ),
-      );
-
-      if ((i + 1) % 5 == 0) {
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildCompactReelsCard(),
-          ),
-        );
-      }
-    }
-
-    return widgets;
-  }
-
-  Widget _buildNewsCard(NewsItem item, int index) {
-    final title = item.title.trim().isEmpty
-        ? 'خبر ${index + 1}'
-        : item.title.trim();
-
-    final description = item.description.trim().isEmpty
-        ? 'اضغط لقراءة تفاصيل الخبر.'
-        : item.description.trim();
-
-    final source = item.source.trim().isEmpty
-        ? 'مصدر إخباري'
-        : item.source.trim();
-
-    final imageUrl = item.imageUrl.trim();
-
-    return Material(
-      color: const Color(0xFF11141D),
-      borderRadius: BorderRadius.circular(15),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _openNews(item),
-        child: SizedBox(
-          height: 140,
-          child: Row(
-            textDirection: TextDirection.rtl,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                width: 116,
-                child: imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            _buildNewsImagePlaceholder(),
-                      )
-                    : _buildNewsImagePlaceholder(),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    10,
-                    8,
-                    10,
-                    8,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              source,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF67E8F9),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              _formatNewsPublishedAt(item.pubDate),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.end,
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 9,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            height: 1.35,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        description,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                          height: 1.3,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Text(
-                            'اقرأ التفاصيل',
-                            style: TextStyle(
-                              color: Color(0xFF72D7FF),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          SizedBox(width: 4),
-                          Icon(
-                            Icons.arrow_back_rounded,
-                            color: Color(0xFF72D7FF),
-                            size: 13,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNewsImagePlaceholder() {
-    return Container(
-      height: double.infinity,
-      width: double.infinity,
-      alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFF202B43),
-            Color(0xFF151923),
-          ],
-        ),
-      ),
-      child: const Icon(
-        Icons.newspaper_rounded,
-        size: 30,
-        color: Color(0x6667E8F9),
-      ),
-    );
-  }
-
-  Widget _buildCompactReelsCard() {
-    return ShortVideoEntryCarousel(
-      onReelsTap: _openReels,
-      onShortsTap: _openTikTokStyleShorts,
     );
   }
 }
@@ -776,9 +699,12 @@ class _HomeAdBanner extends StatefulWidget {
 
 class _HomeAdBannerState extends State<_HomeAdBanner> {
   BannerAd? _banner;
+
   bool _loading = false;
   bool _failed = false;
+
   int _attempts = 0;
+
   Timer? _retryTimer;
 
   @override
@@ -854,6 +780,7 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
     if (_attempts >= 3) return;
 
     _attempts++;
+
     _retryTimer?.cancel();
 
     _retryTimer = Timer(
@@ -876,23 +803,36 @@ class _HomeAdBannerState extends State<_HomeAdBanner> {
     final banner = _banner;
 
     if (banner == null) {
-      return Container(
-        height: 52,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: const Color(0xFF10141E),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: const Color(0x22FFFFFF),
-          ),
+      return Sa7biGlassSurface(
+        radius: 14,
+        padding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 8,
         ),
-        child: Text(
-          _failed
-              ? 'الإعلانات غير متاحة حاليًا'
-              : 'مساحة إعلانية',
-          style: const TextStyle(
-            color: Colors.white38,
-            fontSize: 10,
+        borderColor: Sa7biTheme.border,
+        child: SizedBox(
+          height: 34,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _failed
+                    ? Icons.info_outline_rounded
+                    : Icons.campaign_rounded,
+                color: Sa7biTheme.textMuted,
+                size: 15,
+              ),
+              const SizedBox(width: 7),
+              Text(
+                _failed
+                    ? 'الإعلانات غير متاحة حاليًا'
+                    : 'مساحة إعلانية',
+                style: const TextStyle(
+                  color: Sa7biTheme.textMuted,
+                  fontSize: 10,
+                ),
+              ),
+            ],
           ),
         ),
       );
