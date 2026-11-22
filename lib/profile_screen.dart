@@ -8,6 +8,7 @@ import 'app_diagnostics_screen.dart';
 import 'chat_screen.dart';
 import 'config/service_keys.dart';
 import 'monetization_config.dart';
+import 'owner_profile_screen.dart';
 import 'reminder_settings_screen.dart';
 import 'service_config.dart';
 import 'services/chat_history_service.dart';
@@ -487,6 +488,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onTap: _openSettings,
       ),
       _ProfileAction(
+        icon: Icons.workspace_premium_rounded,
+        title: 'المؤسس والمطوّر',
+        subtitle: 'صفحة مؤسس مشروع صاحبي AI',
+        onTap: _openOwnerProfile,
+      ),
+      _ProfileAction(
         icon: Icons.fact_check_outlined,
         title: 'تشخيص التطبيق',
         subtitle: 'فحص الشبكة والخدمات',
@@ -582,6 +589,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => const SettingsScreen(),
+      ),
+    );
+  }
+
+  void _openOwnerProfile() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const OwnerProfileScreen(),
       ),
     );
   }
@@ -817,7 +832,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 crossAxisCount: 2,
                                 crossAxisSpacing: 8,
                                 mainAxisSpacing: 8,
-                                childAspectRatio: 2.0,
+                                childAspectRatio: 2.2,
                               ),
                               itemBuilder: (context, index) {
                                 return _buildActionTile(actions[index]);
