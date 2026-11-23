@@ -16,8 +16,6 @@ void main() {
 
   testWidgets('Sa7bi AI main navigation and HERO smoke test',
       (tester) async {
-    // اختبار التنقل لا يحتاج إلى تشغيل WebView ثلاثي الأبعاد.
-    // نحتفظ بعنصر HERO نفسه داخل شجرة الواجهة.
     Sa7biHero3D.debugDisableWebViewForTests = true;
 
     addTearDown(() {
@@ -27,23 +25,18 @@ void main() {
     await tester.pumpWidget(const sa7bi.Sa7biAiApp());
     await tester.pump(const Duration(seconds: 2));
 
-    // فحص الهيدر وبوابة خالسانة وشخصية HERO الواحدة.
+    // التأكد من وجود الهيدر وخالسانة وشخصية HERO واحدة.
     expect(find.byType(AppHeader), findsOneWidget);
     expect(find.byType(KhalasanaPortal), findsOneWidget);
     expect(find.byType(Sa7biHero3D), findsOneWidget);
 
-    // فحص Semantics مباشرة.
-    final heroPlaceholder = find.descendant(
+    // التحقق من واجهة HERO الفعلية في وضع الاختبار.
+    final heroIcon = find.descendant(
       of: find.byType(Sa7biHero3D),
-      matching: find.byWidgetPredicate(
-        (widget) =>
-            widget is Semantics &&
-            widget.properties.label == 'HERO 3D test placeholder',
-        description: 'HERO 3D test placeholder Semantics widget',
-      ),
+      matching: find.byIcon(Icons.smart_toy_rounded),
     );
 
-    expect(heroPlaceholder, findsOneWidget);
+    expect(heroIcon, findsOneWidget);
 
     final pageViewFinder = find.byWidgetPredicate(
       (widget) =>
@@ -75,7 +68,7 @@ void main() {
     expect(find.byType(Sa7biHero3D), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // التحقق من السحب الأفقي بين الصفحات.
+    // اختبار السحب الأفقي بين الصفحات.
     final pageView = pageViewFinder.first;
     final topLeft = tester.getTopLeft(pageView);
     final size = tester.getSize(pageView);
@@ -89,7 +82,7 @@ void main() {
       const Duration(milliseconds: 350),
     );
 
-    // HERO لديه حركة تنفس مستمرة؛ لذلك لا نستخدم pumpAndSettle.
+    // لا نستخدم pumpAndSettle بسبب حركة التنفس المستمرة لـ HERO.
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
 
@@ -129,7 +122,6 @@ Future<void> _tapMainTab(
 
   await tester.tap(hitTarget);
 
-  // انتقال التبويب مدته 260ms، بينما HERO يستمر في الحركة.
   await tester.pump(const Duration(milliseconds: 350));
   await tester.pump();
 
