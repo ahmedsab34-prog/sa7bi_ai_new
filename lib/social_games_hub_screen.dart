@@ -71,11 +71,25 @@ class _SocialGamesHubScreenState extends State<SocialGamesHubScreen> {
       await _service.initialize();
 
       if (_service.isSignedIn) {
-        await _service.getCurrentUser();
-        await _loadRooms();
+        try {
+          await _service.getCurrentUser();
+          await _loadRooms();
+        } on SocialGamesException catch (error) {
+          // لا نمسح جلسة اللاعب بسبب انقطاع الإنترنت أو خطأ مؤقت.
+          // نمسحها فقط إذا أكد الخادم أن رمز الدخول انتهى أو غير صالح.
+          if (error.code == 'SESSION_EXPIRED' ||
+              error.code == 'AUTH_REQUIRED') {
+            await _service.logout();
+          } else {
+            _error = error.message;
+          }
+        }
       }
+    } on SocialGamesException catch (error) {
+      _error = error.message;
     } catch (_) {
-      await _service.logout();
+      _error =
+          'تعذر الاتصال بخدمة الألعاب الآن. احتفظنا بجلسة حسابك؛ تحقق من الإنترنت ثم اضغط تحديث.';
     }
 
     if (!mounted) return;
