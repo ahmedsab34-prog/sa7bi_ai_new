@@ -133,14 +133,6 @@ jobs:
 
           "${SDKMANAGER}" --install "ndk;28.2.13676358" "cmake;3.22.1"
 
-      - name: Build debug APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          flutter build apk --debug --no-pub
-          test -s build/app/outputs/flutter-apk/app-debug.apk
-          echo "Debug APK build passed."
-
       - name: Enable KVM permissions
         shell: bash
         run: |
@@ -164,7 +156,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2.35.0
         with:
           api-level: 34
-          target: google_apis_playstore
+          target: google_apis
           arch: x86_64
           profile: pixel_2
           cores: 2
