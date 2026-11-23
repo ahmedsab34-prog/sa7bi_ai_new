@@ -49,6 +49,7 @@ class HomeScreenState extends State<HomeScreen>
       Duration(seconds: 25);
 
   Timer? _autoRefreshTimer;
+  final ScrollController _scrollController = ScrollController();
 
   List<NewsItem> _news = <NewsItem>[];
 
@@ -105,6 +106,7 @@ class HomeScreenState extends State<HomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _autoRefreshTimer?.cancel();
+    _scrollController.dispose();
 
     super.dispose();
   }
@@ -117,8 +119,29 @@ class HomeScreenState extends State<HomeScreen>
     await _loadNews();
   }
 
-  Future<void> refreshNews() {
-    return _loadNews(pullToRefresh: true);
+  Future<void> refreshNews() async {
+    if (_scrollController.hasClients) {
+      await _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
+    await _loadNews(pullToRefresh: true);
+  }
+
+  bool _isFreshNews(String publishedAt) {
+    final parsed =
+        network_news.AiNewsService.parseNewsDate(publishedAt);
+
+    if (parsed == null) return false;
+
+    final now = DateTime.now().toUtc();
+    final age = now.difference(parsed.toUtc());
+
+    return !age.isNegative &&
+        age <= const Duration(days: 7);
   }
 
   bool _isSafeHttpUrl(String value) {
@@ -152,8 +175,11 @@ class HomeScreenState extends State<HomeScreen>
 
         final title = raw['title']?.toString().trim() ?? '';
         final link = raw['link']?.toString().trim() ?? '';
+        final publishedAt = raw['pubDate']?.toString() ?? '';
 
-        if (title.isEmpty || !_isSafeHttpUrl(link)) {
+        if (title.isEmpty ||
+            !_isSafeHttpUrl(link) ||
+            !_isFreshNews(publishedAt)) {
           continue;
         }
 
@@ -164,7 +190,7 @@ class HomeScreenState extends State<HomeScreen>
             link: link,
             imageUrl: raw['imageUrl']?.toString() ?? '',
             description: raw['description']?.toString() ?? '',
-            pubDate: raw['pubDate']?.toString() ?? '',
+            pubDate: publishedAt,
           ),
         );
       }
@@ -251,7 +277,8 @@ class HomeScreenState extends State<HomeScreen>
           .where(
             (item) =>
                 item.title.trim().isNotEmpty &&
-                _isSafeHttpUrl(item.link),
+                _isSafeHttpUrl(item.link) &&
+                _isFreshNews(item.pubDate),
           )
           .map(
             (item) => NewsItem(
@@ -550,58 +577,6 @@ class HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildWelcomeCard() {
-    return Sa7biGlassSurface(
-      radius: 21,
-      showGlow: true,
-      borderColor: Sa7biTheme.borderGold,
-      gradient: Sa7biTheme.premiumGradient,
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Container(
-            width: 43,
-            height: 43,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: Sa7biTheme.goldGradient,
-            ),
-            child: const Icon(
-              Icons.auto_awesome_rounded,
-              color: Sa7biTheme.navyDeep,
-              size: 23,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'أهلاً بيك في صاحبي AI',
-                  style: TextStyle(
-                    color: Sa7biTheme.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'ذكاء اصطناعي، أخبار، وفيديوهات في مكان واحد.',
-                  style: TextStyle(
-                    color: Sa7biTheme.textSecondary,
-                    fontSize: 10,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -622,6 +597,7 @@ class HomeScreenState extends State<HomeScreen>
               backgroundColor: Sa7biTheme.surface,
               onRefresh: refreshNews,
               child: ListView(
+                controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(
                   12,
@@ -630,8 +606,7 @@ class HomeScreenState extends State<HomeScreen>
                   118,
                 ),
                 children: [
-                  _buildWelcomeCard(),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
 
                   // الشخصية الوحيدة تظهر في البوابة العائمة العامة.
                   const Sa7biHeroLitePanel(),
