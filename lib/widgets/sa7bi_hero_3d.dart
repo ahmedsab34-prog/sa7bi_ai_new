@@ -404,7 +404,7 @@ class _Hero25DPainter extends CustomPainter {
       const Offset(180, 390),
       13,
       _gradient(
-        const Rect.fromCircle(center: Offset(180, 390), radius: 13),
+        Rect.fromCircle(center: Offset(180, 390), radius: 13),
         [Colors.white, cyan, blue],
       ),
     );
