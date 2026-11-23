@@ -27,7 +27,7 @@ jobs:
   android-ui-smoke:
     name: Build app and run Android emulator smoke tests
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 30
 
     env:
       EXPECTED_BRANCH: fix/build-692-network-client-lifecycle
@@ -91,7 +91,6 @@ jobs:
           grep -q 'google()' "${FLUTTER_SETTINGS}"
           grep -q 'mavenCentral()' "${FLUTTER_SETTINGS}"
           echo "Flutter included-build repositories are configured."
-          sed -n '1,80p' "${FLUTTER_SETTINGS}"
 
       - name: Resolve Flutter dependencies
         shell: bash
@@ -158,11 +157,11 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2.35.0
         with:
           api-level: 34
-          target: default
+          target: google_apis_playstore
           arch: x86_64
           profile: pixel_2
           cores: 2
-          ram-size: 4096M
+          ram-size: 3072M
           heap-size: 512M
           emulator-boot-timeout: 900
           emulator-port: 5554
@@ -179,7 +178,35 @@ jobs:
             -camera-back none
             -camera-front none
           script: |
-            bash -c 'set -uo pipefail; mkdir -p build/android-ui-smoke; adb devices -l > build/android-ui-smoke/adb-before.txt 2>&1; adb -s emulator-5554 shell getprop sys.boot_completed | grep -q "^1$" || exit 1; adb -s emulator-5554 shell svc power stayon true; free -h > build/android-ui-smoke/host-memory-before.txt 2>&1; adb -s emulator-5554 logcat -b all -v threadtime > build/android-ui-smoke/logcat-live.txt 2>&1 & LOGCAT_PID=$!; (while true; do echo "===== $(date -u +%FT%TZ) ====="; adb -s emulator-5554 get-state 2>&1 || { adb devices -l; free -h; ps -eo pid,ppid,%mem,%cpu,rss,stat,etime,args | grep -E "[e]mulator|[q]emu|[a]db"; break; }; sleep 5; done) > build/android-ui-smoke/adb-watch.txt 2>&1 & WATCH_PID=$!; flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded 2>&1 | tee build/android-ui-smoke/flutter-test.txt; TEST_EXIT=${PIPESTATUS[0]}; kill "$WATCH_PID" "$LOGCAT_PID" 2>/dev/null || true; wait "$WATCH_PID" "$LOGCAT_PID" 2>/dev/null || true; echo "$TEST_EXIT" > build/android-ui-smoke/test-exit-code.txt; adb devices -l > build/android-ui-smoke/adb-after.txt 2>&1 || true; free -h > build/android-ui-smoke/host-memory-after.txt 2>&1 || true; ps -eo pid,ppid,%mem,%cpu,rss,stat,etime,args | grep -E "[e]mulator|[q]emu|[a]db" > build/android-ui-smoke/emulator-processes-after.txt 2>&1 || true; adb -s emulator-5554 logcat -d -b all -v threadtime > build/android-ui-smoke/logcat-after.txt 2>&1 || true; exit "$TEST_EXIT"'
+            bash -c 'set -uo pipefail
+            mkdir -p build/android-ui-smoke
+            adb devices -l > build/android-ui-smoke/adb-before.txt 2>&1
+            adb -s emulator-5554 shell getprop sys.boot_completed | grep -q "^1$" || exit 1
+            adb -s emulator-5554 shell svc power stayon true
+            free -h > build/android-ui-smoke/host-memory-before.txt 2>&1
+            adb -s emulator-5554 logcat -b all -v threadtime > build/android-ui-smoke/logcat-live.txt 2>&1 &
+            LOGCAT_PID=$!
+            (while true; do
+              echo "===== $(date -u +%FT%TZ) ====="
+              adb -s emulator-5554 get-state 2>&1 || {
+                adb devices -l
+                free -h
+                ps -eo pid,ppid,%mem,%cpu,rss,stat,etime,args | grep -E "[e]mulator|[q]emu|[a]db"
+                break
+              }
+              sleep 5
+            done) > build/android-ui-smoke/adb-watch.txt 2>&1 &
+            WATCH_PID=$!
+            timeout --signal=TERM --kill-after=30s 8m flutter test integration_test/sa7bi_app_smoke_test.dart --no-pub -d emulator-5554 --reporter expanded 2>&1 | tee build/android-ui-smoke/flutter-test.txt
+            TEST_EXIT=${PIPESTATUS[0]}
+            kill "$WATCH_PID" "$LOGCAT_PID" 2>/dev/null || true
+            wait "$WATCH_PID" "$LOGCAT_PID" 2>/dev/null || true
+            echo "$TEST_EXIT" > build/android-ui-smoke/test-exit-code.txt
+            adb devices -l > build/android-ui-smoke/adb-after.txt 2>&1 || true
+            free -h > build/android-ui-smoke/host-memory-after.txt 2>&1 || true
+            ps -eo pid,ppid,%mem,%cpu,rss,stat,etime,args | grep -E "[e]mulator|[q]emu|[a]db" > build/android-ui-smoke/emulator-processes-after.txt 2>&1 || true
+            adb -s emulator-5554 logcat -d -b all -v threadtime > build/android-ui-smoke/logcat-after.txt 2>&1 || true
+            exit "$TEST_EXIT"'
 
       - name: Upload Android smoke diagnostics
         if: always()
