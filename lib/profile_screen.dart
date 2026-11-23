@@ -1,3 +1,4 @@
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -5,13 +6,10 @@ import 'package:share_plus/share_plus.dart';
 
 import 'ai_service.dart';
 import 'app_diagnostics_screen.dart';
-import 'chat_screen.dart';
-import 'config/service_keys.dart';
 import 'monetization_config.dart';
 import 'owner_profile_screen.dart';
 import 'reminder_settings_screen.dart';
 import 'service_config.dart';
-import 'services/chat_history_service.dart';
 import 'services/profile_service.dart';
 import 'services/reminder_service.dart';
 import 'settings_screen.dart';
@@ -40,7 +38,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final ProfileService _profileService = ProfileService.instance;
   final ReminderService _reminderService = ReminderService.instance;
-  final ChatHistoryService _chatHistory = ChatHistoryService.instance;
 
   Uint8List? _photo;
   String _displayName = ProfileService.defaultProfileName;
@@ -462,24 +459,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<_ProfileAction> _buildActions() {
     return [
       _ProfileAction(
-        icon: Icons.history_rounded,
-        title: 'المحادثات',
-        subtitle: 'السجل المحفوظ',
-        onTap: _openChatHistory,
-      ),
-      _ProfileAction(
         icon: Icons.notifications_active_outlined,
         title: 'التذكيرات',
         subtitle: _reminderService.items.isEmpty
             ? 'الإشعارات والمواعيد'
             : '${_reminderService.items.length} تذكير محفوظ',
         onTap: _openReminders,
-      ),
-      _ProfileAction(
-        icon: Icons.headphones_rounded,
-        title: 'مركز الصوت',
-        subtitle: 'قرآن وراديو وبودكاست',
-        onTap: _openAudioCenter,
       ),
       _ProfileAction(
         icon: Icons.settings_rounded,
@@ -609,16 +594,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _openAudioCenter() {
-    final callback = widget.onAudio;
-    if (callback != null) {
-      callback();
-      return;
-    }
-
-    _showMessage('افتح مركز الصوت من زر الصوت في الهيدر.');
-  }
-
   Future<void> _shareApp() async {
     try {
       await Share.share(
@@ -628,169 +603,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (_) {
       _showMessage('تعذر فتح المشاركة حاليًا.');
     }
-  }
-
-  void _openChatHistory() {
-    final entries = <_ChatHistoryEntry>[
-      const _ChatHistoryEntry(
-        serviceKey: ServiceKeys.khalasana,
-        title: 'خلصانة AI',
-        serviceContext: null,
-        icon: Icons.auto_awesome_rounded,
-      ),
-      const _ChatHistoryEntry(
-        serviceKey: ServiceKeys.general,
-        title: 'الشات العام',
-        serviceContext: null,
-        icon: Icons.chat_bubble_rounded,
-      ),
-      ...sa7biServices
-          .where((service) => service.serviceKey != ServiceKeys.venting)
-          .map(
-            (service) => _ChatHistoryEntry(
-              serviceKey: service.serviceKey,
-              title: service.title,
-              serviceContext: service.aiRole,
-              icon: service.icon,
-            ),
-          ),
-    ];
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: Container(
-            height: MediaQuery.of(sheetContext).size.height * 0.76,
-            decoration: const BoxDecoration(
-              color: Sa7biTheme.background,
-              borderRadius: BorderRadius.vertical(
-                top: Radius.circular(25),
-              ),
-              border: Border(
-                top: BorderSide(color: Sa7biTheme.border),
-                left: BorderSide(color: Sa7biTheme.border),
-                right: BorderSide(color: Sa7biTheme.border),
-              ),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Column(
-                children: [
-                  const SizedBox(height: 12),
-                  Container(
-                    width: 42,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Sa7biTheme.textSecondary
-                          .withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'المحادثات المحفوظة',
-                    style: TextStyle(
-                      color: Sa7biTheme.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 18),
-                    child: Text(
-                      'اختر المحادثة لفتح سجلها المحفوظ. الفضفضة السرية تظل داخل قسمها المحمي.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Sa7biTheme.textSecondary,
-                        fontSize: 10,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 18),
-                      itemCount: entries.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 6),
-                      itemBuilder: (_, index) {
-                        final entry = entries[index];
-
-                        return FutureBuilder<int>(
-                          future: _chatHistory.messageCount(entry.serviceKey),
-                          builder: (context, snapshot) {
-                            final count = snapshot.data;
-                            final subtitle = snapshot.connectionState !=
-                                    ConnectionState.done
-                                ? 'جاري قراءة السجل…'
-                                : (count == null || count == 0
-                                    ? 'لا توجد رسائل محفوظة بعد'
-                                    : '$count رسالة محفوظة');
-
-                            return Material(
-                              color: Sa7biTheme.surface,
-                              borderRadius: BorderRadius.circular(13),
-                              child: ListTile(
-                                leading: Icon(
-                                  entry.icon,
-                                  color: Sa7biTheme.cyan,
-                                ),
-                                title: Text(
-                                  entry.title,
-                                  style: const TextStyle(
-                                    color: Sa7biTheme.textPrimary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  subtitle,
-                                  style: const TextStyle(
-                                    color: Sa7biTheme.textSecondary,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_left_rounded,
-                                  color: Sa7biTheme.textSecondary,
-                                ),
-                                onTap: () {
-                                  Navigator.of(sheetContext).pop();
-
-                                  Navigator.of(this.context).push<void>(
-                                    MaterialPageRoute<void>(
-                                      builder: (chatContext) => ChatScreen(
-                                        serviceKey: entry.serviceKey,
-                                        serviceTitle: entry.title,
-                                        serviceContext: entry.serviceContext,
-                                        onProfileTap: () {
-                                          Navigator.of(chatContext).maybePop();
-                                        },
-                                        onAudioTap: _openAudioCenter,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 
   @override
@@ -862,18 +674,4 @@ class _ProfileAction {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-}
-
-class _ChatHistoryEntry {
-  const _ChatHistoryEntry({
-    required this.serviceKey,
-    required this.title,
-    required this.serviceContext,
-    required this.icon,
-  });
-
-  final String serviceKey;
-  final String title;
-  final String? serviceContext;
-  final IconData icon;
 }
