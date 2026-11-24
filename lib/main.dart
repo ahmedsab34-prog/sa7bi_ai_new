@@ -98,6 +98,7 @@ class Sa7biAiApp extends StatelessWidget {
 
             final hidePortal = route.isPopup ||
                 route.routeName == '/khalasana' ||
+                route.routeName == '/sa7bi-hero-3d' ||
                 keyboardIsOpen;
 
             final bottomOffset =
