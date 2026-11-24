@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -135,7 +136,10 @@ class HomeScreenState extends State<HomeScreen>
     final parsed =
         network_news.AiNewsService.parseNewsDate(publishedAt);
 
-    if (parsed == null) return false;
+    // بعض مصادر RSS لا ترسل تاريخ نشر صالحًا. يحتفظ Worker بهذه
+    // الأخبار بعد الأخبار المؤرخة، لذلك لا نحذفها كلها من الصفحة الرئيسية.
+    // الأخبار المؤرخة تظل خاضعة لحد السبعة أيام ولرفض التاريخ المستقبلي.
+    if (parsed == null) return true;
 
     final now = DateTime.now().toUtc();
     final age = now.difference(parsed.toUtc());
