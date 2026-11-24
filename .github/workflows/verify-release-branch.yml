@@ -1,4 +1,3 @@
-
 name: Sa7bi AI - Single Source Verified Release
 
 run-name: Sa7bi AI Release - ${{ github.sha }}
@@ -384,7 +383,9 @@ jobs:
           {
             echo "Repository=${GITHUB_REPOSITORY}"
             echo "Branch=${EXPECTED_BRANCH}"
+            echo "TriggerCommit=${GITHUB_SHA}"
             echo "Commit=${SOURCE_SHA}"
+            echo "SourceCommit=${SOURCE_SHA}"
             echo "RunID=${GITHUB_RUN_ID}"
             echo "RunNumber=${GITHUB_RUN_NUMBER}"
             echo "AppVersion=${ACTUAL_VERSION}"
@@ -393,6 +394,7 @@ jobs:
             echo "APKSize=${APK_BYTES}"
             echo "APK_SHA256=${APK_SHA256}"
             echo "SigningCertificateSHA256=${ACTUAL_CERT_SHA256}"
+            echo "CanonicalFilename=${RELEASE_APK_NAME}"
           } > release-artifact/build-provenance.txt
 
           cp flutter-analyze-report.txt release-artifact/
