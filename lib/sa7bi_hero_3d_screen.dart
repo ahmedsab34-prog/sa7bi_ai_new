@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import 'services/hero_face_runtime.dart';
@@ -36,7 +35,7 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
         backgroundColor: Sa7biTheme.background,
         appBar: const Sa7biSubpageAppBar(
           title: 'صاحبي HERO',
-          subtitle: 'الشخصية الرسمية — عرض 2.5D',
+          subtitle: 'شخصية صاحبي الأصلية — مجسم 3D واحد',
         ),
         body: SafeArea(
           top: false,
@@ -140,17 +139,37 @@ class _Sa7biHero3DScreenState extends State<Sa7biHero3DScreen> {
                   borderRadius: BorderRadius.circular(15),
                   border: Border.all(color: Sa7biTheme.border),
                 ),
-                child: const Text(
-                  'هذا إصدار 2.5D مرسوم محليًا داخل Flutter. '
-                  'التعبيرات الحالية تغيّر رسم العينين والحاجبين والفم. '
-                  'حركة الفم مع الصوت تقريبية حسب الكلمات التي يرسلها TTS، '
-                  'وليست مزامنة فونيمية دقيقة.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Sa7biTheme.textSecondary,
-                    fontSize: 10,
-                    height: 1.65,
-                  ),
+                child: ValueListenableBuilder<Set<String>>(
+                  valueListenable:
+                      HeroFaceRuntime.instance.availableAnimations,
+                  builder: (context, animations, _) {
+                    const bodyClips = <String>{
+                      'Hero_Idle',
+                      'Hero_Welcome',
+                      'Hero_Power',
+                    };
+                    final bodyReady = bodyClips.every(animations.contains);
+                    final faceReady =
+                        HeroFaceRuntime.requiredFaceAnimationNames.every(
+                      animations.contains,
+                    );
+
+                    final status = faceReady
+                        ? 'مجسم HERO وحركات الوجه جاهزة.'
+                        : bodyReady
+                            ? 'المجسم جاهز، ويجري التحقق من حركات الوجه.'
+                            : 'جارٍ تحميل مجسم HERO ثلاثي الأبعاد.';
+
+                    return Text(
+                      '$status\nحركة الفم تختار شكلًا تقريبيًا لكل كلمة يرسلها محرك الصوت؛ وليست مزامنة فونيمية دقيقة.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Sa7biTheme.textSecondary,
+                        fontSize: 10,
+                        height: 1.65,
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -275,7 +294,7 @@ class _FaceExpressionPanel extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           const Text(
-            'التعبيرات مرسومة مباشرة داخل Flutter، ولا تحتاج إلى Face Rig أو GLB.',
+            'التعبيرات تُرسل إلى عارض GLB، ولا تظهر إلا إذا كانت حركتها موجودة في ملف الشخصية.',
             style: TextStyle(
               color: Sa7biTheme.textSecondary,
               fontSize: 10,
