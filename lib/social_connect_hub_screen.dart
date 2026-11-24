@@ -40,6 +40,7 @@ class SocialConnectHubScreen extends StatelessWidget {
   void _openHero(BuildContext context) {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
+        settings: const RouteSettings(name: '/sa7bi-hero-3d'),
         builder: (_) => const Sa7biHero3DScreen(),
       ),
     );
