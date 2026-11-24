@@ -8,20 +8,18 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'services/audio_volume_ducker.dart';
+
 /// مشغّل الصوت المركزي لتطبيق صاحبي AI.
-///
-/// كل المصادر الصوتية تمر من هنا حتى تظل جلسة الصوت
-/// واحدة أثناء التنقل بين أقسام التطبيق أو تصغيره.
-///
-/// مهم:
-/// لا ننتظر Future الخاصة بـ _player.play() داخل
-/// طابور العمليات؛ لأن Future التشغيل قد تظل معلقة
-/// حتى نهاية المقطع أو إيقافه مؤقتًا.
 class Sa7biAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer(
     handleInterruptions: false,
   );
+
+  /// يحفظ مستوى الصوت الذي اختاره المستخدم،
+  /// ويحسب المستوى الفعلي أثناء المقاطعات.
+  final AudioVolumeDucker _volumeDucker = AudioVolumeDucker();
 
   StreamSubscription<PlayerState>? _playerStateSubscription;
   StreamSubscription<Duration>? _positionSubscription;
@@ -40,9 +38,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   bool _interruptionActive = false;
   bool _resumeAfterInterruption = false;
-  bool _wasDucked = false;
 
-  static const String _snapshotKey = 'sa7bi_audio_playback_snapshot_v1';
+  static const String _snapshotKey =
+      'sa7bi_audio_playback_snapshot_v1';
+
   Timer? _snapshotTimer;
   bool _restoringSnapshot = false;
 
@@ -244,7 +243,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
   // PLAYBACK PERSISTENCE
   // ============================================================
 
-  void _schedulePlaybackSnapshotSave({bool immediate = false}) {
+  void _schedulePlaybackSnapshotSave({
+    bool immediate = false,
+  }) {
     if (_disposed || _restoringSnapshot) return;
 
     if (immediate) {
@@ -254,7 +255,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
       return;
     }
 
-    // Position updates are frequent; throttle disk writes to one per 3 seconds.
     if (_snapshotTimer?.isActive == true) return;
 
     _snapshotTimer = Timer(
@@ -279,7 +279,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
       }
 
       final currentIndex = _player.currentIndex ?? 0;
-      final safeIndex = currentIndex.clamp(0, items.length - 1).toInt();
+      final safeIndex =
+          currentIndex.clamp(0, items.length - 1).toInt();
+
       final positionMs = _player.position.inMilliseconds;
 
       final serializedItems = items.map((item) {
@@ -312,33 +314,39 @@ class Sa7biAudioHandler extends BaseAudioHandler
     if (_disposed) return;
 
     _restoringSnapshot = true;
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final encoded = prefs.getString(_snapshotKey);
+
       if (encoded == null || encoded.trim().isEmpty) return;
 
       final decoded = jsonDecode(encoded);
+
       if (decoded is! Map) {
         await prefs.remove(_snapshotKey);
         return;
       }
 
       final rawItems = decoded['items'];
+
       if (rawItems is! List || rawItems.isEmpty) {
         await prefs.remove(_snapshotKey);
         return;
       }
 
       final items = <MediaItem>[];
+
       for (final raw in rawItems) {
         if (raw is! Map) continue;
 
         final id = raw['id']?.toString().trim() ?? '';
         final title = raw['title']?.toString().trim() ?? '';
+
         if (id.isEmpty || title.isEmpty) continue;
 
-        // Ignore local files removed since the last app session.
-        if (!id.startsWith('https://') && !id.startsWith('http://')) {
+        if (!id.startsWith('https://') &&
+            !id.startsWith('http://')) {
           try {
             if (!await File(id).exists()) continue;
           } catch (_) {
@@ -347,7 +355,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
         }
 
         final rawDuration = raw['durationMs'];
-        final artValue = raw['artUri']?.toString().trim() ?? '';
+        final artValue =
+            raw['artUri']?.toString().trim() ?? '';
 
         items.add(
           MediaItem(
@@ -358,7 +367,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
             duration: rawDuration is num && rawDuration >= 0
                 ? Duration(milliseconds: rawDuration.toInt())
                 : null,
-            artUri: artValue.isEmpty ? null : Uri.tryParse(artValue),
+            artUri:
+                artValue.isEmpty ? null : Uri.tryParse(artValue),
           ),
         );
       }
@@ -369,11 +379,19 @@ class Sa7biAudioHandler extends BaseAudioHandler
       }
 
       final rawIndex = decoded['index'];
-      final requestedIndex = rawIndex is num ? rawIndex.toInt() : 0;
-      final safeIndex = requestedIndex.clamp(0, items.length - 1).toInt();
+      final requestedIndex =
+          rawIndex is num ? rawIndex.toInt() : 0;
+
+      final safeIndex =
+          requestedIndex.clamp(0, items.length - 1).toInt();
+
       final rawPosition = decoded['positionMs'];
+
       final positionMs = rawPosition is num
-          ? rawPosition.toInt().clamp(0, 24 * 60 * 60 * 1000)
+          ? rawPosition.toInt().clamp(
+                0,
+                24 * 60 * 60 * 1000,
+              )
           : 0;
 
       await _setQueueSource(
@@ -453,10 +471,21 @@ class Sa7biAudioHandler extends BaseAudioHandler
   }
 
   // ============================================================
+  // VOLUME MANAGEMENT
+  // ============================================================
+
+  Future<void> _applyEffectiveVolume() async {
+    if (_disposed) return;
+
+    await _player.setVolume(
+      _volumeDucker.effectiveVolume,
+    );
+  }
+
+  // ============================================================
   // NON-BLOCKING PLAY
   // ============================================================
 
-  /// يبدأ التشغيل دون حجز طابور العمليات حتى نهاية المقطع.
   void _startPlayback(String contextLabel) {
     if (_disposed || !_hasPlayableItem) {
       return;
@@ -492,91 +521,99 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   Future<void> _handleInterruption(
     AudioInterruptionEvent event,
-  ) async {
-    try {
-      if (_disposed) {
-        return;
-      }
+  ) {
+    // كل أحداث المقاطعة تدخل نفس طابور عمليات المشغّل،
+    // حتى لا تتعارض مع تغيير مستوى الصوت أو الإيقاف.
+    return _runExclusive<void>(() async {
+      try {
+        if (_disposed) {
+          return;
+        }
 
-      if (event.begin) {
-        _interruptionActive = true;
+        if (event.begin) {
+          _interruptionActive = true;
 
-        if (event.type == AudioInterruptionType.duck) {
+          if (event.type == AudioInterruptionType.duck) {
+            if (_player.playing) {
+              _resumeAfterInterruption = true;
+
+              _volumeDucker.beginDuck();
+              await _applyEffectiveVolume();
+            } else if (_microphoneCaptureActive &&
+                _resumeAfterMicrophone) {
+              _resumeAfterInterruption = true;
+            }
+
+            _broadcastState();
+            return;
+          }
+
+          // المقاطعة التي تتطلب إيقاف الصوت تنهي أي خفض سابق.
+          if (_volumeDucker.isDucked) {
+            _volumeDucker.endDuck();
+            await _applyEffectiveVolume();
+          }
+
+          _resumeAfterInterruption =
+              _player.playing ||
+              (_microphoneCaptureActive &&
+                  _resumeAfterMicrophone) ||
+              _resumeAfterInterruption;
+
           if (_player.playing) {
-            _resumeAfterInterruption = true;
-            _wasDucked = true;
-
-            await _player.setVolume(0.35);
-          } else if (_microphoneCaptureActive &&
-              _resumeAfterMicrophone) {
-            _resumeAfterInterruption = true;
+            await _player.pause();
           }
 
           _broadcastState();
           return;
         }
 
-        _resumeAfterInterruption =
-            _player.playing ||
-            (_microphoneCaptureActive &&
-                _resumeAfterMicrophone) ||
-            _resumeAfterInterruption;
+        // انتهت المقاطعة الخارجية.
+        _interruptionActive = false;
 
-        _wasDucked = false;
-
-        if (_player.playing) {
-          await _player.pause();
+        // استعادة مستوى الصوت الذي اختاره المستخدم،
+        // وليس ضبطه على 1.0 بصورة إجبارية.
+        if (_volumeDucker.isDucked) {
+          _volumeDucker.endDuck();
+          await _applyEffectiveVolume();
         }
 
+        final shouldResume =
+            _resumeAfterInterruption ||
+            (_microphoneCaptureActive &&
+                _resumeAfterMicrophone);
+
+        _resumeAfterInterruption = false;
+
+        if (_microphoneCaptureActive) {
+          _resumeAfterMicrophone = shouldResume;
+          _broadcastState();
+          return;
+        }
+
+        if (shouldResume &&
+            _hasPlayableItem &&
+            !_player.playing &&
+            _player.processingState !=
+                ProcessingState.completed) {
+          _startPlayback(
+            'Resume after audio interruption',
+          );
+        }
+
+        _resumeAfterMicrophone = false;
         _broadcastState();
-        return;
+      } catch (error, stackTrace) {
+        debugPrint('Audio interruption error: $error');
+        debugPrintStack(stackTrace: stackTrace);
       }
-
-      // انتهت المقاطعة الخارجية.
-      _interruptionActive = false;
-
-      if (_wasDucked) {
-        _wasDucked = false;
-        await _player.setVolume(1.0);
-      }
-
-      final shouldResume =
-          _resumeAfterInterruption ||
-          (_microphoneCaptureActive &&
-              _resumeAfterMicrophone);
-
-      _resumeAfterInterruption = false;
-
-      // لو الميكروفون لا يزال يعمل، نؤجل الاستئناف
-      // إلى أن تنتهي جلسة التقاط الصوت أيضًا.
-      if (_microphoneCaptureActive) {
-        _resumeAfterMicrophone = shouldResume;
-        _broadcastState();
-        return;
-      }
-
-      if (shouldResume &&
-          _hasPlayableItem &&
-          !_player.playing &&
-          _player.processingState != ProcessingState.completed) {
-        _startPlayback('Resume after audio interruption');
-      }
-
-      _resumeAfterMicrophone = false;
-      _broadcastState();
-    } catch (error, stackTrace) {
-      debugPrint('Audio interruption error: $error');
-      debugPrintStack(stackTrace: stackTrace);
-    }
+    });
   }
 
   // ============================================================
   // MICROPHONE / VOICE INPUT
   // ============================================================
 
-  /// يناديها التعرف على الكلام قبل فتح الميكروفون.
-  ///
-  /// لا نستأنف صوتًا كان متوقفًا يدويًا قبل الميكروفون.
   Future<void> beginMicrophoneCapture() async {
     await _ensureInitialized();
 
@@ -600,7 +637,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
     });
   }
 
-  /// يناديها التعرف على الكلام عند إيقاف الميكروفون.
   Future<void> endMicrophoneCapture() async {
     if (_disposed) {
       return;
@@ -630,8 +666,11 @@ class Sa7biAudioHandler extends BaseAudioHandler
       if (shouldResume &&
           _hasPlayableItem &&
           !_player.playing &&
-          _player.processingState != ProcessingState.completed) {
-        _startPlayback('Resume after microphone capture');
+          _player.processingState !=
+              ProcessingState.completed) {
+        _startPlayback(
+          'Resume after microphone capture',
+        );
       }
 
       _broadcastState();
@@ -676,10 +715,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
     final safeIndex =
         initialIndex.clamp(0, items.length - 1).toInt();
 
-    // احتفظ بالقائمة الحالية ومكان التشغيل قبل استبدال المصدر.
-    // إذا فشل تحميل المصدر الجديد سنحاول إعادة المصدر السابق.
     final previousItems =
         List<MediaItem>.unmodifiable(queue.value);
+
     final previousIndex = _player.currentIndex ?? 0;
     final previousPosition = _player.position;
     final wasPlaying = _player.playing;
@@ -688,12 +726,12 @@ class Sa7biAudioHandler extends BaseAudioHandler
         List<MediaItem>.unmodifiable(items);
 
     final selectedDuration = nextItems[safeIndex].duration;
+
     final safePosition = selectedDuration != null &&
             initialPosition > selectedDuration
         ? selectedDuration
         : initialPosition;
 
-    // جهّز كائنات المصدر قبل لمس المشغّل أو بيانات القائمة.
     final nextSource = ConcatenatingAudioSource(
       children: nextItems
           .map(_audioSourceForItem)
@@ -702,8 +740,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
     );
 
     try {
-      // setAudioSource يستبدل قائمة المصدر مباشرة.
-      // لا نستدعي stop() قبله حتى لا نوقف المصدر القديم مبكرًا.
       await _player.setAudioSource(
         nextSource,
         initialIndex: safeIndex,
@@ -714,9 +750,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
         return;
       }
 
-      // لا نعلن القائمة الجديدة إلا بعد قبول المصدر من المشغّل.
       queue.add(nextItems);
       mediaItem.add(nextItems[safeIndex]);
+
       _broadcastState();
       _schedulePlaybackSnapshotSave(immediate: true);
 
@@ -726,9 +762,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
     } catch (error, stackTrace) {
       debugPrint('Audio source switch failed: $error');
 
-      // إذا كان هناك مصدر سابق، استعده مع موضعه وحالة تشغيله.
-      // هذا لا يضمن انتقالًا بلا فجوة، لكنه يمنع ترك المشغّل
-      // بلا قائمة عند فشل المصدر الجديد متى نجحت عملية الاستعادة.
       if (!_disposed && previousItems.isNotEmpty) {
         try {
           final safePreviousIndex = previousIndex
@@ -751,11 +784,14 @@ class Sa7biAudioHandler extends BaseAudioHandler
           if (!_disposed) {
             queue.add(previousItems);
             mediaItem.add(previousItems[safePreviousIndex]);
+
             _broadcastState();
             _schedulePlaybackSnapshotSave(immediate: true);
 
             if (wasPlaying) {
-              _startPlayback('Resume previous source after switch failure');
+              _startPlayback(
+                'Resume previous source after switch failure',
+              );
             }
           }
         } catch (restoreError, restoreStackTrace) {
@@ -802,8 +838,8 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
         _resumeAfterInterruption = false;
 
-        // إعادة المقطع من البداية إذا انتهى.
-        if (_player.processingState == ProcessingState.completed) {
+        if (_player.processingState ==
+            ProcessingState.completed) {
           await _player.seek(Duration.zero);
         }
 
@@ -823,11 +859,11 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
     return _runExclusive<void>(() async {
       try {
-        // الضغط اليدوي على إيقاف مؤقت يلغي الاستئناف التلقائي.
         _resumeAfterMicrophone = false;
         _resumeAfterInterruption = false;
 
         await _player.pause();
+
         _broadcastState();
         _schedulePlaybackSnapshotSave(immediate: true);
       } catch (error, stackTrace) {
@@ -847,13 +883,13 @@ class Sa7biAudioHandler extends BaseAudioHandler
       try {
         _resumeAfterMicrophone = false;
         _resumeAfterInterruption = false;
-        _wasDucked = false;
 
-        await _player.setVolume(1.0);
+        // لا نغيّر مستوى صوت المستخدم إلى 1.0 عند الإيقاف.
         await _player.stop();
 
         _broadcastState();
         _schedulePlaybackSnapshotSave(immediate: true);
+
         await super.stop();
       } catch (error, stackTrace) {
         debugPrint('Audio stop failed: $error');
@@ -871,6 +907,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
     return _runExclusive<void>(() async {
       try {
         await _player.seek(position);
+
         _broadcastState();
         _schedulePlaybackSnapshotSave(immediate: true);
       } catch (error, stackTrace) {
@@ -1122,9 +1159,6 @@ class Sa7biAudioHandler extends BaseAudioHandler
     });
   }
 
-  /// يستبدل قائمة الصوت بالكامل في عملية واحدة ثم يبدأ من العنصر المحدد.
-  ///
-  /// بخلاف حذف كل عنصر منفصلًا، هذا يعيد بناء AudioSource مرة واحدة فقط.
   Future<void> replaceQueueAndPlay({
     required List<MediaItem> items,
     int initialIndex = 0,
@@ -1136,7 +1170,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
         .toList(growable: false);
 
     if (validItems.isEmpty) {
-      throw ArgumentError('Audio queue must contain at least one valid item');
+      throw ArgumentError(
+        'Audio queue must contain at least one valid item',
+      );
     }
 
     final safeIndex =
@@ -1177,8 +1213,10 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
       if (oldQueue.isEmpty) {
         await _player.stop();
+
         queue.add(const <MediaItem>[]);
         mediaItem.add(null);
+
         _broadcastState();
         _schedulePlaybackSnapshotSave(immediate: true);
         return;
@@ -1264,7 +1302,7 @@ class Sa7biAudioHandler extends BaseAudioHandler
   }
 
   Future<void> setSpeed(double speed) async {
-    if (speed <= 0) {
+    if (!speed.isFinite || speed <= 0) {
       return;
     }
 
@@ -1276,12 +1314,17 @@ class Sa7biAudioHandler extends BaseAudioHandler
     });
   }
 
+  /// يغيّر مستوى صوت المستخدم.
+  ///
+  /// إذا كانت المقاطعة نشطة، يتغير المستوى المحفوظ
+  /// ويظل الخفض المؤقت مطبقًا حتى انتهاء المقاطعة.
   Future<void> setVolume(double volume) async {
     await _ensureInitialized();
 
-    final safeVolume = volume.clamp(0.0, 1.0).toDouble();
-
     return _runExclusive<void>(() async {
+      final safeVolume =
+          _volumeDucker.setUserVolume(volume);
+
       await _player.setVolume(safeVolume);
       _broadcastState();
     });
@@ -1289,15 +1332,27 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
   Duration get position => _player.position;
   Duration? get duration => _player.duration;
+
   bool get isPlaying => _player.playing;
-  ProcessingState get processingState => _player.processingState;
+
+  ProcessingState get processingState =>
+      _player.processingState;
+
   bool get isInterruptionActive => _interruptionActive;
-  bool get isMicrophoneCaptureActive => _microphoneCaptureActive;
+
+  bool get isMicrophoneCaptureActive =>
+      _microphoneCaptureActive;
+
+  /// مستوى الصوت الذي اختاره المستخدم.
+  double get volume => _volumeDucker.userVolume;
+
+  /// مستوى الصوت الفعلي بعد احتساب الخفض المؤقت.
+  double get effectiveVolume =>
+      _volumeDucker.effectiveVolume;
 
   @override
   Future<void> onTaskRemoved() async {
-    // لا نوقف الصوت لمجرد إزالة التطبيق من شاشة التطبيقات الأخيرة.
-    // Android AudioService يتولى استمرار جلسة التشغيل بالخلفية.
+    // لا نوقف الصوت عند إزالة التطبيق من شاشة التطبيقات الأخيرة.
   }
 
   Future<void> disposeHandler() async {
@@ -1307,7 +1362,9 @@ class Sa7biAudioHandler extends BaseAudioHandler
 
     _snapshotTimer?.cancel();
     _snapshotTimer = null;
+
     await _persistPlaybackSnapshot();
+
     _disposed = true;
 
     await _playerStateSubscription?.cancel();
@@ -1340,7 +1397,8 @@ class AudioController {
   static final ValueNotifier<bool> isPlayingNotifier =
       ValueNotifier<bool>(false);
 
-  static ValueNotifier<bool> get isPlaying => isPlayingNotifier;
+  static ValueNotifier<bool> get isPlaying =>
+      isPlayingNotifier;
 
   static final ValueNotifier<Duration> position =
       ValueNotifier<Duration>(Duration.zero);
@@ -1467,6 +1525,7 @@ class AudioController {
     int initialIndex = 0,
   }) async {
     final handler = await initialize();
+
     await handler.replaceQueueAndPlay(
       items: items,
       initialIndex: initialIndex,
@@ -1524,7 +1583,6 @@ class AudioController {
   }
 
   /// لا ننشئ مشغّلًا جديدًا لمجرد فتح الميكروفون.
-  /// إذا لم يكن هناك مشغّل نشط، فلا توجد موسيقى تحتاج الإيقاف.
   static Future<void> beginMicrophoneCapture() async {
     final currentHandler = _handler;
 
@@ -1588,7 +1646,9 @@ class Sa7biAudioService {
   }
 
   static Future<void> play() => AudioController.play();
+
   static Future<void> pause() => AudioController.pause();
+
   static Future<void> stop() => AudioController.stop();
 
   static Future<void> seek(Duration position) {
