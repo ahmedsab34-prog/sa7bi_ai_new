@@ -1,3 +1,4 @@
+
 import {
   json,
   firstMatch,
@@ -206,6 +207,37 @@ async function fetchFeedsInParallel(
   }
 
   return items;
+}
+
+// مصادر RSS عربية مباشرة تعمل كمصدر ثالث مستقل عن Google News وBing.
+const ARABIC_FALLBACK_FEEDS = Object.freeze([
+  {
+    url: "https://feeds.bbci.co.uk/arabic/rss.xml",
+    source: "BBC News عربي",
+  },
+  {
+    url: "https://www.youm7.com/rss/SectionRss?SectionID=97",
+    source: "اليوم السابع",
+  },
+]);
+
+async function fetchArabicFallbackNews() {
+  const results = await Promise.allSettled(
+    ARABIC_FALLBACK_FEEDS.map(async (feed) => {
+      const xml = await fetchRssFeed(feed.url);
+      return parseRssItems(xml, feed.source);
+    }),
+  );
+
+  const successfulResults = results.filter(
+    (result) => result.status === "fulfilled",
+  );
+
+  if (successfulResults.length === 0) {
+    throw new Error("ARABIC_RSS_SOURCES_UNAVAILABLE");
+  }
+
+  return successfulResults.flatMap((result) => result.value);
 }
 
 const CATEGORY_QUERIES = Object.freeze({
@@ -440,11 +472,22 @@ export async function fetchAllNewsWithStats({
   maxAgeDays = MAX_NEWS_AGE_DAYS,
   category = null,
 } = {}) {
-  const [googleResult, bingResult] =
-    await Promise.allSettled([
-      fetchGoogleNews(category),
-      fetchBingNews(category),
-    ]);
+  const requests = [
+    fetchGoogleNews(category),
+    fetchBingNews(category),
+  ];
+
+  // التصنيفات تستمر باستخدام خلاصات Google/Bing المخصصة لها.
+  // الأخبار العامة تحصل كذلك على مسار RSS عربي مستقل.
+  if (!category) {
+    requests.push(fetchArabicFallbackNews());
+  }
+
+  const results = await Promise.allSettled(requests);
+
+  const googleResult = results[0];
+  const bingResult = results[1];
+  const arabicResult = results[2];
 
   const google =
     googleResult.status === "fulfilled"
@@ -456,7 +499,12 @@ export async function fetchAllNewsWithStats({
       ? bingResult.value
       : [];
 
-  const rawItems = [...google, ...bing];
+  const arabic =
+    arabicResult?.status === "fulfilled"
+      ? arabicResult.value
+      : [];
+
+  const rawItems = [...google, ...bing, ...arabic];
 
   const normalized = filterAndNormalizeItems(
     rawItems,
@@ -468,7 +516,11 @@ export async function fetchAllNewsWithStats({
 
   const failedSources =
     Number(googleResult.status === "rejected") +
-    Number(bingResult.status === "rejected");
+    Number(bingResult.status === "rejected") +
+    Number(
+      arabicResult != null &&
+      arabicResult.status === "rejected",
+    );
 
   return {
     ...normalized,
