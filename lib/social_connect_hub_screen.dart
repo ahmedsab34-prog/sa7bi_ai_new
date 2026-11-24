@@ -1,5 +1,7 @@
+
 import 'package:flutter/material.dart';
 
+import 'interactive_experiences_screen.dart';
 import 'sa7bi_hero_3d_screen.dart';
 import 'social_connections_screen.dart';
 import 'social_groups_workspace_screen.dart';
@@ -9,7 +11,6 @@ import 'widgets/sa7bi_glass_surface.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
 /// صفحة صاحبي Connect الرئيسية.
-/// تحافظ على وجهات التنقل والخدمات الموجودة دون تغييرها.
 class SocialConnectHubScreen extends StatelessWidget {
   const SocialConnectHubScreen({super.key});
 
@@ -37,10 +38,23 @@ class SocialConnectHubScreen extends StatelessWidget {
     );
   }
 
+  void _openGames(BuildContext context) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(
+          name: '/interactive-experiences',
+        ),
+        builder: (_) => const InteractiveExperiencesScreen(),
+      ),
+    );
+  }
+
   void _openHero(BuildContext context) {
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        settings: const RouteSettings(name: '/sa7bi-hero-3d'),
+        settings: const RouteSettings(
+          name: '/sa7bi-hero-3d',
+        ),
         builder: (_) => const Sa7biHero3DScreen(),
       ),
     );
@@ -69,7 +83,7 @@ class SocialConnectHubScreen extends StatelessWidget {
                 subtitle: 'كل أصحاب صاحبي في مكان واحد',
                 description:
                     'ادخل الغرفة العامة المشتركة، وتابع الرسائل '
-                    'واشارك أصحاب التطبيق الحديث.',
+                    'وشارك أصحاب التطبيق الحديث.',
                 icon: Icons.public_rounded,
                 color: Sa7biTheme.cyan,
                 tag: 'مجتمع صاحبي',
@@ -103,6 +117,21 @@ class SocialConnectHubScreen extends StatelessWidget {
                 tag: 'مجتمعات وأصدقاء',
                 buttonText: 'استكشف المجموعات',
                 onPressed: () => _openGroups(context),
+              ),
+              const SizedBox(height: 13),
+
+              _ConnectDestinationCard(
+                title: 'مركز الألعاب',
+                subtitle: 'ألعاب فردية وجماعية وتحديات ذكاء اصطناعي',
+                description:
+                    'العب الذاكرة و2048 وخمن الرقم واختبر معلوماتك، '
+                    'أو ادخل مباريات الشطرنج وإكس أو وحجر ورقة مقص '
+                    'وتحديات أصحابك.',
+                icon: Icons.sports_esports_rounded,
+                color: Sa7biTheme.violet,
+                tag: 'ألعاب وتحديات',
+                buttonText: 'افتح الألعاب',
+                onPressed: () => _openGames(context),
               ),
               const SizedBox(height: 17),
 
@@ -159,7 +188,7 @@ class SocialConnectHubScreen extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           const Text(
-            'مكان واحد للمحادثات والأصدقاء والمجموعات '
+            'مكان واحد للمحادثات والأصدقاء والمجموعات والألعاب '
             'والتواصل مع مجتمع صاحبي.',
             textAlign: TextAlign.center,
             style: TextStyle(
