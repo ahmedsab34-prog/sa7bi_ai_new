@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'ai_service.dart';
+import 'audio_center_screen.dart';
+import 'interactive_experiences_screen.dart';
+import 'khalasana_portal_screen.dart';
+import 'social_connect_hub_screen.dart';
 import 'app_diagnostics_screen.dart';
 import 'monetization_config.dart';
 import 'owner_profile_screen.dart';
@@ -67,9 +71,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _initialize() async {
     try {
-      // نحمّل بيانات الحساب فقط.
-      // لا نهيّئ التذكيرات هنا حتى لا تظهر طلبات أذونات أندرويد
-      // عند مجرد فتح الصفحة الشخصية.
       await _profileService.initialize();
 
       if (!mounted) return;
@@ -138,7 +139,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       try {
         await _profileService.saveAiConnection(false);
       } catch (_) {
-        // حفظ حالة الاتصال ليس سببًا لإغلاق صفحة الحساب.
+        // فشل حفظ الحالة لا يغلق الصفحة.
       }
     }
   }
@@ -151,7 +152,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
 
     try {
-      // تحديث الحساب لا يحتاج إلى تهيئة نظام التذكيرات.
       await _profileService.refresh();
 
       if (!mounted) return;
@@ -264,6 +264,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildIdentityCard() {
     final hasPhoto = _photo != null && _photo!.isNotEmpty;
+
     final secondaryText = _status.trim().isNotEmpty
         ? _status.trim()
         : (_bio.trim().isNotEmpty
@@ -277,10 +278,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onTap: _openProfileEditor,
         borderRadius: BorderRadius.circular(18),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Sa7biTheme.gold.withValues(alpha: 0.28)),
+            border: Border.all(
+              color: Sa7biTheme.gold.withValues(alpha: 0.28),
+            ),
           ),
           child: Row(
             children: [
@@ -366,7 +372,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _aiConnected ? Sa7biTheme.success : Sa7biTheme.gold;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 11,
+        vertical: 6,
+      ),
       decoration: BoxDecoration(
         color: Sa7biTheme.surfaceRaised,
         borderRadius: BorderRadius.circular(13),
@@ -417,7 +426,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           Icon(
-            _aiConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+            _aiConnected
+                ? Icons.cloud_done_rounded
+                : Icons.cloud_off_rounded,
             size: 17,
             color: statusColor,
           ),
@@ -456,6 +467,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // اختصارات الصفحة الشخصية.
+  void _openConnect() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const SocialConnectHubScreen(),
+      ),
+    );
+  }
+
+  void _openGames() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const InteractiveExperiencesScreen(),
+      ),
+    );
+  }
+
+  void _openAudioCenter() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const AudioCenterScreen(),
+      ),
+    );
+  }
+
+  void _openKhalasana() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const KhalasanaPortalScreen(),
+      ),
+    );
+  }
+
   List<_ProfileAction> _buildActions() {
     return [
       _ProfileAction(
@@ -490,6 +534,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
         subtitle: 'أرسل رابط صاحبي AI',
         onTap: _shareApp,
       ),
+      _ProfileAction(
+        icon: Icons.forum_rounded,
+        title: 'صاحبي Connect',
+        subtitle: 'الشات الخاص والعام والمجموعات',
+        onTap: _openConnect,
+      ),
+      _ProfileAction(
+        icon: Icons.sports_esports_rounded,
+        title: 'الألعاب',
+        subtitle: 'ألعاب فردية وجماعية',
+        onTap: _openGames,
+      ),
+      _ProfileAction(
+        icon: Icons.headphones_rounded,
+        title: 'مركز الصوت',
+        subtitle: 'القرآن والحديث والراديو',
+        onTap: _openAudioCenter,
+      ),
+      _ProfileAction(
+        icon: Icons.auto_awesome_rounded,
+        title: 'خلصانة AI',
+        subtitle: 'المساعد الذكي وأدواته',
+        onTap: _openKhalasana,
+      ),
     ];
   }
 
@@ -501,7 +569,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onTap: action.onTap,
         borderRadius: BorderRadius.circular(15),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 9,
+            vertical: 8,
+          ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(15),
             border: Border.all(color: Sa7biTheme.border),
@@ -562,7 +633,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openReminders() {
-    // الأذونات والتهيئة تحصل هنا فقط بعد اختيار المستخدم للتذكيرات.
     Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => const ReminderSettingsScreen(),
@@ -624,7 +694,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: CircularProgressIndicator(),
                     )
                   : Padding(
-                      padding: const EdgeInsets.fromLTRB(9, 4, 9, 7),
+                      padding: const EdgeInsets.fromLTRB(
+                        9,
+                        4,
+                        9,
+                        7,
+                      ),
                       child: Column(
                         children: [
                           _buildIdentityCard(),
@@ -641,10 +716,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               itemCount: actions.length,
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 8,
-                                mainAxisSpacing: 8,
-                                childAspectRatio: 2.2,
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 7,
+                                mainAxisSpacing: 7,
+                                childAspectRatio: 1.75,
                               ),
                               itemBuilder: (context, index) {
                                 return _buildActionTile(actions[index]);
