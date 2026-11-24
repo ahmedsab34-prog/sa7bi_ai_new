@@ -1,3 +1,4 @@
+
 import assert from "node:assert/strict";
 
 import {
@@ -287,6 +288,53 @@ try {
   assert.equal(
     (await invalidCategory.json()).error,
     "UNSUPPORTED_NEWS_CATEGORY",
+  );
+
+  // ==========================================================
+  // TEST 6: DIRECT ARABIC RSS SOURCES SURVIVE GOOGLE/BING FAILURE
+  // ==========================================================
+
+  let directArabicSourceCalled = false;
+
+  globalThis.fetch = async (url, options = {}) => {
+    const address = String(url);
+    assert.equal(options.method, "GET");
+
+    if (
+      address.includes("news.google.com") ||
+      address.includes("bing.com")
+    ) {
+      return new Response("search provider unavailable", {
+        status: 503,
+      });
+    }
+
+    if (address.includes("feeds.bbci.co.uk/arabic/rss.xml")) {
+      directArabicSourceCalled = true;
+      return new Response(rss, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/rss+xml",
+        },
+      });
+    }
+
+    return new Response("feed unavailable", {
+      status: 503,
+    });
+  };
+
+  const resilientResponse = await handleNews();
+  const resilientBody = await resilientResponse.json();
+
+  assert.equal(resilientResponse.status, 200);
+  assert.equal(resilientBody.ok, true);
+  assert.ok(directArabicSourceCalled);
+  assert.ok(resilientBody.items.length >= 1);
+  assert.ok(
+    resilientBody.items.some(
+      (item) => item.source === "BBC News عربي",
+    ),
   );
 
   console.log(
