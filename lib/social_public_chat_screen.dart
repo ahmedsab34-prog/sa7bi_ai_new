@@ -1,10 +1,8 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import 'services/social_messaging_service.dart';
-import 'widgets/sa7bi_hero_3d.dart';
 import 'widgets/sa7bi_hero_sticker_kit.dart';
 import 'widgets/sa7bi_subpage_app_bar.dart';
 
@@ -422,14 +420,19 @@ class _SocialPublicChatScreenState extends State<SocialPublicChatScreen> {
                 child: InkWell(
                   key: const ValueKey<String>('public-chat-hero-stickers'),
                   onTap: _sending ? null : _pickHeroSticker,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 46,
                     height: 46,
                     child: IgnorePointer(
-                      child: Sa7biHero3D(
-                        compact: true,
-                        cameraControls: false,
-                        enableFaceAnimations: true,
+                      child: Image.asset(
+                        'assets/3d/hero_idle(3).gif',
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, __, ___) => const Icon(
+                          Icons.smart_toy_rounded,
+                          color: Color(0xFFFFD76A),
+                          size: 25,
+                        ),
                       ),
                     ),
                   ),
