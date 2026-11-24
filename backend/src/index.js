@@ -1,3 +1,4 @@
+
 // backend/src/index.js
 // Sa7bi AI Backend
 // FINAL MODULAR INTEGRATION
@@ -718,7 +719,7 @@ export default {
       }
 
       if (request.method === "GET" && path === "/v1/news") {
-        return handleNews();
+        return handleNews(request);
       }
 
       if (
