@@ -1,0 +1,184 @@
+
+name: Sa7bi AI - Diagnose R2 Access
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa7bi-r2-access-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    name: Verify Cloudflare token, account, and R2 bucket
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ github.ref == 'refs/heads/fix/build-692-network-client-lifecycle' }}
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_BUCKET: sa7bi-ai-reels
+
+    steps:
+      - name: Verify repository branch and required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test "${GITHUB_REPOSITORY}" = "ahmedsab34-prog/sa7bi_ai_new"
+          test "${GITHUB_REF_NAME}" = "fix/build-692-network-client-lifecycle"
+
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is missing or empty."
+            exit 1
+          fi
+
+          if ! [[ "${CLOUDFLARE_ACCOUNT_ID}" =~ ^[a-fA-F0-9]{32}$ ]]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID is missing or invalid."
+            exit 1
+          fi
+
+      - name: Verify token authentication and R2 read access
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          token = os.environ["CLOUDFLARE_API_TOKEN"].strip()
+          account = os.environ["CLOUDFLARE_ACCOUNT_ID"].strip()
+          bucket_name = os.environ["EXPECTED_BUCKET"]
+
+          def call(url):
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      "Authorization": "Bearer " + token,
+                      "Accept": "application/json",
+                      "User-Agent": "Sa7bi-AI-R2-Diagnostic/1.0",
+                  },
+              )
+
+              try:
+                  with urllib.request.urlopen(request, timeout=25) as response:
+                      payload = json.loads(response.read().decode("utf-8"))
+                      return response.status, payload
+
+              except urllib.error.HTTPError as error:
+                  raw = error.read().decode("utf-8", errors="replace")
+
+                  try:
+                      payload = json.loads(raw)
+                  except Exception:
+                      payload = {"message": raw[:1000]}
+
+                  errors = payload.get("errors") or []
+
+                  safe_errors = [
+                      {
+                          "code": item.get("code"),
+                          "message": item.get("message"),
+                      }
+                      for item in errors
+                  ]
+
+                  raise RuntimeError(json.dumps({
+                      "http_status": error.code,
+                      "errors": safe_errors,
+                      "message": payload.get("message", ""),
+                  }))
+
+          _, verify = call(
+              "https://api.cloudflare.com/client/v4/user/tokens/verify"
+          )
+
+          if verify.get("success") is not True:
+              raise RuntimeError(
+                  "Cloudflare token verification did not return success."
+              )
+
+          token_status = (verify.get("result") or {}).get(
+              "status", "unknown"
+          )
+
+          print("Token status:", token_status)
+
+          if token_status.lower() != "active":
+              raise RuntimeError(
+                  "Cloudflare API token is not active."
+              )
+
+          list_url = (
+              "https://api.cloudflare.com/client/v4/accounts/"
+              + account
+              + "/r2/buckets"
+          )
+
+          _, listing = call(list_url)
+
+          if listing.get("success") is not True:
+              raise RuntimeError(
+                  "Token authenticated, but R2 bucket listing was rejected. "
+                  "Check R2 Storage Read permission and account ID."
+              )
+
+          buckets = listing.get("result") or []
+
+          names = sorted(
+              item.get("name", "")
+              for item in buckets
+              if isinstance(item, dict)
+          )
+
+          print("R2 bucket listing: authorized")
+          print("Visible bucket count:", len(names))
+
+          if bucket_name in names:
+              print("PASS: Required bucket exists:", bucket_name)
+
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+                  summary.write(
+                      "## R2 access diagnostic: PASS\n\n"
+                      "- Token: active\n"
+                      "- R2 listing: authorized\n"
+                      "- Required bucket: present\n"
+                      "- Cloudflare resources changed: none\n"
+                  )
+
+          else:
+              print("MISSING: Required bucket:", bucket_name)
+
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+                  summary.write(
+                      "## R2 access diagnostic: bucket missing\n\n"
+                      "- Token: active\n"
+                      "- R2 listing: authorized\n"
+                      "- Required bucket: missing\n"
+                      "- No bucket was created or modified\n"
+                      "- Creation requires R2 Storage Write permission\n"
+                  )
+
+              raise SystemExit(
+                  "sa7bi-ai-reels does not exist in the configured account."
+              )
+          PY
+
+      - name: Record safe diagnostic boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo
+            echo "- Repository changes: none"
+            echo "- Cloudflare resources changed: none"
+            echo "- Worker deployments: none"
+            echo "- APK publication: none"
+          } >> "${GITHUB_STEP_SUMMARY}"
