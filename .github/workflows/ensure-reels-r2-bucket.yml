@@ -1,0 +1,128 @@
+
+name: Sa7bi AI - Ensure Reels R2 Bucket
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_create:
+        description: "Confirm creating only the required R2 bucket sa7bi-ai-reels if it does not exist."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sa7bi-ensure-reels-r2-bucket
+  cancel-in-progress: false
+
+jobs:
+  ensure-r2-bucket:
+    name: Check or create the required Reels R2 bucket
+    if: ${{ inputs.confirm_create == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_BRANCH: fix/build-692-network-client-lifecycle
+      BUCKET_NAME: sa7bi-ai-reels
+    steps:
+      - name: Verify the approved repository and branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "ahmedsab34-prog/sa7bi_ai_new"
+          test "${GITHUB_REF_TYPE}" = "branch"
+          test "${GITHUB_REF_NAME}" = "${EXPECTED_BRANCH}"
+          test -n "${CLOUDFLARE_API_TOKEN}"
+          test -n "${CLOUDFLARE_ACCOUNT_ID}"
+
+      - name: Check and create only the missing R2 bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          account = os.environ["CLOUDFLARE_ACCOUNT_ID"].strip()
+          token = os.environ["CLOUDFLARE_API_TOKEN"].strip()
+          bucket = os.environ["BUCKET_NAME"]
+          base = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets"
+
+          def request(method, url, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  url,
+                  data=data,
+                  method=method,
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Content-Type": "application/json",
+                      "Accept": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      return response.status, json.loads(response.read().decode())
+              except urllib.error.HTTPError as error:
+                  body = error.read().decode(errors="replace")
+                  try:
+                      parsed = json.loads(body)
+                  except Exception:
+                      parsed = {"raw": body[:1000]}
+                  raise RuntimeError(
+                      f"Cloudflare API {method} returned HTTP {error.code}: "
+                      + json.dumps(parsed)[:2000]
+                  )
+
+          status, data = request("GET", base)
+          if data.get("success") is not True:
+              raise RuntimeError("Cloudflare rejected the R2 bucket listing request.")
+          buckets = data.get("result") or []
+          if any(item.get("name") == bucket for item in buckets):
+              print(f"PASS: R2 bucket already exists: {bucket}")
+          else:
+              status, created = request("POST", base, {"name": bucket})
+              if created.get("success") is not True:
+                  errors = created.get("errors") or []
+                  raise RuntimeError(
+                      "Cloudflare could not create the R2 bucket. "
+                      "Check that CLOUDFLARE_API_TOKEN has R2 Storage Write permission. "
+                      + json.dumps(errors)[:1500]
+                  )
+              print(f"PASS: Created the required R2 bucket: {bucket}")
+          PY
+
+      - name: Verify the bucket is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          url = (
+              "https://api.cloudflare.com/client/v4/accounts/"
+              + os.environ["CLOUDFLARE_ACCOUNT_ID"].strip()
+              + "/r2/buckets"
+          )
+          req = urllib.request.Request(
+              url,
+              headers={
+                  "Authorization": "Bearer " + os.environ["CLOUDFLARE_API_TOKEN"].strip(),
+                  "Accept": "application/json",
+              },
+          )
+          with urllib.request.urlopen(req, timeout=30) as response:
+              data = json.loads(response.read().decode())
+          names = [item.get("name") for item in data.get("result") or []]
+          if data.get("success") is not True or "sa7bi-ai-reels" not in names:
+              raise SystemExit("R2 bucket verification failed.")
+          print("PASS: sa7bi-ai-reels is visible in the Cloudflare account.")
+          PY
