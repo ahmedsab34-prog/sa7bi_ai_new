@@ -85,7 +85,7 @@ jobs:
     needs: verify-source
     if: ${{ needs.verify-source.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
 
@@ -174,6 +174,28 @@ jobs:
           flutter --version
           flutter pub get --enforce-lockfile
           git diff --exit-code -- pubspec.lock
+
+      - name: Enable KVM for the Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android integration smoke tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          script: |
+            set -euo pipefail
+            flutter test --no-pub --reporter expanded \
+              -d emulator-5554 integration_test/sa7bi_app_smoke_test.dart \
+              2>&1 | tee integration-test-report.txt
 
       - name: Calculate APK version code
         shell: bash
@@ -399,6 +421,7 @@ jobs:
 
           cp flutter-analyze-report.txt release-artifact/
           cp flutter-test-report.txt release-artifact/
+          cp integration-test-report.txt release-artifact/
 
       - name: Reject APK if source branch advanced
         uses: actions/github-script@v7
@@ -437,6 +460,7 @@ jobs:
             echo "- APK version code: ${BUILD_NUMBER}"
             echo "- Artifact: ${{ steps.identity.outputs.artifact_name }}"
             echo "- No second APK build is used for publication."
+            echo "- Android integration smoke test: PASS"
             echo "- No Worker deployment was performed by this job."
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -509,6 +533,8 @@ jobs:
           grep -Fx 'name = "sa7bi-ai-new-fallback"' backend/wrangler-fallback.toml
           grep -Fx 'main = "src/fallback.js"' backend/wrangler-fallback.toml
           grep -Fx 'service = "sa7bi-ai-new"' backend/wrangler-fallback.toml
+          grep -Fx 'binding = "SA7BI_REELS"' backend/wrangler.toml
+          grep -Fx 'bucket_name = "sa7bi-ai-reels"' backend/wrangler.toml
 
       - name: Dry-run Primary Worker
         working-directory: backend
@@ -525,6 +551,134 @@ jobs:
           set -euo pipefail
           npx wrangler deploy --dry-run --config wrangler-fallback.toml \
             --var "SA7BI_SOURCE_COMMIT:${SOURCE_SHA}"
+
+      - name: Preflight R2 bucket and token read access before any Worker deployment
+        shell: bash
+        env:
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          token = os.environ.get("CF_API_TOKEN", "").strip()
+          account = os.environ.get("CF_ACCOUNT_ID", "").strip()
+          bucket_name = "sa7bi-ai-reels"
+
+          if not token or not account:
+              print("::error::Cloudflare credentials are missing.")
+              sys.exit(1)
+
+          query = urllib.parse.urlencode({"name_contains": bucket_name})
+          url = (
+              "https://api.cloudflare.com/client/v4/accounts/"
+              + urllib.parse.quote(account, safe="")
+              + "/r2/buckets?"
+              + query
+          )
+
+          request = urllib.request.Request(
+              url,
+              headers={
+                  "Authorization": "Bearer " + token,
+                  "Accept": "application/json",
+              },
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  payload = json.loads(
+                      response.read().decode("utf-8")
+                  )
+
+          except urllib.error.HTTPError as error:
+              body = error.read().decode(
+                  "utf-8",
+                  errors="replace",
+              )
+
+              try:
+                  details = json.loads(body)
+                  api_errors = details.get("errors", [])
+
+                  codes = ", ".join(
+                      str(item.get("code", "unknown"))
+                      for item in api_errors
+                  )
+
+              except Exception:
+                  codes = "unavailable"
+
+              if error.code == 403:
+                  print(
+                      "::error::R2 preflight denied (HTTP 403). "
+                      "No Worker was deployed. The Cloudflare token needs "
+                      "Account-level Workers R2 Storage Read permission, and "
+                      "CLOUDFLARE_ACCOUNT_ID must identify the account that owns "
+                      "the bucket. API error codes: " + codes
+                  )
+
+              else:
+                  print(
+                      "::error::R2 preflight failed with HTTP "
+                      + str(error.code)
+                      + ". No Worker was deployed. API error codes: "
+                      + codes
+                  )
+
+              sys.exit(1)
+
+          except Exception as error:
+              print(
+                  "::error::Could not complete R2 preflight: "
+                  + str(error)
+                  + ". No Worker was deployed."
+              )
+              sys.exit(1)
+
+          if payload.get("success") is not True:
+              print(
+                  "::error::Cloudflare returned an unsuccessful R2 bucket-list response. "
+                  "No Worker was deployed."
+              )
+              sys.exit(1)
+
+          buckets = payload.get("result")
+
+          if not isinstance(buckets, list):
+              print(
+                  "::error::Cloudflare R2 bucket-list response was malformed. "
+                  "No Worker was deployed."
+              )
+              sys.exit(1)
+
+          names = [
+              item.get("name")
+              for item in buckets
+              if isinstance(item, dict)
+          ]
+
+          if bucket_name not in names:
+              print(
+                  "::error::Required R2 bucket '"
+                  + bucket_name
+                  + "' was not found in CLOUDFLARE_ACCOUNT_ID. "
+                  "No Worker was deployed. The bucket was not created or modified."
+              )
+              sys.exit(1)
+
+          print(
+              "PASS: Required R2 bucket exists and the token can list it. "
+              "No R2 resource was modified."
+          )
+          PY
 
       - name: Confirm source branch has not advanced
         uses: actions/github-script@v7
@@ -590,20 +744,30 @@ jobs:
                       "User-Agent": "Sa7bi-AI-Unified-Release",
                   },
               )
+
               with urllib.request.urlopen(request, timeout=25) as response:
                   if response.status != 200:
                       raise RuntimeError(f"HTTP {response.status}")
-                  body = json.loads(response.read().decode("utf-8"))
+
+                  body = json.loads(
+                      response.read().decode("utf-8")
+                  )
+
                   return body, response.headers
 
           primary_data, _ = fetch(primary_url)
-          primary_commit = str(primary_data.get("sourceCommit", "")).strip()
+
+          primary_commit = str(
+              primary_data.get("sourceCommit", "")
+          ).strip()
 
           print("Expected commit:", expected)
           print("Primary commit:", primary_commit)
 
           if primary_commit.lower() != expected.lower():
-              raise RuntimeError("Primary Worker source identity mismatch.")
+              raise RuntimeError(
+                  "Primary Worker source identity mismatch."
+              )
 
           verified = False
           last_error = "Fallback identity not verified."
@@ -630,20 +794,30 @@ jobs:
                   print("Forwarded commit:", forwarded_commit)
 
                   if fallback_route != "1":
-                      raise RuntimeError("Fallback route header is missing.")
+                      raise RuntimeError(
+                          "Fallback route header is missing."
+                      )
 
                   if fallback_commit.lower() != expected.lower():
-                      raise RuntimeError("Fallback source identity mismatch.")
+                      raise RuntimeError(
+                          "Fallback source identity mismatch."
+                      )
 
                   if forwarded_commit.lower() != expected.lower():
-                      raise RuntimeError("Fallback forwards a different Primary identity.")
+                      raise RuntimeError(
+                          "Fallback forwards a different Primary identity."
+                      )
 
                   verified = True
                   break
 
               except Exception as error:
                   last_error = str(error)
-                  print("Fallback verification pending:", last_error)
+                  print(
+                      "Fallback verification pending:",
+                      last_error,
+                  )
+
                   if attempt < 19:
                       time.sleep(5)
 
@@ -652,7 +826,9 @@ jobs:
                   f"Fallback verification failed: {last_error}"
               )
 
-          print("PASS: Primary and Fallback match the APK source commit.")
+          print(
+              "PASS: Primary and Fallback match the APK source commit."
+          )
           PY
 
       - name: Worker deployment summary
@@ -664,6 +840,7 @@ jobs:
             echo "- Exact source commit: ${SOURCE_SHA}"
             echo "- Primary: ${WORKER_URL}"
             echo "- Fallback: ${FALLBACK_WORKER_URL}"
+            echo "- R2 bucket and list permission passed preflight."
             echo "- Both live identities matched the APK source."
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -804,8 +981,10 @@ jobs:
           fi
 
           ACTUAL_TAG_SHA="$(gh api "${REF_PATH}" --jq '.object.sha')"
+
           echo "Expected tag target: ${SOURCE_SHA}"
           echo "Actual tag target:   ${ACTUAL_TAG_SHA}"
+
           test "${ACTUAL_TAG_SHA}" = "${SOURCE_SHA}"
 
       - name: Verify published APK checksum and stable tag target
@@ -825,17 +1004,24 @@ jobs:
 
           test -s "${RELEASE_APK_NAME}"
           test -s "${RELEASE_APK_NAME}.sha256"
+
           sha256sum --check "${RELEASE_APK_NAME}.sha256"
 
           EXPECTED_SHA="$(awk '{print $1}' "${RELEASE_APK_NAME}.sha256")"
-          ORIGINAL_SHA="$(awk '{print $1}' "../release-artifact/${RELEASE_APK_NAME}.sha256")"
+
+          ORIGINAL_SHA="$(
+            awk '{print $1}' \
+              "../release-artifact/${RELEASE_APK_NAME}.sha256"
+          )"
 
           test "${EXPECTED_SHA}" = "${ORIGINAL_SHA}"
 
           git fetch --force origin \
             "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
 
-          TAG_TARGET_SHA="$(git rev-parse "refs/tags/${RELEASE_TAG}^{}")"
+          TAG_TARGET_SHA="$(
+            git rev-parse "refs/tags/${RELEASE_TAG}^{}"
+          )"
 
           echo "Expected source: ${SOURCE_SHA}"
           echo "Actual tag target: ${TAG_TARGET_SHA}"
