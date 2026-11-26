@@ -1,13 +1,14 @@
 // Sa7bi AI Worker entry point.
 // Preserves existing social, messaging, matchmaking,
 // invite links and tafsir-text routes.
-// Adds authenticated R2-backed social reels, private attachments and realtime events.
+// Adds a hybrid R2/B2 storage adapter without changing legacy object keys.
 
 import worker, {
   Sa7biCredits,
   Sa7biSocial as BaseSa7biSocial,
 } from "./index.js";
 
+import { createStorageBucketAdapter } from "./storage/storage_bucket.js";
 import { handleSocialMessaging } from "./social_messaging.js";
 import { handleSocialPublicChat } from "./social_public_chat.js";
 import { handleSocialCommunity } from "./social_community.js";
@@ -162,6 +163,17 @@ function handleAndroidAssetLinks() {
 }
 
 export class Sa7biSocial extends BaseSa7biSocial {
+  constructor(ctx, env) {
+    super(ctx, env);
+
+    // Old R2 objects keep using R2. New uploads use B2 only when the
+    // SA7BI_STORAGE_PROVIDER variable is explicitly set to "b2".
+    this.env = {
+      ...env,
+      SA7BI_REELS: createStorageBucketAdapter(this, env),
+    };
+  }
+
   async fetch(request) {
     const realtimeResponse =
       await handlePrivateRealtimeRequest(request, this);
