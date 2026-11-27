@@ -1,8 +1,10 @@
+
 name = "sa7bi-ai-new"
 main = "src/index-v2.js"
 compatibility_date = "2026-09-18"
 
 workers_dev = true
+keep_vars = true
 
 [vars]
 GEMINI_TEXT_MODEL = "gemini-3.8-flash"
@@ -14,6 +16,12 @@ WORKERS_IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 
 ADMOB_REWARDED_AD_UNIT_ID = "ca-app-pub-9077658292229374/4621745555"
 ADMOB_REWARD_ITEM = "credits"
+
+SA7BI_B2_ENDPOINT = "https://s3.eu-central-003.backblazeb2.com"
+SA7BI_B2_BUCKET = "sa7bi-ai-storage"
+SA7BI_B2_REGION = "eu-central-003"
+SA7BI_B2_MAX_BYTES = "8589934592"
+SA7BI_B2_WARNING_BYTES = "7516192768"
 
 [ai]
 binding = "AI"
@@ -34,9 +42,9 @@ storage = "sqlite"
 type = "durable-object"
 storage = "sqlite"
 
-[[r2_buckets]]
-binding = "SA7BI_REELS"
-bucket_name = "sa7bi-ai-reels"
-
 [secrets]
-required = ["GEMINI_API_KEY"]
+required = [
+  "GEMINI_API_KEY",
+  "SA7BI_B2_ACCESS_KEY_ID",
+  "SA7BI_B2_SECRET_ACCESS_KEY",
+]
