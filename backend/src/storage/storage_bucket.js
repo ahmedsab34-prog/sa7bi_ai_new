@@ -1,3 +1,4 @@
+
 import { createB2S3Client } from "./b2_s3.js";
 import {
   commitStorageReservation,
@@ -6,12 +7,6 @@ import {
   releaseStorageReservation,
   reserveStorage,
 } from "./storage_quota.js";
-
-function selectedProvider(env) {
-  const provider = String(env?.SA7BI_STORAGE_PROVIDER || "r2").trim().toLowerCase();
-  if (provider !== "r2" && provider !== "b2") throw new Error("STORAGE_PROVIDER_INVALID");
-  return provider;
-}
 
 async function toBytes(value) {
   if (value instanceof Uint8Array) return value;
@@ -22,29 +17,26 @@ async function toBytes(value) {
   return new Uint8Array(await new Response(value).arrayBuffer());
 }
 
+/**
+ * B2-only storage adapter for the Sa7biSocial Durable Object.
+ *
+ * The adapter deliberately has no R2 fallback. Every readable or deletable
+ * object must have a matching B2 record in the Durable Object quota ledger.
+ */
 export function createStorageBucketAdapter(actor, env) {
-  const r2Bucket = env?.SA7BI_REELS || null;
   let b2Client = null;
 
   function getB2Client() {
-    if (!b2Client) b2Client = createB2S3Client(env);
+    if (!b2Client) b2Client = createB2S3Client(env || {});
     return b2Client;
-  }
-
-  function requireR2() {
-    if (!r2Bucket) throw new Error("R2_STORAGE_NOT_CONFIGURED");
-    return r2Bucket;
   }
 
   return {
     async put(objectKey, value, options = {}) {
-      if (selectedProvider(env) === "r2") {
-        return requireR2().put(objectKey, value, options);
-      }
-
       const bytes = await toBytes(value);
-      // Validate B2 credentials/endpoint before reserving quota. A local
-      // configuration mistake must not leave a false pending reservation.
+
+      // Validate configuration before creating a quota reservation. A local
+      // configuration error must not leave a false pending reservation.
       const b2 = getB2Client();
       const reservation = reserveStorage(actor, {
         objectKey,
@@ -61,13 +53,14 @@ export function createStorageBucketAdapter(actor, env) {
             objectKey,
           });
         }
-        // Ambiguous network/5xx outcomes remain reserved so accounting cannot undercount.
+        // Network/5xx outcomes remain reserved because the PUT may have
+        // reached B2 even when the response did not reach this Worker.
         throw error;
       }
 
-      if (!stored.versionId) {
-        // Keep the reservation: a successful PUT without its version ID cannot be
-        // safely deleted and must never be reported as freed capacity.
+      if (typeof stored?.versionId !== "string" || !stored.versionId) {
+        // Never report capacity as freed when the PUT may have stored data.
+        // Keep the reservation until a safe reconciliation can identify it.
         throw new Error("B2_VERSION_ID_MISSING");
       }
 
@@ -76,37 +69,45 @@ export function createStorageBucketAdapter(actor, env) {
         objectKey,
         versionId: stored.versionId,
       });
-      return { versionId: stored.versionId, etag: stored.etag || undefined };
+
+      return {
+        versionId: stored.versionId,
+        etag: stored.etag || undefined,
+      };
     },
 
     async get(objectKey, options = {}) {
       const record = getStorageObjectRecord(actor, objectKey);
-      if (record?.provider === "b2") {
-        if (record.state !== "stored" || !record.version_id) return null;
-        return getB2Client().getObject(objectKey, {
-          versionId: record.version_id,
-          range: options.range,
-          sizeBytes: Number(record.size_bytes) || 0,
-        });
+      if (!record) return null;
+      if (record.provider !== "b2") {
+        throw new Error("STORAGE_PROVIDER_UNSUPPORTED");
       }
-      return requireR2().get(objectKey, options);
+      if (record.state !== "stored" || !record.version_id) return null;
+
+      return getB2Client().getObject(objectKey, {
+        versionId: record.version_id,
+        range: options.range,
+        sizeBytes: Number(record.size_bytes) || 0,
+      });
     },
 
     async delete(objectKey) {
       const record = getStorageObjectRecord(actor, objectKey);
-      if (record?.provider === "b2") {
-        if (record.state !== "stored" || !record.version_id) {
-          throw new Error("B2_EXACT_VERSION_REQUIRED");
-        }
-        await getB2Client().deleteObject(objectKey, record.version_id);
-        // Quota is released only after exact-version deletion is confirmed.
-        releaseDeletedStorageObject(actor, {
-          objectKey,
-          versionId: record.version_id,
-        });
-        return;
+      if (!record) throw new Error("STORAGE_OBJECT_NOT_FOUND");
+      if (record.provider !== "b2") {
+        throw new Error("STORAGE_PROVIDER_UNSUPPORTED");
       }
-      return requireR2().delete(objectKey);
+      if (record.state !== "stored" || !record.version_id) {
+        throw new Error("B2_EXACT_VERSION_REQUIRED");
+      }
+
+      await getB2Client().deleteObject(objectKey, record.version_id);
+
+      // Quota is released only after B2 confirms deletion of this exact version.
+      releaseDeletedStorageObject(actor, {
+        objectKey,
+        versionId: record.version_id,
+      });
     },
   };
 }
